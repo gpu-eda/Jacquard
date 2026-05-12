@@ -173,6 +173,62 @@ mod tests {
         }
     }
 
+    /// Experiment: confirm SKY130's behavioral parser handles GF180MCU's
+    /// `.functional.v` grammar without modification. The two PDKs share
+    /// the same Verilog-primitive-based cell-model format; if this test
+    /// passes, Phase 4 can reuse `parse_functional_model` directly
+    /// rather than writing a parallel parser.
+    /// The DFF cells embed a UDP primitive (`UDP_GF018hv5v_..._FF_UDP`).
+    /// SKY130 expects its own `sky130_fd_sc_hd__udp_*` prefix; this test
+    /// records what happens when the parser encounters a different UDP
+    /// prefix. Phase 4 decisions depend on whether the parser is fully
+    /// PDK-neutral on the parse side (with PDK-specific UDP *handling*
+    /// downstream) or needs explicit prefix configuration.
+    #[test]
+    fn sky130_parser_reads_gf180mcu_dff_with_udp() {
+        use crate::sky130_pdk::parse_functional_model;
+        let path = "vendor/gf180mcu_fd_sc_mcu7t5v0/cells/dffq/\
+                    gf180mcu_fd_sc_mcu7t5v0__dffq_1.functional.v";
+        let src = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("read {path}: {e}"));
+        let model = parse_functional_model(&src).expect("parse should succeed");
+        assert_eq!(model.module_name, "gf180mcu_fd_sc_mcu7t5v0__dffq_1");
+        // dffq_1 wraps a UDP_GF018... FF UDP between two `not` gates;
+        // the parser must surface all three.
+        assert!(
+            model.gates.len() >= 3,
+            "expected at least 3 gates (not, UDP, not), got {}: {:?}",
+            model.gates.len(),
+            model.gates,
+        );
+        let has_udp = model
+            .gates
+            .iter()
+            .any(|g| g.gate_type.contains("UDP_GF018"));
+        assert!(
+            has_udp,
+            "expected a UDP_GF018 entry in the gate list: {:?}",
+            model.gates
+        );
+    }
+
+    #[test]
+    fn sky130_parser_reads_gf180mcu_simple_gate() {
+        use crate::sky130_pdk::parse_functional_model;
+        let path = "vendor/gf180mcu_fd_sc_mcu7t5v0/cells/nand2/\
+                    gf180mcu_fd_sc_mcu7t5v0__nand2_1.functional.v";
+        let src = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("read {path}: {e} \
+                — submodule may need `git submodule update --init`"));
+        let model = parse_functional_model(&src).expect("parse should succeed");
+        assert_eq!(model.module_name, "gf180mcu_fd_sc_mcu7t5v0__nand2_1");
+        assert_eq!(model.inputs, vec!["A1".to_string(), "A2".to_string()]);
+        assert_eq!(model.outputs, vec!["ZN".to_string()]);
+        // nand2_1 is implemented as De Morgan: not A1, not A2, then or →
+        // 2 nots + 1 or = 3 gates.
+        assert_eq!(model.gates.len(), 3, "gates: {:?}", model.gates);
+    }
+
     #[test]
     fn combinational_cells_have_no_classification() {
         // Pure combinational gates (inv, nand2, oai21, etc.) should NOT
