@@ -60,7 +60,7 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
     clilog::info!("Detected cell library: {}", lib);
 
     if lib == CellLibrary::Mixed {
-        panic!("Mixed AIGPDK and SKY130 cells in netlist not supported");
+        panic!("Mixed cells from multiple PDKs in netlist not supported");
     }
 
     let netlistdb = match lib {
@@ -70,6 +70,11 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
             &SKY130LeafPins,
         )
         .expect("cannot build netlist"),
+        CellLibrary::GF180MCU => unimplemented!(
+            "GF180MCU simulation path lands in Phase 5 of \
+             docs/plans/gf180mcu-enablement.md. Timing-IR consumption via \
+             opensta-to-ir works today; full sim does not."
+        ),
         CellLibrary::AIGPDK | CellLibrary::Mixed => NetlistDB::from_sverilog_file(
             &args.netlist_verilog,
             args.top_module.as_deref(),
