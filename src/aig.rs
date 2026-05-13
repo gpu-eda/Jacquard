@@ -765,8 +765,7 @@ impl AIG {
                         continue;
                     }
 
-                    // Handle GF180MCU cells (combinational + tie cells only;
-                    // sequentials panic in postprocess until Phase 4b).
+                    // Handle GF180MCU cells (combinational + sequential).
                     if is_gf180mcu_cell(celltype) {
                         let deps =
                             self.get_gf180mcu_dependencies(netlistdb, pinid, cellid, celltype);

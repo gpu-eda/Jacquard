@@ -52,8 +52,9 @@ pub struct LoadedDesign {
 
 /// Load a design through the full pipeline: netlist → AIG → staged → script.
 ///
-/// Detects cell library (AIGPDK or SKY130), loads display info from JSON,
-/// builds the flattened script, and optionally loads SDF timing data.
+/// Detects cell library (AIGPDK, SKY130, or GF180MCU), loads display info
+/// from JSON, builds the flattened script, and optionally loads SDF timing
+/// data.
 pub fn load_design(args: &DesignArgs) -> LoadedDesign {
     // Detect cell library
     let lib = detect_library_from_file(&args.netlist_verilog).expect("Failed to read netlist file");
@@ -70,10 +71,9 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
             &SKY130LeafPins,
         )
         .expect("cannot build netlist"),
-        // Phase 4 combinational decomposition is wired through. Sequential
-        // GF180MCU cells (DFFs, latches, clock gates) still panic at AIG
-        // construction until Phase 4b adds UDP handling — combinational
-        // gate-level netlists work end-to-end today.
+        // GF180MCU (7t5v0 + 9t5v0). Combinational + sequential paths
+        // (DFFs, latches, scan, clock-gating) are all wired through
+        // `AIG::from_netlistdb` → `gf180mcu_postprocess`.
         CellLibrary::GF180MCU => NetlistDB::from_sverilog_file(
             &args.netlist_verilog,
             args.top_module.as_deref(),

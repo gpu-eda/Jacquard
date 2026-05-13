@@ -62,7 +62,7 @@ enum Commands {
 
 #[derive(Parser)]
 struct SimArgs {
-    /// Gate-level Verilog path synthesized with AIGPDK or SKY130 library.
+    /// Gate-level Verilog path synthesized with AIGPDK, SKY130, or GF180MCU.
     netlist_verilog: PathBuf,
 
     /// VCD input signal path.
@@ -185,7 +185,7 @@ struct SimArgs {
 
 #[derive(Parser)]
 struct CosimArgs {
-    /// Gate-level Verilog path synthesized with AIGPDK or SKY130 library.
+    /// Gate-level Verilog path synthesized with AIGPDK, SKY130, or GF180MCU.
     netlist_verilog: PathBuf,
 
     /// Testbench configuration JSON file.
@@ -261,7 +261,7 @@ struct CosimArgs {
 
 #[derive(Parser)]
 struct DumpPathsArgs {
-    /// Gate-level Verilog path synthesized with AIGPDK or SKY130 library.
+    /// Gate-level Verilog path synthesized with AIGPDK, SKY130, or GF180MCU.
     netlist_verilog: PathBuf,
 
     /// Top module name in the netlist.
