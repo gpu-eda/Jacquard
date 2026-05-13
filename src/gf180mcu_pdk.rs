@@ -24,6 +24,172 @@
 
 #![allow(unused)]
 
+use std::collections::HashMap;
+use std::path::Path;
+
+use crate::sky130_pdk::{
+    build_chain_gate, build_xor_chain, finalize_decomp_result, BehavioralGate, BehavioralModel,
+    DecompResult, UdpModel, WireVal,
+};
+
+/// Behavioral models + UDPs for the GF180MCU PDK.
+///
+/// Lazy-loaded subset of cell types — only the ones actually instantiated
+/// in the netlist need their `.functional.v` parsed. Mirrors SKY130's
+/// `PdkModels` but lives separately because the on-disk layout differs.
+pub struct Gf180PdkModels {
+    /// Behavioral models indexed by base cell type (e.g. "nand2").
+    pub models: HashMap<String, BehavioralModel>,
+    /// UDP models indexed by primitive name. Currently empty — UDP
+    /// handling for DFFs/latches/clock-gating lands in Phase 4b.
+    pub udps: HashMap<String, UdpModel>,
+}
+
+/// Load behavioral models for the requested base cell types.
+///
+/// Resolves each cell type to a `.functional.v` file under the vendored
+/// `gf180mcu_fd_sc_mcu7t5v0` submodule. The 7t and 9t libraries share
+/// identical port layouts and functional bodies (verified at build
+/// time by `build.rs`), so we read from 7t exclusively.
+///
+/// Panics on missing cell types — callers should restrict the request
+/// to the catalogue published in `GF180MCU_PIN_TABLE` plus the union
+/// of cells actually present in the user's netlist.
+pub fn load_pdk_models(cells_root: &Path, cell_types: &[String]) -> Gf180PdkModels {
+    let mut models = HashMap::new();
+    for cell_type in cell_types {
+        // The submodule lays out files as
+        //   cells/<type>/gf180mcu_fd_sc_mcu7t5v0__<type>_<drive>.functional.v
+        // Pick the smallest drive available — the functional body is
+        // identical across drive strengths (verified in build.rs).
+        let dir = cells_root.join("cells").join(cell_type);
+        let Some(entry) = pick_smallest_drive_functional(&dir) else {
+            panic!(
+                "GF180MCU: no functional.v found for cell type '{cell_type}' under {}",
+                dir.display()
+            );
+        };
+        let src = std::fs::read_to_string(&entry).unwrap_or_else(|e| {
+            panic!("read {}: {e}", entry.display());
+        });
+        let model = crate::pdk_decomp::parse_functional_model(&src).unwrap_or_else(|| {
+            panic!("parse {}: returned None", entry.display())
+        });
+        models.insert(cell_type.clone(), model);
+    }
+    Gf180PdkModels {
+        models,
+        udps: HashMap::new(),
+    }
+}
+
+fn pick_smallest_drive_functional(cell_dir: &Path) -> Option<std::path::PathBuf> {
+    let mut best: Option<(usize, std::path::PathBuf)> = None;
+    for entry in std::fs::read_dir(cell_dir).ok()?.flatten() {
+        let path = entry.path();
+        let name = path.file_name()?.to_str()?.to_string();
+        if !name.ends_with(".functional.v") || name.ends_with(".functional.pp.v") {
+            continue;
+        }
+        let stem = name.trim_end_matches(".functional.v");
+        let drive = stem
+            .rsplit_once('_')
+            .and_then(|(_, suffix)| suffix.parse::<usize>().ok())
+            .unwrap_or(0);
+        if best.as_ref().is_none_or(|(d, _)| drive < *d) {
+            best = Some((drive, path));
+        }
+    }
+    best.map(|(_, p)| p)
+}
+
+/// Decompose one combinational GF180MCU cell to AIG primitives.
+///
+/// Handles standard Verilog gate primitives (`not`, `buf`, `and`, `or`,
+/// `nand`, `nor`, `xor`, `xnor`). Sequential cells and clock-gating
+/// cells use `UDP_GF018hv5v_*` primitives that this function panics
+/// on — that's Phase 4b territory. Combinational AOI/OAI/mux/adder
+/// cells use only standard primitives and are in scope here.
+///
+/// `inputs` maps each module-input port name to its `aigpin_iv` value
+/// in the global AIG. `output_pin` selects which module-output port
+/// the returned DecompResult drives (adders have two: `S`, `CO`).
+pub fn decompose_combinational(
+    model: &BehavioralModel,
+    inputs: &HashMap<String, usize>,
+    output_pin: &str,
+) -> DecompResult {
+    let mut wires: HashMap<String, WireVal> = HashMap::new();
+    for name in &model.inputs {
+        let &iv = inputs.get(name).unwrap_or_else(|| {
+            panic!(
+                "Input pin '{name}' not provided for cell '{}'",
+                model.module_name
+            )
+        });
+        wires.insert(name.clone(), WireVal::AigPin(iv));
+    }
+
+    let mut and_gates: Vec<(i64, i64)> = Vec::new();
+
+    for gate in &model.gates {
+        let result = apply_gate(gate, &wires, &mut and_gates);
+        wires.insert(gate.output.clone(), result);
+    }
+
+    let output = *wires.get(output_pin).unwrap_or_else(|| {
+        panic!(
+            "Output pin '{output_pin}' missing from decomposed wires for cell '{}'",
+            model.module_name
+        )
+    });
+    finalize_decomp_result(and_gates, output)
+}
+
+fn apply_gate(
+    gate: &BehavioralGate,
+    wires: &HashMap<String, WireVal>,
+    and_gates: &mut Vec<(i64, i64)>,
+) -> WireVal {
+    let lookup = |n: &str| -> WireVal {
+        *wires
+            .get(n)
+            .unwrap_or_else(|| panic!("Unknown wire '{n}' in gate '{}'", gate.gate_type))
+    };
+    let inputs: Vec<WireVal> = gate.inputs.iter().map(|n| lookup(n)).collect();
+
+    match gate.gate_type.as_str() {
+        "buf" => {
+            assert_eq!(inputs.len(), 1, "buf must have exactly 1 input");
+            inputs[0]
+        }
+        "not" => {
+            assert_eq!(inputs.len(), 1, "not must have exactly 1 input");
+            inputs[0].inverted()
+        }
+        "and" => build_chain_gate(&inputs, false, false, and_gates),
+        "nand" => build_chain_gate(&inputs, false, true, and_gates),
+        // OR via De Morgan: a + b = NOT(NOT(a) AND NOT(b))
+        "or" => build_chain_gate(&inputs, true, true, and_gates),
+        "nor" => build_chain_gate(&inputs, true, false, and_gates),
+        "xor" => build_xor_chain(&inputs, false, and_gates),
+        "xnor" => build_xor_chain(&inputs, true, and_gates),
+        other if other.starts_with("UDP_") || other.starts_with("UDP_GF018") => {
+            panic!(
+                "GF180MCU UDP primitive '{other}' (in cell with output '{}') not yet \
+                 decomposed — sequential / clock-gating cells land in Phase 4b. \
+                 See docs/plans/gf180mcu-enablement.md.",
+                gate.output
+            );
+        }
+        other => panic!(
+            "Unhandled GF180MCU primitive '{other}' in gate with output '{}'. \
+             If this is a new Verilog primitive, extend apply_gate().",
+            gate.output
+        ),
+    }
+}
+
 /// Flip-flops + latches + clock-gating cells — anything whose Q output
 /// captures state across a clock edge (or transparency window).
 pub fn is_sequential_cell(cell_type: &str) -> bool {
@@ -242,5 +408,175 @@ mod tests {
             assert!(!is_filler_cell(c), "{c} should not be a filler");
             assert!(!is_delay_cell(c), "{c} should not be a delay cell");
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Boolean-equivalence: AIG decomposition vs Verilog reference oracle.
+    //
+    // For each combinational cell type we exercise:
+    //   1. Parse the .functional.v model.
+    //   2. Assign each input a unique aigpin_iv (even = uninverted).
+    //   3. Iterate all 2^N input combinations.
+    //   4. Evaluate via eval_behavioral_model (Verilog interpretation).
+    //   5. Decompose to AIG via decompose_combinational.
+    //   6. Walk the AIG and compare outputs.
+    //
+    // The AIG walker matches the encoding in sky130_pdk::finalize_decomp_result.
+    // -------------------------------------------------------------------------
+
+    fn load_cell_model(cell_type: &str) -> BehavioralModel {
+        let dir = Path::new("vendor/gf180mcu_fd_sc_mcu7t5v0/cells").join(cell_type);
+        let path = pick_smallest_drive_functional(&dir)
+            .unwrap_or_else(|| panic!("no functional.v under {}", dir.display()));
+        let src = std::fs::read_to_string(&path).unwrap();
+        crate::pdk_decomp::parse_functional_model(&src)
+            .unwrap_or_else(|| panic!("parse {}", path.display()))
+    }
+
+    /// Evaluate a decomposed AIG on a set of input pin values.
+    fn eval_decomp(decomp: &DecompResult, pin_values: &HashMap<usize, bool>) -> bool {
+        let mut gate_values: Vec<bool> = Vec::with_capacity(decomp.and_gates.len());
+        for &(a_ref, b_ref) in &decomp.and_gates {
+            let a = resolve_ref(a_ref, pin_values, &gate_values);
+            let b = resolve_ref(b_ref, pin_values, &gate_values);
+            gate_values.push(a & b);
+        }
+        let base = if decomp.output_idx >= 0 {
+            pin_values[&(decomp.output_idx as usize)]
+        } else {
+            let gate_idx = (-decomp.output_idx - 1) as usize;
+            gate_values[gate_idx]
+        };
+        base ^ decomp.output_inverted
+    }
+
+    fn resolve_ref(v: i64, pins: &HashMap<usize, bool>, gates: &[bool]) -> bool {
+        if v >= 0 {
+            let iv = v as usize;
+            let pin_idx = iv >> 1;
+            let inv = (iv & 1) == 1;
+            pins[&pin_idx] ^ inv
+        } else {
+            // Encoding from convert_ref_to_standard: gate_idx N uninverted → -(2N+1);
+            // inverted → -(2N+1) ^ 1 (which is even since -(2N+1) is odd).
+            let inv = (v & 1) == 0;
+            let gate_idx = if inv {
+                ((-v - 2) / 2) as usize
+            } else {
+                ((-v - 1) / 2) as usize
+            };
+            gates[gate_idx] ^ inv
+        }
+    }
+
+    /// For one cell + output pin, sweep every 2^N input combination and
+    /// assert AIG output matches the Verilog-interpreted reference.
+    fn assert_equivalent(cell_type: &str, output_pin: &str) {
+        let model = load_cell_model(cell_type);
+        let n = model.inputs.len();
+        assert!(n <= 8, "{cell_type} has {n} inputs — bump the sweep cap");
+
+        // Assign each input pin index 1, 2, 3, … (aigpin_iv = idx * 2).
+        let pin_index_for: HashMap<String, usize> = model
+            .inputs
+            .iter()
+            .enumerate()
+            .map(|(i, name)| (name.clone(), i + 1))
+            .collect();
+        let aigpin_iv_inputs: HashMap<String, usize> = pin_index_for
+            .iter()
+            .map(|(name, &idx)| (name.clone(), idx * 2))
+            .collect();
+
+        let decomp = decompose_combinational(&model, &aigpin_iv_inputs, output_pin);
+
+        let empty_udps = HashMap::new();
+        for mask in 0..(1u32 << n) {
+            let mut bool_inputs: HashMap<String, bool> = HashMap::new();
+            let mut pin_values: HashMap<usize, bool> = HashMap::new();
+            for (i, name) in model.inputs.iter().enumerate() {
+                let bit = (mask >> i) & 1 == 1;
+                bool_inputs.insert(name.clone(), bit);
+                pin_values.insert(pin_index_for[name], bit);
+            }
+            let expected = crate::sky130_pdk::eval_behavioral_model(
+                &model,
+                &bool_inputs,
+                output_pin,
+                &empty_udps,
+            );
+            let got = eval_decomp(&decomp, &pin_values);
+            assert_eq!(
+                got, expected,
+                "cell={cell_type} pin={output_pin} mask=0b{mask:0width$b} \
+                 inputs={bool_inputs:?}: expected {expected}, got {got}",
+                width = n.max(1)
+            );
+        }
+    }
+
+    #[test]
+    fn equivalent_inv() {
+        assert_equivalent("inv", "ZN");
+    }
+
+    #[test]
+    fn equivalent_buf() {
+        assert_equivalent("buf", "Z");
+    }
+
+    #[test]
+    fn equivalent_nand2() {
+        assert_equivalent("nand2", "ZN");
+    }
+
+    #[test]
+    fn equivalent_nand4() {
+        assert_equivalent("nand4", "ZN");
+    }
+
+    #[test]
+    fn equivalent_or3() {
+        assert_equivalent("or3", "Z");
+    }
+
+    #[test]
+    fn equivalent_nor2() {
+        assert_equivalent("nor2", "ZN");
+    }
+
+    #[test]
+    fn equivalent_xor2() {
+        assert_equivalent("xor2", "Z");
+    }
+
+    #[test]
+    fn equivalent_xnor3() {
+        assert_equivalent("xnor3", "ZN");
+    }
+
+    #[test]
+    fn equivalent_aoi22() {
+        assert_equivalent("aoi22", "ZN");
+    }
+
+    #[test]
+    fn equivalent_oai222() {
+        assert_equivalent("oai222", "ZN");
+    }
+
+    #[test]
+    fn equivalent_mux2() {
+        assert_equivalent("mux2", "Z");
+    }
+
+    #[test]
+    fn equivalent_addf_sum() {
+        assert_equivalent("addf", "S");
+    }
+
+    #[test]
+    fn equivalent_addf_carry_out() {
+        assert_equivalent("addf", "CO");
     }
 }

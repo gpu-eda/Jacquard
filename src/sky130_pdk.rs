@@ -658,8 +658,11 @@ fn eval_udp_for_inputs(udp: &UdpModel, input_vals: &[bool]) -> bool {
 /// Internal wire value during AIG construction from a behavioral model.
 /// Can be either a reference to a module input (by aigpin_iv) or an intermediate
 /// AND gate we built (by gate index).
+///
+/// `pub(crate)` so sibling PDK modules can construct AIG sub-circuits
+/// through the same primitives — see `crate::pdk_decomp` re-exports.
 #[derive(Clone, Copy, Debug)]
-enum WireVal {
+pub(crate) enum WireVal {
     /// An AIG pin with inversion bit (aigpin_iv). Bit 0 = inverted.
     AigPin(usize),
     /// Constant value
@@ -668,7 +671,7 @@ enum WireVal {
 
 impl WireVal {
     /// Get the aigpin_iv value, creating const-0 = AigPin(0) convention.
-    fn as_aigpin_iv(self) -> i64 {
+    pub(crate) fn as_aigpin_iv(self) -> i64 {
         match self {
             WireVal::AigPin(iv) => iv as i64,
             WireVal::Const(false) => 0, // const-0
@@ -677,7 +680,7 @@ impl WireVal {
     }
 
     /// Invert this wire value.
-    fn inverted(self) -> Self {
+    pub(crate) fn inverted(self) -> Self {
         match self {
             WireVal::AigPin(iv) => WireVal::AigPin(iv ^ 1),
             WireVal::Const(v) => WireVal::Const(!v),
@@ -809,7 +812,7 @@ pub fn decompose_from_behavioral(
 /// For OR/NOR: invert all inputs, AND them, optionally invert at the end.
 ///   OR(a,b,c) = NOT(AND(NOT a, NOT b, NOT c))
 ///   NOR(a,b,c) = AND(NOT a, NOT b, NOT c)
-fn build_chain_gate(
+pub(crate) fn build_chain_gate(
     inputs: &[WireVal],
     invert_inputs: bool,
     invert_output: bool,
@@ -842,7 +845,7 @@ fn build_chain_gate(
 
 /// Marker bit to distinguish gate references from pin references.
 /// Gate outputs use bit 30 set. This limits us to ~500M gates (more than enough).
-const GATE_MARKER: usize = 1 << 30;
+pub(crate) const GATE_MARKER: usize = 1 << 30;
 
 /// Check if an aigpin_iv value is a gate reference.
 fn is_gate_ref(aigpin_iv: usize) -> bool {
@@ -881,7 +884,7 @@ fn build_xor_2(a: WireVal, b: WireVal, and_gates: &mut Vec<(i64, i64)>) -> WireV
 }
 
 /// Build XOR/XNOR chain for multi-input gates.
-fn build_xor_chain(
+pub(crate) fn build_xor_chain(
     inputs: &[WireVal],
     invert_output: bool,
     and_gates: &mut Vec<(i64, i64)>,
@@ -1025,7 +1028,7 @@ fn get_cell_input_by_name(inputs: &CellInputs, name: &str) -> usize {
 
 /// Post-process a DecompResult built with GATE_MARKER encoding to use
 /// standard negative-index encoding for the and_gates references.
-fn finalize_decomp_result(and_gates: Vec<(i64, i64)>, output: WireVal) -> DecompResult {
+pub(crate) fn finalize_decomp_result(and_gates: Vec<(i64, i64)>, output: WireVal) -> DecompResult {
     // Convert gate references in and_gates from GATE_MARKER to negative indices
     let converted_gates: Vec<(i64, i64)> = and_gates
         .iter()
