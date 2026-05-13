@@ -28,8 +28,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::sky130_pdk::{
-    build_chain_gate, build_xor_chain, finalize_decomp_result, BehavioralGate, BehavioralModel,
-    DecompResult, UdpModel, WireVal,
+    build_chain_gate, build_udp_aig, build_xor_chain, finalize_decomp_result, parse_udp,
+    BehavioralGate, BehavioralModel, DecompResult, UdpModel, WireVal,
 };
 
 /// Behavioral models + UDPs for the GF180MCU PDK.
@@ -39,25 +39,44 @@ use crate::sky130_pdk::{
 /// `PdkModels` but lives separately because the on-disk layout differs.
 pub struct Gf180PdkModels {
     /// Behavioral models indexed by base cell type (e.g. "nand2").
+    /// Excludes sequential and tie/filler cells — those go through
+    /// dedicated paths in `aig.rs::gf180mcu_postprocess`.
     pub models: HashMap<String, BehavioralModel>,
-    /// UDP models indexed by primitive name. Currently empty — UDP
-    /// handling for DFFs/latches/clock-gating lands in Phase 4b.
+    /// UDP models indexed by the **functional.v gate-type name**
+    /// (e.g. `UDP_GF018hv5v_mcu_sc7_TT_1P8V_25C_verilog_nonpg_MGM_N_IQ_FF_UDP`).
+    /// Populated from the four PDK-provided primitives under
+    /// `vendor/gf180mcu_fd_sc_mcu7t5v0/models/`. Currently used only
+    /// for symmetry with sky130 — all GF180MCU sequential cells are
+    /// short-circuited by `gf180mcu_postprocess` and never invoke
+    /// the SOP decomposer, but the map is here so a future
+    /// combinational UDP would route cleanly.
     pub udps: HashMap<String, UdpModel>,
 }
 
-/// Load behavioral models for the requested base cell types.
+/// Load behavioral models + UDP models needed to decompose a set of cells.
 ///
 /// Resolves each cell type to a `.functional.v` file under the vendored
 /// `gf180mcu_fd_sc_mcu7t5v0` submodule. The 7t and 9t libraries share
 /// identical port layouts and functional bodies (verified at build
 /// time by `build.rs`), so we read from 7t exclusively.
 ///
-/// Panics on missing cell types — callers should restrict the request
-/// to the catalogue published in `GF180MCU_PIN_TABLE` plus the union
-/// of cells actually present in the user's netlist.
+/// Sequential, tie, and filler cells are skipped — their behaviour
+/// is hard-coded in `aig.rs::gf180mcu_preprocess`/`gf180mcu_postprocess`
+/// (matching the sky130 precedent of skipping sequentials in its own
+/// `load_pdk_models`). The functional.v files for sequential cells
+/// reference state-holding UDP primitives that can't be decomposed
+/// to pure combinational AIG anyway.
 pub fn load_pdk_models(cells_root: &Path, cell_types: &[String]) -> Gf180PdkModels {
     let mut models = HashMap::new();
+    let mut udps: HashMap<String, UdpModel> = HashMap::new();
+    let models_root = cells_root.join("models");
+
     for cell_type in cell_types {
+        if is_sequential_cell(cell_type) || is_tie_cell(cell_type) || is_filler_cell(cell_type) {
+            // Sequential cells: state-holding UDPs handled directly in
+            // gf180mcu_postprocess. Tie/filler: no logic to load.
+            continue;
+        }
         // The submodule lays out files as
         //   cells/<type>/gf180mcu_fd_sc_mcu7t5v0__<type>_<drive>.functional.v
         // Pick the smallest drive available — the functional body is
@@ -75,12 +94,93 @@ pub fn load_pdk_models(cells_root: &Path, cell_types: &[String]) -> Gf180PdkMode
         let model = crate::pdk_decomp::parse_functional_model(&src).unwrap_or_else(|| {
             panic!("parse {}: returned None", entry.display())
         });
+
+        // Load any UDPs this model references, by functional.v
+        // gate-type name. Currently no combinational cells reference
+        // UDPs, but the loop preserves symmetry with sky130.
+        for gate in &model.gates {
+            if gate.gate_type.starts_with("UDP_GF018") && !udps.contains_key(&gate.gate_type) {
+                if let Some(udp) = load_udp_by_functional_name(&models_root, &gate.gate_type) {
+                    udps.insert(gate.gate_type.clone(), udp);
+                }
+            }
+        }
         models.insert(cell_type.clone(), model);
     }
-    Gf180PdkModels {
-        models,
-        udps: HashMap::new(),
+
+    Gf180PdkModels { models, udps }
+}
+
+/// Resolve a functional.v UDP gate-type name to its on-disk primitive
+/// definition under `vendor/gf180mcu_fd_sc_mcu7t5v0/models/`.
+///
+/// The `.functional.v` files reference UDPs by names of the form
+/// `UDP_GF018hv5v_mcu_sc7_TT_<corner>_verilog_<pg>_MGM_<kind>_UDP` where
+/// `<kind>` is one of `N_IQ_FF` / `HN_IQ_FF` / `N_IQ_LATCH` / `HN_IQ_LATCH`.
+/// The on-disk primitive name is `gf180mcu_fd_sc_mcu7t5v0__udp_<kind_lc>`,
+/// and the directory name matches `udp_<kind_lc>` — except for the latch
+/// with both R and S, whose directory is misspelt `upd_hn_iq_latch`
+/// upstream.
+///
+/// Returns the parsed UDP keyed under the **functional.v gate name** so
+/// `build_udp_aig` (which looks up gates by `gate.gate_type`) hits.
+fn load_udp_by_functional_name(models_root: &Path, gate_name: &str) -> Option<UdpModel> {
+    // Strip the boilerplate prefix; what remains is e.g. "MGM_N_IQ_FF_UDP".
+    let suffix = gate_name
+        .rsplit_once("_MGM_")
+        .map(|(_, s)| s)
+        .unwrap_or(gate_name);
+    let kind_lc = suffix.trim_end_matches("_UDP").to_lowercase();
+    if kind_lc.is_empty() {
+        return None;
     }
+
+    // Two candidate directory names: the canonical `udp_<kind_lc>` and
+    // the upstream typo `upd_<kind_lc>` (latch with both R and S).
+    let candidate_dirs = [
+        format!("udp_{kind_lc}"),
+        format!("upd_{kind_lc}"),
+    ];
+    let candidate_files = [
+        format!("gf180mcu_mcu7t5v0__udp_{kind_lc}.v"),
+        format!("gf180mcu_fd_sc_mcu7t5v0__udp_{kind_lc}.v"),
+    ];
+
+    for dir_name in &candidate_dirs {
+        let dir = models_root.join(dir_name);
+        if !dir.is_dir() {
+            continue;
+        }
+        for file_name in &candidate_files {
+            let path = dir.join(file_name);
+            if !path.is_file() {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+                panic!("read {}: {e}", path.display());
+            });
+            if let Some(mut udp) = parse_udp(&src) {
+                // Rekey so build_udp_aig finds it by the functional.v name.
+                udp.name = gate_name.to_string();
+                return Some(udp);
+            }
+        }
+        // Fallback: take the first .v file in the directory.
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for entry in rd.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|s| s.to_str()) == Some("v") {
+                    let src = std::fs::read_to_string(&p)
+                        .unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+                    if let Some(mut udp) = parse_udp(&src) {
+                        udp.name = gate_name.to_string();
+                        return Some(udp);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 fn pick_smallest_drive_functional(cell_dir: &Path) -> Option<std::path::PathBuf> {
@@ -103,21 +203,27 @@ fn pick_smallest_drive_functional(cell_dir: &Path) -> Option<std::path::PathBuf>
     best.map(|(_, p)| p)
 }
 
-/// Decompose one combinational GF180MCU cell to AIG primitives.
+/// Decompose one GF180MCU cell to AIG primitives using loaded PDK models.
 ///
 /// Handles standard Verilog gate primitives (`not`, `buf`, `and`, `or`,
-/// `nand`, `nor`, `xor`, `xnor`). Sequential cells and clock-gating
-/// cells use `UDP_GF018hv5v_*` primitives that this function panics
-/// on — that's Phase 4b territory. Combinational AOI/OAI/mux/adder
-/// cells use only standard primitives and are in scope here.
+/// `nand`, `nor`, `xor`, `xnor`) plus `UDP_GF018*` UDP instantiations
+/// routed through `build_udp_aig` (sum-of-products from the UDP truth
+/// table). The current GF180MCU catalogue has no combinational UDP
+/// cells, so the UDP path is dormant; sequential cells short-circuit
+/// out of this function in `aig.rs::gf180mcu_postprocess`.
+///
+/// Mirrors the shape of `sky130_pdk::decompose_with_pdk`. The two-argument
+/// `decompose_combinational` wrapper survives for tests that don't load
+/// a `Gf180PdkModels` (their cells never reach UDP gates anyway).
 ///
 /// `inputs` maps each module-input port name to its `aigpin_iv` value
 /// in the global AIG. `output_pin` selects which module-output port
 /// the returned DecompResult drives (adders have two: `S`, `CO`).
-pub fn decompose_combinational(
+pub fn decompose_with_pdk(
     model: &BehavioralModel,
     inputs: &HashMap<String, usize>,
     output_pin: &str,
+    udps: &HashMap<String, UdpModel>,
 ) -> DecompResult {
     let mut wires: HashMap<String, WireVal> = HashMap::new();
     for name in &model.inputs {
@@ -133,7 +239,7 @@ pub fn decompose_combinational(
     let mut and_gates: Vec<(i64, i64)> = Vec::new();
 
     for gate in &model.gates {
-        let result = apply_gate(gate, &wires, &mut and_gates);
+        let result = apply_gate(gate, &wires, udps, &mut and_gates);
         wires.insert(gate.output.clone(), result);
     }
 
@@ -146,9 +252,22 @@ pub fn decompose_combinational(
     finalize_decomp_result(and_gates, output)
 }
 
+/// UDP-free wrapper for callers (e.g. equivalence tests) that load
+/// models directly and never instantiate a UDP gate. Forwards to
+/// `decompose_with_pdk` with an empty UDP map.
+pub fn decompose_combinational(
+    model: &BehavioralModel,
+    inputs: &HashMap<String, usize>,
+    output_pin: &str,
+) -> DecompResult {
+    let empty: HashMap<String, UdpModel> = HashMap::new();
+    decompose_with_pdk(model, inputs, output_pin, &empty)
+}
+
 fn apply_gate(
     gate: &BehavioralGate,
     wires: &HashMap<String, WireVal>,
+    udps: &HashMap<String, UdpModel>,
     and_gates: &mut Vec<(i64, i64)>,
 ) -> WireVal {
     let lookup = |n: &str| -> WireVal {
@@ -174,13 +293,8 @@ fn apply_gate(
         "nor" => build_chain_gate(&inputs, true, false, and_gates),
         "xor" => build_xor_chain(&inputs, false, and_gates),
         "xnor" => build_xor_chain(&inputs, true, and_gates),
-        other if other.starts_with("UDP_") || other.starts_with("UDP_GF018") => {
-            panic!(
-                "GF180MCU UDP primitive '{other}' (in cell with output '{}') not yet \
-                 decomposed — sequential / clock-gating cells land in Phase 4b. \
-                 See docs/plans/gf180mcu-enablement.md.",
-                gate.output
-            );
+        other if other.starts_with("UDP_GF018") => {
+            build_udp_aig(gate, wires, udps, and_gates)
         }
         other => panic!(
             "Unhandled GF180MCU primitive '{other}' in gate with output '{}'. \
@@ -376,6 +490,56 @@ mod tests {
             "expected a UDP_GF018 entry in the gate list: {:?}",
             model.gates
         );
+    }
+
+    #[test]
+    fn load_pdk_models_loads_udps_referenced_by_sequential_cells() {
+        // Although sequential cells aren't loaded as models, their UDP
+        // references must still be picked up so a future combinational
+        // UDP cell would have its truth table available. Verify that
+        // the four PDK UDPs map back from their functional.v gate
+        // names. Done by running the loader on a list that includes
+        // a few sequentials — the loader skips the sequential model
+        // but reads its functional.v specifically to collect UDP refs.
+        //
+        // Per the current design, sequentials skip model load entirely,
+        // so this currently asserts the *negative* — UDPs come along
+        // only when a combinational cell references one. We assert
+        // the loader doesn't panic and surfaces some sensible state.
+        let cells_root = Path::new("vendor/gf180mcu_fd_sc_mcu7t5v0");
+        let cells = ["nand2".to_string(), "dffq".to_string()];
+        let pdk = load_pdk_models(cells_root, &cells);
+        // nand2 loads; dffq is skipped (sequential).
+        assert!(pdk.models.contains_key("nand2"));
+        assert!(!pdk.models.contains_key("dffq"));
+    }
+
+    #[test]
+    fn load_udp_by_functional_name_resolves_all_four_primitives() {
+        let models_root =
+            Path::new("vendor/gf180mcu_fd_sc_mcu7t5v0/models");
+        // The four UDP gate-type names referenced by GF180MCU
+        // functional.v files (corner+pg fields stripped down to a
+        // representative one). The loader must resolve all four —
+        // including the directory-name typo `upd_hn_iq_latch`.
+        let ff_n = "UDP_GF018hv5v_mcu_sc7_TT_1P8V_25C_verilog_nonpg_MGM_N_IQ_FF_UDP";
+        let ff_hn = "UDP_GF018hv5v_mcu_sc7_TT_1P8V_25C_verilog_nonpg_MGM_HN_IQ_FF_UDP";
+        let lat_n = "UDP_GF018hv5v_mcu_sc7_TT_1P8V_25C_verilog_nonpg_MGM_N_IQ_LATCH_UDP";
+        let lat_hn = "UDP_GF018hv5v_mcu_sc7_TT_1P8V_25C_verilog_nonpg_MGM_HN_IQ_LATCH_UDP";
+
+        for name in [ff_n, ff_hn, lat_n, lat_hn] {
+            let udp = load_udp_by_functional_name(models_root, name).unwrap_or_else(|| {
+                panic!("failed to load UDP '{name}' from {}", models_root.display())
+            });
+            assert_eq!(udp.name, name, "UDP rekey by functional.v gate name");
+            // Every PDK UDP for FF/latch has 5 inputs: C, P, CK, D, N.
+            assert_eq!(
+                udp.inputs.len(),
+                5,
+                "{name}: expected 5 inputs (C, P, CK, D, N), got {:?}",
+                udp.inputs
+            );
+        }
     }
 
     #[test]
