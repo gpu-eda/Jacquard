@@ -904,7 +904,10 @@ pub(crate) fn build_xor_chain(
 }
 
 /// Build AIG for a UDP instantiation by converting truth table to sum-of-products.
-fn build_udp_aig(
+///
+/// `pub(crate)` so sibling PDK modules (e.g. `gf180mcu_pdk::decompose_with_pdk`)
+/// can route their own UDP gate-type prefixes through the same SOP builder.
+pub(crate) fn build_udp_aig(
     gate: &BehavioralGate,
     wires: &HashMap<String, WireVal>,
     udps: &HashMap<String, UdpModel>,
