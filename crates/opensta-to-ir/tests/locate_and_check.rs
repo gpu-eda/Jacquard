@@ -4,7 +4,8 @@
 
 #![cfg(unix)]
 
-use std::os::unix::fs::PermissionsExt;
+use std::io::Write as _;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::PathBuf;
 
 use opensta_to_ir::opensta::{
@@ -13,12 +14,22 @@ use opensta_to_ir::opensta::{
 use tempfile::TempDir;
 
 /// Write `script` to `dir/sta`, mark it executable, and return the path.
+///
+/// Opens the file with mode 0o755 in a single syscall and explicitly drops
+/// the writer before returning. Doing chmod after `std::fs::write` returns
+/// leaves a window where Linux can fail an immediate `execve` with
+/// ETXTBSY ("Text file busy"), which this test then sees as an
+/// `io::ErrorKind::ExecutableFileBusy` spawn failure.
 fn write_stub_script(dir: &TempDir, script: &str) -> PathBuf {
     let path = dir.path().join("sta");
-    std::fs::write(&path, script).unwrap();
-    let mut perms = std::fs::metadata(&path).unwrap().permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(&path, perms).unwrap();
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o755)
+        .open(&path)
+        .unwrap();
+    f.write_all(script.as_bytes()).unwrap();
+    drop(f);
     path
 }
 
@@ -99,22 +110,6 @@ fn locate_reports_unparseable_version_output() {
 fn locate_reports_failing_version_probe() {
     let dir = TempDir::new().unwrap();
     let stub = write_failing_stub(&dir);
-
-    // Diagnostic: confirm the stub actually runs and exits non-zero before
-    // exercising the crate. If the runner can't execute `/usr/bin/env bash`
-    // or the script is otherwise mis-spawned, this reveals it before the
-    // matches! check.
-    let direct = std::process::Command::new(&stub)
-        .arg("-version")
-        .output()
-        .expect("stub should at least spawn");
-    eprintln!(
-        "stub direct invocation: status={:?} stdout={:?} stderr={:?}",
-        direct.status,
-        String::from_utf8_lossy(&direct.stdout),
-        String::from_utf8_lossy(&direct.stderr),
-    );
-
     let err = locate_and_check(Some(&stub)).unwrap_err();
     match err {
         LocateError::VersionProbeNonZero { .. } => {}
