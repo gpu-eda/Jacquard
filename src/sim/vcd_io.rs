@@ -289,7 +289,18 @@ pub fn match_vcd_inputs(
     let mut match_one_input = |var: &Var, i: Option<isize>, vcd_pos: usize| {
         let key = (VCDHier::empty(), var.reference.as_str(), i);
         if let Some(&id) = netlistdb.pinname2id.get(&key as &dyn GeneralPinName) {
-            if netlistdb.pindirect[id] != Direction::O {
+            // Accept top-level inputs (Direction::O — top-level inputs
+            // "output" onto the netlist's nets) *and* top-level inouts
+            // (Direction::Unknown — NetlistDB doesn't model bidir, so
+            // it tags inout ports as Unknown and AIG construction
+            // treats them as primary inputs). Top-level outputs
+            // (Direction::I) are not stimulated and stay rejected.
+            //
+            // Without accepting Unknown, designs with inout chip-top
+            // ports (e.g. wafer.space chip-top netlists where every
+            // pad is an inout) would silently fail to absorb their
+            // own primary-input stimulus VCD.
+            if !matches!(netlistdb.pindirect[id], Direction::O | Direction::Unknown) {
                 return;
             }
             vcd2inp.insert((var.code.0, vcd_pos), id);

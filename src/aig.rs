@@ -528,8 +528,17 @@ impl AIG {
                     let ct = crate::gf180mcu::extract_cell_type(celltype);
                     matches!(ct, "buf" | "clkbuf")
                 });
+            // GF180MCU input pads on the clock path buffer PAD → Y, so
+            // they're traceable just like a clkbuf. bi_24t is *not*
+            // included: a bidir pad clocking the core would more likely
+            // be a netlist bug than an intentional design — keep the
+            // matching tight so it still errors.
+            let is_io_pad_buf = is_gf180mcu_cell(celltype) && {
+                let ct = crate::gf180mcu::extract_cell_type(celltype);
+                matches!(ct, "in_c" | "in_s")
+            };
 
-            if !is_inv && !is_buf && celltype != "CKLNQD" {
+            if !is_inv && !is_buf && !is_io_pad_buf && celltype != "CKLNQD" {
                 clilog::error!(
                     "cell type {} not supported on clock path. expecting only INV, BUF, or CKLNQD (or SKY130 / GF180MCU equivalents)",
                     celltype
@@ -540,10 +549,16 @@ impl AIG {
             for ipin in netlistdb.cell2pin.iter_set(cellid) {
                 if netlistdb.pindirect[ipin] == Direction::I {
                     match netlistdb.pinnames[ipin].1.as_str() {
-                        // AIGPDK / sky130 use `A`; GF180MCU buf/inv cells use `I`.
-                        "A" | "I" => pin_a = ipin,
+                        // AIGPDK / sky130 use `A`; GF180MCU buf/inv cells
+                        // use `I`; GF180MCU input pads carry the clock
+                        // on `PAD`.
+                        "A" | "I" | "PAD" => pin_a = ipin,
                         "CP" => pin_cp = ipin,
                         "E" => pin_en = ipin,
+                        // IO-pad sim-irrelevant control pins (pull,
+                        // Schmitt, etc.) — ignore them when this cell
+                        // is on the clock path.
+                        "PU" | "PD" | "IE" | "CS" | "SL" => {}
                         i => {
                             clilog::error!(
                                 "input pin {} unexpected for ck element {}",
@@ -560,7 +575,7 @@ impl AIG {
                 assert_ne!(pin_a, usize::MAX);
                 current_pinid = pin_a;
                 current_is_negedge = !is_negedge;
-            } else if is_buf {
+            } else if is_buf || is_io_pad_buf {
                 assert_ne!(pin_a, usize::MAX);
                 current_pinid = pin_a;
                 // is_negedge stays the same
@@ -1507,16 +1522,17 @@ impl AIG {
         // Build inputs map by pin name. The HashMap allocation per cell
         // is fine — combinational cells are small and the decomposer
         // path runs once per cell instance during AIG construction.
+        //
+        // Filter by `Direction::I` only. Do NOT skip by pin-name list:
+        // pin names are not unique across cells — e.g. GF180MCU's
+        // `mux2` uses `S` as a select *input* while `addf` uses `S`
+        // as a sum *output* — so a name-based blacklist can drop a
+        // real input.
         let mut inputs: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
         for ipin in netlistdb.cell2pin.iter_set(cellid) {
-            if netlistdb.pindirect[ipin] != Direction::O {
+            if netlistdb.pindirect[ipin] == Direction::I {
                 let pin_name = netlistdb.pinnames[ipin].1.as_str();
-                // Skip output pins by name (defensive — handles cells
-                // with mis-detected pin directions).
-                if matches!(pin_name, "Z" | "ZN" | "Q" | "S" | "CO") {
-                    continue;
-                }
                 inputs.insert(pin_name.to_string(), self.pin2aigpin_iv[ipin]);
             }
         }
@@ -3440,10 +3456,10 @@ mod gf180mcu_chip_top_tests {
     use super::*;
     use crate::gf180mcu::GF180MCULeafPins;
 
-    /// End-to-end: a miniature stand-in for the wafer.space chess
-    /// chip-top builds without panic — pad ring (in_s / in_c /
-    /// bi_24t / asig_5p0 / fill10 / cor / ws_io / ws_ip) + a trivial
-    /// std-cell core. Catches regressions in:
+    /// End-to-end: a miniature GF180MCU chip-top builds without panic
+    /// — full pad ring (in_s / in_c / bi_24t / asig_5p0 / fill10 / cor
+    /// / ws_io / ws_ip) wrapping a trivial std-cell core. Catches
+    /// regressions in:
     ///   * `is_gf180mcu_cell` + `extract_cell_type` (gf180mcu_pdk)
     ///   * `GF180MCU_PAD_PIN_TABLE` (gf180mcu.rs)
     ///   * `is_filler_cell` / `is_io_pad_cell` (gf180mcu_pdk.rs)
@@ -3544,5 +3560,31 @@ endmodule
         // construction succeeded and produced a sensible-sized graph.
         assert!(aig_bi.num_aigpins > 0);
         assert!(aig_ic.num_aigpins > 0);
+    }
+
+    /// Regression: gf180mcu's `mux2` cell has a `S` select *input* port,
+    /// but the previous postprocess inputs-collection logic was
+    /// name-blacklisting `S` (assuming it was an adder's sum *output*).
+    /// That caused `decompose_with_pdk` to panic "Input pin 'S' not
+    /// provided" when constructing the AIG for any netlist containing
+    /// a mux2 — which is every real GF180MCU post-synthesis netlist.
+    /// Now we filter by `Direction::I` only and trust the pin table.
+    #[test]
+    fn aig_builds_for_mux2_with_select_input() {
+        const VERILOG: &str = r#"
+module top(a, b, sel, y);
+  input a, b, sel;
+  output y;
+  gf180mcu_fd_sc_mcu9t5v0__mux2_1 u1 (.I0(a), .I1(b), .S(sel), .Z(y));
+endmodule
+"#;
+        let nl = netlistdb::NetlistDB::from_sverilog_source(
+            VERILOG,
+            Some("top"),
+            &GF180MCULeafPins,
+        )
+        .expect("netlist parse");
+        let aig = AIG::from_netlistdb(&nl);
+        assert!(aig.num_aigpins > 0, "AIG should have at least one pin");
     }
 }
