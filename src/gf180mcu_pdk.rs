@@ -72,9 +72,15 @@ pub fn load_pdk_models(cells_root: &Path, cell_types: &[String]) -> Gf180PdkMode
     let models_root = cells_root.join("models");
 
     for cell_type in cell_types {
-        if is_sequential_cell(cell_type) || is_tie_cell(cell_type) || is_filler_cell(cell_type) {
+        if is_sequential_cell(cell_type)
+            || is_tie_cell(cell_type)
+            || is_filler_cell(cell_type)
+            || is_io_pad_cell(cell_type)
+        {
             // Sequential cells: state-holding UDPs handled directly in
-            // gf180mcu_postprocess. Tie/filler: no logic to load.
+            // gf180mcu_postprocess. Tie / filler / IO pad: no functional.v
+            // to load — pads' behaviour is hard-coded in
+            // gf180mcu_postprocess (no tristate model).
             continue;
         }
         // The submodule lays out files as
@@ -329,13 +335,32 @@ pub fn is_tie_cell(cell_type: &str) -> bool {
     matches!(cell_type, "tieh" | "tiel")
 }
 
-/// Physical-only cells: fillers, decap, end-cap, antenna diodes.
-/// Recognised so post-P&R netlists parse, but they contribute no
-/// logic to the AIG.
+/// Physical-only cells: fillers, decap, end-cap, antenna diodes,
+/// IO-ring fillers, corner cells, analog passthrough, wafer.space
+/// power pads, and wafer.space empty IP stubs (id / logo).
+///
+/// Recognised so post-P&R netlists with chip-top pad rings parse,
+/// but they contribute no logic to the AIG. The cell type names
+/// match the base form returned by [`crate::gf180mcu::extract_cell_type`]
+/// after library-prefix stripping (so `gf180mcu_fd_io__fill10` is
+/// classified as `fill10`, `gf180mcu_ws_io__dvdd` as `dvdd`, and so
+/// on).
 pub fn is_filler_cell(cell_type: &str) -> bool {
     matches!(
         cell_type,
+        // Standard-cell fillers / antenna / endcap.
         "antenna" | "endcap" | "fill" | "fillcap" | "filltie"
+        // IO-ring fillers from the fd_io library.
+        | "fill1" | "fill5" | "fill10" | "fillnc"
+        // IO-ring corner.
+        | "cor"
+        // Analog 5V passthrough — Jacquard cannot simulate analog;
+        // classified as filler so the chip-top netlist parses.
+        | "asig_5p0"
+        // wafer.space power pads.
+        | "dvdd" | "dvss"
+        // wafer.space empty IP stubs (id / logo are `module X; endmodule`).
+        | "id" | "logo"
     )
 }
 
@@ -343,6 +368,21 @@ pub fn is_filler_cell(cell_type: &str) -> bool {
 /// I → Z, but inserted by P&R for timing reasons rather than logic.
 pub fn is_delay_cell(cell_type: &str) -> bool {
     matches!(cell_type, "dlya" | "dlyb" | "dlyc" | "dlyd" | "hold")
+}
+
+/// Logic-bearing IO pads. Their behaviour is hard-coded in
+/// `aig.rs::gf180mcu_postprocess` (the simplification is documented
+/// there) rather than parsed from a `.functional.v` — those pad models
+/// use `bufif1` / `rnmos` / continuous-assign primitives that the
+/// standard-cell decomposer doesn't handle.
+///
+/// * `in_c` / `in_s`: trivial input buffer, `Y = PAD`.
+/// * `bi_24t`: digital-sim simplification, `Y = PAD` (the cell's `A`
+///   and `OE` inputs are discarded because Jacquard does not model
+///   tristate; PAD's value comes from the top-level inout port,
+///   which is treated as a primary input).
+pub fn is_io_pad_cell(cell_type: &str) -> bool {
+    matches!(cell_type, "in_c" | "in_s" | "bi_24t")
 }
 
 /// Cells with more than one functional output. The AIG builder
@@ -402,13 +442,32 @@ mod tests {
 
     #[test]
     fn filler_classification() {
+        // Standard-cell physical-only.
         assert!(is_filler_cell("fill"));
         assert!(is_filler_cell("fillcap"));
         assert!(is_filler_cell("filltie"));
         assert!(is_filler_cell("endcap"));
         assert!(is_filler_cell("antenna"));
+        // IO-ring fillers (fd_io family).
+        assert!(is_filler_cell("fill1"));
+        assert!(is_filler_cell("fill5"));
+        assert!(is_filler_cell("fill10"));
+        assert!(is_filler_cell("fillnc"));
+        // Corner + analog passthrough.
+        assert!(is_filler_cell("cor"));
+        assert!(is_filler_cell("asig_5p0"));
+        // wafer.space power pads and empty IP stubs.
+        assert!(is_filler_cell("dvdd"));
+        assert!(is_filler_cell("dvss"));
+        assert!(is_filler_cell("id"));
+        assert!(is_filler_cell("logo"));
+        // Negatives.
         assert!(!is_filler_cell("hold"));
         assert!(!is_filler_cell("buf"));
+        // Logic-bearing pads are NOT fillers.
+        assert!(!is_filler_cell("bi_24t"));
+        assert!(!is_filler_cell("in_c"));
+        assert!(!is_filler_cell("in_s"));
     }
 
     #[test]
@@ -419,6 +478,22 @@ mod tests {
         // Plain buffers aren't delay-repair cells.
         assert!(!is_delay_cell("buf"));
         assert!(!is_delay_cell("clkbuf"));
+    }
+
+    #[test]
+    fn io_pad_classification() {
+        // Logic-bearing pads (handled in aig.rs postprocess).
+        assert!(is_io_pad_cell("in_c"));
+        assert!(is_io_pad_cell("in_s"));
+        assert!(is_io_pad_cell("bi_24t"));
+        // Non-logic pads are NOT classified as IO pads (they're fillers).
+        assert!(!is_io_pad_cell("fill10"));
+        assert!(!is_io_pad_cell("cor"));
+        assert!(!is_io_pad_cell("asig_5p0"));
+        assert!(!is_io_pad_cell("dvdd"));
+        // Standard cells are not IO pads.
+        assert!(!is_io_pad_cell("nand2"));
+        assert!(!is_io_pad_cell("dffq"));
     }
 
     #[test]

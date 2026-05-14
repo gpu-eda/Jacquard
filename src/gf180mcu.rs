@@ -15,10 +15,20 @@
 //!
 //! IO pads (`gf180mcu_fd_io__*`), primitives (`gf180mcu_fd_pr__*`), and IP
 //! blocks (`gf180mcu_fd_ip_*__*`) all share the `gf180mcu_fd_` prefix and
-//! are detected as GF180MCU here so the netlist parser doesn't reject them;
-//! cell-type extraction is conservative and only strips the standard-cell
-//! prefixes. Decomposition for non-standard-cell families lands in later
-//! phases per `docs/plans/gf180mcu-enablement.md`.
+//! are detected as GF180MCU here so the netlist parser doesn't reject them.
+//!
+//! wafer.space variants — `gf180mcu_ws_io__*` (power pads) and
+//! `gf180mcu_ws_ip__*` (id / logo stub modules) — share the `gf180mcu_ws_`
+//! prefix and are recognised alongside the foundry-default `gf180mcu_fd_`
+//! family. Post-P&R chip-tops built from the wafer.space project
+//! template instantiate both, so detection accepts either.
+//!
+//! `extract_cell_type` strips the standard-cell, IO-pad, and IP prefixes
+//! to a bare base-cell name. The classifiers in [`crate::gf180mcu_pdk`]
+//! match on this bare name. Decomposition for the logic-bearing pads
+//! (`in_c`, `in_s`, `bi_24t`) lives in [`crate::aig`]; pure no-logic
+//! pads (fillers, power, corner, analog pass-through) are classified
+//! as filler and skipped.
 
 use compact_str::CompactString;
 use netlistdb::{Direction, LeafPinProvider};
@@ -28,34 +38,59 @@ use sverilogparse::SVerilogRange;
 // Provides `GF180MCU_PIN_TABLE: &[(&str, &[(&str, Direction)])]`.
 include!(concat!(env!("OUT_DIR"), "/gf180mcu_pins.rs"));
 
-/// All GF180MCU cell instantiations share this prefix.
-const GF180MCU_PREFIX: &str = "gf180mcu_fd_";
+/// Foundry-default GF180MCU family (standard cells, fd_io pads, fd_pr
+/// primitives, fd_ip_* IP).
+const GF180MCU_FD_PREFIX: &str = "gf180mcu_fd_";
+
+/// wafer.space variants of the GF180MCU library (ws_io power pads,
+/// ws_ip id/logo stubs).
+const GF180MCU_WS_PREFIX: &str = "gf180mcu_ws_";
 
 const SC_7T_PREFIX: &str = "gf180mcu_fd_sc_mcu7t5v0__";
 const SC_9T_PREFIX: &str = "gf180mcu_fd_sc_mcu9t5v0__";
 
-/// Is `name` any GF180MCU cell — standard cell, IO pad, primitive, or IP?
+/// Prefixes for non-standard-cell families whose macro name *is* the
+/// base cell type (no drive-strength suffix). Strip these in
+/// [`extract_cell_type`] so [`crate::gf180mcu_pdk`]'s classifiers can
+/// match on bare names (`bi_24t`, `fill10`, `dvdd`, `id`, …).
+const NON_SC_PREFIXES: &[&str] = &[
+    "gf180mcu_fd_io__",
+    "gf180mcu_fd_pr__",
+    "gf180mcu_fd_ip_sram__",
+    "gf180mcu_ws_io__",
+    "gf180mcu_ws_ip__",
+];
+
+/// Is `name` any GF180MCU cell — standard cell, IO pad, primitive, IP,
+/// or wafer.space variant (`gf180mcu_ws_*`)?
 pub fn is_gf180mcu_cell(name: &str) -> bool {
-    name.starts_with(GF180MCU_PREFIX)
+    name.starts_with(GF180MCU_FD_PREFIX) || name.starts_with(GF180MCU_WS_PREFIX)
 }
 
 /// Strip the GF180MCU library prefix and the trailing drive-strength
 /// suffix to recover the base cell type.
 ///
 /// `gf180mcu_fd_sc_mcu7t5v0__nand2_1` → `nand2`.
-/// `gf180mcu_fd_sc_mcu9t5v0__inv_20` → `inv`.
+/// `gf180mcu_fd_sc_mcu9t5v0__inv_20`  → `inv`.
+/// `gf180mcu_fd_io__bi_24t`           → `bi_24t`  (no drive suffix on pads).
+/// `gf180mcu_ws_io__dvdd`             → `dvdd`.
+/// `gf180mcu_ws_ip__id`               → `id`.
 ///
-/// Non-standard-cell families (IO, PR, IP) return the suffix after the
-/// library prefix verbatim — decomposition for those lands in later
-/// phases.
+/// Standard-cell drive suffixes are recognised as a trailing all-digit
+/// component after the final underscore. Pad / IP macro names don't carry
+/// a drive suffix, so the digit check leaves them intact (e.g. `asig_5p0`
+/// → `asig_5p0`, since `5p0` contains a letter; `bi_24t` → `bi_24t`,
+/// since `24t` contains a letter).
 pub fn extract_cell_type(name: &str) -> &str {
     let stripped = name
         .strip_prefix(SC_7T_PREFIX)
         .or_else(|| name.strip_prefix(SC_9T_PREFIX))
+        .or_else(|| NON_SC_PREFIXES.iter().find_map(|p| name.strip_prefix(p)))
         .unwrap_or(name);
 
     // Drive strength is always a numeric tail after the final underscore
-    // — matches the SKY130 convention.
+    // — matches the SKY130 convention. Pad / IP macro names don't carry
+    // a drive suffix; their base name is returned verbatim.
     if let Some(last_underscore) = stripped.rfind('_') {
         let suffix = &stripped[last_underscore + 1..];
         if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) {
@@ -66,13 +101,72 @@ pub fn extract_cell_type(name: &str) -> &str {
     stripped
 }
 
-/// LeafPinProvider for GF180MCU standard cells.
+/// Hand-curated pin table for GF180MCU IO pads and wafer.space IP
+/// stubs. Source: `gf180mcu/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/`
+/// in the wafer.space PDK fork.
+///
+/// **Direction conventions inside the cell** (matches what NetlistDB
+/// expects from `LeafPinProvider`):
+///
+/// * `bi_24t` (bidirectional pad): the digital-sim simplification
+///   treats `PAD` as the external value (an input from the cell's POV).
+///   `A` and `OE` are declared as inputs into the cell but their value
+///   is discarded by `aig.rs::gf180mcu_postprocess` — they would only
+///   matter if we modelled tristate, which Jacquard does not.
+/// * `in_c` / `in_s`: `PAD` is the external input, `Y` is the internal
+///   output. `PU` / `PD` exist but are sim-irrelevant inputs.
+/// * `asig_5p0`: analog passthrough — has a single `ASIG5V` net that
+///   Jacquard cannot model. Listed here only so NetlistDB can parse
+///   the netlist; the cell is classified as filler downstream.
+///
+/// Power / corner / filler pads instantiate with `()` (no port
+/// connections) in post-P&R netlists, so they never reach
+/// `LeafPinProvider::direction_of`. They are still classified as
+/// filler in [`crate::gf180mcu_pdk::is_filler_cell`].
+const GF180MCU_PAD_PIN_TABLE: &[(&str, &[(&str, Direction)])] = &[
+    ("in_c", &[
+        ("PAD", Direction::I),
+        ("PU", Direction::I),
+        ("PD", Direction::I),
+        ("Y", Direction::O),
+    ]),
+    ("in_s", &[
+        ("PAD", Direction::I),
+        ("PU", Direction::I),
+        ("PD", Direction::I),
+        ("Y", Direction::O),
+    ]),
+    ("bi_24t", &[
+        // PAD is inout in Verilog. For digital sim with no tristate, we
+        // treat it as an *input* to the cell — its value comes from the
+        // top-level inout port, which Jacquard exposes as a primary
+        // input.
+        ("PAD", Direction::I),
+        // The cell's `A` net comes from the core. In digital sim with
+        // no tristate we discard it (the cell does not drive Y from A).
+        ("A", Direction::I),
+        ("OE", Direction::I),
+        ("IE", Direction::I),
+        ("CS", Direction::I),
+        ("SL", Direction::I),
+        ("PU", Direction::I),
+        ("PD", Direction::I),
+        ("Y", Direction::O),
+    ]),
+    ("asig_5p0", &[
+        // Analog passthrough — has one port. Classified as filler,
+        // contributes no logic.
+        ("ASIG5V", Direction::I),
+    ]),
+];
+
+/// LeafPinProvider for the full GF180MCU library — standard cells,
+/// IO pads, and wafer.space IP stubs.
 ///
 /// All cell pins are scalar (no bus pins), so `width_of` returns `None`.
-/// Non-standard-cell families (IO pads, primitives, IP) are recognised
-/// by [`is_gf180mcu_cell`] for detection purposes but absent from the
-/// generated pin table — instantiating one here is a panic until later
-/// phases stub in port directions for those families.
+/// Standard-cell directions come from the build.rs-generated
+/// `GF180MCU_PIN_TABLE`; pad / IP directions come from the hand-curated
+/// `GF180MCU_PAD_PIN_TABLE` above.
 pub struct GF180MCULeafPins;
 
 impl LeafPinProvider for GF180MCULeafPins {
@@ -83,6 +177,7 @@ impl LeafPinProvider for GF180MCULeafPins {
         _pin_idx: Option<isize>,
     ) -> Direction {
         let cell_type = extract_cell_type(macro_name);
+        // Standard cells first (the hot path).
         for (ct, pins) in GF180MCU_PIN_TABLE {
             if *ct == cell_type {
                 for (p, d) in *pins {
@@ -92,6 +187,20 @@ impl LeafPinProvider for GF180MCULeafPins {
                 }
                 panic!(
                     "Unknown gf180mcu pin on cell type '{cell_type}': \
+                     macro={macro_name}, pin={pin_name}",
+                );
+            }
+        }
+        // Then pads / IP stubs.
+        for (ct, pins) in GF180MCU_PAD_PIN_TABLE {
+            if *ct == cell_type {
+                for (p, d) in *pins {
+                    if *p == pin_name.as_str() {
+                        return *d;
+                    }
+                }
+                panic!(
+                    "Unknown gf180mcu pad pin on cell type '{cell_type}': \
                      macro={macro_name}, pin={pin_name}",
                 );
             }
@@ -129,11 +238,25 @@ mod tests {
     }
 
     #[test]
+    fn detects_wafer_space_variants() {
+        // Post-P&R chip-tops from the wafer.space project template
+        // instantiate `gf180mcu_ws_io__*` power pads and
+        // `gf180mcu_ws_ip__*` IP stubs alongside foundry-default
+        // `gf180mcu_fd_*` cells. Both prefixes must be detected.
+        assert!(is_gf180mcu_cell("gf180mcu_ws_io__dvdd"));
+        assert!(is_gf180mcu_cell("gf180mcu_ws_io__dvss"));
+        assert!(is_gf180mcu_cell("gf180mcu_ws_ip__id"));
+        assert!(is_gf180mcu_cell("gf180mcu_ws_ip__logo"));
+    }
+
+    #[test]
     fn rejects_non_gf180mcu_names() {
         assert!(!is_gf180mcu_cell("sky130_fd_sc_hd__nand2_1"));
         assert!(!is_gf180mcu_cell("AND2_00_0"));
         assert!(!is_gf180mcu_cell(""));
         assert!(!is_gf180mcu_cell("gf180mcu"));
+        // Plausible-looking but wrong family prefix.
+        assert!(!is_gf180mcu_cell("gf180mcu_xx_io__foo"));
     }
 
     #[test]
@@ -163,6 +286,32 @@ mod tests {
         // Non-numeric tails are left intact — no false trim.
         assert_eq!(extract_cell_type("not_a_cell"), "not_a_cell");
         assert_eq!(extract_cell_type("plain"), "plain");
+    }
+
+    #[test]
+    fn extraction_strips_non_standard_cell_prefixes() {
+        // IO pads (no drive suffix on pad cells).
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__bi_24t"), "bi_24t");
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__in_c"), "in_c");
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__in_s"), "in_s");
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__fill10"), "fill10");
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__fill5"), "fill5");
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__fill1"), "fill1");
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__fillnc"), "fillnc");
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__cor"), "cor");
+        // asig_5p0 has a literal _5p0 tail that must NOT be stripped
+        // (it's part of the cell name, not a drive suffix).
+        assert_eq!(extract_cell_type("gf180mcu_fd_io__asig_5p0"), "asig_5p0");
+        // wafer.space pads / IP.
+        assert_eq!(extract_cell_type("gf180mcu_ws_io__dvdd"), "dvdd");
+        assert_eq!(extract_cell_type("gf180mcu_ws_io__dvss"), "dvss");
+        assert_eq!(extract_cell_type("gf180mcu_ws_ip__id"), "id");
+        assert_eq!(extract_cell_type("gf180mcu_ws_ip__logo"), "logo");
+        // SRAM IP.
+        assert_eq!(
+            extract_cell_type("gf180mcu_fd_ip_sram__sram64x16m8wm1"),
+            "sram64x16m8wm1",
+        );
     }
 
     #[test]
@@ -220,6 +369,50 @@ mod tests {
     }
 
     #[test]
+    fn pin_provider_returns_directions_for_io_pads() {
+        // Post-P&R chip-top netlists wire these three pad families
+        // with port connections (PAD, Y, A, OE, etc.). The pin
+        // provider must return directions for each, otherwise
+        // NetlistDB parse panics.
+        let provider = GF180MCULeafPins;
+        let dir = |cell: &str, pin: &str| {
+            provider.direction_of(
+                &CompactString::from(cell),
+                &CompactString::from(pin),
+                None,
+            )
+        };
+
+        // in_c (CMOS input pad): PAD in, Y out, plus sim-irrelevant
+        // PU / PD pull controls.
+        assert_eq!(dir("gf180mcu_fd_io__in_c", "PAD"), Direction::I);
+        assert_eq!(dir("gf180mcu_fd_io__in_c", "Y"), Direction::O);
+        assert_eq!(dir("gf180mcu_fd_io__in_c", "PU"), Direction::I);
+        assert_eq!(dir("gf180mcu_fd_io__in_c", "PD"), Direction::I);
+
+        // in_s (Schmitt input pad): same shape as in_c.
+        assert_eq!(dir("gf180mcu_fd_io__in_s", "PAD"), Direction::I);
+        assert_eq!(dir("gf180mcu_fd_io__in_s", "Y"), Direction::O);
+
+        // bi_24t (bidirectional pad): in digital sim, PAD is the
+        // external input and Y is the internal output. A / OE / IE
+        // are declared as cell inputs but discarded by the AIG
+        // post-process (no tristate).
+        assert_eq!(dir("gf180mcu_fd_io__bi_24t", "PAD"), Direction::I);
+        assert_eq!(dir("gf180mcu_fd_io__bi_24t", "Y"), Direction::O);
+        assert_eq!(dir("gf180mcu_fd_io__bi_24t", "A"), Direction::I);
+        assert_eq!(dir("gf180mcu_fd_io__bi_24t", "OE"), Direction::I);
+        assert_eq!(dir("gf180mcu_fd_io__bi_24t", "IE"), Direction::I);
+        assert_eq!(dir("gf180mcu_fd_io__bi_24t", "CS"), Direction::I);
+        assert_eq!(dir("gf180mcu_fd_io__bi_24t", "SL"), Direction::I);
+
+        // asig_5p0 (analog passthrough — classified as filler, but
+        // its ASIG5V port is wired in real chip-top netlists, so the
+        // pin table needs an entry to satisfy NetlistDB parse).
+        assert_eq!(dir("gf180mcu_fd_io__asig_5p0", "ASIG5V"), Direction::I);
+    }
+
+    #[test]
     fn pin_provider_width_is_always_scalar() {
         let provider = GF180MCULeafPins;
         // No bus pins in the standard-cell library.
@@ -258,6 +451,60 @@ endmodule
         // Exact AIG-pin count varies with synthesis choices; just assert
         // construction succeeded and produced a non-empty AIG.
         assert!(aig.num_aigpins > 0, "AIG should have at least one pin");
+    }
+
+    #[test]
+    fn netlist_db_parses_chip_top_pad_ring() {
+        // Miniature GF180MCU chip-top: full pad ring around a trivial
+        // core, covering every pad family that real post-P&R netlists
+        // instantiate. Verifies that:
+        //   * `is_gf180mcu_cell` accepts both `gf180mcu_fd_*` and
+        //     `gf180mcu_ws_*` prefixes, so NetlistDB doesn't reject;
+        //   * `extract_cell_type` returns base names the pin table
+        //     and filler classifier can match;
+        //   * `GF180MCU_PAD_PIN_TABLE` covers every connected pad pin
+        //     (in_c / in_s / bi_24t / asig_5p0).
+        // AIG construction is out of scope for this test — it's
+        // exercised end-to-end by an aig.rs-side integration test.
+        const VERILOG: &str = r#"
+module chip_top(clk_PAD, in_PAD, bidir_PAD, analog_PAD);
+  inout clk_PAD;
+  inout in_PAD;
+  inout bidir_PAD;
+  inout analog_PAD;
+  wire clk_core, in_core, bidir_y_core, bidir_a_core, oe_core;
+  // Logic-bearing pads.
+  gf180mcu_fd_io__in_s clk_pad (.PAD(clk_PAD), .PU(1'b0), .PD(1'b0), .Y(clk_core));
+  gf180mcu_fd_io__in_c in_pad  (.PAD(in_PAD),  .PU(1'b0), .PD(1'b0), .Y(in_core));
+  gf180mcu_fd_io__bi_24t bidir_pad (
+      .PAD(bidir_PAD), .A(bidir_a_core), .OE(oe_core),
+      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+      .Y(bidir_y_core)
+  );
+  // Analog passthrough (classified as filler, but its ASIG5V port
+  // is connected so the pin table must cover it).
+  gf180mcu_fd_io__asig_5p0 asig_inst (.ASIG5V(analog_PAD));
+  // No-logic pads — empty port lists. Matches post-P&R netlists,
+  // where filler / corner / power / ws_ip stubs have no port
+  // connections.
+  gf180mcu_fd_io__fill10 fill_inst ();
+  gf180mcu_fd_io__cor    cor_inst  ();
+  gf180mcu_ws_io__dvdd   dvdd_inst ();
+  gf180mcu_ws_io__dvss   dvss_inst ();
+  gf180mcu_ws_ip__id     id_inst   ();
+  gf180mcu_ws_ip__logo   logo_inst ();
+endmodule
+"#;
+        let nl = netlistdb::NetlistDB::from_sverilog_source(
+            VERILOG,
+            Some("chip_top"),
+            &GF180MCULeafPins,
+        );
+        assert!(
+            nl.is_some(),
+            "NetlistDB parse failed for chip_top pad ring — \
+             pin table likely missing an entry",
+        );
     }
 
     #[test]
