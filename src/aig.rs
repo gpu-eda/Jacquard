@@ -11,9 +11,15 @@
 )]
 
 use crate::aigpdk::AIGPDK_SRAM_ADDR_WIDTH;
-use crate::gf180mcu::is_gf180mcu_cell;
 use crate::gf180mcu_pdk::Gf180PdkModels;
-use crate::sky130::{extract_cell_type, is_sky130_cell};
+use crate::pdk::PdkVariant;
+// SKY130-flavoured helpers used by the sky130-specific methods on AIG
+// (`get_sky130_dependencies`, `sky130_preprocess`, `sky130_postprocess`,
+// `build_sky130_multi_output_postprocess`). Top-level dispatch through
+// PdkVariant is preferred for new code, but within SKY130-only methods
+// the unqualified shorthand is fine — it can't accidentally classify a
+// GF180MCU cell because the caller has already routed on PdkVariant.
+use crate::sky130::extract_cell_type;
 use crate::sky130_pdk::{
     decompose_with_pdk, is_multi_output_cell, is_sequential_cell, is_tie_cell, CellInputs,
     PdkModels,
@@ -524,36 +530,31 @@ impl AIG {
             // GF180MCU `inv` / `clkinv` are negative-polarity; `buf` / `clkbuf` are
             // identity. GF180MCU clock-path cells use input pin name `I` rather
             // than `A`; we accept both below.
-            let is_inv = celltype == "INV"
-                || (is_sky130_cell(celltype) && {
-                    let ct = extract_cell_type(celltype);
-                    ct.starts_with("inv") || ct.starts_with("clkinv")
-                })
-                || (is_gf180mcu_cell(celltype) && {
-                    let ct = crate::gf180mcu::extract_cell_type(celltype);
-                    matches!(ct, "inv" | "clkinv")
-                });
-            let is_buf = celltype == "BUF"
-                || (is_sky130_cell(celltype) && {
-                    let ct = extract_cell_type(celltype);
-                    ct.starts_with("buf")
+            let variant = PdkVariant::classify(celltype);
+            let (is_inv, is_buf, is_io_pad_buf) = match variant {
+                Some(PdkVariant::Sky130) => {
+                    let ct = PdkVariant::Sky130.extract_cell_type(celltype);
+                    let is_inv = ct.starts_with("inv") || ct.starts_with("clkinv");
+                    let is_buf = ct.starts_with("buf")
                         || ct.starts_with("clkbuf")
                         || ct.starts_with("clkdlybuf")
                         || ct.starts_with("lpflow_isobufsrc")
-                        || ct.starts_with("lpflow_inputiso")
-                })
-                || (is_gf180mcu_cell(celltype) && {
-                    let ct = crate::gf180mcu::extract_cell_type(celltype);
-                    matches!(ct, "buf" | "clkbuf")
-                });
-            // GF180MCU input pads on the clock path buffer PAD → Y, so
-            // they're traceable just like a clkbuf. bi_24t is *not*
-            // included: a bidir pad clocking the core would more likely
-            // be a netlist bug than an intentional design — keep the
-            // matching tight so it still errors.
-            let is_io_pad_buf = is_gf180mcu_cell(celltype) && {
-                let ct = crate::gf180mcu::extract_cell_type(celltype);
-                matches!(ct, "in_c" | "in_s")
+                        || ct.starts_with("lpflow_inputiso");
+                    (is_inv, is_buf, false)
+                }
+                Some(PdkVariant::Gf180Mcu) => {
+                    let ct = PdkVariant::Gf180Mcu.extract_cell_type(celltype);
+                    let is_inv = matches!(ct, "inv" | "clkinv");
+                    let is_buf = matches!(ct, "buf" | "clkbuf");
+                    // GF180MCU input pads on the clock path buffer PAD → Y, so
+                    // they're traceable just like a clkbuf. bi_24t is *not*
+                    // included: a bidir pad clocking the core would more likely
+                    // be a netlist bug than an intentional design — keep the
+                    // matching tight so it still errors.
+                    let is_io_pad_buf = matches!(ct, "in_c" | "in_s");
+                    (is_inv, is_buf, is_io_pad_buf)
+                }
+                None => (celltype == "INV", celltype == "BUF", false),
             };
 
             if !is_inv && !is_buf && !is_io_pad_buf && celltype != "CKLNQD" {
@@ -784,30 +785,29 @@ impl AIG {
                         continue;
                     }
 
-                    // Handle SKY130 cells
-                    if is_sky130_cell(celltype) {
-                        // Get dependencies based on cell type
-                        let deps = self.get_sky130_dependencies(netlistdb, pinid, cellid, celltype);
-                        // Do any pre-processing
-                        self.sky130_preprocess(netlistdb, pinid, cellid, celltype);
-                        // Push process then dependencies
-                        work_stack.push(WorkItem::Process(pinid));
-                        for dep in deps {
-                            work_stack.push(WorkItem::Visit(dep));
+                    // Handle standard-cell PDK cells (combinational + sequential).
+                    match PdkVariant::classify(celltype) {
+                        Some(PdkVariant::Sky130) => {
+                            let deps = self
+                                .get_sky130_dependencies(netlistdb, pinid, cellid, celltype);
+                            self.sky130_preprocess(netlistdb, pinid, cellid, celltype);
+                            work_stack.push(WorkItem::Process(pinid));
+                            for dep in deps {
+                                work_stack.push(WorkItem::Visit(dep));
+                            }
+                            continue;
                         }
-                        continue;
-                    }
-
-                    // Handle GF180MCU cells (combinational + sequential).
-                    if is_gf180mcu_cell(celltype) {
-                        let deps =
-                            self.get_gf180mcu_dependencies(netlistdb, pinid, cellid, celltype);
-                        self.gf180mcu_preprocess(netlistdb, pinid, cellid, celltype);
-                        work_stack.push(WorkItem::Process(pinid));
-                        for dep in deps {
-                            work_stack.push(WorkItem::Visit(dep));
+                        Some(PdkVariant::Gf180Mcu) => {
+                            let deps = self
+                                .get_gf180mcu_dependencies(netlistdb, pinid, cellid, celltype);
+                            self.gf180mcu_preprocess(netlistdb, pinid, cellid, celltype);
+                            work_stack.push(WorkItem::Process(pinid));
+                            for dep in deps {
+                                work_stack.push(WorkItem::Visit(dep));
+                            }
+                            continue;
                         }
-                        continue;
+                        None => {}
                     }
 
                     // Handle AIGPDK combinational cells (AND2, INV, BUF)
@@ -886,24 +886,27 @@ impl AIG {
                         continue;
                     }
 
-                    // Process SKY130 cells
-                    if is_sky130_cell(celltype) {
-                        self.sky130_postprocess(netlistdb, pinid, cellid, celltype, pdk_models);
-                        topo_instack[pinid] = false;
-                        continue;
-                    }
-
-                    // Process GF180MCU cells
-                    if is_gf180mcu_cell(celltype) {
-                        self.gf180mcu_postprocess(
-                            netlistdb,
-                            pinid,
-                            cellid,
-                            celltype,
-                            gf180_pdk,
-                        );
-                        topo_instack[pinid] = false;
-                        continue;
+                    // Process standard-cell PDK cells.
+                    match PdkVariant::classify(celltype) {
+                        Some(PdkVariant::Sky130) => {
+                            self.sky130_postprocess(
+                                netlistdb, pinid, cellid, celltype, pdk_models,
+                            );
+                            topo_instack[pinid] = false;
+                            continue;
+                        }
+                        Some(PdkVariant::Gf180Mcu) => {
+                            self.gf180mcu_postprocess(
+                                netlistdb,
+                                pinid,
+                                cellid,
+                                celltype,
+                                gf180_pdk,
+                            );
+                            topo_instack[pinid] = false;
+                            continue;
+                        }
+                        None => {}
                     }
 
                     // Process AIGPDK combinational cells
@@ -1715,10 +1718,14 @@ impl AIG {
     /// Per `CellLibrary::Mixed` rejection upstream, the netlist is
     /// guaranteed to use at most one PDK.
     pub fn from_netlistdb(netlistdb: &NetlistDB) -> AIG {
-        let has_sky130 =
-            (1..netlistdb.num_cells).any(|cid| is_sky130_cell(netlistdb.celltypes[cid].as_str()));
-        let has_gf180mcu = (1..netlistdb.num_cells)
-            .any(|cid| is_gf180mcu_cell(netlistdb.celltypes[cid].as_str()));
+        let has_sky130 = (1..netlistdb.num_cells).any(|cid| {
+            PdkVariant::classify(netlistdb.celltypes[cid].as_str())
+                == Some(PdkVariant::Sky130)
+        });
+        let has_gf180mcu = (1..netlistdb.num_cells).any(|cid| {
+            PdkVariant::classify(netlistdb.celltypes[cid].as_str())
+                == Some(PdkVariant::Gf180Mcu)
+        });
 
         if has_sky130 {
             let pdk_path = std::path::PathBuf::from("vendor/sky130_fd_sc_hd/cells");
@@ -1730,8 +1737,8 @@ impl AIG {
             let mut cell_types: Vec<String> = Vec::new();
             for cellid in 1..netlistdb.num_cells {
                 let celltype = netlistdb.celltypes[cellid].as_str();
-                if is_sky130_cell(celltype) {
-                    let ct = extract_cell_type(celltype).to_string();
+                if PdkVariant::classify(celltype) == Some(PdkVariant::Sky130) {
+                    let ct = PdkVariant::Sky130.extract_cell_type(celltype).to_string();
                     if !cell_types.contains(&ct) {
                         cell_types.push(ct);
                     }
@@ -1752,8 +1759,8 @@ impl AIG {
             let mut cell_types: Vec<String> = Vec::new();
             for cellid in 1..netlistdb.num_cells {
                 let celltype = netlistdb.celltypes[cellid].as_str();
-                if is_gf180mcu_cell(celltype) {
-                    let ct = crate::gf180mcu::extract_cell_type(celltype).to_string();
+                if PdkVariant::classify(celltype) == Some(PdkVariant::Gf180Mcu) {
+                    let ct = PdkVariant::Gf180Mcu.extract_cell_type(celltype).to_string();
                     if !cell_types.contains(&ct) {
                         cell_types.push(ct);
                     }
@@ -1793,14 +1800,12 @@ impl AIG {
 
             // Check if this is a sequential element (AIGPDK / SKY130 / GF180MCU)
             let is_aigpdk_seq = matches!(celltype, "DFF" | "DFFSR" | "$__RAMGEM_SYNC_");
-            let is_sky130_seq =
-                is_sky130_cell(celltype) && is_sequential_cell(extract_cell_type(celltype));
-            let is_gf180mcu_seq = is_gf180mcu_cell(celltype)
-                && crate::gf180mcu_pdk::is_sequential_cell(
-                    crate::gf180mcu::extract_cell_type(celltype),
-                );
+            let is_pdk_seq = match PdkVariant::classify(celltype) {
+                Some(variant) => variant.is_sequential(variant.extract_cell_type(celltype)),
+                None => false,
+            };
 
-            if !is_aigpdk_seq && !is_sky130_seq && !is_gf180mcu_seq {
+            if !is_aigpdk_seq && !is_pdk_seq {
                 continue;
             }
 
@@ -1927,9 +1932,12 @@ impl AIG {
                 dff.en_iv = ap_clken_iv;
                 dff.d_iv = d_in;
                 assert_ne!(dff.q, 0);
-            } else if is_sky130_cell(celltype) && is_sequential_cell(extract_cell_type(celltype)) {
+            } else if PdkVariant::classify(celltype) == Some(PdkVariant::Sky130)
+                && PdkVariant::Sky130
+                    .is_sequential(PdkVariant::Sky130.extract_cell_type(celltype))
+            {
                 // Handle SKY130 DFFs (dfxtp, edfxtp, dfrtp, etc.)
-                let cell_type = extract_cell_type(celltype);
+                let cell_type = PdkVariant::Sky130.extract_cell_type(celltype);
                 let mut ap_d_iv = 0;
                 let mut ap_clken_iv = 0;
                 let mut ap_enable_iv = 1; // For edfxtp (data enable)
@@ -1968,10 +1976,9 @@ impl AIG {
                 dff.en_iv = ap_clken_iv;
                 dff.d_iv = d_in;
                 assert_ne!(dff.q, 0, "SKY130 DFF {} has no Q output built", cellid);
-            } else if is_gf180mcu_cell(celltype)
-                && crate::gf180mcu_pdk::is_sequential_cell(crate::gf180mcu::extract_cell_type(
-                    celltype,
-                ))
+            } else if PdkVariant::classify(celltype) == Some(PdkVariant::Gf180Mcu)
+                && PdkVariant::Gf180Mcu
+                    .is_sequential(PdkVariant::Gf180Mcu.extract_cell_type(celltype))
             {
                 // GF180MCU sequentials: DFFs / scan DFFs / latches /
                 // clock-gating cells. Same async-set/reset shape as
@@ -1996,7 +2003,7 @@ impl AIG {
                 // We treat them as state-holding DFFs to avoid a
                 // panic; clock-tree-aware simulation through them is
                 // a follow-on item (Phase 5+).
-                let cell_type = crate::gf180mcu::extract_cell_type(celltype);
+                let cell_type = PdkVariant::Gf180Mcu.extract_cell_type(celltype);
                 let mut ap_d_iv: usize = 0;
                 let mut ap_clken_iv: usize = 0;
                 let mut ap_s_iv: usize = 1; // SETN default = inactive
