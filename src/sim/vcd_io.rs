@@ -577,7 +577,7 @@ pub fn setup_output_vcd(
         writer.add_module(scope).unwrap();
     }
 
-    let out2vcd = netlistdb
+    let mut out2vcd = netlistdb
         .cell2pin
         .iter_set(0)
         .filter_map(|i| {
@@ -612,6 +612,8 @@ pub fn setup_output_vcd(
         })
         .collect::<Vec<_>>();
 
+    emit_extra_observables(writer, aig, script, &mut out2vcd);
+
     for _ in 0..scope_parts.len() {
         writer.upscope().unwrap();
     }
@@ -619,6 +621,48 @@ pub fn setup_output_vcd(
     writer.begin(SimulationCommand::Dumpvars).unwrap();
 
     OutputVCDMapping { out2vcd }
+}
+
+/// Append wire definitions for `aig.extra_observable_names` onto an
+/// existing output mapping. Used by both `setup_output_vcd` and
+/// `setup_cosim_output_vcd` so the bidir-pad split (`<port>__out` /
+/// `<port>__oe`) and any future named observables show up identically
+/// in regular sim and cosim VCDs.
+///
+/// Must be called inside the active VCD scope (between `add_module`
+/// and `upscope`/`enddefinitions`) so the wires land in the same
+/// scope as the standard cell-0 outputs.
+fn emit_extra_observables<W: std::io::Write>(
+    writer: &mut vcd_ng::Writer<W>,
+    aig: &AIG,
+    script: &FlattenedScriptV1,
+    out2vcd: &mut Vec<(usize, u32, vcd_ng::IdCode)>,
+) {
+    for (&aigpin, names) in aig.extra_observable_names.iter() {
+        // Resolve the GPU state position. Constant aigpins (0/1) are
+        // emitted with `u32::MAX` (special-cased in write_output_vcd
+        // to use the aigpin value directly). Anything in
+        // `primary_outputs` should also be in `script.output_map`;
+        // skip with a warning if the partitioner dropped it (e.g.
+        // dead-stripped const cone).
+        let output_pos = if aigpin <= 1 {
+            u32::MAX
+        } else if let Some(&pos) = script.output_map.get(&aigpin) {
+            pos
+        } else {
+            clilog::warn!(
+                "extra observable {:?} (aigpin {}) has no output_map entry; \
+                 partitioner may have stripped its cone",
+                names,
+                aigpin
+            );
+            continue;
+        };
+        for name in names {
+            let vid = writer.add_wire(1, name).unwrap();
+            out2vcd.push((aigpin, output_pos, vid));
+        }
+    }
 }
 
 /// Set up output VCD writer for cosim: uses explicit timescale (1ps) instead of VCD header.
@@ -636,7 +680,7 @@ pub fn setup_cosim_output_vcd<W: std::io::Write>(
     writer.timescale(1, vcd_ng::TimescaleUnit::PS).unwrap();
     writer.add_module("top").unwrap();
 
-    let out2vcd = netlistdb
+    let mut out2vcd = netlistdb
         .cell2pin
         .iter_set(0)
         .filter_map(|i| {
@@ -666,6 +710,8 @@ pub fn setup_cosim_output_vcd<W: std::io::Write>(
             }
         })
         .collect::<Vec<_>>();
+
+    emit_extra_observables(writer, aig, script, &mut out2vcd);
 
     writer.upscope().unwrap();
     writer.enddefinitions().unwrap();

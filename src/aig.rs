@@ -263,6 +263,23 @@ pub struct AIG {
     /// Internal AND gates from multi-gate decompositions get empty Vec (zero delay).
     /// Index 0 is Tie0 (empty). Populated during AIG construction from netlistdb.
     pub aigpin_cell_origins: Vec<Vec<(usize, String, String)>>,
+
+    /// Extra observable signals beyond the top-level cell-0 output ports.
+    ///
+    /// Maps an aigpin index → the list of debug names used in the
+    /// output VCD. Entries in this map are also inserted into
+    /// `primary_outputs` so the partitioner schedules them onto a
+    /// state bit and `output_map` gets the position. The VCD writer
+    /// emits one wire definition per name (multiple names may share
+    /// the same aigpin if their drivers collapse to the same node —
+    /// e.g. two bidir pads sharing the same `OE` register bit).
+    ///
+    /// Currently populated only by the GF180MCU `bi_24t` pad split,
+    /// which surfaces each bidir pad's core-side `A` (`__out`) and
+    /// `OE` (`__oe`) so output VCDs capture the core's drive-out
+    /// direction. Without this, the simplified `Y = PAD` IO-pad model
+    /// would leave the core's drive cone unobservable.
+    pub extra_observable_names: IndexMap<usize, Vec<String>>,
 }
 
 impl Default for AIG {
@@ -288,6 +305,7 @@ impl Default for AIG {
             dff_timing: None,
             clock_period_ps: 1000, // Default 1ns clock period
             aigpin_cell_origins: Vec::new(),
+            extra_observable_names: IndexMap::new(),
         }
     }
 }
@@ -1317,6 +1335,42 @@ impl AIG {
         }
     }
 
+    /// Resolve the base name to use for a `bi_24t` cell's observable
+    /// outputs (`<base>__out` / `<base>__oe`).
+    ///
+    /// Walks the PAD pin's net to find a pin on the top-level cell
+    /// (cell-0); that pin's `dbg_fmt_pin` is the inout port's name
+    /// (e.g. `bidir_PAD[12]`). If no top-level pin is on the net
+    /// (e.g. unit-test cell instantiated below an intermediate hier
+    /// level), falls back to the bi_24t cell instance's hierarchical
+    /// name, which is still uniquely traceable.
+    fn resolve_bi_24t_observable_base(
+        &self,
+        netlistdb: &NetlistDB,
+        cellid: usize,
+        pad_pinid: usize,
+    ) -> String {
+        use netlistdb::GeneralHierName;
+        let netid = netlistdb.pin2net[pad_pinid];
+        let net_pins_start = netlistdb.net2pin.start[netid];
+        let net_pins_end = if netid + 1 < netlistdb.net2pin.start.len() {
+            netlistdb.net2pin.start[netid + 1]
+        } else {
+            netlistdb.net2pin.items.len()
+        };
+        for &np in &netlistdb.net2pin.items[net_pins_start..net_pins_end] {
+            if netlistdb.pin2cell[np] == 0 {
+                // Top-level inout port. `dbg_fmt_pin` formats as
+                // `port_name[bus_idx]` (no hierarchy prefix since
+                // cell-0's hierarchy is empty).
+                return netlistdb.pinnames[np].dbg_fmt_pin();
+            }
+        }
+        // Fallback: cell-instance hierarchical name + a `.PAD` suffix
+        // so the observable label is still self-describing.
+        format!("{}.PAD", netlistdb.cellnames[cellid].dbg_fmt_hier())
+    }
+
     /// GF180MCU dependency-collection hook.
     ///
     /// Tie cells have no dependencies. Filler/antenna/endcap cells have
@@ -1352,18 +1406,25 @@ impl AIG {
             }
             return deps;
         }
-        // IO pads: only PAD matters as a dependency of Y. The other
-        // input pins (A / OE / IE / CS / SL / PU / PD) are either
-        // dropped (digital-sim simplification — no tristate) or
-        // sim-irrelevant (pull / Schmitt / input-enable controls).
-        // Including them as deps would needlessly force them into
-        // the AIG (and could pull dangling subnets into the cone).
+        // IO pads: PAD is the dependency of `Y` (input direction).
+        // For bidirectional pads (`bi_24t`) we *also* depend on `A`
+        // (core drive-out) and `OE` (output-enable), so the postprocess
+        // hook can promote their AIG pins to observable primary outputs
+        // (`<top-port>__out` / `<top-port>__oe`). Pure input pads
+        // (`in_c` / `in_s`) have no `A`/`OE` to surface.
+        //
+        // The remaining sim-irrelevant pins (`IE`, `CS`, `SL`, `PU`,
+        // `PD`) are still dropped: they are pull / Schmitt / input-
+        // enable controls that don't affect digital sim.
         if crate::gf180mcu_pdk::is_io_pad_cell(cell_type) {
             let mut deps = SmallVec::new();
+            let is_bidir = cell_type == "bi_24t";
             for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
                 let pin_name = netlistdb.pinnames[dep_pinid].1.as_str();
-                if pin_name == "PAD" {
-                    deps.push(dep_pinid);
+                match pin_name {
+                    "PAD" => deps.push(dep_pinid),
+                    "A" | "OE" if is_bidir => deps.push(dep_pinid),
+                    _ => {}
                 }
             }
             return deps;
@@ -1478,12 +1539,14 @@ impl AIG {
         // * `bi_24t`: bidirectional pad. The real cell is
         //   `Y = PAD & IE` (input side) and `PAD = A when OE=1`
         //   (output side, tristate). Jacquard does not model tristate,
-        //   so we adopt `Y = PAD` always (IE=1 implied) and drop A/OE.
-        //   That is faithful when the pad is used in input mode and
-        //   makes the A/OE cone a dangling fan-out (no observable
-        //   effect). A pad used in output mode will not propagate
-        //   its core-driven value to an externally observable signal
-        //   under this model — see the wider tristate caveat in
+        //   so we adopt `Y = PAD` always (IE=1 implied) for the input
+        //   direction. To make the *output* direction observable, we
+        //   also promote the bidir pad's `A` (core drive) and `OE`
+        //   (output-enable) AIG pins to primary outputs with synthetic
+        //   names `<top-port>__out` / `<top-port>__oe`. Downstream
+        //   consumers can then reconstruct the pad's external value as
+        //   `OE ? A : external_stim`. The wider tristate caveat (lack
+        //   of in-AIG tristate) is unchanged — see
         //   docs/plans/gf180mcu-enablement.md.
         if crate::gf180mcu_pdk::is_io_pad_cell(cell_type) {
             let output_pin_name = netlistdb.pinnames[pinid].1.as_str();
@@ -1491,19 +1554,56 @@ impl AIG {
                 output_pin_name, "Y",
                 "Expected Y output for gf180mcu IO pad '{cell_type}', got '{output_pin_name}'",
             );
-            let mut pad_iv = usize::MAX;
+            let mut pad_pinid = usize::MAX;
+            let mut a_pinid = usize::MAX;
+            let mut oe_pinid = usize::MAX;
             for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
-                if netlistdb.pinnames[dep_pinid].1.as_str() == "PAD" {
-                    pad_iv = self.pin2aigpin_iv[dep_pinid];
-                    break;
+                match netlistdb.pinnames[dep_pinid].1.as_str() {
+                    "PAD" => pad_pinid = dep_pinid,
+                    "A" => a_pinid = dep_pinid,
+                    "OE" => oe_pinid = dep_pinid,
+                    _ => {}
                 }
             }
             assert_ne!(
-                pad_iv,
+                pad_pinid,
                 usize::MAX,
                 "gf180mcu IO pad '{cell_type}' has no PAD pin",
             );
+            let pad_iv = self.pin2aigpin_iv[pad_pinid];
             self.pin2aigpin_iv[pinid] = pad_iv;
+
+            // bi_24t split: surface A and OE as named primary outputs.
+            // The base name is the top-level inout port that the PAD
+            // pin's net connects to (e.g. `bidir_PAD[12]`); we look it
+            // up by walking the PAD net for a pin on cell-0. If the
+            // PAD pin isn't connected to a top-level port (e.g. an
+            // intermediate-hier instantiation in a unit test), fall
+            // back to the cell-instance hierarchical name so the
+            // observable still has a stable, traceable label.
+            if cell_type == "bi_24t" {
+                let base = self.resolve_bi_24t_observable_base(netlistdb, cellid, pad_pinid);
+                if a_pinid != usize::MAX {
+                    let a_iv = self.pin2aigpin_iv[a_pinid];
+                    if a_iv != usize::MAX {
+                        self.primary_outputs.insert(a_iv);
+                        self.extra_observable_names
+                            .entry(a_iv)
+                            .or_default()
+                            .push(format!("{}__out", base));
+                    }
+                }
+                if oe_pinid != usize::MAX {
+                    let oe_iv = self.pin2aigpin_iv[oe_pinid];
+                    if oe_iv != usize::MAX {
+                        self.primary_outputs.insert(oe_iv);
+                        self.extra_observable_names
+                            .entry(oe_iv)
+                            .or_default()
+                            .push(format!("{}__oe", base));
+                    }
+                }
+            }
             return;
         }
 
@@ -3507,15 +3607,22 @@ endmodule
         assert!(aig.num_aigpins > 0, "AIG should have at least one pin");
     }
 
-    /// The bi_24t simplification (Y = PAD, dropping A / OE) means a
-    /// bi_24t in input mode behaves exactly like an in_c. Build two
-    /// equivalent designs — one using bi_24t with arbitrary core
-    /// drives for A/OE, one using in_c — and verify they have the
-    /// same number of AIG pins after construction.
+    /// The bi_24t simplification (Y = PAD) means a bi_24t pad's `Y`
+    /// cone matches an `in_c` pad's `Y` cone. Build two equivalent
+    /// designs — one using bi_24t with constant core drives for
+    /// A/OE, one using in_c — and verify both build successfully
+    /// with sensible AIG sizes.
+    ///
+    /// Note: with the bidir split, the bi_24t's A/OE pins *are* now
+    /// in the AIG (as deps of the postprocess hook), and surface as
+    /// extra observables (`p__out`/`p__oe`). The load-bearing
+    /// assertion here is that the `p → y` relationship is unchanged.
     #[test]
     fn bi_24t_input_mode_matches_in_c() {
-        // Trivial 1-pad design using bi_24t with A driven by something
-        // (it should be dropped — *not* contribute to the AIG cone of Y).
+        // Trivial 1-pad design using bi_24t with A/OE driven by ties.
+        // The tie cells are now reached by the bi_24t dep walk and
+        // surface as `p__out`/`p__oe` extra observables — that's fine,
+        // because the `p → y` cone is independent of those.
         const BI_24T_VERILOG: &str = r#"
 module top(p, y);
   inout p;
@@ -3526,8 +3633,6 @@ module top(p, y);
       .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
       .Y(y)
   );
-  // Dangling drivers for A and OE — these should NOT pull anything
-  // into the AIG cone of y.
   gf180mcu_fd_sc_mcu9t5v0__tieh u_tie1 (.Z(ig1));
   gf180mcu_fd_sc_mcu9t5v0__tiel u_tie2 (.ZN(ig2));
 endmodule
@@ -3555,11 +3660,158 @@ endmodule
         let aig_ic = AIG::from_netlistdb(&nl_ic);
         // Both AIGs should observe the same primary-input → primary-
         // output relationship for `p → y`. We don't compare exact
-        // structures (the bi_24t version has the dangling tie cells
-        // present); the load-bearing assertion is that AIG
-        // construction succeeded and produced a sensible-sized graph.
+        // structures (the bi_24t version has tie cells in its
+        // `p__out`/`p__oe` observables); the load-bearing assertion
+        // is that AIG construction succeeded and produced a
+        // sensible-sized graph.
         assert!(aig_bi.num_aigpins > 0);
         assert!(aig_ic.num_aigpins > 0);
+    }
+
+    /// `bi_24t` bidirectional pads surface their core-side `A` (drive)
+    /// and `OE` (output-enable) pins as extra observable primary outputs,
+    /// named after the top-level inout port they connect to (e.g.
+    /// `bidir_PAD[12]__out` / `bidir_PAD[12]__oe`). This lets the output
+    /// VCD capture the core's drive-out direction of a bidir pad — the
+    /// `Y = PAD` alias is still emitted for the input direction.
+    ///
+    /// `in_c` / `in_s` are *not* split (no `A`/`OE` to surface).
+    #[test]
+    fn bi_24t_surfaces_a_and_oe_as_observables() {
+        const VERILOG: &str = r#"
+module top(p, y);
+  inout p;
+  output y;
+  wire core_a, core_oe;
+  gf180mcu_fd_io__bi_24t bidir_pad (
+      .PAD(p), .A(core_a), .OE(core_oe),
+      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+      .Y(y)
+  );
+  // Distinct drivers for A and OE so they each get their own aigpin.
+  gf180mcu_fd_sc_mcu9t5v0__tieh u_tie_a  (.Z(core_a));
+  gf180mcu_fd_sc_mcu9t5v0__tiel u_tie_oe (.ZN(core_oe));
+endmodule
+"#;
+        let nl = netlistdb::NetlistDB::from_sverilog_source(
+            VERILOG,
+            Some("top"),
+            &GF180MCULeafPins,
+        )
+        .expect("netlist parse");
+        let aig = AIG::from_netlistdb(&nl);
+        assert!(aig.num_aigpins > 0);
+
+        // Both `p__out` and `p__oe` should appear as named extra
+        // observables, and each should be present in primary_outputs.
+        let names: std::collections::HashSet<String> = aig
+            .extra_observable_names
+            .values()
+            .flat_map(|v| v.iter().cloned())
+            .collect();
+        assert!(
+            names.contains("p__out"),
+            "expected `p__out` in extra_observable_names, got {:?}",
+            names
+        );
+        assert!(
+            names.contains("p__oe"),
+            "expected `p__oe` in extra_observable_names, got {:?}",
+            names
+        );
+
+        // Every extra observable must also live in primary_outputs so
+        // the partitioner schedules it onto a state bit.
+        for (&aigpin, names) in aig.extra_observable_names.iter() {
+            assert!(
+                aig.primary_outputs.contains(&aigpin),
+                "extra observables {:?} (aigpin {}) not in primary_outputs",
+                names,
+                aigpin
+            );
+        }
+    }
+
+    /// Bus-indexed bidir pads use the top-level port's bus index in the
+    /// observable name (e.g. `bidir_PAD[12]__out`). Verifies the
+    /// PAD → top-port name lookup handles bus indices.
+    #[test]
+    fn bi_24t_observable_name_includes_bus_index() {
+        const VERILOG: &str = r#"
+module top(bidir_PAD);
+  inout [1:0] bidir_PAD;
+  wire core_a_0, core_oe_0;
+  wire core_a_1, core_oe_1;
+  wire y_0, y_1;
+  gf180mcu_fd_io__bi_24t pad0 (
+      .PAD(bidir_PAD[0]), .A(core_a_0), .OE(core_oe_0),
+      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+      .Y(y_0)
+  );
+  gf180mcu_fd_io__bi_24t pad1 (
+      .PAD(bidir_PAD[1]), .A(core_a_1), .OE(core_oe_1),
+      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+      .Y(y_1)
+  );
+  gf180mcu_fd_sc_mcu9t5v0__tieh u_a0  (.Z(core_a_0));
+  gf180mcu_fd_sc_mcu9t5v0__tiel u_oe0 (.ZN(core_oe_0));
+  gf180mcu_fd_sc_mcu9t5v0__tieh u_a1  (.Z(core_a_1));
+  gf180mcu_fd_sc_mcu9t5v0__tiel u_oe1 (.ZN(core_oe_1));
+endmodule
+"#;
+        let nl = netlistdb::NetlistDB::from_sverilog_source(
+            VERILOG,
+            Some("top"),
+            &GF180MCULeafPins,
+        )
+        .expect("netlist parse");
+        let aig = AIG::from_netlistdb(&nl);
+        let names: std::collections::HashSet<String> = aig
+            .extra_observable_names
+            .values()
+            .flat_map(|v| v.iter().cloned())
+            .collect();
+        for idx in 0..2 {
+            assert!(
+                names.contains(&format!("bidir_PAD[{}]__out", idx)),
+                "missing bidir_PAD[{}]__out in {:?}",
+                idx,
+                names,
+            );
+            assert!(
+                names.contains(&format!("bidir_PAD[{}]__oe", idx)),
+                "missing bidir_PAD[{}]__oe in {:?}",
+                idx,
+                names,
+            );
+        }
+    }
+
+    /// `in_c` / `in_s` pads do NOT contribute extra observables — they
+    /// are input-only and have no `A`/`OE` pins to surface.
+    #[test]
+    fn in_c_in_s_pads_emit_no_extra_observables() {
+        const VERILOG: &str = r#"
+module top(clk_PAD, in_PAD, y0, y1);
+  inout clk_PAD;
+  inout in_PAD;
+  output y0, y1;
+  gf180mcu_fd_io__in_s clk_pad (.PAD(clk_PAD), .PU(1'b0), .PD(1'b0), .Y(y0));
+  gf180mcu_fd_io__in_c in_pad  (.PAD(in_PAD),  .PU(1'b0), .PD(1'b0), .Y(y1));
+endmodule
+"#;
+        let nl = netlistdb::NetlistDB::from_sverilog_source(
+            VERILOG,
+            Some("top"),
+            &GF180MCULeafPins,
+        )
+        .expect("netlist parse");
+        let aig = AIG::from_netlistdb(&nl);
+        assert!(
+            aig.extra_observable_names.is_empty(),
+            "in_c / in_s pads should not contribute extra observables; got {:?}",
+            aig.extra_observable_names,
+        );
     }
 
     /// Regression: gf180mcu's `mux2` cell has a `S` select *input* port,

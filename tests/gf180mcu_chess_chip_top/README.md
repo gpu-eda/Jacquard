@@ -72,23 +72,41 @@ On an Apple M4 Pro:
 * Cell library detection: GF180MCU
 * Clock tracing: ~40 ms (7,550 sequential cells)
 * AIG DFS build: ~180 ms (~267k AIG pins)
-* Partitioning + merging: ~19 s → 20 partitions
-* Script build: ~1 s (~1.39M instructions)
+* Partitioning + merging: ~17–19 s → 17 partitions
+* Script build: ~1 s (~1.09M instructions)
 * Metal kernel: instant for 106 cycles
-* Total wall-clock: ≈ 20 s
+* Total wall-clock: ≈ 18–20 s
 
-The output VCD will be small (~1 kB): chip_top has no
-`Direction::I` top-level ports — every primary signal is an `inout`
-pad — so Jacquard finds no signal to emit per-cycle samples for.
-The cycle timestamps are emitted as bare `#N` records. Adding
-visible outputs requires hierarchical hooks into core internals
-(`bidir_PAD2CORE[i]` and similar), which is out of scope for this
-smoke test.
+The output VCD is small but no longer empty (~4 kB). The chip_top
+module exposes only `inout` ports at the Verilog syntax level
+(NetlistDB tags these `Direction::Unknown` and AIG construction
+routes them as primary inputs), but the design has semantically
+input-only and output-only behaviour at synthesis time:
+
+* 14 input-only pads via `in_c`/`in_s` (1 clk + 1 reset + 12
+  input_PAD) — their `Y = PAD` alias is consumed internally; the
+  pads themselves are stimulus targets, not outputs.
+* 40 bidirectional pads via `bi_24t`. The bidir-pad split surfaces
+  each pad's core-side `A` (drive) and `OE` (output-enable) as
+  observables named `bidir_PAD[i]__out` and `bidir_PAD[i]__oe`. In
+  this LibreLane build the JTAG control bits weren't wired, so
+  bidir[0..15] have OE tied low (input mode) and bidir[16..39]
+  have OE tied high (output mode).
+
+You should see 80 wire definitions (`bidir_PAD[0..39]__out` +
+`bidir_PAD[0..39]__oe`) in the output VCD header. Most signals are
+static (OE constants and idle core); a handful transition during
+the 106-cycle run as the core's reset deasserts and combinational
+paths to `A` settle. Capturing transitions on the *internal* signal
+fanout (`bidir_PAD2CORE[i]` and similar) still requires a
+hierarchical watchlist — out of scope here.
 
 ## What this catches
 
 * GF180MCU prefix detection (`gf180mcu_fd_*` and `gf180mcu_ws_*`).
 * IO-pad pin-table coverage for `bi_24t` / `in_c` / `in_s` / `asig_5p0`.
+* `bi_24t` observability split: `A`/`OE` surfaced as named primary
+  outputs (`bidir_PAD[i]__out` / `__oe`).
 * Filler classification for IO-ring fillers, corner, analog
   passthrough, wafer.space power pads, ws_ip empty stubs.
 * Clock-path tracer handling of `in_c` / `in_s` (pad-as-buffer).
