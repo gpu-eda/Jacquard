@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CellLibrary","PdkVariant"],"fn":["detect_library","detect_library_from_file"]};
