@@ -8,7 +8,7 @@ GEM (GPU-accelerated Emulator-inspired RTL simulation) is a GPU-accelerated RTL 
 
 Supports three GPU backends: **CUDA** (NVIDIA GPUs), **HIP** (AMD GPUs via ROCm), and **Metal** (Apple Silicon Macs).
 
-**Key limitation**: Only supports non-interactive testbenches with static input waveforms (VCD). Synchronous logic only - no latches or async sequential logic.
+**Key limitation**: Synchronous logic only — no latches or async sequential logic. The `sim` command takes a static input VCD; the `cosim` command runs reactive peripheral models (SPI flash, UART, Wishbone bus trace) as GPU kernels alongside the design, so inputs can depend on design outputs cycle-by-cycle.
 
 ## Build Commands
 

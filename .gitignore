@@ -12,6 +12,9 @@ __pycache__/
 *.swp
 .pdm-python
 
+# macOS Finder metadata
+**/.DS_Store
+
 # Claude Code session data
 .claude/
 
