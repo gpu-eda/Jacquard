@@ -2,7 +2,15 @@
 
 **Status:** Phases 0–6 shipped (2026-05-12 / 13). Phase 7
 (wafer.space test-run-1 design integration) deferred pending design
-availability. This document is now a recap of what landed; the
+availability. Subsequent follow-ups also landed (2026-05-14):
+IO pad behavioural decomposition (`__in_c`, `__in_s`, `__bi_24t`,
+plus filler classification for the wafer.space `gf180mcu_ws_*`
+families) and bidir A/OE observability surfacing as
+`<port>__out` / `<port>__oe` extra primary outputs — see commits
+`aa312b8`, `c23d583`, `207cc80`. These extended GF180MCU support
+from "synthesized-core-only" to "full chip_top including pad ring",
+validated end-to-end on a 227k-cell wafer.space chess chip_top
+netlist. This document is now a recap of what landed; the
 forward-looking deferred items are in § Follow-on cleanup at the
 bottom.
 

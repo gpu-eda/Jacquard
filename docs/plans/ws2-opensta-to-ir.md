@@ -1,7 +1,12 @@
 # Plan — WS2: `opensta-to-ir`
 
-**Status:** Design — pending review.
-**Phase:** 0 (executes WS2 from `phase-0-ir-and-oracle.md`).
+**Status:** Implemented — historical record. All five phases (2.1–2.5)
+plus Pillar B Stage 1 (per-DFF CLOCK_ARRIVAL records) and release
+hardening (WS-RH.1 OpenSTA version probe) have shipped. The crate
+lives at `crates/opensta-to-ir/`. Current scheduling for further
+timing-model fidelity work is tracked in `post-phase-0-roadmap.md`.
+
+**Phase:** 0 (executed WS2 from `phase-0-ir-and-oracle.md`).
 **Predecessors:** WS1 (`crates/timing-ir`, schema and round-trip — done), ADRs 0001 / 0002 / 0005 / 0006.
 
 ## Goal
@@ -161,24 +166,32 @@ Splitting WS2 into focused PRs keeps reviewability tight. Each phase exits with 
 
 | Phase | Scope | Exit signal | Status |
 |---|---|---|---|
-| 2.1 | Single-corner, timing-arc IOPATHs only. CLI scaffolding. | AIGPDK AND2 round-trip clean through `opensta-to-ir` end-to-end. | ✅ landed (50b8600). `inv_chain_pnr` golden-IR check deferred to 2.5 (needs SKY130 .lib availability). |
-| 2.2 | Add interconnect delays (`wire`-role edges, with optional SPEF). | Multi-cell design produces INTERCONNECT records that round-trip. | ⏳ pending. |
-| 2.3 | Add setup/hold checks. | DFF setup/hold round-trips end-to-end. | 🟡 minimum landed (8343b14): AIGPDK DFF emits both rising and falling SETUP_HOLD. Recovery / removal / width checks remain unimplemented; conditional setup/hold (COND) not exercised. |
-| 2.4 | Multi-corner. | 3-corner synthetic fixture produces 3-corner IR. | ⏳ pending. |
-| 2.5 | CI corpus integration; golden-IR fixtures for representative designs. | WS4 corpus job in CI; WS2 task complete. | ⏳ pending; depends on SKY130 .lib availability for `inv_chain_pnr`. |
+| 2.1 | Single-corner, timing-arc IOPATHs only. CLI scaffolding. | AIGPDK AND2 round-trip clean through `opensta-to-ir` end-to-end. | ✅ Shipped (`dc3db4a` scaffold + `3997e06` subprocess plumbing + `50b8600` real Tcl extraction). |
+| 2.2 | Add interconnect delays (`wire`-role edges, with optional SPEF). | Multi-cell design produces INTERCONNECT records that round-trip. | ✅ Shipped (`67210c0`). Test: `chain_with_sdf_emits_interconnect_delay`. |
+| 2.3 | Add setup/hold checks. | DFF setup/hold round-trips end-to-end. | ✅ Shipped (`8343b14`). Test: `aigpdk_dff_emits_setup_hold_records`. Recovery / removal / width checks remain out of scope. |
+| 2.4 | Multi-corner. | 3-corner synthetic fixture produces 3-corner IR. | ✅ Shipped (`530bb36` builder + `59fde04` per-corner Tcl emission + `d110174` integration test + `50f4bf5` real-sky130 multi-corner follow-up). Tests: `aigpdk_dff_emits_per_corner_timing_values`, `sky130_multi_corner_emits_per_corner_values`. |
+| 2.5 | CI corpus integration; golden-IR fixtures for representative designs. | WS4 corpus job in CI; WS2 task complete. | ✅ Shipped (`90558bb`). Runner: `cargo test -p opensta-to-ir corpus`. |
 
-WS3 (delete `src/sdf_parser.rs` + wire interim runtime hook) can begin once Phase 2.1 lands, in parallel with 2.2–2.5. With 2.1 + 2.3-minimum landed (delay arcs + setup/hold checks), the IR has the must-have content for the runtime cutover; multi-corner and interconnects would refine the result without blocking it.
+**Beyond original WS2 scope:**
 
-## Open questions
+- **Pillar B Stage 1** — per-DFF `CLOCK_ARRIVAL` records (`c403cc8`). Adds clock arrival times to the IR so downstream consumers can compute per-DFF setup/hold margins without re-running OpenSTA. Test: `dff_with_sdc_clock_emits_clock_arrival`. Tracked separately in `post-phase-0-roadmap.md`.
+- **Release hardening WS-RH.1** — hard-fail on missing or too-old OpenSTA, with version probe and usage diagnostics (`c9c393b`). Tests: `locate_accepts_min_tested_version`, `locate_flags_newer_than_tested`. Tracked in `post-phase-0-roadmap.md` § Release hardening.
 
-Items not pinned by this design; resolve during implementation or in follow-up:
+WS3 (delete `src/sdf_parser.rs` + wire interim runtime hook) was unblocked once Phase 2.3 minimum landed and has also shipped — see `ws3-delete-sdf-parser.md`.
 
-- **OpenSTA version pinning**: which range do we support? Initially target the submodule pin (`f361dd65`) only; widen with empirical evidence. Documented in the binary's `--help`.
-- **OpenSTA installation**: contributors run `scripts/build-opensta.sh` once (idempotent; `--force` to rebuild). The script initialises the `vendor/opensta/` submodule if needed, checks build prerequisites, and invokes CMake. Brewfile-based dependency install is required first on macOS (`brew bundle --file vendor/opensta/Brewfile`); Linux contributors follow `vendor/opensta/Dockerfile.ubuntu22.04`. The script prints the binary path on success; `--print-binary` is the dependency probe for tests and CI.
-- **Long-running designs**: real SoC SDFs can have hundreds of thousands of arcs. Investigate streaming the dump (Tcl flushing line-by-line, Rust reading the FIFO incrementally) if memory becomes an issue. Defer until profiling shows it matters.
-- **Errors during Tcl execution**: how aggressively do we surface OpenSTA's `error` vs `warning` messages? Current plan: capture all stderr, replay on failure, otherwise quiet. `--strict-tcl` upgrades warnings to errors.
-- **Tcl-script versioning**: the dump format header has `# format-version: 1`. Bump on breaking changes; binary refuses unknown versions.
-- **Conditional arcs (SDF `COND`)**: capture in the `condition` IR field. Verify OpenSTA's Tcl API exposes them (preliminary: `get_timing_arcs_from <pin>` returns conditional variants separately).
+## Open questions — resolution
+
+Resolutions from implementation:
+
+- **OpenSTA version pinning** — **Resolved** by WS-RH.1 (`c9c393b`). Binary probes OpenSTA's `version_string`, accepts a `[MIN_TESTED, MAX_TESTED]` range, prints a usage diagnostic with the supported range on mismatch.
+- **OpenSTA installation** — **Resolved**. `scripts/build-opensta.sh` ships with `--print-binary` for the dependency probe; integration tests skip cleanly when the binary isn't built. Documented in the script's `--help` and the post-Phase-0 roadmap.
+- **Tcl-script versioning** — **Resolved**. `# format-version: 1` header check is enforced in `dump.rs`; the binary refuses unknown versions with an explicit error.
+- **Conditional arcs (SDF `COND`)** — **Partial**. The `condition` field is plumbed end-to-end (dump format → Rust parser → IR builder), but the Tcl emission side does not yet populate it for conditional variants. Defer until a real design surfaces a `COND` arc that needs distinguishing.
+
+Still open / deferred:
+
+- **Long-running designs**: streaming dump emission (Tcl flushing line-by-line, Rust incremental read) — defer until profiling on a real SoC shows memory pressure.
+- **Strict Tcl error handling**: `--strict-tcl` flag was specced but not implemented. Current behaviour captures all stderr and replays on failure; no warning-to-error upgrade path. Land if it becomes a real CI hygiene concern.
 
 ## Risks
 
@@ -205,4 +218,4 @@ Items not pinned by this design; resolve during implementation or in follow-up:
 
 ---
 
-**Last updated:** 2026-04-28
+**Last updated:** 2026-04-28 (design); 2026-05-15 (status flip to Implemented).
