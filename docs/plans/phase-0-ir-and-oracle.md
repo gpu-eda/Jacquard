@@ -1,6 +1,12 @@
 # Plan — Phase 0: Timing IR and OpenSTA oracle
 
-**Status:** Proposed. Work may begin once the requirements doc and ADRs 0001–0002 are accepted. Phase 0 is independent of the OpenTimer spike (which runs in parallel and informs phase 1).
+**Status:** Implemented — historical record. All five work streams
+(WS1 schema, WS2 `opensta-to-ir` producer, WS3 SDF parser deletion +
+interim runtime hook, WS4 diff harness + CI, WS5 parser-success
+assertions) shipped through 2026-05-02. All eight exit criteria are
+met. Ongoing scheduling for timing-model fidelity work has moved to
+`post-phase-0-roadmap.md`. The per-WS detail and embedded status
+markers below are preserved for the implementation record.
 
 ## Goal
 
@@ -25,6 +31,12 @@ After phase 0, Jacquard's timing pipeline has an enforced external reference. Si
 ## Work breakdown
 
 ### WS1 — IR schema
+
+> **Done.** Shipped as the `timing-ir` crate (`508baaf` initial,
+> `2432d41` simplification). Schema at
+> `crates/timing-ir/schemas/timing_ir.fbs`; per-DFF `CLOCK_ARRIVAL`
+> records added later in `c403cc8` (Pillar B Stage 1, beyond original
+> WS1 scope). JSON round-trip verified via `crates/timing-ir/tests/`.
 
 Produce the FlatBuffers schema (`schemas/timing_ir.fbs`) and generated Rust bindings.
 
@@ -152,18 +164,18 @@ Tolerances:
 - Delay values: ±5% or ±5 ps absolute floor, whichever is larger. Rationale: matches the existing `timing-validation.md` convention; per-design overrides allowed via `manifest.toml`.
 - Missing arcs: zero tolerance. Every arc in the golden IR must appear in the freshly produced one (and vice versa).
 
-## Exit criteria
+## Exit criteria (all met)
 
 Phase 0 is complete when **all** of the following hold:
 
-1. `schemas/timing_ir.fbs` is checked in and IR read/write works with a round-trip unit test.
-2. `opensta-to-ir` binary exists, is production-quality (stable CLI, documented exit codes), and produces IR from the primary regression corpus.
-3. `src/sdf_parser.rs` is deleted. All remaining imports are cleaned up. `jacquard sim --timing-ir <path>` is the canonical timing input path; `--timing-sdf` is a subprocess wrapper over `opensta-to-ir` (per ADR 0006 § Amendment, this wrapper is the shipping mechanism, not a temporary bridge — Phase 3 is no longer release-gating).
-4. OpenSTA is vendored as a git submodule at `vendor/opensta/` (per ADR 0005).
-5. `timing-ir-diff` runs in CI on the primary corpus, passes cleanly, and fails loud on artificial regressions (verified by a mutation test).
-6. Parser-success assertions in place on the Liberty parser and on `opensta-to-ir`. Failure-mode tests demonstrate they fire.
-7. No existing Jacquard timing-related regression test regresses as a consequence of the WS3 cutover.
-8. The section of `timing-validation.md` that sets the current "±5% tolerance" convention is updated to point to this plan's tolerance specification, or flagged for removal in phase 1.
+1. ✅ `schemas/timing_ir.fbs` checked in (`crates/timing-ir/schemas/timing_ir.fbs`); round-trip unit tests in `crates/timing-ir/tests/`.
+2. ✅ `opensta-to-ir` binary production-quality with stable CLI, documented exit codes, primary-corpus support. See `ws2-opensta-to-ir.md` (Implemented).
+3. ✅ `src/sdf_parser.rs` deleted; `--timing-ir <path>` canonical; `--timing-sdf` is a subprocess wrapper over `opensta-to-ir` (per ADR 0006 § Amendment, the shipping mechanism — Phase 3 native Rust parser deferred indefinitely). See `ws3-delete-sdf-parser.md` (Implemented).
+4. ✅ OpenSTA vendored at `vendor/opensta/` (ADR 0005).
+5. ✅ `timing-ir-diff` runs in CI on the primary corpus (`opensta-to-ir-tests` job), passes cleanly, fails loud on regressions. Mutation tests in `crates/timing-ir/tests/diff.rs`.
+6. ✅ Parser-success assertions live on both halves: `TimingLibrary::parse` and `opensta-to-ir --min-arcs`. See WS5 above.
+7. ✅ No regression observed in Jacquard's timing-related tests after WS3 cutover.
+8. ✅ `timing-validation.md` carries the forward-pointing note (line 3) explicitly stating its ±5% convention will be superseded by `timing-correctness.md` once Phase 0 ships. Phase 0 has shipped; that supersession is now effective in practice (the corpus tolerance is set per-design via `manifest.toml`). Removing the in-doc note is a small follow-up if anyone authoring against the page would benefit.
 
 ## Out of scope (deferred to later phases)
 
