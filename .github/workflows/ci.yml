@@ -1096,11 +1096,14 @@ jobs:
           sudo apt-get install -y --no-install-recommends build-essential zlib1g-dev
           git clone --depth 1 https://github.com/cambridgehackers/open-src-cvc.git ~/cvc-src
           cd ~/cvc-src/src
-          make -f makefile.cvc64 -j$(nproc) \
-            OPTFLGS="" \
-            CFLAGS="-Wall -I../pli_incs -D__RHEL6X__ -fno-pie -no-pie -O0"
+          # Upstream refactored the build (commit 1c5e043e, 2026-03-13):
+          # makefile.cvc64 → top-level Makefile; output now at
+          # ../build64/cvc64. Mirrors the working invocation in the
+          # cvc-reference job earlier in this workflow.
+          make -j$(nproc) \
+            CFLAGS="-pipe -Wall -Wno-incompatible-pointer-types -Wno-implicit-function-declaration -I../pli_incs -D__RHEL6X__ -fno-pie -no-pie -O0"
           mkdir -p ~/cvc/bin
-          cp cvc64 ~/cvc/bin/
+          cp ../build64/cvc64 ~/cvc/bin/
 
       - name: Add CVC to PATH
         run: echo "$HOME/cvc/bin" >> "$GITHUB_PATH"
