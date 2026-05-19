@@ -15,11 +15,14 @@ use tempfile::TempDir;
 
 /// Write `script` to `dir/sta`, mark it executable, and return the path.
 ///
-/// Opens the file with mode 0o755 in a single syscall and explicitly drops
-/// the writer before returning. Doing chmod after `std::fs::write` returns
-/// leaves a window where Linux can fail an immediate `execve` with
-/// ETXTBSY ("Text file busy"), which this test then sees as an
-/// `io::ErrorKind::ExecutableFileBusy` spawn failure.
+/// Opens the file with mode 0o755 in a single syscall, `sync_all`s, and
+/// drops the writer — then briefly polls a no-op `execve` until the
+/// kernel stops returning ETXTBSY ("Text file busy"). Without the poll,
+/// Linux occasionally rejects an immediate execve even after the writer
+/// is closed (the inode's writer_count decrement is not synchronous with
+/// `close(2)`), which surfaces in `locate_and_check` as `VersionProbeFailed
+/// { kind: ExecutableFileBusy }` and breaks the test's exit-code
+/// assertions.
 fn write_stub_script(dir: &TempDir, script: &str) -> PathBuf {
     let path = dir.path().join("sta");
     let mut f = std::fs::OpenOptions::new()
@@ -29,8 +32,37 @@ fn write_stub_script(dir: &TempDir, script: &str) -> PathBuf {
         .open(&path)
         .unwrap();
     f.write_all(script.as_bytes()).unwrap();
+    f.sync_all().unwrap();
     drop(f);
+    wait_for_execve_ready(&path);
     path
+}
+
+/// Block (briefly) until `path` can be `execve`'d without ETXTBSY.
+fn wait_for_execve_ready(path: &std::path::Path) {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match Command::new(path)
+            .arg("--__probe-ready")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(mut child) => {
+                let _ = child.wait();
+                return;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                if Instant::now() > deadline {
+                    panic!("execve still returning ETXTBSY after 2s for {path:?}");
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(e) => panic!("unexpected spawn error probing {path:?}: {e}"),
+        }
+    }
 }
 
 /// Stub that prints the given version on `-version` and exits 0.
