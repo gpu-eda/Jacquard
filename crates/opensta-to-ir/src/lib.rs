@@ -11,3 +11,4 @@
 pub mod builder;
 pub mod dump;
 pub mod opensta;
+pub mod verilog_filter;
