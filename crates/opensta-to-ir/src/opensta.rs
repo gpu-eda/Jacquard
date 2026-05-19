@@ -381,7 +381,19 @@ pub fn run(
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let verilog_arg = paths_to_lines(inv.verilog);
+
+    // Filter each verilog input through the named-module extractor.
+    // LibreLane + wafer.space final.v files have the structural top
+    // wrapped in an integration module (e.g. openframe_project_wrapper)
+    // that uses RTL operators OpenSTA's reader rejects. Extracting
+    // just the named --top from each file leaves any other modules
+    // — including offending wrappers — behind. Files that don't
+    // contain a `module <top>` declaration are passed through
+    // unchanged so hierarchical designs with sub-modules split across
+    // multiple files still link cleanly. See ADR 0009.
+    let filtered_verilog_paths =
+        filter_verilog_inputs(inv.verilog, inv.top, dir.path())?;
+    let verilog_arg = paths_to_lines(&filtered_verilog_paths);
 
     let mut cmd = Command::new(binary);
     cmd.arg("-no_init")
@@ -438,6 +450,33 @@ fn paths_to_lines(paths: &[PathBuf]) -> String {
         .map(|p| p.display().to_string())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Pre-extract the `top` module from each input file so OpenSTA's
+/// structural-only Verilog reader doesn't choke on integration
+/// wrappers. Files that don't contain `module <top>` are passed
+/// through unchanged. Filtered outputs are written into `tmp_dir`
+/// with unique names; the returned paths replace the original
+/// `--verilog` paths in the OpenSTA invocation. See ADR 0009.
+fn filter_verilog_inputs(
+    inputs: &[PathBuf],
+    top: &str,
+    tmp_dir: &Path,
+) -> Result<Vec<PathBuf>, InvokeError> {
+    let mut out = Vec::with_capacity(inputs.len());
+    for (idx, src) in inputs.iter().enumerate() {
+        let content = std::fs::read_to_string(src).map_err(InvokeError::Spawn)?;
+        match crate::verilog_filter::extract_named_module(&content, top) {
+            Some(extracted) => {
+                let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("input");
+                let dst = tmp_dir.join(format!("filtered_{idx:02}_{stem}.v"));
+                std::fs::write(&dst, extracted).map_err(InvokeError::Spawn)?;
+                out.push(dst);
+            }
+            None => out.push(src.clone()),
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

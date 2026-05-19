@@ -27,48 +27,50 @@ only accepts pre-converted IR via `--timing-ir`.
 The `tests/mcu_soc/` cosim flow that used to load SDF via the testbench
 config now needs an explicit pre-conversion step.
 
-### Important: feed `top_synth.v` to OpenSTA, not `6_final.v`
+### Feed `6_final.v` directly to `opensta-to-ir`
 
-OpenSTA's Verilog parser only accepts gate-level structural Verilog.
-`tests/mcu_soc/data/6_final.v` is the `openframe_project_wrapper` —
-a thin wrapper around the synthesized `top` module — and contains
-RTL-style `assign` statements (`~`, concatenations, bit-selects) that
-OpenSTA rejects with a syntax error around line 135 (`assign
-gpio_oeb[0] = ~( \io$soc_flash_clk$oe );`).
+**Retraction (2026-05-18).** Earlier versions of this section
+recommended feeding `tests/mcu_soc/data/top_synth.v` (post-synthesis,
+pre-P&R) to `opensta-to-ir` to dodge a parse error on `6_final.v`'s
+chipflow integration wrapper. That was wrong: `top_synth.v` is
+missing the ~236K cells P&R inserts (`clkbuf_regs_*` CTS buffers,
+`ANTENNA_*` diodes, `delaybuf_*`, fillers), so OpenSTA silently drops
+every SDF entry referencing a P&R-inserted cell and the resulting IR
+is missing the bulk of the design's timing. The "28162 matched /
+2090 unmatched" verification log we celebrated at the time measured
+jtir records against the cosim-loaded netlist, not SDF coverage
+against the jtir — high surface match rate, materially incomplete
+IR. See **ADR 0009** (OpenSTA Verilog reader input constraints) for
+the broader rule.
 
-The actual gate-level netlist that the SDF was generated against is
-`tests/mcu_soc/data/top_synth.v`, with module name `top`. The SDF's
-`(DESIGN "top")` header confirms this. Use `top_synth.v` + `--top top`
-for the OpenSTA invocation:
+`opensta-to-ir` now transparently extracts `module <--top>` from each
+input file before invoking OpenSTA (implementation in
+`crates/opensta-to-ir/src/verilog_filter.rs`). For the chipflow
+mcu_soc case this strips the `openframe_project_wrapper` module
+automatically; the same handling kicks in for any LibreLane +
+wafer.space user (hazard3 and future tapeouts) whose final netlist
+carries an integration wrapper around the structural top.
 
 ```sh
-# 1. Convert SDF → IR once. Use top_synth.v (clean gate-level), NOT
-#    6_final.v (the wrapper has RTL assigns that crash OpenSTA).
+# Convert SDF → IR once. Pass 6_final.v directly; the wrapper module
+# is dropped automatically.
 opensta-to-ir \
     --liberty /path/to/sky130_fd_sc_hd__tt_025C_1v80.lib \
-    --verilog tests/mcu_soc/data/top_synth.v \
+    --verilog tests/mcu_soc/data/6_final.v \
     --sdf tests/mcu_soc/data/6_final.sdf \
     --top top \
     --output tests/mcu_soc/data/6_final.jtir
 
-# 2. Run cosim with the pre-converted IR. Cosim still loads 6_final.v
-#    (the wrapper) because that's what carries GPIO ports. The IR
-#    consumer's hierarchy-prefix detection automatically strips the
-#    'top_inst/' prefix from the wrapper's cell paths so they match the
-#    IR's instance names.
+# Run cosim with the pre-converted IR. Cosim loads 6_final.v (the
+# wrapper) because that's what carries GPIO ports. The IR consumer's
+# hierarchy-prefix detection strips the `top_inst/` prefix from the
+# wrapper's cell paths so they match the IR's instance names.
 cargo run -r --features metal --bin jacquard -- cosim \
     tests/mcu_soc/data/6_final.v \
     --config tests/mcu_soc/sim_config_sky130.json \
     --top-module openframe_project_wrapper \
     --timing-ir tests/mcu_soc/data/6_final.jtir
 ```
-
-Verified working on sky130 mcu_soc (2026-04-29):
-`Loaded IR timing: 28162 matched, 2090 unmatched (251 Liberty
-fallback), 0 wire delays, 3756 DFF constraints` →
-`SIMULATION: PASSED`. The "0 wire delays" is the documented WS2.2
-gap — `opensta-to-ir` doesn't yet emit `interconnect_delays`, so wire
-contributions are missing from timing. Returns when WS2.2 lands.
 
 `tests/mcu_soc/sim_config_sky130.json` no longer carries `sdf_file` /
 `sdf_corner` (the fields would be silently ignored if added back;
