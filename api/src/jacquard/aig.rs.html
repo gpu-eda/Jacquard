@@ -3356,762 +3356,768 @@
 <a href=#3356 id=3356 data-nosnippet>3356</a>        <span class="kw">use </span>sverilogparse::SVerilogRange;
 <a href=#3357 id=3357 data-nosnippet>3357</a>
 <a href=#3358 id=3358 data-nosnippet>3358</a>        <span class="comment">// Blackbox interface mirroring
-<a href=#3359 id=3359 data-nosnippet>3359</a>        // gf180mcu_ocd_ip_sram__sram1024x8m8wm1. Uses the
-<a href=#3360 id=3360 data-nosnippet>3360</a>        // module-header-only port list with separate declarations
-<a href=#3361 id=3361 data-nosnippet>3361</a>        // (sverilogparse's preferred shape — confirmed by the
-<a href=#3362 id=3362 data-nosnippet>3362</a>        // existing AIGPDK / SKY130 / GF180MCU vendored blackboxes).
-<a href=#3363 id=3363 data-nosnippet>3363</a>        </span><span class="kw">const </span>OCD_SRAM_BLACKBOX: <span class="kw-2">&amp;</span>str = <span class="string">"\
-<a href=#3364 id=3364 data-nosnippet>3364</a>module gf180mcu_ocd_ip_sram__sram1024x8m8wm1 (CLK, CEN, GWEN, WEN, A, D, Q);
-<a href=#3365 id=3365 data-nosnippet>3365</a>  input CLK;
-<a href=#3366 id=3366 data-nosnippet>3366</a>  input CEN;
-<a href=#3367 id=3367 data-nosnippet>3367</a>  input GWEN;
-<a href=#3368 id=3368 data-nosnippet>3368</a>  input [7:0] WEN;
-<a href=#3369 id=3369 data-nosnippet>3369</a>  input [9:0] A;
-<a href=#3370 id=3370 data-nosnippet>3370</a>  input [7:0] D;
-<a href=#3371 id=3371 data-nosnippet>3371</a>  output [7:0] Q;
-<a href=#3372 id=3372 data-nosnippet>3372</a>endmodule
-<a href=#3373 id=3373 data-nosnippet>3373</a>"</span>;
-<a href=#3374 id=3374 data-nosnippet>3374</a>
-<a href=#3375 id=3375 data-nosnippet>3375</a>        <span class="comment">// Tiny top instantiating one SRAM. Inputs are primary ports;
-<a href=#3376 id=3376 data-nosnippet>3376</a>        // outputs Q[7:0] are the cell's output, routed to top-level
-<a href=#3377 id=3377 data-nosnippet>3377</a>        // outputs so they end up in the netlist's primary-output set.
-<a href=#3378 id=3378 data-nosnippet>3378</a>        </span><span class="kw">const </span>TOP_VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">"\
-<a href=#3379 id=3379 data-nosnippet>3379</a>module top(clk, cen, gwen, wen, a, d, q);
-<a href=#3380 id=3380 data-nosnippet>3380</a>  input clk, cen, gwen;
-<a href=#3381 id=3381 data-nosnippet>3381</a>  input [7:0] wen;
-<a href=#3382 id=3382 data-nosnippet>3382</a>  input [9:0] a;
-<a href=#3383 id=3383 data-nosnippet>3383</a>  input [7:0] d;
-<a href=#3384 id=3384 data-nosnippet>3384</a>  output [7:0] q;
-<a href=#3385 id=3385 data-nosnippet>3385</a>  gf180mcu_ocd_ip_sram__sram1024x8m8wm1 u_sram (
-<a href=#3386 id=3386 data-nosnippet>3386</a>    .CLK(clk), .CEN(cen), .GWEN(gwen),
-<a href=#3387 id=3387 data-nosnippet>3387</a>    .WEN(wen), .A(a), .D(d), .Q(q)
-<a href=#3388 id=3388 data-nosnippet>3388</a>  );
-<a href=#3389 id=3389 data-nosnippet>3389</a>endmodule
-<a href=#3390 id=3390 data-nosnippet>3390</a>"</span>;
-<a href=#3391 id=3391 data-nosnippet>3391</a>
-<a href=#3392 id=3392 data-nosnippet>3392</a>        <span class="comment">// Write the cell library file (with sibling manifest) so the
-<a href=#3393 id=3393 data-nosnippet>3393</a>        // sverilogparse-backed loader sees them via the public API.
-<a href=#3394 id=3394 data-nosnippet>3394</a>        </span><span class="kw">let </span>dir = tempfile::TempDir::new().unwrap();
-<a href=#3395 id=3395 data-nosnippet>3395</a>        <span class="kw">let </span>lib_path = dir.path().join(<span class="string">"ocd_sram.v"</span>);
-<a href=#3396 id=3396 data-nosnippet>3396</a>        std::fs::write(<span class="kw-2">&amp;</span>lib_path, OCD_SRAM_BLACKBOX).unwrap();
-<a href=#3397 id=3397 data-nosnippet>3397</a>        std::fs::write(
-<a href=#3398 id=3398 data-nosnippet>3398</a>            dir.path().join(<span class="string">"ocd_sram.cells.toml"</span>),
-<a href=#3399 id=3399 data-nosnippet>3399</a>            <span class="string">"schema_version = \"1.0\"\n\
-<a href=#3400 id=3400 data-nosnippet>3400</a>             [cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]\n\
-<a href=#3401 id=3401 data-nosnippet>3401</a>             kind = \"ram\"\n"</span>,
-<a href=#3402 id=3402 data-nosnippet>3402</a>        )
-<a href=#3403 id=3403 data-nosnippet>3403</a>        .unwrap();
-<a href=#3404 id=3404 data-nosnippet>3404</a>
-<a href=#3405 id=3405 data-nosnippet>3405</a>        <span class="kw">let </span>runtime_lib = RuntimeCellLibrary::from_files(<span class="kw-2">&amp;</span>[lib_path]).unwrap();
-<a href=#3406 id=3406 data-nosnippet>3406</a>
-<a href=#3407 id=3407 data-nosnippet>3407</a>        <span class="comment">// Sanity: the manifest was loaded.
-<a href=#3408 id=3408 data-nosnippet>3408</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#3409 id=3409 data-nosnippet>3409</a>            runtime_lib.lookup_kind(<span class="string">"gf180mcu_ocd_ip_sram__sram1024x8m8wm1"</span>),
-<a href=#3410 id=3410 data-nosnippet>3410</a>            <span class="prelude-val">Some</span>(<span class="kw">crate</span>::cell_library::CellKind::Ram)
-<a href=#3411 id=3411 data-nosnippet>3411</a>        );
-<a href=#3412 id=3412 data-nosnippet>3412</a>        <span class="macro">assert_eq!</span>(
-<a href=#3413 id=3413 data-nosnippet>3413</a>            runtime_lib.lookup_pin(
-<a href=#3414 id=3414 data-nosnippet>3414</a>                <span class="kw-2">&amp;</span>CompactString::new(<span class="string">"gf180mcu_ocd_ip_sram__sram1024x8m8wm1"</span>),
-<a href=#3415 id=3415 data-nosnippet>3415</a>                <span class="kw-2">&amp;</span>CompactString::new(<span class="string">"Q"</span>)
-<a href=#3416 id=3416 data-nosnippet>3416</a>            ),
-<a href=#3417 id=3417 data-nosnippet>3417</a>            <span class="prelude-val">Some</span>(netlistdb::Direction::O)
-<a href=#3418 id=3418 data-nosnippet>3418</a>        );
-<a href=#3419 id=3419 data-nosnippet>3419</a>
-<a href=#3420 id=3420 data-nosnippet>3420</a>        <span class="comment">// The runtime library is the only pin-direction source for
-<a href=#3421 id=3421 data-nosnippet>3421</a>        // this cell — no built-in fallback needed here. The
-<a href=#3422 id=3422 data-nosnippet>3422</a>        // top module's port directions come from the inline
-<a href=#3423 id=3423 data-nosnippet>3423</a>        // declarations themselves, which sverilogparse handles
-<a href=#3424 id=3424 data-nosnippet>3424</a>        // directly.
-<a href=#3425 id=3425 data-nosnippet>3425</a>        </span><span class="kw">struct </span>NoFallback;
-<a href=#3426 id=3426 data-nosnippet>3426</a>        <span class="kw">impl </span>LeafPinProvider <span class="kw">for </span>NoFallback {
-<a href=#3427 id=3427 data-nosnippet>3427</a>            <span class="kw">fn </span>direction_of(
-<a href=#3428 id=3428 data-nosnippet>3428</a>                <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#3429 id=3429 data-nosnippet>3429</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>CompactString,
-<a href=#3430 id=3430 data-nosnippet>3430</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>CompactString,
-<a href=#3431 id=3431 data-nosnippet>3431</a>                <span class="kw">_</span>: <span class="prelude-ty">Option</span>&lt;isize&gt;,
-<a href=#3432 id=3432 data-nosnippet>3432</a>            ) -&gt; netlistdb::Direction {
-<a href=#3433 id=3433 data-nosnippet>3433</a>                netlistdb::Direction::Unknown
-<a href=#3434 id=3434 data-nosnippet>3434</a>            }
-<a href=#3435 id=3435 data-nosnippet>3435</a>            <span class="kw">fn </span>width_of(
-<a href=#3436 id=3436 data-nosnippet>3436</a>                <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#3437 id=3437 data-nosnippet>3437</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>CompactString,
-<a href=#3438 id=3438 data-nosnippet>3438</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>CompactString,
-<a href=#3439 id=3439 data-nosnippet>3439</a>            ) -&gt; <span class="prelude-ty">Option</span>&lt;SVerilogRange&gt; {
-<a href=#3440 id=3440 data-nosnippet>3440</a>                <span class="prelude-val">None
-<a href=#3441 id=3441 data-nosnippet>3441</a>            </span>}
-<a href=#3442 id=3442 data-nosnippet>3442</a>        }
-<a href=#3443 id=3443 data-nosnippet>3443</a>        <span class="kw">let </span>fallback = NoFallback;
-<a href=#3444 id=3444 data-nosnippet>3444</a>        <span class="kw">let </span>provider = <span class="kw">crate</span>::cell_library::ChainedPinProvider {
-<a href=#3445 id=3445 data-nosnippet>3445</a>            runtime: <span class="kw-2">&amp;</span>runtime_lib,
-<a href=#3446 id=3446 data-nosnippet>3446</a>            fallback: <span class="kw-2">&amp;</span>fallback,
-<a href=#3447 id=3447 data-nosnippet>3447</a>        };
-<a href=#3448 id=3448 data-nosnippet>3448</a>
-<a href=#3449 id=3449 data-nosnippet>3449</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
-<a href=#3450 id=3450 data-nosnippet>3450</a>            TOP_VERILOG,
-<a href=#3451 id=3451 data-nosnippet>3451</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
-<a href=#3452 id=3452 data-nosnippet>3452</a>            <span class="kw-2">&amp;</span>provider,
-<a href=#3453 id=3453 data-nosnippet>3453</a>        )
-<a href=#3454 id=3454 data-nosnippet>3454</a>        .expect(<span class="string">"netlist parse"</span>);
-<a href=#3455 id=3455 data-nosnippet>3455</a>
-<a href=#3456 id=3456 data-nosnippet>3456</a>        <span class="kw">let </span>aig = AIG::from_netlistdb_with_cells(<span class="kw-2">&amp;</span>nl, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>runtime_lib));
-<a href=#3457 id=3457 data-nosnippet>3457</a>
-<a href=#3458 id=3458 data-nosnippet>3458</a>        <span class="comment">// The OCD SRAM cell now has a `srams` entry — opaque-RAM
-<a href=#3459 id=3459 data-nosnippet>3459</a>        // allocation path took effect.
-<a href=#3460 id=3460 data-nosnippet>3460</a>        </span><span class="macro">assert!</span>(
-<a href=#3461 id=3461 data-nosnippet>3461</a>            !aig.srams.is_empty(),
-<a href=#3462 id=3462 data-nosnippet>3462</a>            <span class="string">"expected at least one srams entry for the opaque RAM"
-<a href=#3463 id=3463 data-nosnippet>3463</a>        </span>);
-<a href=#3464 id=3464 data-nosnippet>3464</a>        <span class="kw">let </span>(cellid, ram) = aig.srams.iter().next().unwrap();
-<a href=#3465 id=3465 data-nosnippet>3465</a>        <span class="comment">// First 8 slots of port_r_rd_data populated (Q[7:0]); the
-<a href=#3466 id=3466 data-nosnippet>3466</a>        // remaining 24 stay default-zero.
-<a href=#3467 id=3467 data-nosnippet>3467</a>        </span><span class="kw">let </span>populated = ram.port_r_rd_data.iter().filter(|&amp;&amp;p| p != <span class="number">0</span>).count();
-<a href=#3468 id=3468 data-nosnippet>3468</a>        <span class="macro">assert_eq!</span>(
-<a href=#3469 id=3469 data-nosnippet>3469</a>            populated, <span class="number">8</span>,
-<a href=#3470 id=3470 data-nosnippet>3470</a>            <span class="string">"expected 8 populated rd_data slots for an 8-bit opaque RAM (got {populated})"
-<a href=#3471 id=3471 data-nosnippet>3471</a>        </span>);
-<a href=#3472 id=3472 data-nosnippet>3472</a>
-<a href=#3473 id=3473 data-nosnippet>3473</a>        <span class="comment">// X-source enumeration tolerates the zero slots without panic.
-<a href=#3474 id=3474 data-nosnippet>3474</a>        </span><span class="kw">let </span>x_sources = aig.compute_x_sources();
-<a href=#3475 id=3475 data-nosnippet>3475</a>        <span class="kw">let </span>x_count = x_sources.iter().filter(|&amp;&amp;x| x).count();
-<a href=#3476 id=3476 data-nosnippet>3476</a>        <span class="macro">assert_eq!</span>(
-<a href=#3477 id=3477 data-nosnippet>3477</a>            x_count, <span class="number">8</span>,
-<a href=#3478 id=3478 data-nosnippet>3478</a>            <span class="string">"expected 8 X-sources (the 8 OCD SRAM Q outputs) — got {x_count}"
-<a href=#3479 id=3479 data-nosnippet>3479</a>        </span>);
-<a href=#3480 id=3480 data-nosnippet>3480</a>
-<a href=#3481 id=3481 data-nosnippet>3481</a>        <span class="comment">// The cell origin is recorded with the manifest-declared name.
-<a href=#3482 id=3482 data-nosnippet>3482</a>        </span><span class="kw">let _ </span>= cellid; <span class="comment">// future check: hierarchical instance path
-<a href=#3483 id=3483 data-nosnippet>3483</a>    </span>}
-<a href=#3484 id=3484 data-nosnippet>3484</a>
-<a href=#3485 id=3485 data-nosnippet>3485</a>    <span class="attr">#[test]
-<a href=#3486 id=3486 data-nosnippet>3486</a>    </span><span class="kw">fn </span>test_x_sources_narrow_opaque_ram() {
-<a href=#3487 id=3487 data-nosnippet>3487</a>        <span class="comment">// Opaque-RAM cells declared via the runtime cell-library
-<a href=#3488 id=3488 data-nosnippet>3488</a>        // manifest (ADR 0010 `kind = "ram"`) have output widths
-<a href=#3489 id=3489 data-nosnippet>3489</a>        // narrower than the fixed 32-bit `port_r_rd_data` array.
-<a href=#3490 id=3490 data-nosnippet>3490</a>        // The unused slots stay default-zero and `compute_x_sources`
-<a href=#3491 id=3491 data-nosnippet>3491</a>        // must skip rather than assert on them.
-<a href=#3492 id=3492 data-nosnippet>3492</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>aig = new_test_aig();
-<a href=#3493 id=3493 data-nosnippet>3493</a>        aig.add_aigpin(DriverType::InputPort(<span class="number">0</span>)); <span class="comment">// pin 1
-<a href=#3494 id=3494 data-nosnippet>3494</a>
-<a href=#3495 id=3495 data-nosnippet>3495</a>        // 8-bit opaque RAM — populate only slots 0..8, leave 8..32 zero.
-<a href=#3496 id=3496 data-nosnippet>3496</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>rd_data = [<span class="number">0usize</span>; <span class="number">32</span>];
-<a href=#3497 id=3497 data-nosnippet>3497</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#3498 id=3498 data-nosnippet>3498</a>            rd_data[i] = aig.add_aigpin(DriverType::SRAM(<span class="number">42</span>)); <span class="comment">// pins 2..9
-<a href=#3499 id=3499 data-nosnippet>3499</a>        </span>}
+<a href=#3359 id=3359 data-nosnippet>3359</a>        // gf180mcu_ocd_ip_sram__sram1024x8m8wm1, verbatim from
+<a href=#3360 id=3360 data-nosnippet>3360</a>        // RTimothyEdwards/gf180mcu_ocd_ip_sram. Uses the ANSI-style
+<a href=#3361 id=3361 data-nosnippet>3361</a>        // port-list form that's dominant in modern third-party IP
+<a href=#3362 id=3362 data-nosnippet>3362</a>        // blackbox.v files — supported via the sverilogparse fix
+<a href=#3363 id=3363 data-nosnippet>3363</a>        // in ChipFlow/eda-infra-rs#1 (closes #69). Before that fix
+<a href=#3364 id=3364 data-nosnippet>3364</a>        // landed, this test had to be written in the older
+<a href=#3365 id=3365 data-nosnippet>3365</a>        // port-names-in-header + separate body declarations form
+<a href=#3366 id=3366 data-nosnippet>3366</a>        // as a workaround.
+<a href=#3367 id=3367 data-nosnippet>3367</a>        </span><span class="kw">const </span>OCD_SRAM_BLACKBOX: <span class="kw-2">&amp;</span>str = <span class="string">"\
+<a href=#3368 id=3368 data-nosnippet>3368</a>(* blackbox *)
+<a href=#3369 id=3369 data-nosnippet>3369</a>module gf180mcu_ocd_ip_sram__sram1024x8m8wm1 (
+<a href=#3370 id=3370 data-nosnippet>3370</a>  input         CLK,
+<a href=#3371 id=3371 data-nosnippet>3371</a>  input         CEN,
+<a href=#3372 id=3372 data-nosnippet>3372</a>  input         GWEN,
+<a href=#3373 id=3373 data-nosnippet>3373</a>  input  [7:0]  WEN,
+<a href=#3374 id=3374 data-nosnippet>3374</a>  input  [9:0]  A,
+<a href=#3375 id=3375 data-nosnippet>3375</a>  input  [7:0]  D,
+<a href=#3376 id=3376 data-nosnippet>3376</a>  output [7:0]  Q
+<a href=#3377 id=3377 data-nosnippet>3377</a>);
+<a href=#3378 id=3378 data-nosnippet>3378</a>endmodule
+<a href=#3379 id=3379 data-nosnippet>3379</a>"</span>;
+<a href=#3380 id=3380 data-nosnippet>3380</a>
+<a href=#3381 id=3381 data-nosnippet>3381</a>        <span class="comment">// Tiny top instantiating one SRAM. Inputs are primary ports;
+<a href=#3382 id=3382 data-nosnippet>3382</a>        // outputs Q[7:0] are the cell's output, routed to top-level
+<a href=#3383 id=3383 data-nosnippet>3383</a>        // outputs so they end up in the netlist's primary-output set.
+<a href=#3384 id=3384 data-nosnippet>3384</a>        </span><span class="kw">const </span>TOP_VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">"\
+<a href=#3385 id=3385 data-nosnippet>3385</a>module top(clk, cen, gwen, wen, a, d, q);
+<a href=#3386 id=3386 data-nosnippet>3386</a>  input clk, cen, gwen;
+<a href=#3387 id=3387 data-nosnippet>3387</a>  input [7:0] wen;
+<a href=#3388 id=3388 data-nosnippet>3388</a>  input [9:0] a;
+<a href=#3389 id=3389 data-nosnippet>3389</a>  input [7:0] d;
+<a href=#3390 id=3390 data-nosnippet>3390</a>  output [7:0] q;
+<a href=#3391 id=3391 data-nosnippet>3391</a>  gf180mcu_ocd_ip_sram__sram1024x8m8wm1 u_sram (
+<a href=#3392 id=3392 data-nosnippet>3392</a>    .CLK(clk), .CEN(cen), .GWEN(gwen),
+<a href=#3393 id=3393 data-nosnippet>3393</a>    .WEN(wen), .A(a), .D(d), .Q(q)
+<a href=#3394 id=3394 data-nosnippet>3394</a>  );
+<a href=#3395 id=3395 data-nosnippet>3395</a>endmodule
+<a href=#3396 id=3396 data-nosnippet>3396</a>"</span>;
+<a href=#3397 id=3397 data-nosnippet>3397</a>
+<a href=#3398 id=3398 data-nosnippet>3398</a>        <span class="comment">// Write the cell library file (with sibling manifest) so the
+<a href=#3399 id=3399 data-nosnippet>3399</a>        // sverilogparse-backed loader sees them via the public API.
+<a href=#3400 id=3400 data-nosnippet>3400</a>        </span><span class="kw">let </span>dir = tempfile::TempDir::new().unwrap();
+<a href=#3401 id=3401 data-nosnippet>3401</a>        <span class="kw">let </span>lib_path = dir.path().join(<span class="string">"ocd_sram.v"</span>);
+<a href=#3402 id=3402 data-nosnippet>3402</a>        std::fs::write(<span class="kw-2">&amp;</span>lib_path, OCD_SRAM_BLACKBOX).unwrap();
+<a href=#3403 id=3403 data-nosnippet>3403</a>        std::fs::write(
+<a href=#3404 id=3404 data-nosnippet>3404</a>            dir.path().join(<span class="string">"ocd_sram.cells.toml"</span>),
+<a href=#3405 id=3405 data-nosnippet>3405</a>            <span class="string">"schema_version = \"1.0\"\n\
+<a href=#3406 id=3406 data-nosnippet>3406</a>             [cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]\n\
+<a href=#3407 id=3407 data-nosnippet>3407</a>             kind = \"ram\"\n"</span>,
+<a href=#3408 id=3408 data-nosnippet>3408</a>        )
+<a href=#3409 id=3409 data-nosnippet>3409</a>        .unwrap();
+<a href=#3410 id=3410 data-nosnippet>3410</a>
+<a href=#3411 id=3411 data-nosnippet>3411</a>        <span class="kw">let </span>runtime_lib = RuntimeCellLibrary::from_files(<span class="kw-2">&amp;</span>[lib_path]).unwrap();
+<a href=#3412 id=3412 data-nosnippet>3412</a>
+<a href=#3413 id=3413 data-nosnippet>3413</a>        <span class="comment">// Sanity: the manifest was loaded.
+<a href=#3414 id=3414 data-nosnippet>3414</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#3415 id=3415 data-nosnippet>3415</a>            runtime_lib.lookup_kind(<span class="string">"gf180mcu_ocd_ip_sram__sram1024x8m8wm1"</span>),
+<a href=#3416 id=3416 data-nosnippet>3416</a>            <span class="prelude-val">Some</span>(<span class="kw">crate</span>::cell_library::CellKind::Ram)
+<a href=#3417 id=3417 data-nosnippet>3417</a>        );
+<a href=#3418 id=3418 data-nosnippet>3418</a>        <span class="macro">assert_eq!</span>(
+<a href=#3419 id=3419 data-nosnippet>3419</a>            runtime_lib.lookup_pin(
+<a href=#3420 id=3420 data-nosnippet>3420</a>                <span class="kw-2">&amp;</span>CompactString::new(<span class="string">"gf180mcu_ocd_ip_sram__sram1024x8m8wm1"</span>),
+<a href=#3421 id=3421 data-nosnippet>3421</a>                <span class="kw-2">&amp;</span>CompactString::new(<span class="string">"Q"</span>)
+<a href=#3422 id=3422 data-nosnippet>3422</a>            ),
+<a href=#3423 id=3423 data-nosnippet>3423</a>            <span class="prelude-val">Some</span>(netlistdb::Direction::O)
+<a href=#3424 id=3424 data-nosnippet>3424</a>        );
+<a href=#3425 id=3425 data-nosnippet>3425</a>
+<a href=#3426 id=3426 data-nosnippet>3426</a>        <span class="comment">// The runtime library is the only pin-direction source for
+<a href=#3427 id=3427 data-nosnippet>3427</a>        // this cell — no built-in fallback needed here. The
+<a href=#3428 id=3428 data-nosnippet>3428</a>        // top module's port directions come from the inline
+<a href=#3429 id=3429 data-nosnippet>3429</a>        // declarations themselves, which sverilogparse handles
+<a href=#3430 id=3430 data-nosnippet>3430</a>        // directly.
+<a href=#3431 id=3431 data-nosnippet>3431</a>        </span><span class="kw">struct </span>NoFallback;
+<a href=#3432 id=3432 data-nosnippet>3432</a>        <span class="kw">impl </span>LeafPinProvider <span class="kw">for </span>NoFallback {
+<a href=#3433 id=3433 data-nosnippet>3433</a>            <span class="kw">fn </span>direction_of(
+<a href=#3434 id=3434 data-nosnippet>3434</a>                <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#3435 id=3435 data-nosnippet>3435</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>CompactString,
+<a href=#3436 id=3436 data-nosnippet>3436</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>CompactString,
+<a href=#3437 id=3437 data-nosnippet>3437</a>                <span class="kw">_</span>: <span class="prelude-ty">Option</span>&lt;isize&gt;,
+<a href=#3438 id=3438 data-nosnippet>3438</a>            ) -&gt; netlistdb::Direction {
+<a href=#3439 id=3439 data-nosnippet>3439</a>                netlistdb::Direction::Unknown
+<a href=#3440 id=3440 data-nosnippet>3440</a>            }
+<a href=#3441 id=3441 data-nosnippet>3441</a>            <span class="kw">fn </span>width_of(
+<a href=#3442 id=3442 data-nosnippet>3442</a>                <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#3443 id=3443 data-nosnippet>3443</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>CompactString,
+<a href=#3444 id=3444 data-nosnippet>3444</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>CompactString,
+<a href=#3445 id=3445 data-nosnippet>3445</a>            ) -&gt; <span class="prelude-ty">Option</span>&lt;SVerilogRange&gt; {
+<a href=#3446 id=3446 data-nosnippet>3446</a>                <span class="prelude-val">None
+<a href=#3447 id=3447 data-nosnippet>3447</a>            </span>}
+<a href=#3448 id=3448 data-nosnippet>3448</a>        }
+<a href=#3449 id=3449 data-nosnippet>3449</a>        <span class="kw">let </span>fallback = NoFallback;
+<a href=#3450 id=3450 data-nosnippet>3450</a>        <span class="kw">let </span>provider = <span class="kw">crate</span>::cell_library::ChainedPinProvider {
+<a href=#3451 id=3451 data-nosnippet>3451</a>            runtime: <span class="kw-2">&amp;</span>runtime_lib,
+<a href=#3452 id=3452 data-nosnippet>3452</a>            fallback: <span class="kw-2">&amp;</span>fallback,
+<a href=#3453 id=3453 data-nosnippet>3453</a>        };
+<a href=#3454 id=3454 data-nosnippet>3454</a>
+<a href=#3455 id=3455 data-nosnippet>3455</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
+<a href=#3456 id=3456 data-nosnippet>3456</a>            TOP_VERILOG,
+<a href=#3457 id=3457 data-nosnippet>3457</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
+<a href=#3458 id=3458 data-nosnippet>3458</a>            <span class="kw-2">&amp;</span>provider,
+<a href=#3459 id=3459 data-nosnippet>3459</a>        )
+<a href=#3460 id=3460 data-nosnippet>3460</a>        .expect(<span class="string">"netlist parse"</span>);
+<a href=#3461 id=3461 data-nosnippet>3461</a>
+<a href=#3462 id=3462 data-nosnippet>3462</a>        <span class="kw">let </span>aig = AIG::from_netlistdb_with_cells(<span class="kw-2">&amp;</span>nl, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>runtime_lib));
+<a href=#3463 id=3463 data-nosnippet>3463</a>
+<a href=#3464 id=3464 data-nosnippet>3464</a>        <span class="comment">// The OCD SRAM cell now has a `srams` entry — opaque-RAM
+<a href=#3465 id=3465 data-nosnippet>3465</a>        // allocation path took effect.
+<a href=#3466 id=3466 data-nosnippet>3466</a>        </span><span class="macro">assert!</span>(
+<a href=#3467 id=3467 data-nosnippet>3467</a>            !aig.srams.is_empty(),
+<a href=#3468 id=3468 data-nosnippet>3468</a>            <span class="string">"expected at least one srams entry for the opaque RAM"
+<a href=#3469 id=3469 data-nosnippet>3469</a>        </span>);
+<a href=#3470 id=3470 data-nosnippet>3470</a>        <span class="kw">let </span>(cellid, ram) = aig.srams.iter().next().unwrap();
+<a href=#3471 id=3471 data-nosnippet>3471</a>        <span class="comment">// First 8 slots of port_r_rd_data populated (Q[7:0]); the
+<a href=#3472 id=3472 data-nosnippet>3472</a>        // remaining 24 stay default-zero.
+<a href=#3473 id=3473 data-nosnippet>3473</a>        </span><span class="kw">let </span>populated = ram.port_r_rd_data.iter().filter(|&amp;&amp;p| p != <span class="number">0</span>).count();
+<a href=#3474 id=3474 data-nosnippet>3474</a>        <span class="macro">assert_eq!</span>(
+<a href=#3475 id=3475 data-nosnippet>3475</a>            populated, <span class="number">8</span>,
+<a href=#3476 id=3476 data-nosnippet>3476</a>            <span class="string">"expected 8 populated rd_data slots for an 8-bit opaque RAM (got {populated})"
+<a href=#3477 id=3477 data-nosnippet>3477</a>        </span>);
+<a href=#3478 id=3478 data-nosnippet>3478</a>
+<a href=#3479 id=3479 data-nosnippet>3479</a>        <span class="comment">// X-source enumeration tolerates the zero slots without panic.
+<a href=#3480 id=3480 data-nosnippet>3480</a>        </span><span class="kw">let </span>x_sources = aig.compute_x_sources();
+<a href=#3481 id=3481 data-nosnippet>3481</a>        <span class="kw">let </span>x_count = x_sources.iter().filter(|&amp;&amp;x| x).count();
+<a href=#3482 id=3482 data-nosnippet>3482</a>        <span class="macro">assert_eq!</span>(
+<a href=#3483 id=3483 data-nosnippet>3483</a>            x_count, <span class="number">8</span>,
+<a href=#3484 id=3484 data-nosnippet>3484</a>            <span class="string">"expected 8 X-sources (the 8 OCD SRAM Q outputs) — got {x_count}"
+<a href=#3485 id=3485 data-nosnippet>3485</a>        </span>);
+<a href=#3486 id=3486 data-nosnippet>3486</a>
+<a href=#3487 id=3487 data-nosnippet>3487</a>        <span class="comment">// The cell origin is recorded with the manifest-declared name.
+<a href=#3488 id=3488 data-nosnippet>3488</a>        </span><span class="kw">let _ </span>= cellid; <span class="comment">// future check: hierarchical instance path
+<a href=#3489 id=3489 data-nosnippet>3489</a>    </span>}
+<a href=#3490 id=3490 data-nosnippet>3490</a>
+<a href=#3491 id=3491 data-nosnippet>3491</a>    <span class="attr">#[test]
+<a href=#3492 id=3492 data-nosnippet>3492</a>    </span><span class="kw">fn </span>test_x_sources_narrow_opaque_ram() {
+<a href=#3493 id=3493 data-nosnippet>3493</a>        <span class="comment">// Opaque-RAM cells declared via the runtime cell-library
+<a href=#3494 id=3494 data-nosnippet>3494</a>        // manifest (ADR 0010 `kind = "ram"`) have output widths
+<a href=#3495 id=3495 data-nosnippet>3495</a>        // narrower than the fixed 32-bit `port_r_rd_data` array.
+<a href=#3496 id=3496 data-nosnippet>3496</a>        // The unused slots stay default-zero and `compute_x_sources`
+<a href=#3497 id=3497 data-nosnippet>3497</a>        // must skip rather than assert on them.
+<a href=#3498 id=3498 data-nosnippet>3498</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>aig = new_test_aig();
+<a href=#3499 id=3499 data-nosnippet>3499</a>        aig.add_aigpin(DriverType::InputPort(<span class="number">0</span>)); <span class="comment">// pin 1
 <a href=#3500 id=3500 data-nosnippet>3500</a>
-<a href=#3501 id=3501 data-nosnippet>3501</a>        aig.srams.insert(
-<a href=#3502 id=3502 data-nosnippet>3502</a>            <span class="number">42</span>,
-<a href=#3503 id=3503 data-nosnippet>3503</a>            RAMBlock {
-<a href=#3504 id=3504 data-nosnippet>3504</a>                port_r_addr_iv: [<span class="number">0</span>; AIGPDK_SRAM_ADDR_WIDTH],
-<a href=#3505 id=3505 data-nosnippet>3505</a>                port_r_en_iv: <span class="number">0</span>,
-<a href=#3506 id=3506 data-nosnippet>3506</a>                port_r_rd_data: rd_data,
-<a href=#3507 id=3507 data-nosnippet>3507</a>                port_w_addr_iv: [<span class="number">0</span>; AIGPDK_SRAM_ADDR_WIDTH],
-<a href=#3508 id=3508 data-nosnippet>3508</a>                port_w_wr_en_iv: [<span class="number">0</span>; <span class="number">32</span>],
-<a href=#3509 id=3509 data-nosnippet>3509</a>                port_w_wr_data_iv: [<span class="number">0</span>; <span class="number">32</span>],
-<a href=#3510 id=3510 data-nosnippet>3510</a>            },
-<a href=#3511 id=3511 data-nosnippet>3511</a>        );
-<a href=#3512 id=3512 data-nosnippet>3512</a>
-<a href=#3513 id=3513 data-nosnippet>3513</a>        <span class="kw">let </span>x_sources = aig.compute_x_sources();
-<a href=#3514 id=3514 data-nosnippet>3514</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#3515 id=3515 data-nosnippet>3515</a>            <span class="macro">assert!</span>(
-<a href=#3516 id=3516 data-nosnippet>3516</a>                x_sources[rd_data[i]],
-<a href=#3517 id=3517 data-nosnippet>3517</a>                <span class="string">"Opaque RAM rd_data[{i}] (pin {}) should be X source"</span>,
-<a href=#3518 id=3518 data-nosnippet>3518</a>                rd_data[i]
-<a href=#3519 id=3519 data-nosnippet>3519</a>            );
-<a href=#3520 id=3520 data-nosnippet>3520</a>        }
-<a href=#3521 id=3521 data-nosnippet>3521</a>        <span class="comment">// No panic / assert from the unused-slot zeros.
-<a href=#3522 id=3522 data-nosnippet>3522</a>
-<a href=#3523 id=3523 data-nosnippet>3523</a>        </span><span class="kw">let </span>(_x_capable, stats) = aig.compute_x_capable_pins();
-<a href=#3524 id=3524 data-nosnippet>3524</a>        <span class="macro">assert_eq!</span>(stats.num_x_sources, <span class="number">8</span>);
-<a href=#3525 id=3525 data-nosnippet>3525</a>    }
-<a href=#3526 id=3526 data-nosnippet>3526</a>
-<a href=#3527 id=3527 data-nosnippet>3527</a>    <span class="attr">#[test]
-<a href=#3528 id=3528 data-nosnippet>3528</a>    </span><span class="kw">fn </span>test_x_prop_with_inv_chain() {
-<a href=#3529 id=3529 data-nosnippet>3529</a>        <span class="comment">// Integration test using the real inv_chain.v design
-<a href=#3530 id=3530 data-nosnippet>3530</a>        </span><span class="kw">let </span>verilog_path = std::path::PathBuf::from(<span class="string">"tests/timing_test/sky130_timing/inv_chain.v"</span>);
-<a href=#3531 id=3531 data-nosnippet>3531</a>        <span class="kw">if </span>!verilog_path.exists() {
-<a href=#3532 id=3532 data-nosnippet>3532</a>            <span class="macro">eprintln!</span>(<span class="string">"Skipping test_x_prop_with_inv_chain: inv_chain.v not found"</span>);
-<a href=#3533 id=3533 data-nosnippet>3533</a>            <span class="kw">return</span>;
-<a href=#3534 id=3534 data-nosnippet>3534</a>        }
-<a href=#3535 id=3535 data-nosnippet>3535</a>        <span class="kw">use </span><span class="kw">crate</span>::sky130::SKY130LeafPins;
-<a href=#3536 id=3536 data-nosnippet>3536</a>        <span class="kw">let </span>netlistdb = NetlistDB::from_sverilog_file(<span class="kw-2">&amp;</span>verilog_path, <span class="prelude-val">None</span>, <span class="kw-2">&amp;</span>SKY130LeafPins)
-<a href=#3537 id=3537 data-nosnippet>3537</a>            .expect(<span class="string">"cannot build netlist"</span>);
-<a href=#3538 id=3538 data-nosnippet>3538</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>netlistdb);
-<a href=#3539 id=3539 data-nosnippet>3539</a>
-<a href=#3540 id=3540 data-nosnippet>3540</a>        <span class="kw">let </span>(x_capable, stats) = aig.compute_x_capable_pins();
-<a href=#3541 id=3541 data-nosnippet>3541</a>
-<a href=#3542 id=3542 data-nosnippet>3542</a>        <span class="comment">// inv_chain has 2 DFFs, so at least 2 X sources
-<a href=#3543 id=3543 data-nosnippet>3543</a>        </span><span class="macro">assert!</span>(
-<a href=#3544 id=3544 data-nosnippet>3544</a>            stats.num_x_sources &gt;= <span class="number">2</span>,
-<a href=#3545 id=3545 data-nosnippet>3545</a>            <span class="string">"Expected at least 2 X sources from DFFs, got {}"</span>,
-<a href=#3546 id=3546 data-nosnippet>3546</a>            stats.num_x_sources
-<a href=#3547 id=3547 data-nosnippet>3547</a>        );
-<a href=#3548 id=3548 data-nosnippet>3548</a>        <span class="comment">// The forward cone should propagate X through the inverter chain
+<a href=#3501 id=3501 data-nosnippet>3501</a>        // 8-bit opaque RAM — populate only slots 0..8, leave 8..32 zero.
+<a href=#3502 id=3502 data-nosnippet>3502</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>rd_data = [<span class="number">0usize</span>; <span class="number">32</span>];
+<a href=#3503 id=3503 data-nosnippet>3503</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#3504 id=3504 data-nosnippet>3504</a>            rd_data[i] = aig.add_aigpin(DriverType::SRAM(<span class="number">42</span>)); <span class="comment">// pins 2..9
+<a href=#3505 id=3505 data-nosnippet>3505</a>        </span>}
+<a href=#3506 id=3506 data-nosnippet>3506</a>
+<a href=#3507 id=3507 data-nosnippet>3507</a>        aig.srams.insert(
+<a href=#3508 id=3508 data-nosnippet>3508</a>            <span class="number">42</span>,
+<a href=#3509 id=3509 data-nosnippet>3509</a>            RAMBlock {
+<a href=#3510 id=3510 data-nosnippet>3510</a>                port_r_addr_iv: [<span class="number">0</span>; AIGPDK_SRAM_ADDR_WIDTH],
+<a href=#3511 id=3511 data-nosnippet>3511</a>                port_r_en_iv: <span class="number">0</span>,
+<a href=#3512 id=3512 data-nosnippet>3512</a>                port_r_rd_data: rd_data,
+<a href=#3513 id=3513 data-nosnippet>3513</a>                port_w_addr_iv: [<span class="number">0</span>; AIGPDK_SRAM_ADDR_WIDTH],
+<a href=#3514 id=3514 data-nosnippet>3514</a>                port_w_wr_en_iv: [<span class="number">0</span>; <span class="number">32</span>],
+<a href=#3515 id=3515 data-nosnippet>3515</a>                port_w_wr_data_iv: [<span class="number">0</span>; <span class="number">32</span>],
+<a href=#3516 id=3516 data-nosnippet>3516</a>            },
+<a href=#3517 id=3517 data-nosnippet>3517</a>        );
+<a href=#3518 id=3518 data-nosnippet>3518</a>
+<a href=#3519 id=3519 data-nosnippet>3519</a>        <span class="kw">let </span>x_sources = aig.compute_x_sources();
+<a href=#3520 id=3520 data-nosnippet>3520</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#3521 id=3521 data-nosnippet>3521</a>            <span class="macro">assert!</span>(
+<a href=#3522 id=3522 data-nosnippet>3522</a>                x_sources[rd_data[i]],
+<a href=#3523 id=3523 data-nosnippet>3523</a>                <span class="string">"Opaque RAM rd_data[{i}] (pin {}) should be X source"</span>,
+<a href=#3524 id=3524 data-nosnippet>3524</a>                rd_data[i]
+<a href=#3525 id=3525 data-nosnippet>3525</a>            );
+<a href=#3526 id=3526 data-nosnippet>3526</a>        }
+<a href=#3527 id=3527 data-nosnippet>3527</a>        <span class="comment">// No panic / assert from the unused-slot zeros.
+<a href=#3528 id=3528 data-nosnippet>3528</a>
+<a href=#3529 id=3529 data-nosnippet>3529</a>        </span><span class="kw">let </span>(_x_capable, stats) = aig.compute_x_capable_pins();
+<a href=#3530 id=3530 data-nosnippet>3530</a>        <span class="macro">assert_eq!</span>(stats.num_x_sources, <span class="number">8</span>);
+<a href=#3531 id=3531 data-nosnippet>3531</a>    }
+<a href=#3532 id=3532 data-nosnippet>3532</a>
+<a href=#3533 id=3533 data-nosnippet>3533</a>    <span class="attr">#[test]
+<a href=#3534 id=3534 data-nosnippet>3534</a>    </span><span class="kw">fn </span>test_x_prop_with_inv_chain() {
+<a href=#3535 id=3535 data-nosnippet>3535</a>        <span class="comment">// Integration test using the real inv_chain.v design
+<a href=#3536 id=3536 data-nosnippet>3536</a>        </span><span class="kw">let </span>verilog_path = std::path::PathBuf::from(<span class="string">"tests/timing_test/sky130_timing/inv_chain.v"</span>);
+<a href=#3537 id=3537 data-nosnippet>3537</a>        <span class="kw">if </span>!verilog_path.exists() {
+<a href=#3538 id=3538 data-nosnippet>3538</a>            <span class="macro">eprintln!</span>(<span class="string">"Skipping test_x_prop_with_inv_chain: inv_chain.v not found"</span>);
+<a href=#3539 id=3539 data-nosnippet>3539</a>            <span class="kw">return</span>;
+<a href=#3540 id=3540 data-nosnippet>3540</a>        }
+<a href=#3541 id=3541 data-nosnippet>3541</a>        <span class="kw">use </span><span class="kw">crate</span>::sky130::SKY130LeafPins;
+<a href=#3542 id=3542 data-nosnippet>3542</a>        <span class="kw">let </span>netlistdb = NetlistDB::from_sverilog_file(<span class="kw-2">&amp;</span>verilog_path, <span class="prelude-val">None</span>, <span class="kw-2">&amp;</span>SKY130LeafPins)
+<a href=#3543 id=3543 data-nosnippet>3543</a>            .expect(<span class="string">"cannot build netlist"</span>);
+<a href=#3544 id=3544 data-nosnippet>3544</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>netlistdb);
+<a href=#3545 id=3545 data-nosnippet>3545</a>
+<a href=#3546 id=3546 data-nosnippet>3546</a>        <span class="kw">let </span>(x_capable, stats) = aig.compute_x_capable_pins();
+<a href=#3547 id=3547 data-nosnippet>3547</a>
+<a href=#3548 id=3548 data-nosnippet>3548</a>        <span class="comment">// inv_chain has 2 DFFs, so at least 2 X sources
 <a href=#3549 id=3549 data-nosnippet>3549</a>        </span><span class="macro">assert!</span>(
-<a href=#3550 id=3550 data-nosnippet>3550</a>            stats.num_x_capable_pins &gt;= stats.num_x_sources,
-<a href=#3551 id=3551 data-nosnippet>3551</a>            <span class="string">"X-capable pins ({}) should be &gt;= X sources ({})"</span>,
-<a href=#3552 id=3552 data-nosnippet>3552</a>            stats.num_x_capable_pins,
-<a href=#3553 id=3553 data-nosnippet>3553</a>            stats.num_x_sources
-<a href=#3554 id=3554 data-nosnippet>3554</a>        );
-<a href=#3555 id=3555 data-nosnippet>3555</a>        <span class="comment">// Sanity: not everything should be X-capable (inputs are known)
-<a href=#3556 id=3556 data-nosnippet>3556</a>        </span><span class="macro">assert!</span>(
-<a href=#3557 id=3557 data-nosnippet>3557</a>            stats.num_x_capable_pins &lt; stats.total_pins,
-<a href=#3558 id=3558 data-nosnippet>3558</a>            <span class="string">"Not all pins should be X-capable"
-<a href=#3559 id=3559 data-nosnippet>3559</a>        </span>);
-<a href=#3560 id=3560 data-nosnippet>3560</a>
-<a href=#3561 id=3561 data-nosnippet>3561</a>        <span class="macro">println!</span>(
-<a href=#3562 id=3562 data-nosnippet>3562</a>            <span class="string">"inv_chain X-prop: {}/{} pins ({:.1}%) X-capable, {} fixpoint iterations"</span>,
-<a href=#3563 id=3563 data-nosnippet>3563</a>            stats.num_x_capable_pins,
-<a href=#3564 id=3564 data-nosnippet>3564</a>            stats.total_pins,
-<a href=#3565 id=3565 data-nosnippet>3565</a>            <span class="number">100.0 </span>* stats.num_x_capable_pins <span class="kw">as </span>f64 / stats.total_pins <span class="kw">as </span>f64,
-<a href=#3566 id=3566 data-nosnippet>3566</a>            stats.fixpoint_iterations
-<a href=#3567 id=3567 data-nosnippet>3567</a>        );
-<a href=#3568 id=3568 data-nosnippet>3568</a>
-<a href=#3569 id=3569 data-nosnippet>3569</a>        <span class="comment">// Verify no input ports are X-capable
-<a href=#3570 id=3570 data-nosnippet>3570</a>        </span><span class="kw">for </span>(aigpin, driver) <span class="kw">in </span>aig.drivers.iter().enumerate() {
-<a href=#3571 id=3571 data-nosnippet>3571</a>            <span class="kw">if </span><span class="macro">matches!</span>(
-<a href=#3572 id=3572 data-nosnippet>3572</a>                driver,
-<a href=#3573 id=3573 data-nosnippet>3573</a>                DriverType::InputPort(<span class="kw">_</span>) | DriverType::InputClockFlag(<span class="kw">_</span>, <span class="kw">_</span>)
-<a href=#3574 id=3574 data-nosnippet>3574</a>            ) {
-<a href=#3575 id=3575 data-nosnippet>3575</a>                <span class="macro">assert!</span>(
-<a href=#3576 id=3576 data-nosnippet>3576</a>                    !x_capable[aigpin],
-<a href=#3577 id=3577 data-nosnippet>3577</a>                    <span class="string">"Input port aigpin {} should not be X-capable"</span>,
-<a href=#3578 id=3578 data-nosnippet>3578</a>                    aigpin
-<a href=#3579 id=3579 data-nosnippet>3579</a>                );
-<a href=#3580 id=3580 data-nosnippet>3580</a>            }
-<a href=#3581 id=3581 data-nosnippet>3581</a>        }
-<a href=#3582 id=3582 data-nosnippet>3582</a>    }
-<a href=#3583 id=3583 data-nosnippet>3583</a>}
-<a href=#3584 id=3584 data-nosnippet>3584</a>
-<a href=#3585 id=3585 data-nosnippet>3585</a><span class="attr">#[cfg(test)]
-<a href=#3586 id=3586 data-nosnippet>3586</a></span><span class="kw">mod </span>path_mapping_tests {
-<a href=#3587 id=3587 data-nosnippet>3587</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#3588 id=3588 data-nosnippet>3588</a>    <span class="kw">use </span><span class="kw">crate</span>::sky130::SKY130LeafPins;
-<a href=#3589 id=3589 data-nosnippet>3589</a>    <span class="kw">use </span>std::collections::HashMap;
+<a href=#3550 id=3550 data-nosnippet>3550</a>            stats.num_x_sources &gt;= <span class="number">2</span>,
+<a href=#3551 id=3551 data-nosnippet>3551</a>            <span class="string">"Expected at least 2 X sources from DFFs, got {}"</span>,
+<a href=#3552 id=3552 data-nosnippet>3552</a>            stats.num_x_sources
+<a href=#3553 id=3553 data-nosnippet>3553</a>        );
+<a href=#3554 id=3554 data-nosnippet>3554</a>        <span class="comment">// The forward cone should propagate X through the inverter chain
+<a href=#3555 id=3555 data-nosnippet>3555</a>        </span><span class="macro">assert!</span>(
+<a href=#3556 id=3556 data-nosnippet>3556</a>            stats.num_x_capable_pins &gt;= stats.num_x_sources,
+<a href=#3557 id=3557 data-nosnippet>3557</a>            <span class="string">"X-capable pins ({}) should be &gt;= X sources ({})"</span>,
+<a href=#3558 id=3558 data-nosnippet>3558</a>            stats.num_x_capable_pins,
+<a href=#3559 id=3559 data-nosnippet>3559</a>            stats.num_x_sources
+<a href=#3560 id=3560 data-nosnippet>3560</a>        );
+<a href=#3561 id=3561 data-nosnippet>3561</a>        <span class="comment">// Sanity: not everything should be X-capable (inputs are known)
+<a href=#3562 id=3562 data-nosnippet>3562</a>        </span><span class="macro">assert!</span>(
+<a href=#3563 id=3563 data-nosnippet>3563</a>            stats.num_x_capable_pins &lt; stats.total_pins,
+<a href=#3564 id=3564 data-nosnippet>3564</a>            <span class="string">"Not all pins should be X-capable"
+<a href=#3565 id=3565 data-nosnippet>3565</a>        </span>);
+<a href=#3566 id=3566 data-nosnippet>3566</a>
+<a href=#3567 id=3567 data-nosnippet>3567</a>        <span class="macro">println!</span>(
+<a href=#3568 id=3568 data-nosnippet>3568</a>            <span class="string">"inv_chain X-prop: {}/{} pins ({:.1}%) X-capable, {} fixpoint iterations"</span>,
+<a href=#3569 id=3569 data-nosnippet>3569</a>            stats.num_x_capable_pins,
+<a href=#3570 id=3570 data-nosnippet>3570</a>            stats.total_pins,
+<a href=#3571 id=3571 data-nosnippet>3571</a>            <span class="number">100.0 </span>* stats.num_x_capable_pins <span class="kw">as </span>f64 / stats.total_pins <span class="kw">as </span>f64,
+<a href=#3572 id=3572 data-nosnippet>3572</a>            stats.fixpoint_iterations
+<a href=#3573 id=3573 data-nosnippet>3573</a>        );
+<a href=#3574 id=3574 data-nosnippet>3574</a>
+<a href=#3575 id=3575 data-nosnippet>3575</a>        <span class="comment">// Verify no input ports are X-capable
+<a href=#3576 id=3576 data-nosnippet>3576</a>        </span><span class="kw">for </span>(aigpin, driver) <span class="kw">in </span>aig.drivers.iter().enumerate() {
+<a href=#3577 id=3577 data-nosnippet>3577</a>            <span class="kw">if </span><span class="macro">matches!</span>(
+<a href=#3578 id=3578 data-nosnippet>3578</a>                driver,
+<a href=#3579 id=3579 data-nosnippet>3579</a>                DriverType::InputPort(<span class="kw">_</span>) | DriverType::InputClockFlag(<span class="kw">_</span>, <span class="kw">_</span>)
+<a href=#3580 id=3580 data-nosnippet>3580</a>            ) {
+<a href=#3581 id=3581 data-nosnippet>3581</a>                <span class="macro">assert!</span>(
+<a href=#3582 id=3582 data-nosnippet>3582</a>                    !x_capable[aigpin],
+<a href=#3583 id=3583 data-nosnippet>3583</a>                    <span class="string">"Input port aigpin {} should not be X-capable"</span>,
+<a href=#3584 id=3584 data-nosnippet>3584</a>                    aigpin
+<a href=#3585 id=3585 data-nosnippet>3585</a>                );
+<a href=#3586 id=3586 data-nosnippet>3586</a>            }
+<a href=#3587 id=3587 data-nosnippet>3587</a>        }
+<a href=#3588 id=3588 data-nosnippet>3588</a>    }
+<a href=#3589 id=3589 data-nosnippet>3589</a>}
 <a href=#3590 id=3590 data-nosnippet>3590</a>
-<a href=#3591 id=3591 data-nosnippet>3591</a>    <span class="doccomment">/// Helper: load inv_chain.v and build AIG.
-<a href=#3592 id=3592 data-nosnippet>3592</a>    </span><span class="kw">fn </span>load_inv_chain_aig() -&gt; (NetlistDB, AIG) {
-<a href=#3593 id=3593 data-nosnippet>3593</a>        <span class="kw">let </span>verilog_path = std::path::PathBuf::from(<span class="string">"tests/timing_test/sky130_timing/inv_chain.v"</span>);
-<a href=#3594 id=3594 data-nosnippet>3594</a>        <span class="macro">assert!</span>(verilog_path.exists(), <span class="string">"inv_chain.v not found"</span>);
-<a href=#3595 id=3595 data-nosnippet>3595</a>
-<a href=#3596 id=3596 data-nosnippet>3596</a>        <span class="kw">let </span>netlistdb = NetlistDB::from_sverilog_file(<span class="kw-2">&amp;</span>verilog_path, <span class="prelude-val">None</span>, <span class="kw-2">&amp;</span>SKY130LeafPins)
-<a href=#3597 id=3597 data-nosnippet>3597</a>            .expect(<span class="string">"Failed to parse inv_chain.v"</span>);
-<a href=#3598 id=3598 data-nosnippet>3598</a>
-<a href=#3599 id=3599 data-nosnippet>3599</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>netlistdb);
-<a href=#3600 id=3600 data-nosnippet>3600</a>        (netlistdb, aig)
-<a href=#3601 id=3601 data-nosnippet>3601</a>    }
-<a href=#3602 id=3602 data-nosnippet>3602</a>
-<a href=#3603 id=3603 data-nosnippet>3603</a>    <span class="doccomment">/// Helper: build cellid → IR path map.
-<a href=#3604 id=3604 data-nosnippet>3604</a>    /// Mirrors the construction in `load_timing_from_ir` (uses `/` as the
-<a href=#3605 id=3605 data-nosnippet>3605</a>    /// hierarchy separator, matching OpenSTA's default divider).
-<a href=#3606 id=3606 data-nosnippet>3606</a>    </span><span class="kw">fn </span>build_cellid_to_path(netlistdb: <span class="kw-2">&amp;</span>NetlistDB) -&gt; HashMap&lt;usize, String&gt; {
-<a href=#3607 id=3607 data-nosnippet>3607</a>        <span class="kw">let </span><span class="kw-2">mut </span>map = HashMap::new();
-<a href=#3608 id=3608 data-nosnippet>3608</a>        <span class="kw">for </span>cellid <span class="kw">in </span><span class="number">1</span>..netlistdb.num_cells {
-<a href=#3609 id=3609 data-nosnippet>3609</a>            <span class="kw">let </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = netlistdb.cellnames[cellid]
-<a href=#3610 id=3610 data-nosnippet>3610</a>                .iter()
-<a href=#3611 id=3611 data-nosnippet>3611</a>                .map(|s| s.as_str())
-<a href=#3612 id=3612 data-nosnippet>3612</a>                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-<a href=#3613 id=3613 data-nosnippet>3613</a>            <span class="kw">let </span>path: String = parts.iter().rev().cloned().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;().join(<span class="string">"/"</span>);
-<a href=#3614 id=3614 data-nosnippet>3614</a>            map.insert(cellid, path);
-<a href=#3615 id=3615 data-nosnippet>3615</a>        }
-<a href=#3616 id=3616 data-nosnippet>3616</a>        map
-<a href=#3617 id=3617 data-nosnippet>3617</a>    }
-<a href=#3618 id=3618 data-nosnippet>3618</a>
-<a href=#3619 id=3619 data-nosnippet>3619</a>    <span class="comment">// === Test 1: Cell origin population ===
-<a href=#3620 id=3620 data-nosnippet>3620</a>
-<a href=#3621 id=3621 data-nosnippet>3621</a>    </span><span class="attr">#[test]
-<a href=#3622 id=3622 data-nosnippet>3622</a>    </span><span class="kw">fn </span>test_cell_origins_length() {
-<a href=#3623 id=3623 data-nosnippet>3623</a>        <span class="kw">let </span>(_netlistdb, aig) = load_inv_chain_aig();
-<a href=#3624 id=3624 data-nosnippet>3624</a>        <span class="macro">assert_eq!</span>(
-<a href=#3625 id=3625 data-nosnippet>3625</a>            aig.aigpin_cell_origins.len(),
-<a href=#3626 id=3626 data-nosnippet>3626</a>            aig.num_aigpins + <span class="number">1</span>,
-<a href=#3627 id=3627 data-nosnippet>3627</a>            <span class="string">"aigpin_cell_origins should have num_aigpins + 1 entries (index 0 = Tie0)"
-<a href=#3628 id=3628 data-nosnippet>3628</a>        </span>);
-<a href=#3629 id=3629 data-nosnippet>3629</a>    }
-<a href=#3630 id=3630 data-nosnippet>3630</a>
-<a href=#3631 id=3631 data-nosnippet>3631</a>    <span class="attr">#[test]
-<a href=#3632 id=3632 data-nosnippet>3632</a>    </span><span class="kw">fn </span>test_cell_origin_tie0_is_empty() {
-<a href=#3633 id=3633 data-nosnippet>3633</a>        <span class="kw">let </span>(_netlistdb, aig) = load_inv_chain_aig();
-<a href=#3634 id=3634 data-nosnippet>3634</a>        <span class="macro">assert!</span>(
-<a href=#3635 id=3635 data-nosnippet>3635</a>            aig.aigpin_cell_origins[<span class="number">0</span>].is_empty(),
-<a href=#3636 id=3636 data-nosnippet>3636</a>            <span class="string">"Index 0 (Tie0) must have no cell origins"
-<a href=#3637 id=3637 data-nosnippet>3637</a>        </span>);
-<a href=#3638 id=3638 data-nosnippet>3638</a>    }
-<a href=#3639 id=3639 data-nosnippet>3639</a>
-<a href=#3640 id=3640 data-nosnippet>3640</a>    <span class="attr">#[test]
-<a href=#3641 id=3641 data-nosnippet>3641</a>    </span><span class="kw">fn </span>test_cell_origins_accumulated() {
-<a href=#3642 id=3642 data-nosnippet>3642</a>        <span class="kw">let </span>(_netlistdb, aig) = load_inv_chain_aig();
-<a href=#3643 id=3643 data-nosnippet>3643</a>
-<a href=#3644 id=3644 data-nosnippet>3644</a>        <span class="comment">// With accumulated origins, inverters no longer overwrite — they push.
-<a href=#3645 id=3645 data-nosnippet>3645</a>        // For inv_chain: dff_in.Q → i0 → ... → i15 → dff_out.D
-<a href=#3646 id=3646 data-nosnippet>3646</a>        // The shared AIG pin (dff_in.Q / inverter chain) accumulates:
-<a href=#3647 id=3647 data-nosnippet>3647</a>        //   1 DFF origin (dff_in CLK→Q) + 16 inverter origins = 17 entries.
-<a href=#3648 id=3648 data-nosnippet>3648</a>        // dff_out.Q gets its own AIG pin with 1 entry.
-<a href=#3649 id=3649 data-nosnippet>3649</a>        </span><span class="kw">let </span>non_empty_count = aig
-<a href=#3650 id=3650 data-nosnippet>3650</a>            .aigpin_cell_origins
-<a href=#3651 id=3651 data-nosnippet>3651</a>            .iter()
-<a href=#3652 id=3652 data-nosnippet>3652</a>            .filter(|o| !o.is_empty())
-<a href=#3653 id=3653 data-nosnippet>3653</a>            .count();
-<a href=#3654 id=3654 data-nosnippet>3654</a>
-<a href=#3655 id=3655 data-nosnippet>3655</a>        <span class="comment">// 2 AIG pins with non-empty origins: shared chain pin + dff_out
-<a href=#3656 id=3656 data-nosnippet>3656</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#3657 id=3657 data-nosnippet>3657</a>            non_empty_count, <span class="number">2</span>,
-<a href=#3658 id=3658 data-nosnippet>3658</a>            <span class="string">"Expected 2 AIG pins with cell origins (chain pin + dff_out), got {}"</span>,
-<a href=#3659 id=3659 data-nosnippet>3659</a>            non_empty_count
-<a href=#3660 id=3660 data-nosnippet>3660</a>        );
-<a href=#3661 id=3661 data-nosnippet>3661</a>
-<a href=#3662 id=3662 data-nosnippet>3662</a>        <span class="comment">// The shared pin should have 17 entries (1 DFF + 16 inverters)
-<a href=#3663 id=3663 data-nosnippet>3663</a>        </span><span class="kw">let </span>chain_pin = aig
-<a href=#3664 id=3664 data-nosnippet>3664</a>            .aigpin_cell_origins
-<a href=#3665 id=3665 data-nosnippet>3665</a>            .iter()
-<a href=#3666 id=3666 data-nosnippet>3666</a>            .find(|origins| origins.len() &gt; <span class="number">1</span>)
-<a href=#3667 id=3667 data-nosnippet>3667</a>            .expect(<span class="string">"Should have a pin with multiple origins (the inverter chain)"</span>);
-<a href=#3668 id=3668 data-nosnippet>3668</a>        <span class="macro">assert_eq!</span>(
-<a href=#3669 id=3669 data-nosnippet>3669</a>            chain_pin.len(),
-<a href=#3670 id=3670 data-nosnippet>3670</a>            <span class="number">17</span>,
-<a href=#3671 id=3671 data-nosnippet>3671</a>            <span class="string">"Shared chain pin should have 17 origins (1 DFF + 16 inverters), got {}"</span>,
-<a href=#3672 id=3672 data-nosnippet>3672</a>            chain_pin.len()
-<a href=#3673 id=3673 data-nosnippet>3673</a>        );
-<a href=#3674 id=3674 data-nosnippet>3674</a>    }
-<a href=#3675 id=3675 data-nosnippet>3675</a>
-<a href=#3676 id=3676 data-nosnippet>3676</a>    <span class="attr">#[test]
-<a href=#3677 id=3677 data-nosnippet>3677</a>    </span><span class="kw">fn </span>test_cell_origin_dff_output_pin() {
-<a href=#3678 id=3678 data-nosnippet>3678</a>        <span class="kw">let </span>(netlistdb, aig) = load_inv_chain_aig();
-<a href=#3679 id=3679 data-nosnippet>3679</a>
-<a href=#3680 id=3680 data-nosnippet>3680</a>        <span class="comment">// Both DFFs should now be present (dff_in is no longer overwritten)
-<a href=#3681 id=3681 data-nosnippet>3681</a>        </span><span class="kw">let </span>dff_origins: Vec&lt;<span class="kw">_</span>&gt; = aig
-<a href=#3682 id=3682 data-nosnippet>3682</a>            .aigpin_cell_origins
-<a href=#3683 id=3683 data-nosnippet>3683</a>            .iter()
-<a href=#3684 id=3684 data-nosnippet>3684</a>            .enumerate()
-<a href=#3685 id=3685 data-nosnippet>3685</a>            .flat_map(|(i, origins)| {
-<a href=#3686 id=3686 data-nosnippet>3686</a>                origins
-<a href=#3687 id=3687 data-nosnippet>3687</a>                    .iter()
-<a href=#3688 id=3688 data-nosnippet>3688</a>                    .map(<span class="kw">move </span>|(cid, ct, pin)| (i, <span class="kw-2">*</span>cid, ct.clone(), pin.clone()))
-<a href=#3689 id=3689 data-nosnippet>3689</a>            })
-<a href=#3690 id=3690 data-nosnippet>3690</a>            .filter(|(<span class="kw">_</span>, <span class="kw">_</span>, ct, <span class="kw">_</span>)| ct == <span class="string">"dfxtp"</span>)
-<a href=#3691 id=3691 data-nosnippet>3691</a>            .collect();
-<a href=#3692 id=3692 data-nosnippet>3692</a>
-<a href=#3693 id=3693 data-nosnippet>3693</a>        <span class="macro">assert_eq!</span>(
-<a href=#3694 id=3694 data-nosnippet>3694</a>            dff_origins.len(),
-<a href=#3695 id=3695 data-nosnippet>3695</a>            <span class="number">2</span>,
-<a href=#3696 id=3696 data-nosnippet>3696</a>            <span class="string">"Expected 2 DFF cell origins (dff_in + dff_out), got {}"</span>,
-<a href=#3697 id=3697 data-nosnippet>3697</a>            dff_origins.len()
-<a href=#3698 id=3698 data-nosnippet>3698</a>        );
-<a href=#3699 id=3699 data-nosnippet>3699</a>
-<a href=#3700 id=3700 data-nosnippet>3700</a>        <span class="kw">for </span>(<span class="kw-2">ref </span>_aigpin, <span class="kw-2">ref </span>cellid, <span class="kw-2">ref </span>_cell_type, <span class="kw-2">ref </span>output_pin_name) <span class="kw">in </span><span class="kw-2">&amp;</span>dff_origins {
-<a href=#3701 id=3701 data-nosnippet>3701</a>            <span class="macro">assert_eq!</span>(output_pin_name, <span class="string">"Q"</span>, <span class="string">"DFF output pin must be Q"</span>);
-<a href=#3702 id=3702 data-nosnippet>3702</a>            <span class="macro">assert!</span>(
-<a href=#3703 id=3703 data-nosnippet>3703</a>                netlistdb.celltypes[<span class="kw-2">*</span>cellid].contains(<span class="string">"dfxtp"</span>),
-<a href=#3704 id=3704 data-nosnippet>3704</a>                <span class="string">"Cell {} should be dfxtp type, got {}"</span>,
-<a href=#3705 id=3705 data-nosnippet>3705</a>                cellid,
-<a href=#3706 id=3706 data-nosnippet>3706</a>                netlistdb.celltypes[<span class="kw-2">*</span>cellid]
-<a href=#3707 id=3707 data-nosnippet>3707</a>            );
-<a href=#3708 id=3708 data-nosnippet>3708</a>        }
-<a href=#3709 id=3709 data-nosnippet>3709</a>    }
-<a href=#3710 id=3710 data-nosnippet>3710</a>
-<a href=#3711 id=3711 data-nosnippet>3711</a>    <span class="attr">#[test]
-<a href=#3712 id=3712 data-nosnippet>3712</a>    </span><span class="kw">fn </span>test_all_inverters_present() {
-<a href=#3713 id=3713 data-nosnippet>3713</a>        <span class="kw">let </span>(netlistdb, aig) = load_inv_chain_aig();
-<a href=#3714 id=3714 data-nosnippet>3714</a>
-<a href=#3715 id=3715 data-nosnippet>3715</a>        <span class="comment">// All 16 inverters should now have their origins accumulated (not just the last one)
-<a href=#3716 id=3716 data-nosnippet>3716</a>        </span><span class="kw">let </span>inv_origins: Vec&lt;<span class="kw">_</span>&gt; = aig
-<a href=#3717 id=3717 data-nosnippet>3717</a>            .aigpin_cell_origins
-<a href=#3718 id=3718 data-nosnippet>3718</a>            .iter()
-<a href=#3719 id=3719 data-nosnippet>3719</a>            .enumerate()
-<a href=#3720 id=3720 data-nosnippet>3720</a>            .flat_map(|(i, origins)| {
-<a href=#3721 id=3721 data-nosnippet>3721</a>                origins
-<a href=#3722 id=3722 data-nosnippet>3722</a>                    .iter()
-<a href=#3723 id=3723 data-nosnippet>3723</a>                    .map(<span class="kw">move </span>|(cid, ct, pin)| (i, <span class="kw-2">*</span>cid, ct.clone(), pin.clone()))
-<a href=#3724 id=3724 data-nosnippet>3724</a>            })
-<a href=#3725 id=3725 data-nosnippet>3725</a>            .filter(|(<span class="kw">_</span>, <span class="kw">_</span>, ct, <span class="kw">_</span>)| ct == <span class="string">"inv"</span>)
-<a href=#3726 id=3726 data-nosnippet>3726</a>            .collect();
-<a href=#3727 id=3727 data-nosnippet>3727</a>
-<a href=#3728 id=3728 data-nosnippet>3728</a>        <span class="macro">assert_eq!</span>(
-<a href=#3729 id=3729 data-nosnippet>3729</a>            inv_origins.len(),
-<a href=#3730 id=3730 data-nosnippet>3730</a>            <span class="number">16</span>,
-<a href=#3731 id=3731 data-nosnippet>3731</a>            <span class="string">"Expected 16 inverter cell origins (all inverters in chain), got {}"</span>,
-<a href=#3732 id=3732 data-nosnippet>3732</a>            inv_origins.len()
-<a href=#3733 id=3733 data-nosnippet>3733</a>        );
-<a href=#3734 id=3734 data-nosnippet>3734</a>
-<a href=#3735 id=3735 data-nosnippet>3735</a>        <span class="kw">for </span>(<span class="kw-2">ref </span>_aigpin, <span class="kw-2">ref </span>cellid, <span class="kw-2">ref </span>_cell_type, <span class="kw-2">ref </span>output_pin_name) <span class="kw">in </span><span class="kw-2">&amp;</span>inv_origins {
-<a href=#3736 id=3736 data-nosnippet>3736</a>            <span class="macro">assert_eq!</span>(output_pin_name, <span class="string">"Y"</span>, <span class="string">"Inverter output pin must be Y"</span>);
-<a href=#3737 id=3737 data-nosnippet>3737</a>            <span class="macro">assert!</span>(
-<a href=#3738 id=3738 data-nosnippet>3738</a>                netlistdb.celltypes[<span class="kw-2">*</span>cellid].contains(<span class="string">"inv"</span>),
-<a href=#3739 id=3739 data-nosnippet>3739</a>                <span class="string">"Cell {} should be inv type, got {}"</span>,
-<a href=#3740 id=3740 data-nosnippet>3740</a>                cellid,
-<a href=#3741 id=3741 data-nosnippet>3741</a>                netlistdb.celltypes[<span class="kw-2">*</span>cellid]
-<a href=#3742 id=3742 data-nosnippet>3742</a>            );
-<a href=#3743 id=3743 data-nosnippet>3743</a>        }
-<a href=#3744 id=3744 data-nosnippet>3744</a>    }
-<a href=#3745 id=3745 data-nosnippet>3745</a>
-<a href=#3746 id=3746 data-nosnippet>3746</a>    <span class="attr">#[test]
-<a href=#3747 id=3747 data-nosnippet>3747</a>    </span><span class="kw">fn </span>test_no_and_gates_for_inverters() {
-<a href=#3748 id=3748 data-nosnippet>3748</a>        <span class="kw">let </span>(_netlistdb, aig) = load_inv_chain_aig();
-<a href=#3749 id=3749 data-nosnippet>3749</a>
-<a href=#3750 id=3750 data-nosnippet>3750</a>        <span class="comment">// Inverters in AIG are just wire + invert bit, no AND gates needed.
-<a href=#3751 id=3751 data-nosnippet>3751</a>        // The only AND gates should be none (inv_chain has no multi-input gates).
-<a href=#3752 id=3752 data-nosnippet>3752</a>        </span><span class="kw">let </span>and_gate_count = (<span class="number">1</span>..=aig.num_aigpins)
-<a href=#3753 id=3753 data-nosnippet>3753</a>            .filter(|<span class="kw-2">&amp;</span>ap| <span class="macro">matches!</span>(aig.drivers[ap], DriverType::AndGate(<span class="kw">_</span>, <span class="kw">_</span>)))
-<a href=#3754 id=3754 data-nosnippet>3754</a>            .count();
+<a href=#3591 id=3591 data-nosnippet>3591</a><span class="attr">#[cfg(test)]
+<a href=#3592 id=3592 data-nosnippet>3592</a></span><span class="kw">mod </span>path_mapping_tests {
+<a href=#3593 id=3593 data-nosnippet>3593</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#3594 id=3594 data-nosnippet>3594</a>    <span class="kw">use </span><span class="kw">crate</span>::sky130::SKY130LeafPins;
+<a href=#3595 id=3595 data-nosnippet>3595</a>    <span class="kw">use </span>std::collections::HashMap;
+<a href=#3596 id=3596 data-nosnippet>3596</a>
+<a href=#3597 id=3597 data-nosnippet>3597</a>    <span class="doccomment">/// Helper: load inv_chain.v and build AIG.
+<a href=#3598 id=3598 data-nosnippet>3598</a>    </span><span class="kw">fn </span>load_inv_chain_aig() -&gt; (NetlistDB, AIG) {
+<a href=#3599 id=3599 data-nosnippet>3599</a>        <span class="kw">let </span>verilog_path = std::path::PathBuf::from(<span class="string">"tests/timing_test/sky130_timing/inv_chain.v"</span>);
+<a href=#3600 id=3600 data-nosnippet>3600</a>        <span class="macro">assert!</span>(verilog_path.exists(), <span class="string">"inv_chain.v not found"</span>);
+<a href=#3601 id=3601 data-nosnippet>3601</a>
+<a href=#3602 id=3602 data-nosnippet>3602</a>        <span class="kw">let </span>netlistdb = NetlistDB::from_sverilog_file(<span class="kw-2">&amp;</span>verilog_path, <span class="prelude-val">None</span>, <span class="kw-2">&amp;</span>SKY130LeafPins)
+<a href=#3603 id=3603 data-nosnippet>3603</a>            .expect(<span class="string">"Failed to parse inv_chain.v"</span>);
+<a href=#3604 id=3604 data-nosnippet>3604</a>
+<a href=#3605 id=3605 data-nosnippet>3605</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>netlistdb);
+<a href=#3606 id=3606 data-nosnippet>3606</a>        (netlistdb, aig)
+<a href=#3607 id=3607 data-nosnippet>3607</a>    }
+<a href=#3608 id=3608 data-nosnippet>3608</a>
+<a href=#3609 id=3609 data-nosnippet>3609</a>    <span class="doccomment">/// Helper: build cellid → IR path map.
+<a href=#3610 id=3610 data-nosnippet>3610</a>    /// Mirrors the construction in `load_timing_from_ir` (uses `/` as the
+<a href=#3611 id=3611 data-nosnippet>3611</a>    /// hierarchy separator, matching OpenSTA's default divider).
+<a href=#3612 id=3612 data-nosnippet>3612</a>    </span><span class="kw">fn </span>build_cellid_to_path(netlistdb: <span class="kw-2">&amp;</span>NetlistDB) -&gt; HashMap&lt;usize, String&gt; {
+<a href=#3613 id=3613 data-nosnippet>3613</a>        <span class="kw">let </span><span class="kw-2">mut </span>map = HashMap::new();
+<a href=#3614 id=3614 data-nosnippet>3614</a>        <span class="kw">for </span>cellid <span class="kw">in </span><span class="number">1</span>..netlistdb.num_cells {
+<a href=#3615 id=3615 data-nosnippet>3615</a>            <span class="kw">let </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = netlistdb.cellnames[cellid]
+<a href=#3616 id=3616 data-nosnippet>3616</a>                .iter()
+<a href=#3617 id=3617 data-nosnippet>3617</a>                .map(|s| s.as_str())
+<a href=#3618 id=3618 data-nosnippet>3618</a>                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#3619 id=3619 data-nosnippet>3619</a>            <span class="kw">let </span>path: String = parts.iter().rev().cloned().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;().join(<span class="string">"/"</span>);
+<a href=#3620 id=3620 data-nosnippet>3620</a>            map.insert(cellid, path);
+<a href=#3621 id=3621 data-nosnippet>3621</a>        }
+<a href=#3622 id=3622 data-nosnippet>3622</a>        map
+<a href=#3623 id=3623 data-nosnippet>3623</a>    }
+<a href=#3624 id=3624 data-nosnippet>3624</a>
+<a href=#3625 id=3625 data-nosnippet>3625</a>    <span class="comment">// === Test 1: Cell origin population ===
+<a href=#3626 id=3626 data-nosnippet>3626</a>
+<a href=#3627 id=3627 data-nosnippet>3627</a>    </span><span class="attr">#[test]
+<a href=#3628 id=3628 data-nosnippet>3628</a>    </span><span class="kw">fn </span>test_cell_origins_length() {
+<a href=#3629 id=3629 data-nosnippet>3629</a>        <span class="kw">let </span>(_netlistdb, aig) = load_inv_chain_aig();
+<a href=#3630 id=3630 data-nosnippet>3630</a>        <span class="macro">assert_eq!</span>(
+<a href=#3631 id=3631 data-nosnippet>3631</a>            aig.aigpin_cell_origins.len(),
+<a href=#3632 id=3632 data-nosnippet>3632</a>            aig.num_aigpins + <span class="number">1</span>,
+<a href=#3633 id=3633 data-nosnippet>3633</a>            <span class="string">"aigpin_cell_origins should have num_aigpins + 1 entries (index 0 = Tie0)"
+<a href=#3634 id=3634 data-nosnippet>3634</a>        </span>);
+<a href=#3635 id=3635 data-nosnippet>3635</a>    }
+<a href=#3636 id=3636 data-nosnippet>3636</a>
+<a href=#3637 id=3637 data-nosnippet>3637</a>    <span class="attr">#[test]
+<a href=#3638 id=3638 data-nosnippet>3638</a>    </span><span class="kw">fn </span>test_cell_origin_tie0_is_empty() {
+<a href=#3639 id=3639 data-nosnippet>3639</a>        <span class="kw">let </span>(_netlistdb, aig) = load_inv_chain_aig();
+<a href=#3640 id=3640 data-nosnippet>3640</a>        <span class="macro">assert!</span>(
+<a href=#3641 id=3641 data-nosnippet>3641</a>            aig.aigpin_cell_origins[<span class="number">0</span>].is_empty(),
+<a href=#3642 id=3642 data-nosnippet>3642</a>            <span class="string">"Index 0 (Tie0) must have no cell origins"
+<a href=#3643 id=3643 data-nosnippet>3643</a>        </span>);
+<a href=#3644 id=3644 data-nosnippet>3644</a>    }
+<a href=#3645 id=3645 data-nosnippet>3645</a>
+<a href=#3646 id=3646 data-nosnippet>3646</a>    <span class="attr">#[test]
+<a href=#3647 id=3647 data-nosnippet>3647</a>    </span><span class="kw">fn </span>test_cell_origins_accumulated() {
+<a href=#3648 id=3648 data-nosnippet>3648</a>        <span class="kw">let </span>(_netlistdb, aig) = load_inv_chain_aig();
+<a href=#3649 id=3649 data-nosnippet>3649</a>
+<a href=#3650 id=3650 data-nosnippet>3650</a>        <span class="comment">// With accumulated origins, inverters no longer overwrite — they push.
+<a href=#3651 id=3651 data-nosnippet>3651</a>        // For inv_chain: dff_in.Q → i0 → ... → i15 → dff_out.D
+<a href=#3652 id=3652 data-nosnippet>3652</a>        // The shared AIG pin (dff_in.Q / inverter chain) accumulates:
+<a href=#3653 id=3653 data-nosnippet>3653</a>        //   1 DFF origin (dff_in CLK→Q) + 16 inverter origins = 17 entries.
+<a href=#3654 id=3654 data-nosnippet>3654</a>        // dff_out.Q gets its own AIG pin with 1 entry.
+<a href=#3655 id=3655 data-nosnippet>3655</a>        </span><span class="kw">let </span>non_empty_count = aig
+<a href=#3656 id=3656 data-nosnippet>3656</a>            .aigpin_cell_origins
+<a href=#3657 id=3657 data-nosnippet>3657</a>            .iter()
+<a href=#3658 id=3658 data-nosnippet>3658</a>            .filter(|o| !o.is_empty())
+<a href=#3659 id=3659 data-nosnippet>3659</a>            .count();
+<a href=#3660 id=3660 data-nosnippet>3660</a>
+<a href=#3661 id=3661 data-nosnippet>3661</a>        <span class="comment">// 2 AIG pins with non-empty origins: shared chain pin + dff_out
+<a href=#3662 id=3662 data-nosnippet>3662</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#3663 id=3663 data-nosnippet>3663</a>            non_empty_count, <span class="number">2</span>,
+<a href=#3664 id=3664 data-nosnippet>3664</a>            <span class="string">"Expected 2 AIG pins with cell origins (chain pin + dff_out), got {}"</span>,
+<a href=#3665 id=3665 data-nosnippet>3665</a>            non_empty_count
+<a href=#3666 id=3666 data-nosnippet>3666</a>        );
+<a href=#3667 id=3667 data-nosnippet>3667</a>
+<a href=#3668 id=3668 data-nosnippet>3668</a>        <span class="comment">// The shared pin should have 17 entries (1 DFF + 16 inverters)
+<a href=#3669 id=3669 data-nosnippet>3669</a>        </span><span class="kw">let </span>chain_pin = aig
+<a href=#3670 id=3670 data-nosnippet>3670</a>            .aigpin_cell_origins
+<a href=#3671 id=3671 data-nosnippet>3671</a>            .iter()
+<a href=#3672 id=3672 data-nosnippet>3672</a>            .find(|origins| origins.len() &gt; <span class="number">1</span>)
+<a href=#3673 id=3673 data-nosnippet>3673</a>            .expect(<span class="string">"Should have a pin with multiple origins (the inverter chain)"</span>);
+<a href=#3674 id=3674 data-nosnippet>3674</a>        <span class="macro">assert_eq!</span>(
+<a href=#3675 id=3675 data-nosnippet>3675</a>            chain_pin.len(),
+<a href=#3676 id=3676 data-nosnippet>3676</a>            <span class="number">17</span>,
+<a href=#3677 id=3677 data-nosnippet>3677</a>            <span class="string">"Shared chain pin should have 17 origins (1 DFF + 16 inverters), got {}"</span>,
+<a href=#3678 id=3678 data-nosnippet>3678</a>            chain_pin.len()
+<a href=#3679 id=3679 data-nosnippet>3679</a>        );
+<a href=#3680 id=3680 data-nosnippet>3680</a>    }
+<a href=#3681 id=3681 data-nosnippet>3681</a>
+<a href=#3682 id=3682 data-nosnippet>3682</a>    <span class="attr">#[test]
+<a href=#3683 id=3683 data-nosnippet>3683</a>    </span><span class="kw">fn </span>test_cell_origin_dff_output_pin() {
+<a href=#3684 id=3684 data-nosnippet>3684</a>        <span class="kw">let </span>(netlistdb, aig) = load_inv_chain_aig();
+<a href=#3685 id=3685 data-nosnippet>3685</a>
+<a href=#3686 id=3686 data-nosnippet>3686</a>        <span class="comment">// Both DFFs should now be present (dff_in is no longer overwritten)
+<a href=#3687 id=3687 data-nosnippet>3687</a>        </span><span class="kw">let </span>dff_origins: Vec&lt;<span class="kw">_</span>&gt; = aig
+<a href=#3688 id=3688 data-nosnippet>3688</a>            .aigpin_cell_origins
+<a href=#3689 id=3689 data-nosnippet>3689</a>            .iter()
+<a href=#3690 id=3690 data-nosnippet>3690</a>            .enumerate()
+<a href=#3691 id=3691 data-nosnippet>3691</a>            .flat_map(|(i, origins)| {
+<a href=#3692 id=3692 data-nosnippet>3692</a>                origins
+<a href=#3693 id=3693 data-nosnippet>3693</a>                    .iter()
+<a href=#3694 id=3694 data-nosnippet>3694</a>                    .map(<span class="kw">move </span>|(cid, ct, pin)| (i, <span class="kw-2">*</span>cid, ct.clone(), pin.clone()))
+<a href=#3695 id=3695 data-nosnippet>3695</a>            })
+<a href=#3696 id=3696 data-nosnippet>3696</a>            .filter(|(<span class="kw">_</span>, <span class="kw">_</span>, ct, <span class="kw">_</span>)| ct == <span class="string">"dfxtp"</span>)
+<a href=#3697 id=3697 data-nosnippet>3697</a>            .collect();
+<a href=#3698 id=3698 data-nosnippet>3698</a>
+<a href=#3699 id=3699 data-nosnippet>3699</a>        <span class="macro">assert_eq!</span>(
+<a href=#3700 id=3700 data-nosnippet>3700</a>            dff_origins.len(),
+<a href=#3701 id=3701 data-nosnippet>3701</a>            <span class="number">2</span>,
+<a href=#3702 id=3702 data-nosnippet>3702</a>            <span class="string">"Expected 2 DFF cell origins (dff_in + dff_out), got {}"</span>,
+<a href=#3703 id=3703 data-nosnippet>3703</a>            dff_origins.len()
+<a href=#3704 id=3704 data-nosnippet>3704</a>        );
+<a href=#3705 id=3705 data-nosnippet>3705</a>
+<a href=#3706 id=3706 data-nosnippet>3706</a>        <span class="kw">for </span>(<span class="kw-2">ref </span>_aigpin, <span class="kw-2">ref </span>cellid, <span class="kw-2">ref </span>_cell_type, <span class="kw-2">ref </span>output_pin_name) <span class="kw">in </span><span class="kw-2">&amp;</span>dff_origins {
+<a href=#3707 id=3707 data-nosnippet>3707</a>            <span class="macro">assert_eq!</span>(output_pin_name, <span class="string">"Q"</span>, <span class="string">"DFF output pin must be Q"</span>);
+<a href=#3708 id=3708 data-nosnippet>3708</a>            <span class="macro">assert!</span>(
+<a href=#3709 id=3709 data-nosnippet>3709</a>                netlistdb.celltypes[<span class="kw-2">*</span>cellid].contains(<span class="string">"dfxtp"</span>),
+<a href=#3710 id=3710 data-nosnippet>3710</a>                <span class="string">"Cell {} should be dfxtp type, got {}"</span>,
+<a href=#3711 id=3711 data-nosnippet>3711</a>                cellid,
+<a href=#3712 id=3712 data-nosnippet>3712</a>                netlistdb.celltypes[<span class="kw-2">*</span>cellid]
+<a href=#3713 id=3713 data-nosnippet>3713</a>            );
+<a href=#3714 id=3714 data-nosnippet>3714</a>        }
+<a href=#3715 id=3715 data-nosnippet>3715</a>    }
+<a href=#3716 id=3716 data-nosnippet>3716</a>
+<a href=#3717 id=3717 data-nosnippet>3717</a>    <span class="attr">#[test]
+<a href=#3718 id=3718 data-nosnippet>3718</a>    </span><span class="kw">fn </span>test_all_inverters_present() {
+<a href=#3719 id=3719 data-nosnippet>3719</a>        <span class="kw">let </span>(netlistdb, aig) = load_inv_chain_aig();
+<a href=#3720 id=3720 data-nosnippet>3720</a>
+<a href=#3721 id=3721 data-nosnippet>3721</a>        <span class="comment">// All 16 inverters should now have their origins accumulated (not just the last one)
+<a href=#3722 id=3722 data-nosnippet>3722</a>        </span><span class="kw">let </span>inv_origins: Vec&lt;<span class="kw">_</span>&gt; = aig
+<a href=#3723 id=3723 data-nosnippet>3723</a>            .aigpin_cell_origins
+<a href=#3724 id=3724 data-nosnippet>3724</a>            .iter()
+<a href=#3725 id=3725 data-nosnippet>3725</a>            .enumerate()
+<a href=#3726 id=3726 data-nosnippet>3726</a>            .flat_map(|(i, origins)| {
+<a href=#3727 id=3727 data-nosnippet>3727</a>                origins
+<a href=#3728 id=3728 data-nosnippet>3728</a>                    .iter()
+<a href=#3729 id=3729 data-nosnippet>3729</a>                    .map(<span class="kw">move </span>|(cid, ct, pin)| (i, <span class="kw-2">*</span>cid, ct.clone(), pin.clone()))
+<a href=#3730 id=3730 data-nosnippet>3730</a>            })
+<a href=#3731 id=3731 data-nosnippet>3731</a>            .filter(|(<span class="kw">_</span>, <span class="kw">_</span>, ct, <span class="kw">_</span>)| ct == <span class="string">"inv"</span>)
+<a href=#3732 id=3732 data-nosnippet>3732</a>            .collect();
+<a href=#3733 id=3733 data-nosnippet>3733</a>
+<a href=#3734 id=3734 data-nosnippet>3734</a>        <span class="macro">assert_eq!</span>(
+<a href=#3735 id=3735 data-nosnippet>3735</a>            inv_origins.len(),
+<a href=#3736 id=3736 data-nosnippet>3736</a>            <span class="number">16</span>,
+<a href=#3737 id=3737 data-nosnippet>3737</a>            <span class="string">"Expected 16 inverter cell origins (all inverters in chain), got {}"</span>,
+<a href=#3738 id=3738 data-nosnippet>3738</a>            inv_origins.len()
+<a href=#3739 id=3739 data-nosnippet>3739</a>        );
+<a href=#3740 id=3740 data-nosnippet>3740</a>
+<a href=#3741 id=3741 data-nosnippet>3741</a>        <span class="kw">for </span>(<span class="kw-2">ref </span>_aigpin, <span class="kw-2">ref </span>cellid, <span class="kw-2">ref </span>_cell_type, <span class="kw-2">ref </span>output_pin_name) <span class="kw">in </span><span class="kw-2">&amp;</span>inv_origins {
+<a href=#3742 id=3742 data-nosnippet>3742</a>            <span class="macro">assert_eq!</span>(output_pin_name, <span class="string">"Y"</span>, <span class="string">"Inverter output pin must be Y"</span>);
+<a href=#3743 id=3743 data-nosnippet>3743</a>            <span class="macro">assert!</span>(
+<a href=#3744 id=3744 data-nosnippet>3744</a>                netlistdb.celltypes[<span class="kw-2">*</span>cellid].contains(<span class="string">"inv"</span>),
+<a href=#3745 id=3745 data-nosnippet>3745</a>                <span class="string">"Cell {} should be inv type, got {}"</span>,
+<a href=#3746 id=3746 data-nosnippet>3746</a>                cellid,
+<a href=#3747 id=3747 data-nosnippet>3747</a>                netlistdb.celltypes[<span class="kw-2">*</span>cellid]
+<a href=#3748 id=3748 data-nosnippet>3748</a>            );
+<a href=#3749 id=3749 data-nosnippet>3749</a>        }
+<a href=#3750 id=3750 data-nosnippet>3750</a>    }
+<a href=#3751 id=3751 data-nosnippet>3751</a>
+<a href=#3752 id=3752 data-nosnippet>3752</a>    <span class="attr">#[test]
+<a href=#3753 id=3753 data-nosnippet>3753</a>    </span><span class="kw">fn </span>test_no_and_gates_for_inverters() {
+<a href=#3754 id=3754 data-nosnippet>3754</a>        <span class="kw">let </span>(_netlistdb, aig) = load_inv_chain_aig();
 <a href=#3755 id=3755 data-nosnippet>3755</a>
-<a href=#3756 id=3756 data-nosnippet>3756</a>        <span class="macro">assert_eq!</span>(
-<a href=#3757 id=3757 data-nosnippet>3757</a>            and_gate_count, <span class="number">0</span>,
-<a href=#3758 id=3758 data-nosnippet>3758</a>            <span class="string">"Inverter chain should produce 0 AND gates, got {}"</span>,
-<a href=#3759 id=3759 data-nosnippet>3759</a>            and_gate_count
-<a href=#3760 id=3760 data-nosnippet>3760</a>        );
-<a href=#3761 id=3761 data-nosnippet>3761</a>    }
-<a href=#3762 id=3762 data-nosnippet>3762</a>
-<a href=#3763 id=3763 data-nosnippet>3763</a>    <span class="comment">// === Test 2: HierName → IR cell-instance path matching ===
-<a href=#3764 id=3764 data-nosnippet>3764</a>
-<a href=#3765 id=3765 data-nosnippet>3765</a>    </span><span class="attr">#[test]
-<a href=#3766 id=3766 data-nosnippet>3766</a>    </span><span class="kw">fn </span>test_path_matching_all_cells() {
-<a href=#3767 id=3767 data-nosnippet>3767</a>        <span class="comment">// Every cell in the netlist should produce a path matching one of
-<a href=#3768 id=3768 data-nosnippet>3768</a>        // the expected leaf-instance names. This is the same property the
-<a href=#3769 id=3769 data-nosnippet>3769</a>        // IR consumer (`load_timing_from_ir`) relies on when looking up
-<a href=#3770 id=3770 data-nosnippet>3770</a>        // arcs/checks by `cell_instance` string.
-<a href=#3771 id=3771 data-nosnippet>3771</a>        </span><span class="kw">let </span>(netlistdb, _aig) = load_inv_chain_aig();
-<a href=#3772 id=3772 data-nosnippet>3772</a>        <span class="kw">let </span>cellid_to_path = build_cellid_to_path(<span class="kw-2">&amp;</span>netlistdb);
-<a href=#3773 id=3773 data-nosnippet>3773</a>
-<a href=#3774 id=3774 data-nosnippet>3774</a>        <span class="comment">// 18 real cells: 2 DFFs (dff_in, dff_out) + 16 inverters (i0..i15).
-<a href=#3775 id=3775 data-nosnippet>3775</a>        </span><span class="kw">let </span>expected: std::collections::HashSet&lt;<span class="kw-2">&amp;</span>str&gt; = [
-<a href=#3776 id=3776 data-nosnippet>3776</a>            <span class="string">"dff_in"</span>, <span class="string">"i0"</span>, <span class="string">"i1"</span>, <span class="string">"i2"</span>, <span class="string">"i3"</span>, <span class="string">"i4"</span>, <span class="string">"i5"</span>, <span class="string">"i6"</span>, <span class="string">"i7"</span>, <span class="string">"i8"</span>, <span class="string">"i9"</span>, <span class="string">"i10"</span>, <span class="string">"i11"</span>,
-<a href=#3777 id=3777 data-nosnippet>3777</a>            <span class="string">"i12"</span>, <span class="string">"i13"</span>, <span class="string">"i14"</span>, <span class="string">"i15"</span>, <span class="string">"dff_out"</span>,
-<a href=#3778 id=3778 data-nosnippet>3778</a>        ]
-<a href=#3779 id=3779 data-nosnippet>3779</a>        .into_iter()
-<a href=#3780 id=3780 data-nosnippet>3780</a>        .collect();
-<a href=#3781 id=3781 data-nosnippet>3781</a>
-<a href=#3782 id=3782 data-nosnippet>3782</a>        <span class="kw">let </span><span class="kw-2">mut </span>matched = <span class="number">0</span>;
-<a href=#3783 id=3783 data-nosnippet>3783</a>        <span class="kw">let </span><span class="kw-2">mut </span>unmatched = Vec::new();
-<a href=#3784 id=3784 data-nosnippet>3784</a>        <span class="kw">for </span>cellid <span class="kw">in </span><span class="number">1</span>..netlistdb.num_cells {
-<a href=#3785 id=3785 data-nosnippet>3785</a>            <span class="kw">let </span>path = <span class="kw-2">&amp;</span>cellid_to_path[<span class="kw-2">&amp;</span>cellid];
-<a href=#3786 id=3786 data-nosnippet>3786</a>            <span class="kw">if </span>expected.contains(path.as_str()) {
-<a href=#3787 id=3787 data-nosnippet>3787</a>                matched += <span class="number">1</span>;
-<a href=#3788 id=3788 data-nosnippet>3788</a>            } <span class="kw">else </span>{
-<a href=#3789 id=3789 data-nosnippet>3789</a>                unmatched.push(<span class="macro">format!</span>(
-<a href=#3790 id=3790 data-nosnippet>3790</a>                    <span class="string">"cellid={} type={} path={}"</span>,
-<a href=#3791 id=3791 data-nosnippet>3791</a>                    cellid, netlistdb.celltypes[cellid], path
-<a href=#3792 id=3792 data-nosnippet>3792</a>                ));
-<a href=#3793 id=3793 data-nosnippet>3793</a>            }
-<a href=#3794 id=3794 data-nosnippet>3794</a>        }
-<a href=#3795 id=3795 data-nosnippet>3795</a>
-<a href=#3796 id=3796 data-nosnippet>3796</a>        <span class="macro">assert!</span>(
-<a href=#3797 id=3797 data-nosnippet>3797</a>            unmatched.is_empty(),
-<a href=#3798 id=3798 data-nosnippet>3798</a>            <span class="string">"All cells should produce expected instance paths. Unmatched:\n{}"</span>,
-<a href=#3799 id=3799 data-nosnippet>3799</a>            unmatched.join(<span class="string">"\n"</span>)
-<a href=#3800 id=3800 data-nosnippet>3800</a>        );
-<a href=#3801 id=3801 data-nosnippet>3801</a>        <span class="macro">assert_eq!</span>(matched, <span class="number">18</span>, <span class="string">"Expected 18 matched cells"</span>);
-<a href=#3802 id=3802 data-nosnippet>3802</a>    }
-<a href=#3803 id=3803 data-nosnippet>3803</a>
-<a href=#3804 id=3804 data-nosnippet>3804</a>    <span class="attr">#[test]
-<a href=#3805 id=3805 data-nosnippet>3805</a>    </span><span class="kw">fn </span>test_path_format_flat() {
-<a href=#3806 id=3806 data-nosnippet>3806</a>        <span class="comment">// For a flat design, cellnames should produce single-component paths
-<a href=#3807 id=3807 data-nosnippet>3807</a>        // (no `/` separators).
-<a href=#3808 id=3808 data-nosnippet>3808</a>        </span><span class="kw">let </span>(netlistdb, _aig) = load_inv_chain_aig();
-<a href=#3809 id=3809 data-nosnippet>3809</a>        <span class="kw">let </span>cellid_to_path = build_cellid_to_path(<span class="kw-2">&amp;</span>netlistdb);
-<a href=#3810 id=3810 data-nosnippet>3810</a>
-<a href=#3811 id=3811 data-nosnippet>3811</a>        <span class="kw">let </span>expected_names = [
-<a href=#3812 id=3812 data-nosnippet>3812</a>            <span class="string">"dff_in"</span>, <span class="string">"i0"</span>, <span class="string">"i1"</span>, <span class="string">"i2"</span>, <span class="string">"i3"</span>, <span class="string">"i4"</span>, <span class="string">"i5"</span>, <span class="string">"i6"</span>, <span class="string">"i7"</span>, <span class="string">"i8"</span>, <span class="string">"i9"</span>, <span class="string">"i10"</span>, <span class="string">"i11"</span>,
-<a href=#3813 id=3813 data-nosnippet>3813</a>            <span class="string">"i12"</span>, <span class="string">"i13"</span>, <span class="string">"i14"</span>, <span class="string">"i15"</span>, <span class="string">"dff_out"</span>,
-<a href=#3814 id=3814 data-nosnippet>3814</a>        ];
-<a href=#3815 id=3815 data-nosnippet>3815</a>
-<a href=#3816 id=3816 data-nosnippet>3816</a>        <span class="kw">let </span>paths: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = cellid_to_path.values().map(|s| s.as_str()).collect();
-<a href=#3817 id=3817 data-nosnippet>3817</a>        <span class="kw">for </span>name <span class="kw">in </span><span class="kw-2">&amp;</span>expected_names {
-<a href=#3818 id=3818 data-nosnippet>3818</a>            <span class="macro">assert!</span>(
-<a href=#3819 id=3819 data-nosnippet>3819</a>                paths.contains(name),
-<a href=#3820 id=3820 data-nosnippet>3820</a>                <span class="string">"Expected path '{}' not found. Paths: {:?}"</span>,
-<a href=#3821 id=3821 data-nosnippet>3821</a>                name,
-<a href=#3822 id=3822 data-nosnippet>3822</a>                paths
-<a href=#3823 id=3823 data-nosnippet>3823</a>            );
-<a href=#3824 id=3824 data-nosnippet>3824</a>        }
-<a href=#3825 id=3825 data-nosnippet>3825</a>    }
-<a href=#3826 id=3826 data-nosnippet>3826</a>}
-<a href=#3827 id=3827 data-nosnippet>3827</a>
-<a href=#3828 id=3828 data-nosnippet>3828</a><span class="attr">#[cfg(test)]
-<a href=#3829 id=3829 data-nosnippet>3829</a></span><span class="kw">mod </span>gf180mcu_chip_top_tests {
-<a href=#3830 id=3830 data-nosnippet>3830</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#3831 id=3831 data-nosnippet>3831</a>    <span class="kw">use </span><span class="kw">crate</span>::gf180mcu::GF180MCULeafPins;
-<a href=#3832 id=3832 data-nosnippet>3832</a>
-<a href=#3833 id=3833 data-nosnippet>3833</a>    <span class="doccomment">/// End-to-end: a miniature GF180MCU chip-top builds without panic
-<a href=#3834 id=3834 data-nosnippet>3834</a>    /// — full pad ring (in_s / in_c / bi_24t / asig_5p0 / fill10 / cor
-<a href=#3835 id=3835 data-nosnippet>3835</a>    /// / ws_io / ws_ip) wrapping a trivial std-cell core. Catches
-<a href=#3836 id=3836 data-nosnippet>3836</a>    /// regressions in:
-<a href=#3837 id=3837 data-nosnippet>3837</a>    ///   * `is_gf180mcu_cell` + `extract_cell_type` (gf180mcu_pdk)
-<a href=#3838 id=3838 data-nosnippet>3838</a>    ///   * `GF180MCU_PAD_PIN_TABLE` (gf180mcu.rs)
-<a href=#3839 id=3839 data-nosnippet>3839</a>    ///   * `is_filler_cell` / `is_io_pad_cell` (gf180mcu_pdk.rs)
-<a href=#3840 id=3840 data-nosnippet>3840</a>    ///   * `gf180mcu_postprocess` IO-pad branch (this file)
-<a href=#3841 id=3841 data-nosnippet>3841</a>    ///   * `get_gf180mcu_dependencies` IO-pad branch (this file)
-<a href=#3842 id=3842 data-nosnippet>3842</a>    </span><span class="attr">#[test]
-<a href=#3843 id=3843 data-nosnippet>3843</a>    </span><span class="kw">fn </span>aig_builds_from_chip_top_with_pad_ring() {
-<a href=#3844 id=3844 data-nosnippet>3844</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
-<a href=#3845 id=3845 data-nosnippet>3845</a>module chip_top(clk_PAD, in_PAD, bidir_PAD, analog_PAD);
-<a href=#3846 id=3846 data-nosnippet>3846</a>  inout clk_PAD;
-<a href=#3847 id=3847 data-nosnippet>3847</a>  inout in_PAD;
-<a href=#3848 id=3848 data-nosnippet>3848</a>  inout bidir_PAD;
-<a href=#3849 id=3849 data-nosnippet>3849</a>  inout analog_PAD;
-<a href=#3850 id=3850 data-nosnippet>3850</a>  wire clk_core, in_core, bidir_y_core, bidir_a_core, oe_core;
-<a href=#3851 id=3851 data-nosnippet>3851</a>  wire mid;
-<a href=#3852 id=3852 data-nosnippet>3852</a>  // Logic-bearing pads.
-<a href=#3853 id=3853 data-nosnippet>3853</a>  gf180mcu_fd_io__in_s clk_pad (.PAD(clk_PAD), .PU(1'b0), .PD(1'b0), .Y(clk_core));
-<a href=#3854 id=3854 data-nosnippet>3854</a>  gf180mcu_fd_io__in_c in_pad  (.PAD(in_PAD),  .PU(1'b0), .PD(1'b0), .Y(in_core));
-<a href=#3855 id=3855 data-nosnippet>3855</a>  gf180mcu_fd_io__bi_24t bidir_pad (
-<a href=#3856 id=3856 data-nosnippet>3856</a>      .PAD(bidir_PAD), .A(bidir_a_core), .OE(oe_core),
-<a href=#3857 id=3857 data-nosnippet>3857</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
-<a href=#3858 id=3858 data-nosnippet>3858</a>      .Y(bidir_y_core)
-<a href=#3859 id=3859 data-nosnippet>3859</a>  );
-<a href=#3860 id=3860 data-nosnippet>3860</a>  // No-logic pads (no port connections, matching post-P&amp;R netlists).
-<a href=#3861 id=3861 data-nosnippet>3861</a>  gf180mcu_fd_io__asig_5p0 asig_inst (.ASIG5V(analog_PAD));
-<a href=#3862 id=3862 data-nosnippet>3862</a>  gf180mcu_fd_io__fill10 fill_inst ();
-<a href=#3863 id=3863 data-nosnippet>3863</a>  gf180mcu_fd_io__cor    cor_inst  ();
-<a href=#3864 id=3864 data-nosnippet>3864</a>  gf180mcu_ws_io__dvdd   dvdd_inst ();
-<a href=#3865 id=3865 data-nosnippet>3865</a>  gf180mcu_ws_io__dvss   dvss_inst ();
-<a href=#3866 id=3866 data-nosnippet>3866</a>  gf180mcu_ws_ip__id     id_inst   ();
-<a href=#3867 id=3867 data-nosnippet>3867</a>  gf180mcu_ws_ip__logo   logo_inst ();
-<a href=#3868 id=3868 data-nosnippet>3868</a>  // Trivial core: bidir_a_core = NAND(clk, in); oe_core = AND(clk, in).
-<a href=#3869 id=3869 data-nosnippet>3869</a>  gf180mcu_fd_sc_mcu9t5v0__nand2_1 u1 (.A1(clk_core), .A2(in_core), .ZN(mid));
-<a href=#3870 id=3870 data-nosnippet>3870</a>  gf180mcu_fd_sc_mcu9t5v0__buf_1   u2 (.I(mid), .Z(bidir_a_core));
-<a href=#3871 id=3871 data-nosnippet>3871</a>  gf180mcu_fd_sc_mcu9t5v0__and2_1  u3 (.A1(clk_core), .A2(in_core), .Z(oe_core));
-<a href=#3872 id=3872 data-nosnippet>3872</a>endmodule
-<a href=#3873 id=3873 data-nosnippet>3873</a>"#</span>;
-<a href=#3874 id=3874 data-nosnippet>3874</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
-<a href=#3875 id=3875 data-nosnippet>3875</a>            VERILOG,
-<a href=#3876 id=3876 data-nosnippet>3876</a>            <span class="prelude-val">Some</span>(<span class="string">"chip_top"</span>),
-<a href=#3877 id=3877 data-nosnippet>3877</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
-<a href=#3878 id=3878 data-nosnippet>3878</a>        )
-<a href=#3879 id=3879 data-nosnippet>3879</a>        .expect(<span class="string">"netlist parse"</span>);
-<a href=#3880 id=3880 data-nosnippet>3880</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
-<a href=#3881 id=3881 data-nosnippet>3881</a>        <span class="macro">assert!</span>(aig.num_aigpins &gt; <span class="number">0</span>, <span class="string">"AIG should have at least one pin"</span>);
-<a href=#3882 id=3882 data-nosnippet>3882</a>    }
-<a href=#3883 id=3883 data-nosnippet>3883</a>
-<a href=#3884 id=3884 data-nosnippet>3884</a>    <span class="doccomment">/// The bi_24t simplification (Y = PAD) means a bi_24t pad's `Y`
-<a href=#3885 id=3885 data-nosnippet>3885</a>    /// cone matches an `in_c` pad's `Y` cone. Build two equivalent
-<a href=#3886 id=3886 data-nosnippet>3886</a>    /// designs — one using bi_24t with constant core drives for
-<a href=#3887 id=3887 data-nosnippet>3887</a>    /// A/OE, one using in_c — and verify both build successfully
-<a href=#3888 id=3888 data-nosnippet>3888</a>    /// with sensible AIG sizes.
-<a href=#3889 id=3889 data-nosnippet>3889</a>    ///
-<a href=#3890 id=3890 data-nosnippet>3890</a>    /// Note: with the bidir split, the bi_24t's A/OE pins *are* now
-<a href=#3891 id=3891 data-nosnippet>3891</a>    /// in the AIG (as deps of the postprocess hook), and surface as
-<a href=#3892 id=3892 data-nosnippet>3892</a>    /// extra observables (`p__out`/`p__oe`). The load-bearing
-<a href=#3893 id=3893 data-nosnippet>3893</a>    /// assertion here is that the `p → y` relationship is unchanged.
-<a href=#3894 id=3894 data-nosnippet>3894</a>    </span><span class="attr">#[test]
-<a href=#3895 id=3895 data-nosnippet>3895</a>    </span><span class="kw">fn </span>bi_24t_input_mode_matches_in_c() {
-<a href=#3896 id=3896 data-nosnippet>3896</a>        <span class="comment">// Trivial 1-pad design using bi_24t with A/OE driven by ties.
-<a href=#3897 id=3897 data-nosnippet>3897</a>        // The tie cells are now reached by the bi_24t dep walk and
-<a href=#3898 id=3898 data-nosnippet>3898</a>        // surface as `p__out`/`p__oe` extra observables — that's fine,
-<a href=#3899 id=3899 data-nosnippet>3899</a>        // because the `p → y` cone is independent of those.
-<a href=#3900 id=3900 data-nosnippet>3900</a>        </span><span class="kw">const </span>BI_24T_VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
-<a href=#3901 id=3901 data-nosnippet>3901</a>module top(p, y);
-<a href=#3902 id=3902 data-nosnippet>3902</a>  inout p;
-<a href=#3903 id=3903 data-nosnippet>3903</a>  output y;
-<a href=#3904 id=3904 data-nosnippet>3904</a>  wire ig1, ig2;
-<a href=#3905 id=3905 data-nosnippet>3905</a>  gf180mcu_fd_io__bi_24t bidir_pad (
-<a href=#3906 id=3906 data-nosnippet>3906</a>      .PAD(p), .A(ig1), .OE(ig2),
-<a href=#3907 id=3907 data-nosnippet>3907</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
-<a href=#3908 id=3908 data-nosnippet>3908</a>      .Y(y)
-<a href=#3909 id=3909 data-nosnippet>3909</a>  );
-<a href=#3910 id=3910 data-nosnippet>3910</a>  gf180mcu_fd_sc_mcu9t5v0__tieh u_tie1 (.Z(ig1));
-<a href=#3911 id=3911 data-nosnippet>3911</a>  gf180mcu_fd_sc_mcu9t5v0__tiel u_tie2 (.ZN(ig2));
-<a href=#3912 id=3912 data-nosnippet>3912</a>endmodule
-<a href=#3913 id=3913 data-nosnippet>3913</a>"#</span>;
-<a href=#3914 id=3914 data-nosnippet>3914</a>        <span class="kw">const </span>IN_C_VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
-<a href=#3915 id=3915 data-nosnippet>3915</a>module top(p, y);
-<a href=#3916 id=3916 data-nosnippet>3916</a>  inout p;
-<a href=#3917 id=3917 data-nosnippet>3917</a>  output y;
-<a href=#3918 id=3918 data-nosnippet>3918</a>  gf180mcu_fd_io__in_c in_pad (.PAD(p), .PU(1'b0), .PD(1'b0), .Y(y));
-<a href=#3919 id=3919 data-nosnippet>3919</a>endmodule
-<a href=#3920 id=3920 data-nosnippet>3920</a>"#</span>;
-<a href=#3921 id=3921 data-nosnippet>3921</a>        <span class="kw">let </span>nl_bi = netlistdb::NetlistDB::from_sverilog_source(
-<a href=#3922 id=3922 data-nosnippet>3922</a>            BI_24T_VERILOG,
-<a href=#3923 id=3923 data-nosnippet>3923</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
-<a href=#3924 id=3924 data-nosnippet>3924</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
-<a href=#3925 id=3925 data-nosnippet>3925</a>        )
-<a href=#3926 id=3926 data-nosnippet>3926</a>        .expect(<span class="string">"bi_24t netlist parse"</span>);
-<a href=#3927 id=3927 data-nosnippet>3927</a>        <span class="kw">let </span>nl_ic = netlistdb::NetlistDB::from_sverilog_source(
-<a href=#3928 id=3928 data-nosnippet>3928</a>            IN_C_VERILOG,
+<a href=#3756 id=3756 data-nosnippet>3756</a>        <span class="comment">// Inverters in AIG are just wire + invert bit, no AND gates needed.
+<a href=#3757 id=3757 data-nosnippet>3757</a>        // The only AND gates should be none (inv_chain has no multi-input gates).
+<a href=#3758 id=3758 data-nosnippet>3758</a>        </span><span class="kw">let </span>and_gate_count = (<span class="number">1</span>..=aig.num_aigpins)
+<a href=#3759 id=3759 data-nosnippet>3759</a>            .filter(|<span class="kw-2">&amp;</span>ap| <span class="macro">matches!</span>(aig.drivers[ap], DriverType::AndGate(<span class="kw">_</span>, <span class="kw">_</span>)))
+<a href=#3760 id=3760 data-nosnippet>3760</a>            .count();
+<a href=#3761 id=3761 data-nosnippet>3761</a>
+<a href=#3762 id=3762 data-nosnippet>3762</a>        <span class="macro">assert_eq!</span>(
+<a href=#3763 id=3763 data-nosnippet>3763</a>            and_gate_count, <span class="number">0</span>,
+<a href=#3764 id=3764 data-nosnippet>3764</a>            <span class="string">"Inverter chain should produce 0 AND gates, got {}"</span>,
+<a href=#3765 id=3765 data-nosnippet>3765</a>            and_gate_count
+<a href=#3766 id=3766 data-nosnippet>3766</a>        );
+<a href=#3767 id=3767 data-nosnippet>3767</a>    }
+<a href=#3768 id=3768 data-nosnippet>3768</a>
+<a href=#3769 id=3769 data-nosnippet>3769</a>    <span class="comment">// === Test 2: HierName → IR cell-instance path matching ===
+<a href=#3770 id=3770 data-nosnippet>3770</a>
+<a href=#3771 id=3771 data-nosnippet>3771</a>    </span><span class="attr">#[test]
+<a href=#3772 id=3772 data-nosnippet>3772</a>    </span><span class="kw">fn </span>test_path_matching_all_cells() {
+<a href=#3773 id=3773 data-nosnippet>3773</a>        <span class="comment">// Every cell in the netlist should produce a path matching one of
+<a href=#3774 id=3774 data-nosnippet>3774</a>        // the expected leaf-instance names. This is the same property the
+<a href=#3775 id=3775 data-nosnippet>3775</a>        // IR consumer (`load_timing_from_ir`) relies on when looking up
+<a href=#3776 id=3776 data-nosnippet>3776</a>        // arcs/checks by `cell_instance` string.
+<a href=#3777 id=3777 data-nosnippet>3777</a>        </span><span class="kw">let </span>(netlistdb, _aig) = load_inv_chain_aig();
+<a href=#3778 id=3778 data-nosnippet>3778</a>        <span class="kw">let </span>cellid_to_path = build_cellid_to_path(<span class="kw-2">&amp;</span>netlistdb);
+<a href=#3779 id=3779 data-nosnippet>3779</a>
+<a href=#3780 id=3780 data-nosnippet>3780</a>        <span class="comment">// 18 real cells: 2 DFFs (dff_in, dff_out) + 16 inverters (i0..i15).
+<a href=#3781 id=3781 data-nosnippet>3781</a>        </span><span class="kw">let </span>expected: std::collections::HashSet&lt;<span class="kw-2">&amp;</span>str&gt; = [
+<a href=#3782 id=3782 data-nosnippet>3782</a>            <span class="string">"dff_in"</span>, <span class="string">"i0"</span>, <span class="string">"i1"</span>, <span class="string">"i2"</span>, <span class="string">"i3"</span>, <span class="string">"i4"</span>, <span class="string">"i5"</span>, <span class="string">"i6"</span>, <span class="string">"i7"</span>, <span class="string">"i8"</span>, <span class="string">"i9"</span>, <span class="string">"i10"</span>, <span class="string">"i11"</span>,
+<a href=#3783 id=3783 data-nosnippet>3783</a>            <span class="string">"i12"</span>, <span class="string">"i13"</span>, <span class="string">"i14"</span>, <span class="string">"i15"</span>, <span class="string">"dff_out"</span>,
+<a href=#3784 id=3784 data-nosnippet>3784</a>        ]
+<a href=#3785 id=3785 data-nosnippet>3785</a>        .into_iter()
+<a href=#3786 id=3786 data-nosnippet>3786</a>        .collect();
+<a href=#3787 id=3787 data-nosnippet>3787</a>
+<a href=#3788 id=3788 data-nosnippet>3788</a>        <span class="kw">let </span><span class="kw-2">mut </span>matched = <span class="number">0</span>;
+<a href=#3789 id=3789 data-nosnippet>3789</a>        <span class="kw">let </span><span class="kw-2">mut </span>unmatched = Vec::new();
+<a href=#3790 id=3790 data-nosnippet>3790</a>        <span class="kw">for </span>cellid <span class="kw">in </span><span class="number">1</span>..netlistdb.num_cells {
+<a href=#3791 id=3791 data-nosnippet>3791</a>            <span class="kw">let </span>path = <span class="kw-2">&amp;</span>cellid_to_path[<span class="kw-2">&amp;</span>cellid];
+<a href=#3792 id=3792 data-nosnippet>3792</a>            <span class="kw">if </span>expected.contains(path.as_str()) {
+<a href=#3793 id=3793 data-nosnippet>3793</a>                matched += <span class="number">1</span>;
+<a href=#3794 id=3794 data-nosnippet>3794</a>            } <span class="kw">else </span>{
+<a href=#3795 id=3795 data-nosnippet>3795</a>                unmatched.push(<span class="macro">format!</span>(
+<a href=#3796 id=3796 data-nosnippet>3796</a>                    <span class="string">"cellid={} type={} path={}"</span>,
+<a href=#3797 id=3797 data-nosnippet>3797</a>                    cellid, netlistdb.celltypes[cellid], path
+<a href=#3798 id=3798 data-nosnippet>3798</a>                ));
+<a href=#3799 id=3799 data-nosnippet>3799</a>            }
+<a href=#3800 id=3800 data-nosnippet>3800</a>        }
+<a href=#3801 id=3801 data-nosnippet>3801</a>
+<a href=#3802 id=3802 data-nosnippet>3802</a>        <span class="macro">assert!</span>(
+<a href=#3803 id=3803 data-nosnippet>3803</a>            unmatched.is_empty(),
+<a href=#3804 id=3804 data-nosnippet>3804</a>            <span class="string">"All cells should produce expected instance paths. Unmatched:\n{}"</span>,
+<a href=#3805 id=3805 data-nosnippet>3805</a>            unmatched.join(<span class="string">"\n"</span>)
+<a href=#3806 id=3806 data-nosnippet>3806</a>        );
+<a href=#3807 id=3807 data-nosnippet>3807</a>        <span class="macro">assert_eq!</span>(matched, <span class="number">18</span>, <span class="string">"Expected 18 matched cells"</span>);
+<a href=#3808 id=3808 data-nosnippet>3808</a>    }
+<a href=#3809 id=3809 data-nosnippet>3809</a>
+<a href=#3810 id=3810 data-nosnippet>3810</a>    <span class="attr">#[test]
+<a href=#3811 id=3811 data-nosnippet>3811</a>    </span><span class="kw">fn </span>test_path_format_flat() {
+<a href=#3812 id=3812 data-nosnippet>3812</a>        <span class="comment">// For a flat design, cellnames should produce single-component paths
+<a href=#3813 id=3813 data-nosnippet>3813</a>        // (no `/` separators).
+<a href=#3814 id=3814 data-nosnippet>3814</a>        </span><span class="kw">let </span>(netlistdb, _aig) = load_inv_chain_aig();
+<a href=#3815 id=3815 data-nosnippet>3815</a>        <span class="kw">let </span>cellid_to_path = build_cellid_to_path(<span class="kw-2">&amp;</span>netlistdb);
+<a href=#3816 id=3816 data-nosnippet>3816</a>
+<a href=#3817 id=3817 data-nosnippet>3817</a>        <span class="kw">let </span>expected_names = [
+<a href=#3818 id=3818 data-nosnippet>3818</a>            <span class="string">"dff_in"</span>, <span class="string">"i0"</span>, <span class="string">"i1"</span>, <span class="string">"i2"</span>, <span class="string">"i3"</span>, <span class="string">"i4"</span>, <span class="string">"i5"</span>, <span class="string">"i6"</span>, <span class="string">"i7"</span>, <span class="string">"i8"</span>, <span class="string">"i9"</span>, <span class="string">"i10"</span>, <span class="string">"i11"</span>,
+<a href=#3819 id=3819 data-nosnippet>3819</a>            <span class="string">"i12"</span>, <span class="string">"i13"</span>, <span class="string">"i14"</span>, <span class="string">"i15"</span>, <span class="string">"dff_out"</span>,
+<a href=#3820 id=3820 data-nosnippet>3820</a>        ];
+<a href=#3821 id=3821 data-nosnippet>3821</a>
+<a href=#3822 id=3822 data-nosnippet>3822</a>        <span class="kw">let </span>paths: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = cellid_to_path.values().map(|s| s.as_str()).collect();
+<a href=#3823 id=3823 data-nosnippet>3823</a>        <span class="kw">for </span>name <span class="kw">in </span><span class="kw-2">&amp;</span>expected_names {
+<a href=#3824 id=3824 data-nosnippet>3824</a>            <span class="macro">assert!</span>(
+<a href=#3825 id=3825 data-nosnippet>3825</a>                paths.contains(name),
+<a href=#3826 id=3826 data-nosnippet>3826</a>                <span class="string">"Expected path '{}' not found. Paths: {:?}"</span>,
+<a href=#3827 id=3827 data-nosnippet>3827</a>                name,
+<a href=#3828 id=3828 data-nosnippet>3828</a>                paths
+<a href=#3829 id=3829 data-nosnippet>3829</a>            );
+<a href=#3830 id=3830 data-nosnippet>3830</a>        }
+<a href=#3831 id=3831 data-nosnippet>3831</a>    }
+<a href=#3832 id=3832 data-nosnippet>3832</a>}
+<a href=#3833 id=3833 data-nosnippet>3833</a>
+<a href=#3834 id=3834 data-nosnippet>3834</a><span class="attr">#[cfg(test)]
+<a href=#3835 id=3835 data-nosnippet>3835</a></span><span class="kw">mod </span>gf180mcu_chip_top_tests {
+<a href=#3836 id=3836 data-nosnippet>3836</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#3837 id=3837 data-nosnippet>3837</a>    <span class="kw">use </span><span class="kw">crate</span>::gf180mcu::GF180MCULeafPins;
+<a href=#3838 id=3838 data-nosnippet>3838</a>
+<a href=#3839 id=3839 data-nosnippet>3839</a>    <span class="doccomment">/// End-to-end: a miniature GF180MCU chip-top builds without panic
+<a href=#3840 id=3840 data-nosnippet>3840</a>    /// — full pad ring (in_s / in_c / bi_24t / asig_5p0 / fill10 / cor
+<a href=#3841 id=3841 data-nosnippet>3841</a>    /// / ws_io / ws_ip) wrapping a trivial std-cell core. Catches
+<a href=#3842 id=3842 data-nosnippet>3842</a>    /// regressions in:
+<a href=#3843 id=3843 data-nosnippet>3843</a>    ///   * `is_gf180mcu_cell` + `extract_cell_type` (gf180mcu_pdk)
+<a href=#3844 id=3844 data-nosnippet>3844</a>    ///   * `GF180MCU_PAD_PIN_TABLE` (gf180mcu.rs)
+<a href=#3845 id=3845 data-nosnippet>3845</a>    ///   * `is_filler_cell` / `is_io_pad_cell` (gf180mcu_pdk.rs)
+<a href=#3846 id=3846 data-nosnippet>3846</a>    ///   * `gf180mcu_postprocess` IO-pad branch (this file)
+<a href=#3847 id=3847 data-nosnippet>3847</a>    ///   * `get_gf180mcu_dependencies` IO-pad branch (this file)
+<a href=#3848 id=3848 data-nosnippet>3848</a>    </span><span class="attr">#[test]
+<a href=#3849 id=3849 data-nosnippet>3849</a>    </span><span class="kw">fn </span>aig_builds_from_chip_top_with_pad_ring() {
+<a href=#3850 id=3850 data-nosnippet>3850</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
+<a href=#3851 id=3851 data-nosnippet>3851</a>module chip_top(clk_PAD, in_PAD, bidir_PAD, analog_PAD);
+<a href=#3852 id=3852 data-nosnippet>3852</a>  inout clk_PAD;
+<a href=#3853 id=3853 data-nosnippet>3853</a>  inout in_PAD;
+<a href=#3854 id=3854 data-nosnippet>3854</a>  inout bidir_PAD;
+<a href=#3855 id=3855 data-nosnippet>3855</a>  inout analog_PAD;
+<a href=#3856 id=3856 data-nosnippet>3856</a>  wire clk_core, in_core, bidir_y_core, bidir_a_core, oe_core;
+<a href=#3857 id=3857 data-nosnippet>3857</a>  wire mid;
+<a href=#3858 id=3858 data-nosnippet>3858</a>  // Logic-bearing pads.
+<a href=#3859 id=3859 data-nosnippet>3859</a>  gf180mcu_fd_io__in_s clk_pad (.PAD(clk_PAD), .PU(1'b0), .PD(1'b0), .Y(clk_core));
+<a href=#3860 id=3860 data-nosnippet>3860</a>  gf180mcu_fd_io__in_c in_pad  (.PAD(in_PAD),  .PU(1'b0), .PD(1'b0), .Y(in_core));
+<a href=#3861 id=3861 data-nosnippet>3861</a>  gf180mcu_fd_io__bi_24t bidir_pad (
+<a href=#3862 id=3862 data-nosnippet>3862</a>      .PAD(bidir_PAD), .A(bidir_a_core), .OE(oe_core),
+<a href=#3863 id=3863 data-nosnippet>3863</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+<a href=#3864 id=3864 data-nosnippet>3864</a>      .Y(bidir_y_core)
+<a href=#3865 id=3865 data-nosnippet>3865</a>  );
+<a href=#3866 id=3866 data-nosnippet>3866</a>  // No-logic pads (no port connections, matching post-P&amp;R netlists).
+<a href=#3867 id=3867 data-nosnippet>3867</a>  gf180mcu_fd_io__asig_5p0 asig_inst (.ASIG5V(analog_PAD));
+<a href=#3868 id=3868 data-nosnippet>3868</a>  gf180mcu_fd_io__fill10 fill_inst ();
+<a href=#3869 id=3869 data-nosnippet>3869</a>  gf180mcu_fd_io__cor    cor_inst  ();
+<a href=#3870 id=3870 data-nosnippet>3870</a>  gf180mcu_ws_io__dvdd   dvdd_inst ();
+<a href=#3871 id=3871 data-nosnippet>3871</a>  gf180mcu_ws_io__dvss   dvss_inst ();
+<a href=#3872 id=3872 data-nosnippet>3872</a>  gf180mcu_ws_ip__id     id_inst   ();
+<a href=#3873 id=3873 data-nosnippet>3873</a>  gf180mcu_ws_ip__logo   logo_inst ();
+<a href=#3874 id=3874 data-nosnippet>3874</a>  // Trivial core: bidir_a_core = NAND(clk, in); oe_core = AND(clk, in).
+<a href=#3875 id=3875 data-nosnippet>3875</a>  gf180mcu_fd_sc_mcu9t5v0__nand2_1 u1 (.A1(clk_core), .A2(in_core), .ZN(mid));
+<a href=#3876 id=3876 data-nosnippet>3876</a>  gf180mcu_fd_sc_mcu9t5v0__buf_1   u2 (.I(mid), .Z(bidir_a_core));
+<a href=#3877 id=3877 data-nosnippet>3877</a>  gf180mcu_fd_sc_mcu9t5v0__and2_1  u3 (.A1(clk_core), .A2(in_core), .Z(oe_core));
+<a href=#3878 id=3878 data-nosnippet>3878</a>endmodule
+<a href=#3879 id=3879 data-nosnippet>3879</a>"#</span>;
+<a href=#3880 id=3880 data-nosnippet>3880</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
+<a href=#3881 id=3881 data-nosnippet>3881</a>            VERILOG,
+<a href=#3882 id=3882 data-nosnippet>3882</a>            <span class="prelude-val">Some</span>(<span class="string">"chip_top"</span>),
+<a href=#3883 id=3883 data-nosnippet>3883</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
+<a href=#3884 id=3884 data-nosnippet>3884</a>        )
+<a href=#3885 id=3885 data-nosnippet>3885</a>        .expect(<span class="string">"netlist parse"</span>);
+<a href=#3886 id=3886 data-nosnippet>3886</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
+<a href=#3887 id=3887 data-nosnippet>3887</a>        <span class="macro">assert!</span>(aig.num_aigpins &gt; <span class="number">0</span>, <span class="string">"AIG should have at least one pin"</span>);
+<a href=#3888 id=3888 data-nosnippet>3888</a>    }
+<a href=#3889 id=3889 data-nosnippet>3889</a>
+<a href=#3890 id=3890 data-nosnippet>3890</a>    <span class="doccomment">/// The bi_24t simplification (Y = PAD) means a bi_24t pad's `Y`
+<a href=#3891 id=3891 data-nosnippet>3891</a>    /// cone matches an `in_c` pad's `Y` cone. Build two equivalent
+<a href=#3892 id=3892 data-nosnippet>3892</a>    /// designs — one using bi_24t with constant core drives for
+<a href=#3893 id=3893 data-nosnippet>3893</a>    /// A/OE, one using in_c — and verify both build successfully
+<a href=#3894 id=3894 data-nosnippet>3894</a>    /// with sensible AIG sizes.
+<a href=#3895 id=3895 data-nosnippet>3895</a>    ///
+<a href=#3896 id=3896 data-nosnippet>3896</a>    /// Note: with the bidir split, the bi_24t's A/OE pins *are* now
+<a href=#3897 id=3897 data-nosnippet>3897</a>    /// in the AIG (as deps of the postprocess hook), and surface as
+<a href=#3898 id=3898 data-nosnippet>3898</a>    /// extra observables (`p__out`/`p__oe`). The load-bearing
+<a href=#3899 id=3899 data-nosnippet>3899</a>    /// assertion here is that the `p → y` relationship is unchanged.
+<a href=#3900 id=3900 data-nosnippet>3900</a>    </span><span class="attr">#[test]
+<a href=#3901 id=3901 data-nosnippet>3901</a>    </span><span class="kw">fn </span>bi_24t_input_mode_matches_in_c() {
+<a href=#3902 id=3902 data-nosnippet>3902</a>        <span class="comment">// Trivial 1-pad design using bi_24t with A/OE driven by ties.
+<a href=#3903 id=3903 data-nosnippet>3903</a>        // The tie cells are now reached by the bi_24t dep walk and
+<a href=#3904 id=3904 data-nosnippet>3904</a>        // surface as `p__out`/`p__oe` extra observables — that's fine,
+<a href=#3905 id=3905 data-nosnippet>3905</a>        // because the `p → y` cone is independent of those.
+<a href=#3906 id=3906 data-nosnippet>3906</a>        </span><span class="kw">const </span>BI_24T_VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
+<a href=#3907 id=3907 data-nosnippet>3907</a>module top(p, y);
+<a href=#3908 id=3908 data-nosnippet>3908</a>  inout p;
+<a href=#3909 id=3909 data-nosnippet>3909</a>  output y;
+<a href=#3910 id=3910 data-nosnippet>3910</a>  wire ig1, ig2;
+<a href=#3911 id=3911 data-nosnippet>3911</a>  gf180mcu_fd_io__bi_24t bidir_pad (
+<a href=#3912 id=3912 data-nosnippet>3912</a>      .PAD(p), .A(ig1), .OE(ig2),
+<a href=#3913 id=3913 data-nosnippet>3913</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+<a href=#3914 id=3914 data-nosnippet>3914</a>      .Y(y)
+<a href=#3915 id=3915 data-nosnippet>3915</a>  );
+<a href=#3916 id=3916 data-nosnippet>3916</a>  gf180mcu_fd_sc_mcu9t5v0__tieh u_tie1 (.Z(ig1));
+<a href=#3917 id=3917 data-nosnippet>3917</a>  gf180mcu_fd_sc_mcu9t5v0__tiel u_tie2 (.ZN(ig2));
+<a href=#3918 id=3918 data-nosnippet>3918</a>endmodule
+<a href=#3919 id=3919 data-nosnippet>3919</a>"#</span>;
+<a href=#3920 id=3920 data-nosnippet>3920</a>        <span class="kw">const </span>IN_C_VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
+<a href=#3921 id=3921 data-nosnippet>3921</a>module top(p, y);
+<a href=#3922 id=3922 data-nosnippet>3922</a>  inout p;
+<a href=#3923 id=3923 data-nosnippet>3923</a>  output y;
+<a href=#3924 id=3924 data-nosnippet>3924</a>  gf180mcu_fd_io__in_c in_pad (.PAD(p), .PU(1'b0), .PD(1'b0), .Y(y));
+<a href=#3925 id=3925 data-nosnippet>3925</a>endmodule
+<a href=#3926 id=3926 data-nosnippet>3926</a>"#</span>;
+<a href=#3927 id=3927 data-nosnippet>3927</a>        <span class="kw">let </span>nl_bi = netlistdb::NetlistDB::from_sverilog_source(
+<a href=#3928 id=3928 data-nosnippet>3928</a>            BI_24T_VERILOG,
 <a href=#3929 id=3929 data-nosnippet>3929</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
 <a href=#3930 id=3930 data-nosnippet>3930</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
 <a href=#3931 id=3931 data-nosnippet>3931</a>        )
-<a href=#3932 id=3932 data-nosnippet>3932</a>        .expect(<span class="string">"in_c netlist parse"</span>);
-<a href=#3933 id=3933 data-nosnippet>3933</a>        <span class="kw">let </span>aig_bi = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl_bi);
-<a href=#3934 id=3934 data-nosnippet>3934</a>        <span class="kw">let </span>aig_ic = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl_ic);
-<a href=#3935 id=3935 data-nosnippet>3935</a>        <span class="comment">// Both AIGs should observe the same primary-input → primary-
-<a href=#3936 id=3936 data-nosnippet>3936</a>        // output relationship for `p → y`. We don't compare exact
-<a href=#3937 id=3937 data-nosnippet>3937</a>        // structures (the bi_24t version has tie cells in its
-<a href=#3938 id=3938 data-nosnippet>3938</a>        // `p__out`/`p__oe` observables); the load-bearing assertion
-<a href=#3939 id=3939 data-nosnippet>3939</a>        // is that AIG construction succeeded and produced a
-<a href=#3940 id=3940 data-nosnippet>3940</a>        // sensible-sized graph.
-<a href=#3941 id=3941 data-nosnippet>3941</a>        </span><span class="macro">assert!</span>(aig_bi.num_aigpins &gt; <span class="number">0</span>);
-<a href=#3942 id=3942 data-nosnippet>3942</a>        <span class="macro">assert!</span>(aig_ic.num_aigpins &gt; <span class="number">0</span>);
-<a href=#3943 id=3943 data-nosnippet>3943</a>    }
-<a href=#3944 id=3944 data-nosnippet>3944</a>
-<a href=#3945 id=3945 data-nosnippet>3945</a>    <span class="doccomment">/// `bi_24t` bidirectional pads surface their core-side `A` (drive)
-<a href=#3946 id=3946 data-nosnippet>3946</a>    /// and `OE` (output-enable) pins as extra observable primary outputs,
-<a href=#3947 id=3947 data-nosnippet>3947</a>    /// named after the top-level inout port they connect to (e.g.
-<a href=#3948 id=3948 data-nosnippet>3948</a>    /// `bidir_PAD[12]__out` / `bidir_PAD[12]__oe`). This lets the output
-<a href=#3949 id=3949 data-nosnippet>3949</a>    /// VCD capture the core's drive-out direction of a bidir pad — the
-<a href=#3950 id=3950 data-nosnippet>3950</a>    /// `Y = PAD` alias is still emitted for the input direction.
-<a href=#3951 id=3951 data-nosnippet>3951</a>    ///
-<a href=#3952 id=3952 data-nosnippet>3952</a>    /// `in_c` / `in_s` are *not* split (no `A`/`OE` to surface).
-<a href=#3953 id=3953 data-nosnippet>3953</a>    </span><span class="attr">#[test]
-<a href=#3954 id=3954 data-nosnippet>3954</a>    </span><span class="kw">fn </span>bi_24t_surfaces_a_and_oe_as_observables() {
-<a href=#3955 id=3955 data-nosnippet>3955</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
-<a href=#3956 id=3956 data-nosnippet>3956</a>module top(p, y);
-<a href=#3957 id=3957 data-nosnippet>3957</a>  inout p;
-<a href=#3958 id=3958 data-nosnippet>3958</a>  output y;
-<a href=#3959 id=3959 data-nosnippet>3959</a>  wire core_a, core_oe;
-<a href=#3960 id=3960 data-nosnippet>3960</a>  gf180mcu_fd_io__bi_24t bidir_pad (
-<a href=#3961 id=3961 data-nosnippet>3961</a>      .PAD(p), .A(core_a), .OE(core_oe),
-<a href=#3962 id=3962 data-nosnippet>3962</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
-<a href=#3963 id=3963 data-nosnippet>3963</a>      .Y(y)
-<a href=#3964 id=3964 data-nosnippet>3964</a>  );
-<a href=#3965 id=3965 data-nosnippet>3965</a>  // Distinct drivers for A and OE so they each get their own aigpin.
-<a href=#3966 id=3966 data-nosnippet>3966</a>  gf180mcu_fd_sc_mcu9t5v0__tieh u_tie_a  (.Z(core_a));
-<a href=#3967 id=3967 data-nosnippet>3967</a>  gf180mcu_fd_sc_mcu9t5v0__tiel u_tie_oe (.ZN(core_oe));
-<a href=#3968 id=3968 data-nosnippet>3968</a>endmodule
-<a href=#3969 id=3969 data-nosnippet>3969</a>"#</span>;
-<a href=#3970 id=3970 data-nosnippet>3970</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
-<a href=#3971 id=3971 data-nosnippet>3971</a>            VERILOG,
-<a href=#3972 id=3972 data-nosnippet>3972</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
-<a href=#3973 id=3973 data-nosnippet>3973</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
-<a href=#3974 id=3974 data-nosnippet>3974</a>        )
-<a href=#3975 id=3975 data-nosnippet>3975</a>        .expect(<span class="string">"netlist parse"</span>);
-<a href=#3976 id=3976 data-nosnippet>3976</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
-<a href=#3977 id=3977 data-nosnippet>3977</a>        <span class="macro">assert!</span>(aig.num_aigpins &gt; <span class="number">0</span>);
-<a href=#3978 id=3978 data-nosnippet>3978</a>
-<a href=#3979 id=3979 data-nosnippet>3979</a>        <span class="comment">// Both `p__out` and `p__oe` should appear as named extra
-<a href=#3980 id=3980 data-nosnippet>3980</a>        // observables, and each should be present in primary_outputs.
-<a href=#3981 id=3981 data-nosnippet>3981</a>        </span><span class="kw">let </span>names: std::collections::HashSet&lt;String&gt; = aig
-<a href=#3982 id=3982 data-nosnippet>3982</a>            .extra_observable_names
-<a href=#3983 id=3983 data-nosnippet>3983</a>            .values()
-<a href=#3984 id=3984 data-nosnippet>3984</a>            .flat_map(|v| v.iter().cloned())
-<a href=#3985 id=3985 data-nosnippet>3985</a>            .collect();
-<a href=#3986 id=3986 data-nosnippet>3986</a>        <span class="macro">assert!</span>(
-<a href=#3987 id=3987 data-nosnippet>3987</a>            names.contains(<span class="string">"p__out"</span>),
-<a href=#3988 id=3988 data-nosnippet>3988</a>            <span class="string">"expected `p__out` in extra_observable_names, got {:?}"</span>,
-<a href=#3989 id=3989 data-nosnippet>3989</a>            names
-<a href=#3990 id=3990 data-nosnippet>3990</a>        );
-<a href=#3991 id=3991 data-nosnippet>3991</a>        <span class="macro">assert!</span>(
-<a href=#3992 id=3992 data-nosnippet>3992</a>            names.contains(<span class="string">"p__oe"</span>),
-<a href=#3993 id=3993 data-nosnippet>3993</a>            <span class="string">"expected `p__oe` in extra_observable_names, got {:?}"</span>,
-<a href=#3994 id=3994 data-nosnippet>3994</a>            names
-<a href=#3995 id=3995 data-nosnippet>3995</a>        );
-<a href=#3996 id=3996 data-nosnippet>3996</a>
-<a href=#3997 id=3997 data-nosnippet>3997</a>        <span class="comment">// Every extra observable must also live in primary_outputs so
-<a href=#3998 id=3998 data-nosnippet>3998</a>        // the partitioner schedules it onto a state bit.
-<a href=#3999 id=3999 data-nosnippet>3999</a>        </span><span class="kw">for </span>(<span class="kw-2">&amp;</span>aigpin, names) <span class="kw">in </span>aig.extra_observable_names.iter() {
-<a href=#4000 id=4000 data-nosnippet>4000</a>            <span class="macro">assert!</span>(
-<a href=#4001 id=4001 data-nosnippet>4001</a>                aig.primary_outputs.contains(<span class="kw-2">&amp;</span>aigpin),
-<a href=#4002 id=4002 data-nosnippet>4002</a>                <span class="string">"extra observables {:?} (aigpin {}) not in primary_outputs"</span>,
-<a href=#4003 id=4003 data-nosnippet>4003</a>                names,
-<a href=#4004 id=4004 data-nosnippet>4004</a>                aigpin
-<a href=#4005 id=4005 data-nosnippet>4005</a>            );
-<a href=#4006 id=4006 data-nosnippet>4006</a>        }
-<a href=#4007 id=4007 data-nosnippet>4007</a>    }
-<a href=#4008 id=4008 data-nosnippet>4008</a>
-<a href=#4009 id=4009 data-nosnippet>4009</a>    <span class="doccomment">/// Bus-indexed bidir pads use the top-level port's bus index in the
-<a href=#4010 id=4010 data-nosnippet>4010</a>    /// observable name (e.g. `bidir_PAD[12]__out`). Verifies the
-<a href=#4011 id=4011 data-nosnippet>4011</a>    /// PAD → top-port name lookup handles bus indices.
-<a href=#4012 id=4012 data-nosnippet>4012</a>    </span><span class="attr">#[test]
-<a href=#4013 id=4013 data-nosnippet>4013</a>    </span><span class="kw">fn </span>bi_24t_observable_name_includes_bus_index() {
-<a href=#4014 id=4014 data-nosnippet>4014</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
-<a href=#4015 id=4015 data-nosnippet>4015</a>module top(bidir_PAD);
-<a href=#4016 id=4016 data-nosnippet>4016</a>  inout [1:0] bidir_PAD;
-<a href=#4017 id=4017 data-nosnippet>4017</a>  wire core_a_0, core_oe_0;
-<a href=#4018 id=4018 data-nosnippet>4018</a>  wire core_a_1, core_oe_1;
-<a href=#4019 id=4019 data-nosnippet>4019</a>  wire y_0, y_1;
-<a href=#4020 id=4020 data-nosnippet>4020</a>  gf180mcu_fd_io__bi_24t pad0 (
-<a href=#4021 id=4021 data-nosnippet>4021</a>      .PAD(bidir_PAD[0]), .A(core_a_0), .OE(core_oe_0),
-<a href=#4022 id=4022 data-nosnippet>4022</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
-<a href=#4023 id=4023 data-nosnippet>4023</a>      .Y(y_0)
-<a href=#4024 id=4024 data-nosnippet>4024</a>  );
-<a href=#4025 id=4025 data-nosnippet>4025</a>  gf180mcu_fd_io__bi_24t pad1 (
-<a href=#4026 id=4026 data-nosnippet>4026</a>      .PAD(bidir_PAD[1]), .A(core_a_1), .OE(core_oe_1),
-<a href=#4027 id=4027 data-nosnippet>4027</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
-<a href=#4028 id=4028 data-nosnippet>4028</a>      .Y(y_1)
-<a href=#4029 id=4029 data-nosnippet>4029</a>  );
-<a href=#4030 id=4030 data-nosnippet>4030</a>  gf180mcu_fd_sc_mcu9t5v0__tieh u_a0  (.Z(core_a_0));
-<a href=#4031 id=4031 data-nosnippet>4031</a>  gf180mcu_fd_sc_mcu9t5v0__tiel u_oe0 (.ZN(core_oe_0));
-<a href=#4032 id=4032 data-nosnippet>4032</a>  gf180mcu_fd_sc_mcu9t5v0__tieh u_a1  (.Z(core_a_1));
-<a href=#4033 id=4033 data-nosnippet>4033</a>  gf180mcu_fd_sc_mcu9t5v0__tiel u_oe1 (.ZN(core_oe_1));
-<a href=#4034 id=4034 data-nosnippet>4034</a>endmodule
-<a href=#4035 id=4035 data-nosnippet>4035</a>"#</span>;
-<a href=#4036 id=4036 data-nosnippet>4036</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
-<a href=#4037 id=4037 data-nosnippet>4037</a>            VERILOG,
-<a href=#4038 id=4038 data-nosnippet>4038</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
-<a href=#4039 id=4039 data-nosnippet>4039</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
-<a href=#4040 id=4040 data-nosnippet>4040</a>        )
-<a href=#4041 id=4041 data-nosnippet>4041</a>        .expect(<span class="string">"netlist parse"</span>);
-<a href=#4042 id=4042 data-nosnippet>4042</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
-<a href=#4043 id=4043 data-nosnippet>4043</a>        <span class="kw">let </span>names: std::collections::HashSet&lt;String&gt; = aig
-<a href=#4044 id=4044 data-nosnippet>4044</a>            .extra_observable_names
-<a href=#4045 id=4045 data-nosnippet>4045</a>            .values()
-<a href=#4046 id=4046 data-nosnippet>4046</a>            .flat_map(|v| v.iter().cloned())
-<a href=#4047 id=4047 data-nosnippet>4047</a>            .collect();
-<a href=#4048 id=4048 data-nosnippet>4048</a>        <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..<span class="number">2 </span>{
-<a href=#4049 id=4049 data-nosnippet>4049</a>            <span class="macro">assert!</span>(
-<a href=#4050 id=4050 data-nosnippet>4050</a>                names.contains(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"bidir_PAD[{}]__out"</span>, idx)),
-<a href=#4051 id=4051 data-nosnippet>4051</a>                <span class="string">"missing bidir_PAD[{}]__out in {:?}"</span>,
-<a href=#4052 id=4052 data-nosnippet>4052</a>                idx,
-<a href=#4053 id=4053 data-nosnippet>4053</a>                names,
-<a href=#4054 id=4054 data-nosnippet>4054</a>            );
+<a href=#3932 id=3932 data-nosnippet>3932</a>        .expect(<span class="string">"bi_24t netlist parse"</span>);
+<a href=#3933 id=3933 data-nosnippet>3933</a>        <span class="kw">let </span>nl_ic = netlistdb::NetlistDB::from_sverilog_source(
+<a href=#3934 id=3934 data-nosnippet>3934</a>            IN_C_VERILOG,
+<a href=#3935 id=3935 data-nosnippet>3935</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
+<a href=#3936 id=3936 data-nosnippet>3936</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
+<a href=#3937 id=3937 data-nosnippet>3937</a>        )
+<a href=#3938 id=3938 data-nosnippet>3938</a>        .expect(<span class="string">"in_c netlist parse"</span>);
+<a href=#3939 id=3939 data-nosnippet>3939</a>        <span class="kw">let </span>aig_bi = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl_bi);
+<a href=#3940 id=3940 data-nosnippet>3940</a>        <span class="kw">let </span>aig_ic = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl_ic);
+<a href=#3941 id=3941 data-nosnippet>3941</a>        <span class="comment">// Both AIGs should observe the same primary-input → primary-
+<a href=#3942 id=3942 data-nosnippet>3942</a>        // output relationship for `p → y`. We don't compare exact
+<a href=#3943 id=3943 data-nosnippet>3943</a>        // structures (the bi_24t version has tie cells in its
+<a href=#3944 id=3944 data-nosnippet>3944</a>        // `p__out`/`p__oe` observables); the load-bearing assertion
+<a href=#3945 id=3945 data-nosnippet>3945</a>        // is that AIG construction succeeded and produced a
+<a href=#3946 id=3946 data-nosnippet>3946</a>        // sensible-sized graph.
+<a href=#3947 id=3947 data-nosnippet>3947</a>        </span><span class="macro">assert!</span>(aig_bi.num_aigpins &gt; <span class="number">0</span>);
+<a href=#3948 id=3948 data-nosnippet>3948</a>        <span class="macro">assert!</span>(aig_ic.num_aigpins &gt; <span class="number">0</span>);
+<a href=#3949 id=3949 data-nosnippet>3949</a>    }
+<a href=#3950 id=3950 data-nosnippet>3950</a>
+<a href=#3951 id=3951 data-nosnippet>3951</a>    <span class="doccomment">/// `bi_24t` bidirectional pads surface their core-side `A` (drive)
+<a href=#3952 id=3952 data-nosnippet>3952</a>    /// and `OE` (output-enable) pins as extra observable primary outputs,
+<a href=#3953 id=3953 data-nosnippet>3953</a>    /// named after the top-level inout port they connect to (e.g.
+<a href=#3954 id=3954 data-nosnippet>3954</a>    /// `bidir_PAD[12]__out` / `bidir_PAD[12]__oe`). This lets the output
+<a href=#3955 id=3955 data-nosnippet>3955</a>    /// VCD capture the core's drive-out direction of a bidir pad — the
+<a href=#3956 id=3956 data-nosnippet>3956</a>    /// `Y = PAD` alias is still emitted for the input direction.
+<a href=#3957 id=3957 data-nosnippet>3957</a>    ///
+<a href=#3958 id=3958 data-nosnippet>3958</a>    /// `in_c` / `in_s` are *not* split (no `A`/`OE` to surface).
+<a href=#3959 id=3959 data-nosnippet>3959</a>    </span><span class="attr">#[test]
+<a href=#3960 id=3960 data-nosnippet>3960</a>    </span><span class="kw">fn </span>bi_24t_surfaces_a_and_oe_as_observables() {
+<a href=#3961 id=3961 data-nosnippet>3961</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
+<a href=#3962 id=3962 data-nosnippet>3962</a>module top(p, y);
+<a href=#3963 id=3963 data-nosnippet>3963</a>  inout p;
+<a href=#3964 id=3964 data-nosnippet>3964</a>  output y;
+<a href=#3965 id=3965 data-nosnippet>3965</a>  wire core_a, core_oe;
+<a href=#3966 id=3966 data-nosnippet>3966</a>  gf180mcu_fd_io__bi_24t bidir_pad (
+<a href=#3967 id=3967 data-nosnippet>3967</a>      .PAD(p), .A(core_a), .OE(core_oe),
+<a href=#3968 id=3968 data-nosnippet>3968</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+<a href=#3969 id=3969 data-nosnippet>3969</a>      .Y(y)
+<a href=#3970 id=3970 data-nosnippet>3970</a>  );
+<a href=#3971 id=3971 data-nosnippet>3971</a>  // Distinct drivers for A and OE so they each get their own aigpin.
+<a href=#3972 id=3972 data-nosnippet>3972</a>  gf180mcu_fd_sc_mcu9t5v0__tieh u_tie_a  (.Z(core_a));
+<a href=#3973 id=3973 data-nosnippet>3973</a>  gf180mcu_fd_sc_mcu9t5v0__tiel u_tie_oe (.ZN(core_oe));
+<a href=#3974 id=3974 data-nosnippet>3974</a>endmodule
+<a href=#3975 id=3975 data-nosnippet>3975</a>"#</span>;
+<a href=#3976 id=3976 data-nosnippet>3976</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
+<a href=#3977 id=3977 data-nosnippet>3977</a>            VERILOG,
+<a href=#3978 id=3978 data-nosnippet>3978</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
+<a href=#3979 id=3979 data-nosnippet>3979</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
+<a href=#3980 id=3980 data-nosnippet>3980</a>        )
+<a href=#3981 id=3981 data-nosnippet>3981</a>        .expect(<span class="string">"netlist parse"</span>);
+<a href=#3982 id=3982 data-nosnippet>3982</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
+<a href=#3983 id=3983 data-nosnippet>3983</a>        <span class="macro">assert!</span>(aig.num_aigpins &gt; <span class="number">0</span>);
+<a href=#3984 id=3984 data-nosnippet>3984</a>
+<a href=#3985 id=3985 data-nosnippet>3985</a>        <span class="comment">// Both `p__out` and `p__oe` should appear as named extra
+<a href=#3986 id=3986 data-nosnippet>3986</a>        // observables, and each should be present in primary_outputs.
+<a href=#3987 id=3987 data-nosnippet>3987</a>        </span><span class="kw">let </span>names: std::collections::HashSet&lt;String&gt; = aig
+<a href=#3988 id=3988 data-nosnippet>3988</a>            .extra_observable_names
+<a href=#3989 id=3989 data-nosnippet>3989</a>            .values()
+<a href=#3990 id=3990 data-nosnippet>3990</a>            .flat_map(|v| v.iter().cloned())
+<a href=#3991 id=3991 data-nosnippet>3991</a>            .collect();
+<a href=#3992 id=3992 data-nosnippet>3992</a>        <span class="macro">assert!</span>(
+<a href=#3993 id=3993 data-nosnippet>3993</a>            names.contains(<span class="string">"p__out"</span>),
+<a href=#3994 id=3994 data-nosnippet>3994</a>            <span class="string">"expected `p__out` in extra_observable_names, got {:?}"</span>,
+<a href=#3995 id=3995 data-nosnippet>3995</a>            names
+<a href=#3996 id=3996 data-nosnippet>3996</a>        );
+<a href=#3997 id=3997 data-nosnippet>3997</a>        <span class="macro">assert!</span>(
+<a href=#3998 id=3998 data-nosnippet>3998</a>            names.contains(<span class="string">"p__oe"</span>),
+<a href=#3999 id=3999 data-nosnippet>3999</a>            <span class="string">"expected `p__oe` in extra_observable_names, got {:?}"</span>,
+<a href=#4000 id=4000 data-nosnippet>4000</a>            names
+<a href=#4001 id=4001 data-nosnippet>4001</a>        );
+<a href=#4002 id=4002 data-nosnippet>4002</a>
+<a href=#4003 id=4003 data-nosnippet>4003</a>        <span class="comment">// Every extra observable must also live in primary_outputs so
+<a href=#4004 id=4004 data-nosnippet>4004</a>        // the partitioner schedules it onto a state bit.
+<a href=#4005 id=4005 data-nosnippet>4005</a>        </span><span class="kw">for </span>(<span class="kw-2">&amp;</span>aigpin, names) <span class="kw">in </span>aig.extra_observable_names.iter() {
+<a href=#4006 id=4006 data-nosnippet>4006</a>            <span class="macro">assert!</span>(
+<a href=#4007 id=4007 data-nosnippet>4007</a>                aig.primary_outputs.contains(<span class="kw-2">&amp;</span>aigpin),
+<a href=#4008 id=4008 data-nosnippet>4008</a>                <span class="string">"extra observables {:?} (aigpin {}) not in primary_outputs"</span>,
+<a href=#4009 id=4009 data-nosnippet>4009</a>                names,
+<a href=#4010 id=4010 data-nosnippet>4010</a>                aigpin
+<a href=#4011 id=4011 data-nosnippet>4011</a>            );
+<a href=#4012 id=4012 data-nosnippet>4012</a>        }
+<a href=#4013 id=4013 data-nosnippet>4013</a>    }
+<a href=#4014 id=4014 data-nosnippet>4014</a>
+<a href=#4015 id=4015 data-nosnippet>4015</a>    <span class="doccomment">/// Bus-indexed bidir pads use the top-level port's bus index in the
+<a href=#4016 id=4016 data-nosnippet>4016</a>    /// observable name (e.g. `bidir_PAD[12]__out`). Verifies the
+<a href=#4017 id=4017 data-nosnippet>4017</a>    /// PAD → top-port name lookup handles bus indices.
+<a href=#4018 id=4018 data-nosnippet>4018</a>    </span><span class="attr">#[test]
+<a href=#4019 id=4019 data-nosnippet>4019</a>    </span><span class="kw">fn </span>bi_24t_observable_name_includes_bus_index() {
+<a href=#4020 id=4020 data-nosnippet>4020</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
+<a href=#4021 id=4021 data-nosnippet>4021</a>module top(bidir_PAD);
+<a href=#4022 id=4022 data-nosnippet>4022</a>  inout [1:0] bidir_PAD;
+<a href=#4023 id=4023 data-nosnippet>4023</a>  wire core_a_0, core_oe_0;
+<a href=#4024 id=4024 data-nosnippet>4024</a>  wire core_a_1, core_oe_1;
+<a href=#4025 id=4025 data-nosnippet>4025</a>  wire y_0, y_1;
+<a href=#4026 id=4026 data-nosnippet>4026</a>  gf180mcu_fd_io__bi_24t pad0 (
+<a href=#4027 id=4027 data-nosnippet>4027</a>      .PAD(bidir_PAD[0]), .A(core_a_0), .OE(core_oe_0),
+<a href=#4028 id=4028 data-nosnippet>4028</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+<a href=#4029 id=4029 data-nosnippet>4029</a>      .Y(y_0)
+<a href=#4030 id=4030 data-nosnippet>4030</a>  );
+<a href=#4031 id=4031 data-nosnippet>4031</a>  gf180mcu_fd_io__bi_24t pad1 (
+<a href=#4032 id=4032 data-nosnippet>4032</a>      .PAD(bidir_PAD[1]), .A(core_a_1), .OE(core_oe_1),
+<a href=#4033 id=4033 data-nosnippet>4033</a>      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+<a href=#4034 id=4034 data-nosnippet>4034</a>      .Y(y_1)
+<a href=#4035 id=4035 data-nosnippet>4035</a>  );
+<a href=#4036 id=4036 data-nosnippet>4036</a>  gf180mcu_fd_sc_mcu9t5v0__tieh u_a0  (.Z(core_a_0));
+<a href=#4037 id=4037 data-nosnippet>4037</a>  gf180mcu_fd_sc_mcu9t5v0__tiel u_oe0 (.ZN(core_oe_0));
+<a href=#4038 id=4038 data-nosnippet>4038</a>  gf180mcu_fd_sc_mcu9t5v0__tieh u_a1  (.Z(core_a_1));
+<a href=#4039 id=4039 data-nosnippet>4039</a>  gf180mcu_fd_sc_mcu9t5v0__tiel u_oe1 (.ZN(core_oe_1));
+<a href=#4040 id=4040 data-nosnippet>4040</a>endmodule
+<a href=#4041 id=4041 data-nosnippet>4041</a>"#</span>;
+<a href=#4042 id=4042 data-nosnippet>4042</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
+<a href=#4043 id=4043 data-nosnippet>4043</a>            VERILOG,
+<a href=#4044 id=4044 data-nosnippet>4044</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
+<a href=#4045 id=4045 data-nosnippet>4045</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
+<a href=#4046 id=4046 data-nosnippet>4046</a>        )
+<a href=#4047 id=4047 data-nosnippet>4047</a>        .expect(<span class="string">"netlist parse"</span>);
+<a href=#4048 id=4048 data-nosnippet>4048</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
+<a href=#4049 id=4049 data-nosnippet>4049</a>        <span class="kw">let </span>names: std::collections::HashSet&lt;String&gt; = aig
+<a href=#4050 id=4050 data-nosnippet>4050</a>            .extra_observable_names
+<a href=#4051 id=4051 data-nosnippet>4051</a>            .values()
+<a href=#4052 id=4052 data-nosnippet>4052</a>            .flat_map(|v| v.iter().cloned())
+<a href=#4053 id=4053 data-nosnippet>4053</a>            .collect();
+<a href=#4054 id=4054 data-nosnippet>4054</a>        <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..<span class="number">2 </span>{
 <a href=#4055 id=4055 data-nosnippet>4055</a>            <span class="macro">assert!</span>(
-<a href=#4056 id=4056 data-nosnippet>4056</a>                names.contains(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"bidir_PAD[{}]__oe"</span>, idx)),
-<a href=#4057 id=4057 data-nosnippet>4057</a>                <span class="string">"missing bidir_PAD[{}]__oe in {:?}"</span>,
+<a href=#4056 id=4056 data-nosnippet>4056</a>                names.contains(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"bidir_PAD[{}]__out"</span>, idx)),
+<a href=#4057 id=4057 data-nosnippet>4057</a>                <span class="string">"missing bidir_PAD[{}]__out in {:?}"</span>,
 <a href=#4058 id=4058 data-nosnippet>4058</a>                idx,
 <a href=#4059 id=4059 data-nosnippet>4059</a>                names,
 <a href=#4060 id=4060 data-nosnippet>4060</a>            );
-<a href=#4061 id=4061 data-nosnippet>4061</a>        }
-<a href=#4062 id=4062 data-nosnippet>4062</a>    }
-<a href=#4063 id=4063 data-nosnippet>4063</a>
-<a href=#4064 id=4064 data-nosnippet>4064</a>    <span class="doccomment">/// `in_c` / `in_s` pads do NOT contribute extra observables — they
-<a href=#4065 id=4065 data-nosnippet>4065</a>    /// are input-only and have no `A`/`OE` pins to surface.
-<a href=#4066 id=4066 data-nosnippet>4066</a>    </span><span class="attr">#[test]
-<a href=#4067 id=4067 data-nosnippet>4067</a>    </span><span class="kw">fn </span>in_c_in_s_pads_emit_no_extra_observables() {
-<a href=#4068 id=4068 data-nosnippet>4068</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
-<a href=#4069 id=4069 data-nosnippet>4069</a>module top(clk_PAD, in_PAD, y0, y1);
-<a href=#4070 id=4070 data-nosnippet>4070</a>  inout clk_PAD;
-<a href=#4071 id=4071 data-nosnippet>4071</a>  inout in_PAD;
-<a href=#4072 id=4072 data-nosnippet>4072</a>  output y0, y1;
-<a href=#4073 id=4073 data-nosnippet>4073</a>  gf180mcu_fd_io__in_s clk_pad (.PAD(clk_PAD), .PU(1'b0), .PD(1'b0), .Y(y0));
-<a href=#4074 id=4074 data-nosnippet>4074</a>  gf180mcu_fd_io__in_c in_pad  (.PAD(in_PAD),  .PU(1'b0), .PD(1'b0), .Y(y1));
-<a href=#4075 id=4075 data-nosnippet>4075</a>endmodule
-<a href=#4076 id=4076 data-nosnippet>4076</a>"#</span>;
-<a href=#4077 id=4077 data-nosnippet>4077</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
-<a href=#4078 id=4078 data-nosnippet>4078</a>            VERILOG,
-<a href=#4079 id=4079 data-nosnippet>4079</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
-<a href=#4080 id=4080 data-nosnippet>4080</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
-<a href=#4081 id=4081 data-nosnippet>4081</a>        )
-<a href=#4082 id=4082 data-nosnippet>4082</a>        .expect(<span class="string">"netlist parse"</span>);
-<a href=#4083 id=4083 data-nosnippet>4083</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
-<a href=#4084 id=4084 data-nosnippet>4084</a>        <span class="macro">assert!</span>(
-<a href=#4085 id=4085 data-nosnippet>4085</a>            aig.extra_observable_names.is_empty(),
-<a href=#4086 id=4086 data-nosnippet>4086</a>            <span class="string">"in_c / in_s pads should not contribute extra observables; got {:?}"</span>,
-<a href=#4087 id=4087 data-nosnippet>4087</a>            aig.extra_observable_names,
-<a href=#4088 id=4088 data-nosnippet>4088</a>        );
-<a href=#4089 id=4089 data-nosnippet>4089</a>    }
-<a href=#4090 id=4090 data-nosnippet>4090</a>
-<a href=#4091 id=4091 data-nosnippet>4091</a>    <span class="doccomment">/// Regression: gf180mcu's `mux2` cell has a `S` select *input* port,
-<a href=#4092 id=4092 data-nosnippet>4092</a>    /// but the previous postprocess inputs-collection logic was
-<a href=#4093 id=4093 data-nosnippet>4093</a>    /// name-blacklisting `S` (assuming it was an adder's sum *output*).
-<a href=#4094 id=4094 data-nosnippet>4094</a>    /// That caused `decompose_with_pdk` to panic "Input pin 'S' not
-<a href=#4095 id=4095 data-nosnippet>4095</a>    /// provided" when constructing the AIG for any netlist containing
-<a href=#4096 id=4096 data-nosnippet>4096</a>    /// a mux2 — which is every real GF180MCU post-synthesis netlist.
-<a href=#4097 id=4097 data-nosnippet>4097</a>    /// Now we filter by `Direction::I` only and trust the pin table.
-<a href=#4098 id=4098 data-nosnippet>4098</a>    </span><span class="attr">#[test]
-<a href=#4099 id=4099 data-nosnippet>4099</a>    </span><span class="kw">fn </span>aig_builds_for_mux2_with_select_input() {
-<a href=#4100 id=4100 data-nosnippet>4100</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
-<a href=#4101 id=4101 data-nosnippet>4101</a>module top(a, b, sel, y);
-<a href=#4102 id=4102 data-nosnippet>4102</a>  input a, b, sel;
-<a href=#4103 id=4103 data-nosnippet>4103</a>  output y;
-<a href=#4104 id=4104 data-nosnippet>4104</a>  gf180mcu_fd_sc_mcu9t5v0__mux2_1 u1 (.I0(a), .I1(b), .S(sel), .Z(y));
-<a href=#4105 id=4105 data-nosnippet>4105</a>endmodule
-<a href=#4106 id=4106 data-nosnippet>4106</a>"#</span>;
-<a href=#4107 id=4107 data-nosnippet>4107</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
-<a href=#4108 id=4108 data-nosnippet>4108</a>            VERILOG,
-<a href=#4109 id=4109 data-nosnippet>4109</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
-<a href=#4110 id=4110 data-nosnippet>4110</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
-<a href=#4111 id=4111 data-nosnippet>4111</a>        )
-<a href=#4112 id=4112 data-nosnippet>4112</a>        .expect(<span class="string">"netlist parse"</span>);
-<a href=#4113 id=4113 data-nosnippet>4113</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
-<a href=#4114 id=4114 data-nosnippet>4114</a>        <span class="macro">assert!</span>(aig.num_aigpins &gt; <span class="number">0</span>, <span class="string">"AIG should have at least one pin"</span>);
-<a href=#4115 id=4115 data-nosnippet>4115</a>    }
-<a href=#4116 id=4116 data-nosnippet>4116</a>}
+<a href=#4061 id=4061 data-nosnippet>4061</a>            <span class="macro">assert!</span>(
+<a href=#4062 id=4062 data-nosnippet>4062</a>                names.contains(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"bidir_PAD[{}]__oe"</span>, idx)),
+<a href=#4063 id=4063 data-nosnippet>4063</a>                <span class="string">"missing bidir_PAD[{}]__oe in {:?}"</span>,
+<a href=#4064 id=4064 data-nosnippet>4064</a>                idx,
+<a href=#4065 id=4065 data-nosnippet>4065</a>                names,
+<a href=#4066 id=4066 data-nosnippet>4066</a>            );
+<a href=#4067 id=4067 data-nosnippet>4067</a>        }
+<a href=#4068 id=4068 data-nosnippet>4068</a>    }
+<a href=#4069 id=4069 data-nosnippet>4069</a>
+<a href=#4070 id=4070 data-nosnippet>4070</a>    <span class="doccomment">/// `in_c` / `in_s` pads do NOT contribute extra observables — they
+<a href=#4071 id=4071 data-nosnippet>4071</a>    /// are input-only and have no `A`/`OE` pins to surface.
+<a href=#4072 id=4072 data-nosnippet>4072</a>    </span><span class="attr">#[test]
+<a href=#4073 id=4073 data-nosnippet>4073</a>    </span><span class="kw">fn </span>in_c_in_s_pads_emit_no_extra_observables() {
+<a href=#4074 id=4074 data-nosnippet>4074</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
+<a href=#4075 id=4075 data-nosnippet>4075</a>module top(clk_PAD, in_PAD, y0, y1);
+<a href=#4076 id=4076 data-nosnippet>4076</a>  inout clk_PAD;
+<a href=#4077 id=4077 data-nosnippet>4077</a>  inout in_PAD;
+<a href=#4078 id=4078 data-nosnippet>4078</a>  output y0, y1;
+<a href=#4079 id=4079 data-nosnippet>4079</a>  gf180mcu_fd_io__in_s clk_pad (.PAD(clk_PAD), .PU(1'b0), .PD(1'b0), .Y(y0));
+<a href=#4080 id=4080 data-nosnippet>4080</a>  gf180mcu_fd_io__in_c in_pad  (.PAD(in_PAD),  .PU(1'b0), .PD(1'b0), .Y(y1));
+<a href=#4081 id=4081 data-nosnippet>4081</a>endmodule
+<a href=#4082 id=4082 data-nosnippet>4082</a>"#</span>;
+<a href=#4083 id=4083 data-nosnippet>4083</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
+<a href=#4084 id=4084 data-nosnippet>4084</a>            VERILOG,
+<a href=#4085 id=4085 data-nosnippet>4085</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
+<a href=#4086 id=4086 data-nosnippet>4086</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
+<a href=#4087 id=4087 data-nosnippet>4087</a>        )
+<a href=#4088 id=4088 data-nosnippet>4088</a>        .expect(<span class="string">"netlist parse"</span>);
+<a href=#4089 id=4089 data-nosnippet>4089</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
+<a href=#4090 id=4090 data-nosnippet>4090</a>        <span class="macro">assert!</span>(
+<a href=#4091 id=4091 data-nosnippet>4091</a>            aig.extra_observable_names.is_empty(),
+<a href=#4092 id=4092 data-nosnippet>4092</a>            <span class="string">"in_c / in_s pads should not contribute extra observables; got {:?}"</span>,
+<a href=#4093 id=4093 data-nosnippet>4093</a>            aig.extra_observable_names,
+<a href=#4094 id=4094 data-nosnippet>4094</a>        );
+<a href=#4095 id=4095 data-nosnippet>4095</a>    }
+<a href=#4096 id=4096 data-nosnippet>4096</a>
+<a href=#4097 id=4097 data-nosnippet>4097</a>    <span class="doccomment">/// Regression: gf180mcu's `mux2` cell has a `S` select *input* port,
+<a href=#4098 id=4098 data-nosnippet>4098</a>    /// but the previous postprocess inputs-collection logic was
+<a href=#4099 id=4099 data-nosnippet>4099</a>    /// name-blacklisting `S` (assuming it was an adder's sum *output*).
+<a href=#4100 id=4100 data-nosnippet>4100</a>    /// That caused `decompose_with_pdk` to panic "Input pin 'S' not
+<a href=#4101 id=4101 data-nosnippet>4101</a>    /// provided" when constructing the AIG for any netlist containing
+<a href=#4102 id=4102 data-nosnippet>4102</a>    /// a mux2 — which is every real GF180MCU post-synthesis netlist.
+<a href=#4103 id=4103 data-nosnippet>4103</a>    /// Now we filter by `Direction::I` only and trust the pin table.
+<a href=#4104 id=4104 data-nosnippet>4104</a>    </span><span class="attr">#[test]
+<a href=#4105 id=4105 data-nosnippet>4105</a>    </span><span class="kw">fn </span>aig_builds_for_mux2_with_select_input() {
+<a href=#4106 id=4106 data-nosnippet>4106</a>        <span class="kw">const </span>VERILOG: <span class="kw-2">&amp;</span>str = <span class="string">r#"
+<a href=#4107 id=4107 data-nosnippet>4107</a>module top(a, b, sel, y);
+<a href=#4108 id=4108 data-nosnippet>4108</a>  input a, b, sel;
+<a href=#4109 id=4109 data-nosnippet>4109</a>  output y;
+<a href=#4110 id=4110 data-nosnippet>4110</a>  gf180mcu_fd_sc_mcu9t5v0__mux2_1 u1 (.I0(a), .I1(b), .S(sel), .Z(y));
+<a href=#4111 id=4111 data-nosnippet>4111</a>endmodule
+<a href=#4112 id=4112 data-nosnippet>4112</a>"#</span>;
+<a href=#4113 id=4113 data-nosnippet>4113</a>        <span class="kw">let </span>nl = netlistdb::NetlistDB::from_sverilog_source(
+<a href=#4114 id=4114 data-nosnippet>4114</a>            VERILOG,
+<a href=#4115 id=4115 data-nosnippet>4115</a>            <span class="prelude-val">Some</span>(<span class="string">"top"</span>),
+<a href=#4116 id=4116 data-nosnippet>4116</a>            <span class="kw-2">&amp;</span>GF180MCULeafPins,
+<a href=#4117 id=4117 data-nosnippet>4117</a>        )
+<a href=#4118 id=4118 data-nosnippet>4118</a>        .expect(<span class="string">"netlist parse"</span>);
+<a href=#4119 id=4119 data-nosnippet>4119</a>        <span class="kw">let </span>aig = AIG::from_netlistdb(<span class="kw-2">&amp;</span>nl);
+<a href=#4120 id=4120 data-nosnippet>4120</a>        <span class="macro">assert!</span>(aig.num_aigpins &gt; <span class="number">0</span>, <span class="string">"AIG should have at least one pin"</span>);
+<a href=#4121 id=4121 data-nosnippet>4121</a>    }
+<a href=#4122 id=4122 data-nosnippet>4122</a>}
 </code></pre></div></section></main></body></html>
