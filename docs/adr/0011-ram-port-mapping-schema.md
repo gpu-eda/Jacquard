@@ -1,6 +1,6 @@
 # ADR 0011 — RAM port-mapping schema for declarative cell metadata
 
-**Status:** Proposed.
+**Status:** Accepted.
 
 ## Context
 

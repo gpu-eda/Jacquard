@@ -1,16 +1,32 @@
-# Declarative cell metadata — Tier 1 + minimal Tier 2
+# Declarative cell metadata — Tier 1 + minimal Tier 2 + port mapping
 
-**Status:** Active.
-**ADR:** [0010 — Declarative cell metadata for PDK enablement](../adr/0010-declarative-cell-metadata.md).
-**Issue:** [#67](https://github.com/ChipFlow/Jacquard/issues/67).
-**Driving design:** a downstream wafer.space tapeout's `chip_top.pnl.v`, blocked on `gf180mcu_ocd_ip_sram__sram1024x8m8wm1`.
+**Status:** Implemented — historical record. Tier 1, minimal Tier 2,
+and the port-mapping schema have all landed.
+**ADRs:**
+- [0010 — Declarative cell metadata for PDK enablement](../adr/0010-declarative-cell-metadata.md)
+  (Tier 1 + minimal Tier 2)
+- [0011 — RAM port-mapping schema](../adr/0011-ram-port-mapping-schema.md)
+  (the port-mapping extension originally deferred by ADR 0010)
+**Issues:** [#67](https://github.com/ChipFlow/Jacquard/issues/67),
+[#80](https://github.com/ChipFlow/Jacquard/issues/80).
+**Driving designs:** the wafer.space `chip_top.pnl.v` blocked on
+`gf180mcu_ocd_ip_sram__sram1024x8m8wm1`, then the JTAG-DM workflow
+in PR #78 surfacing the need for real RAM backing storage.
 
-## Scope
+## Scope (as shipped)
 
-One slice — Tier 1 + minimal Tier 2 — sufficient to unblock the
-OCD SRAM case in the driving wafer.space tapeout. Port-mapping schema is **out of scope**;
-it gets its own ADR after this lands and we have real adoption
-data.
+Originally scoped to one slice (Tier 1 + minimal Tier 2 — opaque
+`kind = "ram"` with no port resolution). Expanded mid-flight when
+the JTAG-DM workflow (PR #78) surfaced the need for explicit-port
+RAMs with real backing storage:
+
+- **Tier 1**: `--cell-library` + sverilogparse-backed pin tables
+  (landed 2026-05-19 in PR #65/#68).
+- **Tier 2 minimal**: `kind` discriminator in TOML, opaque-RAM
+  mode (landed alongside Tier 1).
+- **Port-mapping schema** (ADR 0011, v1.1): `[cells.NAME.ram]`
+  sub-table for explicit-port RAMs with backing storage. Landed
+  in this PR alongside `SramInitConfig` ELF preload (closes #80).
 
 ## Deliverables
 
