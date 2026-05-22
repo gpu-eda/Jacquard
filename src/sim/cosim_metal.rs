@@ -2199,6 +2199,31 @@ pub fn run_cosim(
         )
     };
     sram_data.fill(0);
+
+    // SRAM preload (issue #80, ADR 0011 § "SRAM preload"). When
+    // `sim_config.json` declares `sram_init`, parse the named ELF
+    // file's PT_LOAD segments and pack them into the design's
+    // single SRAM's backing region before the kernel launches.
+    // Multi-SRAM preload is gated on a future schema extension —
+    // errors cleanly today.
+    if let Some(sram_init) = config.sram_init.as_ref() {
+        let elf_path = std::path::Path::new(&sram_init.elf_path);
+        let chunks = crate::sim::sram_preload::parse_elf_chunks(elf_path)
+            .unwrap_or_else(|e| panic!("sram_init: {e}"));
+        let (cellid, storage_offset) =
+            crate::sim::sram_preload::resolve_single_sram(&script.sram_cell_storage_offsets)
+                .unwrap_or_else(|e| panic!("sram_init: {e}"));
+        let total_bytes: usize = chunks.iter().map(|c| c.bytes.len()).sum();
+        crate::sim::sram_preload::apply_chunks(sram_data, storage_offset, &chunks)
+            .unwrap_or_else(|e| panic!("sram_init: {e}"));
+        clilog::info!(
+            "SRAM preload: {} bytes from {} → cell {} at storage offset {}",
+            total_bytes,
+            elf_path.display(),
+            cellid,
+            storage_offset
+        );
+    }
     let _ = sram_data;
 
     // Initialize: set reset active
