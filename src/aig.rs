@@ -2301,6 +2301,117 @@ impl AIG {
                 }
 
                 *aig.srams.get_mut(&cellid).unwrap() = sram;
+            } else if cell_library
+                .and_then(|lib| lib.lookup_ram_ports(celltype))
+                .is_some()
+            {
+                // Explicit-port RAM declared via the cell-library manifest
+                // (ADR 0011). The Visit phase already populated
+                // `srams[cellid].port_r_rd_data` for this cell's output
+                // pins (via the existing kind=ram path inherited from
+                // ADR 0010's opaque mode). Here we walk the cell's
+                // input pins per the manifest schema, populate the
+                // RAMBlock's port_r_*/port_w_* arrays, and combine
+                // chip_enable / write_enable / write_mask polarities
+                // into the effective per-bit write-enable.
+                let ram_ports = cell_library
+                    .and_then(|lib| lib.lookup_ram_ports(celltype))
+                    .unwrap();
+                let mut sram = aig.srams.entry(cellid).or_default().clone();
+                // Helper: apply active-low → invert, active-high → pass-through.
+                use crate::cell_library::Polarity;
+                let polarised = |pin_iv: usize, polarity: Polarity| -> usize {
+                    match polarity {
+                        Polarity::High => pin_iv,
+                        Polarity::Low => pin_iv ^ 1,
+                    }
+                };
+                let mut clken_iv: usize = 0;
+                // ce_active / we_global_active default to "always
+                // active" (logic-1 = aigpin 0 with inversion bit set,
+                // i.e. iv=1) when the schema omits the control.
+                let mut ce_active_iv: usize = 1; // tied-high (active)
+                let mut we_global_active_iv: usize = 1; // tied-high (active)
+                let mut we_mask_active_iv: [usize; 32] = [1; 32]; // tied-high per bit
+                for pinid in netlistdb.cell2pin.iter_set(cellid) {
+                    let pin_name = netlistdb.pinnames[pinid].1.as_str();
+                    let bit = netlistdb.pinnames[pinid].2.map(|i| i as usize);
+                    let pin_iv = aig.pin2aigpin_iv[pinid];
+                    if pin_name == ram_ports.clock.pin {
+                        // ClockEdge::Neg flips the start polarity so the
+                        // inferred signal is the falling-edge tracker.
+                        let is_negedge =
+                            ram_ports.clock.edge == crate::cell_library::ClockEdge::Neg;
+                        clken_iv = aig
+                            .trace_clock_pin(netlistdb, pinid, is_negedge, false)
+                            .unwrap();
+                    } else if let Some(ce) = &ram_ports.chip_enable {
+                        if pin_name == ce.pin {
+                            ce_active_iv = polarised(pin_iv, ce.polarity);
+                            continue;
+                        }
+                    }
+                    if let Some(we) = &ram_ports.write_enable {
+                        if pin_name == we.pin {
+                            we_global_active_iv = polarised(pin_iv, we.polarity);
+                            continue;
+                        }
+                    }
+                    if let Some(wm) = &ram_ports.write_mask {
+                        if pin_name == wm.pin {
+                            let idx = bit.unwrap_or(0);
+                            if idx < we_mask_active_iv.len() {
+                                we_mask_active_iv[idx] = polarised(pin_iv, wm.polarity);
+                            }
+                            continue;
+                        }
+                    }
+                    if pin_name == ram_ports.address {
+                        let idx = bit.unwrap_or(0);
+                        if idx < sram.port_r_addr_iv.len() {
+                            // 1RW sync SRAM shares the address bus
+                            // between read and write ports.
+                            sram.port_r_addr_iv[idx] = pin_iv;
+                            sram.port_w_addr_iv[idx] = pin_iv;
+                        }
+                    } else if pin_name == ram_ports.data_in {
+                        let idx = bit.unwrap_or(0);
+                        if idx < sram.port_w_wr_data_iv.len() {
+                            sram.port_w_wr_data_iv[idx] = pin_iv;
+                        }
+                    }
+                    // `data_out` pins were claimed in the Visit phase
+                    // via DriverType::SRAM(cellid); no second-pass work.
+                }
+                // Compose effective per-bit write-enable. For each
+                // bit i: wr_en[i] = clken & ce_active & we_global &
+                // we_mask[i]. The Visit-phase code allocates
+                // port_r_rd_data slots only for bits that exist on
+                // the cell (the rest stay 0); apply the same width
+                // gate here so we don't compose enables for bits
+                // beyond the cell's actual width.
+                let data_width = ram_ports.width as usize;
+                let clken_ce = aig.add_and_gate(clken_iv, ce_active_iv);
+                let clken_ce_we = aig.add_and_gate(clken_ce, we_global_active_iv);
+                for i in 0..data_width.min(sram.port_w_wr_en_iv.len()) {
+                    sram.port_w_wr_en_iv[i] =
+                        aig.add_and_gate(clken_ce_we, we_mask_active_iv[i]);
+                }
+                // Read enable: clken & ce_active & NOT we_global. For
+                // the OCD SRAM that's `clken & !CEN & GWEN`. For SRAMs
+                // without a global write_enable, NOT we_global is
+                // logic-0 (= aigpin 0 with inv=1, iv=1; XOR 1 = 0).
+                // Wait — we_global_active defaults to iv=1 (always
+                // active) when the schema omits write_enable, which
+                // would make read-enable = 0. That's wrong: schemas
+                // without write_enable should always read. So gate on
+                // schema presence.
+                sram.port_r_en_iv = if ram_ports.write_enable.is_some() {
+                    aig.add_and_gate(clken_ce, we_global_active_iv ^ 1)
+                } else {
+                    clken_ce
+                };
+                *aig.srams.get_mut(&cellid).unwrap() = sram;
             } else if netlistdb.celltypes[cellid].as_str() == "GEM_ASSERT" {
                 // Parse GEM_ASSERT cells for assertion checking
                 // GEM_ASSERT has: CLK (trigger), EN (enable), A (condition)
@@ -3526,6 +3637,161 @@ endmodule
 
         // The cell origin is recorded with the manifest-declared name.
         let _ = cellid; // future check: hierarchical instance path
+    }
+
+    /// ADR 0011: a `kind = "ram"` cell with an explicit
+    /// `[cells.NAME.ram]` port-mapping sub-table promotes from
+    /// opaque mode (outputs as X-source, no backing storage) to
+    /// explicit mode — the `RAMBlock` ends up with real port_r_*/
+    /// port_w_* arrays populated from resolved pin positions, so
+    /// the simulator's GPU-side SRAM machinery handles reads,
+    /// writes, and per-entry backing memory.
+    ///
+    /// Worked example: OCD GF180MCU SRAM blackbox shape (active-low
+    /// CEN/GWEN/WEN, 10-bit address, 8-bit data). Asserts the
+    /// resulting RAMBlock has all expected slots populated.
+    #[test]
+    fn test_explicit_port_ram_end_to_end() {
+        use crate::cell_library::RuntimeCellLibrary;
+
+        // Matches the OCD GF180MCU SRAM port list (ANSI form,
+        // post-#69; (* blackbox *) attribute included to confirm
+        // the parser handles it).
+        const OCD_SRAM_BLACKBOX: &str = "\
+(* blackbox *)
+module gf180mcu_ocd_ip_sram__sram1024x8m8wm1 (
+  input         CLK,
+  input         CEN,
+  input         GWEN,
+  input  [7:0]  WEN,
+  input  [9:0]  A,
+  input  [7:0]  D,
+  output [7:0]  Q
+);
+endmodule
+";
+
+        // Tiny top: one SRAM instance + a flip-flop on CLK so
+        // `trace_clock_pin` has something to walk back to. The
+        // CLK / control / address / data signals are primary
+        // inputs; Q is a primary output.
+        const TOP_VERILOG: &str = "\
+module top(clk, cen, gwen, wen, a, d, q, q_ff);
+  input clk, cen, gwen;
+  input [7:0] wen;
+  input [9:0] a;
+  input [7:0] d;
+  output [7:0] q;
+  output q_ff;
+  wire q_internal;
+  gf180mcu_ocd_ip_sram__sram1024x8m8wm1 u_sram (
+    .CLK(clk), .CEN(cen), .GWEN(gwen),
+    .WEN(wen), .A(a), .D(d), .Q(q)
+  );
+  // Trivial DFF so the design has a sequential element clocked by
+  // the same CLK — gives the AIG something to topologically anchor.
+  DFF u_dff(.D(cen), .CLK(clk), .Q(q_ff));
+endmodule
+";
+
+        // Capture the design's pin set BEFORE building the runtime
+        // library — we want it to be supplied by the manifest, not
+        // the design itself. (TOP_VERILOG's own declarations are
+        // sufficient for the top module; only the SRAM blackbox
+        // needs library lookup.)
+        let dir = tempfile::TempDir::new().unwrap();
+        let lib_path = dir.path().join("ocd_sram.v");
+        std::fs::write(&lib_path, OCD_SRAM_BLACKBOX).unwrap();
+        std::fs::write(
+            dir.path().join("ocd_sram.cells.toml"),
+            "\
+schema_version = \"1.1\"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]
+kind = \"ram\"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1.ram]
+depth = 1024
+width = 8
+clock        = { pin = \"CLK\", edge = \"pos\" }
+chip_enable  = { pin = \"CEN\", polarity = \"low\" }
+write_enable = { pin = \"GWEN\", polarity = \"low\" }
+write_mask   = { pin = \"WEN\", polarity = \"low\", granularity = \"bit\" }
+address      = \"A\"
+data_in      = \"D\"
+data_out     = \"Q\"
+",
+        )
+        .unwrap();
+
+        let runtime_lib = RuntimeCellLibrary::from_files(&[lib_path]).unwrap();
+
+        // Sanity: schema parsed.
+        let ports = runtime_lib
+            .lookup_ram_ports("gf180mcu_ocd_ip_sram__sram1024x8m8wm1")
+            .expect("ram port map should be present after manifest load");
+        assert_eq!(ports.depth, 1024);
+        assert_eq!(ports.width, 8);
+
+        // Fallback provider: the AIGPDK provider knows about DFF;
+        // everything else falls through to the runtime library.
+        let fallback = crate::aigpdk::AIGPDKLeafPins();
+        let provider = crate::cell_library::ChainedPinProvider {
+            runtime: &runtime_lib,
+            fallback: &fallback,
+        };
+
+        let nl = netlistdb::NetlistDB::from_sverilog_source(
+            TOP_VERILOG,
+            Some("top"),
+            &provider,
+        )
+        .expect("netlist parse");
+        let aig = AIG::from_netlistdb_with_cells(&nl, Some(&runtime_lib));
+
+        // Find the SRAM's RAMBlock entry.
+        let (_, ram) = aig
+            .srams
+            .iter()
+            .next()
+            .expect("SRAM RAMBlock should be allocated");
+
+        // Q[7:0] → port_r_rd_data[0..8] populated by Visit phase.
+        let populated_q = ram.port_r_rd_data.iter().filter(|&&p| p != 0).count();
+        assert_eq!(populated_q, 8, "expected 8 populated Q slots, got {populated_q}");
+
+        // A[9:0] → port_r_addr_iv[0..10] and port_w_addr_iv[0..10]
+        // populated by the explicit-port second-pass.
+        let populated_a_r = ram.port_r_addr_iv.iter().filter(|&&p| p != 0).count();
+        let populated_a_w = ram.port_w_addr_iv.iter().filter(|&&p| p != 0).count();
+        assert_eq!(populated_a_r, 10, "expected 10 read-addr slots populated");
+        assert_eq!(populated_a_w, 10, "expected 10 write-addr slots populated");
+
+        // D[7:0] → port_w_wr_data_iv[0..8] populated.
+        let populated_d = ram.port_w_wr_data_iv.iter().filter(|&&p| p != 0).count();
+        assert_eq!(populated_d, 8);
+
+        // port_w_wr_en_iv[0..8] composed from clken & !CEN & !GWEN &
+        // !WEN[i] — each slot should be non-zero (i.e. an actual
+        // AIG-pin index for the AND-gate output, not a constant).
+        for i in 0..8 {
+            assert!(
+                ram.port_w_wr_en_iv[i] != 0,
+                "wr_en_iv[{i}] should be a composed AIG pin, got 0"
+            );
+        }
+        // Bits 8..32 are not declared by the schema; should stay zero.
+        for i in 8..32 {
+            assert_eq!(ram.port_w_wr_en_iv[i], 0, "wr_en_iv[{i}] should stay 0");
+        }
+
+        // port_r_en_iv composed from clken & !CEN & GWEN (NOT
+        // write_enable_active). Should be non-zero.
+        assert!(
+            ram.port_r_en_iv != 0,
+            "port_r_en_iv should be a composed AIG pin, got 0"
+        );
+
     }
 
     #[test]
