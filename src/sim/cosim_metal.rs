@@ -15,7 +15,7 @@ use metal::{
     CommandQueue, ComputePipelineState, Device as MTLDevice, MTLResourceOptions, MTLSize,
     SharedEvent,
 };
-use netlistdb::{GeneralPinName, NetlistDB};
+use netlistdb::{Direction, GeneralPinName, NetlistDB};
 use ulib::{AsUPtr, Device};
 
 /// Runtime options for co-simulation.
@@ -1003,6 +1003,21 @@ pub(crate) fn build_gpio_mapping(
         }
     }
 
+    // Reverse-lookup map for extra observables: name → aigpin. Used
+    // below to resolve top-level `inout` ports — those have
+    // Direction::Unknown so they don't appear in output_map under
+    // their own name, but the AIG-side bidir-pad observability code
+    // (see `aig.rs::resolve_bi_24t_observable_base`) registers the
+    // core-drive-out aigpin under the synthetic `<port>__out` name.
+    // Looking that up gives peripheral observers (UART RX decoder,
+    // GPIO output watchers) the right signal. See #79.
+    let mut extra_observable_by_name: HashMap<String, usize> = HashMap::new();
+    for (&aigpin, names) in aig.extra_observable_names.iter() {
+        for name in names {
+            extra_observable_by_name.insert(name.clone(), aigpin);
+        }
+    }
+
     // Map output ports → state buffer positions
     for i in netlistdb.cell2pin.iter_set(0) {
         let pin_name = netlistdb.pinnames[i].dbg_fmt_pin();
@@ -1012,7 +1027,29 @@ pub(crate) fn build_gpio_mapping(
             .copied()
             .or_else(|| parse_gpio_index(&pin_name, "gpio_out"));
         if let Some(gpio_idx) = gpio_idx {
-            let aigpin_iv = aig.pin2aigpin_iv[i];
+            let mut aigpin_iv = aig.pin2aigpin_iv[i];
+            // Top-level inout: pin2aigpin_iv stays usize::MAX (the
+            // port has Direction::Unknown so the AIG builder never
+            // wires it as an InputPort or output driver). Recover
+            // by consulting the bidir-pad observability table — for
+            // any wafer.space-style `bi_24t` pad on this net, the
+            // core-side `A` aigpin is registered as `<pin>__out`.
+            if netlistdb.pindirect[i] == Direction::Unknown
+                && aigpin_iv == usize::MAX
+            {
+                let synth_name = format!("{pin_name}__out");
+                if let Some(&aigpin) = extra_observable_by_name.get(&synth_name) {
+                    aigpin_iv = aigpin;
+                    clilog::debug!(
+                        "output[{}] inout pin '{}' resolved via bidir-pad \
+                         observable '{}' → aigpin {}",
+                        gpio_idx,
+                        pin_name,
+                        synth_name,
+                        aigpin
+                    );
+                }
+            }
             if aigpin_iv == usize::MAX {
                 clilog::info!(
                     "output[{}] pin '{}' has no AIG connection (usize::MAX)",
