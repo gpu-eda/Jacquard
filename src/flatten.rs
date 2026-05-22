@@ -262,6 +262,13 @@ pub struct FlattenedScriptV1 {
     pub reg_io_state_size: u32,
     /// the u32 array length for storing SRAMs.
     pub sram_storage_size: u32,
+    /// `cellid → offset` (in u32 entries) where the SRAM's backing
+    /// storage begins inside the `sram_storage` buffer. Used by
+    /// `SramInitConfig` preload to write ELF segment bytes into the
+    /// right region at tick 0. Each SRAM occupies
+    /// `1 << AIGPDK_SRAM_ADDR_WIDTH` u32 entries from its offset.
+    /// See ADR 0011 § "SRAM preload" and issue #80.
+    pub sram_cell_storage_offsets: IndexMap<usize, u32>,
     /// expected input AIG pins layout
     pub input_layout: Vec<usize>,
     /// maps from primary outputs, FF:D and SRAM:PORT_R_RD_DATA AIG pins
@@ -1163,6 +1170,15 @@ fn build_flattened_script_v1(
     }
     let mut sum_state_start = states_start;
     let mut sum_srams_start = 0;
+    // Maps cellid → SRAM backing-storage offset (in u32 entries).
+    // Populated as partitions get their `sram_start` assigned and
+    // their endpoints walked for RAMBlock membership. Carried out
+    // on the final FlattenedScriptV1 for use by SramInitConfig
+    // preload (issue #80). Insertion order matches block-affinity
+    // order, mirroring how SRAMs land in storage.
+    let mut sram_cell_storage_offsets: IndexMap<usize, u32> = IndexMap::new();
+    let aig_po_len = aig.primary_outputs.len();
+    let aig_dff_len = aig.dffs.len();
 
     // enumerate all major stages and build them one by one.
 
@@ -1235,6 +1251,29 @@ fn build_flattened_script_v1(
                 flattening_parts[part_id].sram_start = sum_srams_start;
                 sum_srams_start +=
                     flattening_parts[part_id].num_srams * (1 << AIGPDK_SRAM_ADDR_WIDTH);
+                // Map each RAMBlock endpoint in this partition to its
+                // backing-storage offset. cellid comes from indexing
+                // `aig.srams` at the endpoint's position within the
+                // SRAM range. Mirror the per-partition `cur_sram_id`
+                // walk that `init_writeout_perms` does later (see the
+                // RAMBlock arm at the `for &endpt_i in &part.endpoints`
+                // loop) — same iteration order, same offset arithmetic.
+                if flattening_parts[part_id].num_srams > 0 {
+                    let part_sram_start = flattening_parts[part_id].sram_start;
+                    let mut cur_sram_id: u32 = 0;
+                    for &endpt_i in &init_parts[part_id].endpoints {
+                        if let EndpointGroup::RAMBlock(_) =
+                            staged.get_endpoint_group(aig, endpt_i)
+                        {
+                            let sram_pos = endpt_i - aig_po_len - aig_dff_len;
+                            let cellid = *aig.srams.get_index(sram_pos).unwrap().0;
+                            let offset = part_sram_start
+                                + cur_sram_id * (1 << AIGPDK_SRAM_ADDR_WIDTH);
+                            sram_cell_storage_offsets.insert(cellid, offset);
+                            cur_sram_id += 1;
+                        }
+                    }
+                }
             }
         }
 
@@ -1510,6 +1549,7 @@ fn build_flattened_script_v1(
         blocks_data: blocks_data.into(),
         reg_io_state_size: sum_state_start,
         sram_storage_size: sum_srams_start,
+        sram_cell_storage_offsets,
         input_layout,
         input_map,
         output_map,
@@ -2295,6 +2335,7 @@ mod ir_delay_tests {
             blocks_data: Vec::<u32>::new().into(),
             reg_io_state_size: 0,
             sram_storage_size: 0,
+            sram_cell_storage_offsets: indexmap::IndexMap::new(),
             input_layout: Vec::new(),
             output_map: IndexMap::new(),
             input_map: IndexMap::new(),
@@ -2803,6 +2844,7 @@ mod ir_delay_tests {
             blocks_data: vec![0u32; blocks_data_size].into(),
             reg_io_state_size: 0,
             sram_storage_size: 0,
+            sram_cell_storage_offsets: indexmap::IndexMap::new(),
             input_layout: Vec::new(),
             output_map: IndexMap::new(),
             input_map: IndexMap::new(),
@@ -2903,6 +2945,7 @@ mod constraint_buffer_tests {
             blocks_data: Vec::<u32>::new().into(),
             reg_io_state_size,
             sram_storage_size: 0,
+            sram_cell_storage_offsets: indexmap::IndexMap::new(),
             input_layout: Vec::new(),
             output_map: IndexMap::new(),
             input_map: IndexMap::new(),
@@ -3336,6 +3379,7 @@ mod xprop_tests {
             blocks_data: Vec::<u32>::new().into(),
             reg_io_state_size: rio,
             sram_storage_size: 0,
+            sram_cell_storage_offsets: indexmap::IndexMap::new(),
             input_layout: Vec::new(),
             output_map: IndexMap::new(),
             input_map: IndexMap::new(),
