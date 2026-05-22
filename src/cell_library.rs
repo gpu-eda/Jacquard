@@ -80,7 +80,7 @@ pub enum CellKind {
     TieLow,
 }
 
-/// Top-level TOML manifest schema (v1.0).
+/// Top-level TOML manifest schema (v1.0 / v1.1).
 ///
 /// ```toml
 /// schema_version = "1.0"
@@ -88,6 +88,9 @@ pub enum CellKind {
 /// [cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]
 /// kind = "ram"
 /// ```
+///
+/// v1.1 adds the optional `ram` sub-table on `kind = "ram"` cells —
+/// see [`RamPortMap`] and [ADR 0011](../../docs/adr/0011-ram-port-mapping-schema.md).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ManifestFile {
     pub schema_version: String,
@@ -95,11 +98,101 @@ pub struct ManifestFile {
     pub cells: HashMap<String, CellEntry>,
 }
 
-/// Per-cell manifest entry. In v1.0 the only field is `kind`; future
-/// schema versions add `ports = { ... }` and similar.
+/// Per-cell manifest entry. v1.0 only had `kind`; v1.1 adds the
+/// optional `ram` port-mapping sub-table for cells with
+/// `kind = "ram"`. Cells declaring `ram` are promoted from opaque
+/// mode (outputs as X-source) to explicit mode (real backing
+/// storage, writes populate, reads return what was written).
 #[derive(Debug, Clone, Deserialize)]
 pub struct CellEntry {
     pub kind: CellKind,
+    /// RAM port mapping. Only meaningful when `kind == CellKind::Ram`.
+    /// Omitted → opaque mode (ADR 0010 v1.0 semantics).
+    #[serde(default)]
+    pub ram: Option<RamPortMap>,
+}
+
+/// RAM port-mapping schema (ADR 0011 v1.1).
+///
+/// All pin names are matched against the cell's Verilog port list.
+/// Bus widths are read from the Verilog (via `sverilogparse`) — not
+/// re-declared here.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RamPortMap {
+    /// Number of addressable entries. Must be ≤ 2^AIGPDK_SRAM_ADDR_WIDTH.
+    pub depth: usize,
+    /// Bit-width of each entry. 1..=32.
+    pub width: u8,
+    /// Clock pin spec.
+    pub clock: ClockPin,
+    /// Chip enable. Omit for sync SRAMs that are always-enabled.
+    #[serde(default)]
+    pub chip_enable: Option<EnablePin>,
+    /// Global write enable — gates all writes regardless of mask.
+    /// Omit for SRAMs without a global write-enable.
+    #[serde(default)]
+    pub write_enable: Option<EnablePin>,
+    /// Per-bit / per-byte write mask. Omit for SRAMs without per-bit
+    /// masking — global `write_enable` then controls the whole word.
+    #[serde(default)]
+    pub write_mask: Option<WriteMaskPin>,
+    /// Address pin name (single string — bus width derives from Verilog).
+    pub address: String,
+    /// Data-in pin name.
+    pub data_in: String,
+    /// Data-out pin name.
+    pub data_out: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClockPin {
+    pub pin: String,
+    #[serde(default)]
+    pub edge: ClockEdge,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClockEdge {
+    #[default]
+    Pos,
+    Neg,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct EnablePin {
+    pub pin: String,
+    #[serde(default)]
+    pub polarity: Polarity,
+}
+
+/// Polarity of an active control pin. Defaults to `Low` —
+/// dominant convention across foundry SRAM IP (CEN, GWEN, WEN[]
+/// all active-low on the OCD GF180MCU SRAM, the OpenRAM SkyWater
+/// generators, the Synopsys SRAM compiler outputs).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Polarity {
+    High,
+    #[default]
+    Low,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WriteMaskPin {
+    pub pin: String,
+    #[serde(default)]
+    pub polarity: Polarity,
+    #[serde(default)]
+    pub granularity: MaskGranularity,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MaskGranularity {
+    #[default]
+    Bit,
+    Byte,
 }
 
 /// Runtime cell-library data — pin tables parsed from user-supplied
@@ -116,6 +209,10 @@ pub struct RuntimeCellLibrary {
     /// `macro_name → CellKind`. Populated from manifest TOML files;
     /// pins-only entries (no manifest sibling) leave the kind unset.
     kinds: HashMap<CompactString, CellKind>,
+    /// `macro_name → RamPortMap` for cells with an explicit `ram`
+    /// sub-table (ADR 0011). Cells with `kind = "ram"` but no entry
+    /// here fall back to opaque mode (ADR 0010 v1.0 semantics).
+    ram_ports: HashMap<CompactString, RamPortMap>,
 }
 
 /// Direction + optional bus width for a single pin on a runtime cell.
@@ -144,6 +241,13 @@ pub enum LoadError {
         path: PathBuf,
         found: String,
     },
+    /// Manifest internally inconsistent — e.g. a `ram` block on a
+    /// non-RAM cell, or a width/granularity that the schema can't
+    /// represent (ADR 0011).
+    SchemaMismatch {
+        path: PathBuf,
+        message: String,
+    },
 }
 
 impl std::fmt::Display for LoadError {
@@ -161,9 +265,12 @@ impl std::fmt::Display for LoadError {
             LoadError::UnsupportedSchemaVersion { path, found } => write!(
                 f,
                 "manifest {} declares schema_version = \"{found}\" — \
-                 only \"1.0\" is supported in this build",
+                 only \"1.0\" / \"1.1\" supported in this build",
                 path.display()
             ),
+            LoadError::SchemaMismatch { path, message } => {
+                write!(f, "manifest {}: {message}", path.display())
+            }
         }
     }
 }
@@ -254,7 +361,10 @@ impl RuntimeCellLibrary {
                 path: path.to_path_buf(),
                 err,
             })?;
-        if parsed.schema_version != "1.0" {
+        // v1.0 accepts only `kind`; v1.1 additionally accepts the
+        // `ram` sub-table (ADR 0011). Both versions are additive —
+        // v1.1 loaders parse v1.0 manifests cleanly.
+        if !matches!(parsed.schema_version.as_str(), "1.0" | "1.1") {
             return Err(LoadError::UnsupportedSchemaVersion {
                 path: path.to_path_buf(),
                 found: parsed.schema_version,
@@ -268,7 +378,20 @@ impl RuntimeCellLibrary {
                     path.display()
                 );
             }
-            self.kinds.insert(key, entry.kind);
+            self.kinds.insert(key.clone(), entry.kind);
+            if let Some(ram) = entry.ram {
+                if entry.kind != CellKind::Ram {
+                    return Err(LoadError::SchemaMismatch {
+                        path: path.to_path_buf(),
+                        message: format!(
+                            "cell `{key}` has a `ram` block but kind = `{:?}`; \
+                             `ram` is only valid for kind = \"ram\"",
+                            entry.kind
+                        ),
+                    });
+                }
+                self.ram_ports.insert(key, ram);
+            }
         }
         Ok(())
     }
@@ -315,6 +438,14 @@ impl RuntimeCellLibrary {
     /// is unknown to the runtime library.
     pub fn lookup_kind(&self, macro_name: &str) -> Option<CellKind> {
         self.kinds.get(macro_name).copied()
+    }
+
+    /// Lookup the RAM port mapping for a cell. `None` means either
+    /// the cell isn't a RAM, or it's a RAM declared without an
+    /// explicit `ram` sub-table (opaque mode — ADR 0010 v1.0
+    /// semantics still apply). See ADR 0011 for the schema.
+    pub fn lookup_ram_ports(&self, macro_name: &str) -> Option<&RamPortMap> {
+        self.ram_ports.get(macro_name)
     }
 }
 
@@ -483,6 +614,128 @@ endmodule
         let mut lib = RuntimeCellLibrary::default();
         let err = lib.load_manifest(&manifest).unwrap_err();
         assert!(matches!(err, LoadError::ManifestParse { .. }));
+    }
+
+    #[test]
+    fn parses_v1_1_ram_port_mapping() {
+        // Matches the OCD GF180MCU SRAM that drove ADR 0011.
+        let dir = TempDir::new().unwrap();
+        let manifest = write_file(
+            &dir,
+            "ocd.cells.toml",
+            "\
+schema_version = \"1.1\"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]
+kind = \"ram\"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1.ram]
+depth = 1024
+width = 8
+clock        = { pin = \"CLK\", edge = \"pos\" }
+chip_enable  = { pin = \"CEN\", polarity = \"low\" }
+write_enable = { pin = \"GWEN\", polarity = \"low\" }
+write_mask   = { pin = \"WEN\", polarity = \"low\", granularity = \"bit\" }
+address      = \"A\"
+data_in      = \"D\"
+data_out     = \"Q\"
+",
+        );
+        let mut lib = RuntimeCellLibrary::default();
+        lib.load_manifest(&manifest).unwrap();
+        let ram = lib
+            .lookup_ram_ports("gf180mcu_ocd_ip_sram__sram1024x8m8wm1")
+            .expect("ram port map should be present");
+        assert_eq!(ram.depth, 1024);
+        assert_eq!(ram.width, 8);
+        assert_eq!(ram.clock.pin, "CLK");
+        assert_eq!(ram.clock.edge, ClockEdge::Pos);
+        let ce = ram.chip_enable.as_ref().unwrap();
+        assert_eq!(ce.pin, "CEN");
+        assert_eq!(ce.polarity, Polarity::Low);
+        let we = ram.write_enable.as_ref().unwrap();
+        assert_eq!(we.pin, "GWEN");
+        let wm = ram.write_mask.as_ref().unwrap();
+        assert_eq!(wm.pin, "WEN");
+        assert_eq!(wm.granularity, MaskGranularity::Bit);
+        assert_eq!(ram.address, "A");
+        assert_eq!(ram.data_in, "D");
+        assert_eq!(ram.data_out, "Q");
+    }
+
+    #[test]
+    fn ram_defaults_polarity_low_and_edge_pos() {
+        let dir = TempDir::new().unwrap();
+        let manifest = write_file(
+            &dir,
+            "x.cells.toml",
+            "\
+schema_version = \"1.1\"
+
+[cells.minimal_sram]
+kind = \"ram\"
+
+[cells.minimal_sram.ram]
+depth = 256
+width = 8
+clock = { pin = \"CLK\" }
+write_enable = { pin = \"WE\" }
+address = \"A\"
+data_in = \"D\"
+data_out = \"Q\"
+",
+        );
+        let mut lib = RuntimeCellLibrary::default();
+        lib.load_manifest(&manifest).unwrap();
+        let ram = lib.lookup_ram_ports("minimal_sram").unwrap();
+        assert_eq!(ram.clock.edge, ClockEdge::Pos);
+        assert_eq!(ram.write_enable.as_ref().unwrap().polarity, Polarity::Low);
+        assert!(ram.chip_enable.is_none());
+        assert!(ram.write_mask.is_none());
+    }
+
+    #[test]
+    fn rejects_ram_block_on_non_ram_kind() {
+        let dir = TempDir::new().unwrap();
+        let manifest = write_file(
+            &dir,
+            "x.cells.toml",
+            "\
+schema_version = \"1.1\"
+
+[cells.bogus]
+kind = \"filler\"
+
+[cells.bogus.ram]
+depth = 256
+width = 8
+clock   = { pin = \"CLK\" }
+address = \"A\"
+data_in = \"D\"
+data_out = \"Q\"
+",
+        );
+        let mut lib = RuntimeCellLibrary::default();
+        let err = lib.load_manifest(&manifest).unwrap_err();
+        assert!(matches!(err, LoadError::SchemaMismatch { .. }));
+    }
+
+    #[test]
+    fn ram_absent_means_opaque_mode_per_adr_0010() {
+        let dir = TempDir::new().unwrap();
+        let manifest = write_file(
+            &dir,
+            "x.cells.toml",
+            "\
+schema_version = \"1.0\"
+[cells.opaque_sram]
+kind = \"ram\"
+",
+        );
+        let mut lib = RuntimeCellLibrary::default();
+        lib.load_manifest(&manifest).unwrap();
+        assert_eq!(lib.lookup_kind("opaque_sram"), Some(CellKind::Ram));
+        assert!(lib.lookup_ram_ports("opaque_sram").is_none());
     }
 
     #[test]
