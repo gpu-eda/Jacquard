@@ -409,15 +409,69 @@ jacquard sim my_chip.v stim.vcd out.vcd 1 \
 
 The `--cell-library` flag is repeatable for multi-IP designs.
 
-### What `kind = "ram"` delivers in v1.0
+### What `kind = "ram"` delivers — opaque vs explicit-port modes
 
-The cell's output pins become X-source slots in the AIG. The SRAM's
-internal memory behaviour is **not** modelled in v1.0 — sufficient for
-designs whose CPU executes from boot ROM / register file and never
-reads SRAM contents at the timescales Jacquard simulates
-(the heartbeat-verification case driving this work). Real memory
-modelling lands in a future
-schema version with explicit port-mapping (`[cells.NAME.ports]`).
+There are two modes depending on whether the manifest includes a
+`[cells.NAME.ram]` port-mapping sub-table:
+
+**Opaque mode** (no `ram` sub-table, schema v1.0+): the cell's
+output pins become X-source slots in the AIG. The SRAM's internal
+memory behaviour is **not** modelled. Sufficient for designs whose
+CPU executes from boot ROM / register file and never reads SRAM
+contents at the timescales Jacquard simulates.
+
+**Explicit-port mode** (with `ram` sub-table, schema v1.1+, ADR
+0011): outputs are wired to a real AIG-backed RAMBlock, writes
+populate per-entry storage, reads return what was written. Real
+memory modelling end-to-end. Use this when the CPU reads its own
+SRAM (the common case for any design beyond heartbeat
+verification).
+
+Schema (full example, mirroring the upstream OCD GF180MCU SRAM):
+
+```toml
+schema_version = "1.1"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]
+kind = "ram"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1.ram]
+depth = 1024
+width = 8
+clock        = { pin = "CLK", edge = "pos" }
+chip_enable  = { pin = "CEN", polarity = "low" }
+write_enable = { pin = "GWEN", polarity = "low" }
+write_mask   = { pin = "WEN", polarity = "low", granularity = "bit" }
+address      = "A"
+data_in      = "D"
+data_out     = "Q"
+```
+
+Field semantics, defaults, and the multi-port-SRAM/async/wider-than-32-bit
+out-of-scope items are documented in
+[ADR 0011](adr/0011-ram-port-mapping-schema.md). Polarity defaults
+to `low`; clock edge defaults to `pos`; mask granularity defaults
+to `bit`. All three control pins (`chip_enable` / `write_enable` /
+`write_mask`) are optional — omit them for sync SRAMs without
+those signals.
+
+### Preloading SRAM contents at sim start
+
+Once a SRAM is in explicit-port mode, its contents can be preloaded
+from an ELF file via `sim_config.json`:
+
+```json
+{
+  "sram_init": {
+    "elf_path": "build/firmware.elf"
+  }
+}
+```
+
+The ELF's PT_LOAD segments are packed into the SRAM's backing
+storage before tick 0; the lowest loadable virtual address is taken
+as SRAM address 0. Single-SRAM designs only — multi-SRAM
+instance-targeting is a future schema extension (issue #80).
 
 ### Other kinds
 
