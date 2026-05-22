@@ -199,6 +199,11 @@ pub struct TestbenchConfig {
     pub uart: Option<UartConfig>,
     #[serde(default)]
     pub gpios: Vec<GpioConfig>,
+    /// JTAG replay peripheral. When present together with a CLI
+    /// `--jtag-replay <PATH>`, cosim drives the configured pins
+    /// from the recorded remote_bitbang byte stream.
+    #[serde(default)]
+    pub jtag: Option<JtagConfig>,
     pub sram_init: Option<SramInitConfig>,
     pub output_events: Option<String>,
     pub events_reference: Option<String>,
@@ -303,6 +308,30 @@ pub struct UartConfig {
 pub struct GpioConfig {
     pub name: String,
     pub pins: Vec<usize>,
+}
+
+/// JTAG replay peripheral configuration.
+///
+/// Pin mappings only — the byte source is supplied at the CLI via
+/// `--jtag-replay <PATH>`. See `src/sim/models/jtag.rs` and
+/// [discussion #77](https://github.com/ChipFlow/Jacquard/discussions/77).
+#[derive(Debug, Clone, Deserialize)]
+pub struct JtagConfig {
+    pub tck_gpio: usize,
+    pub tms_gpio: usize,
+    pub tdi_gpio: usize,
+    /// Optional TRST pin. TAPs that use TMS-only reset
+    /// (five-cycle `TMS=1`) leave this unset.
+    #[serde(default)]
+    pub trst_gpio: Option<usize>,
+    /// Polarity of the design's TRST input. Defaults to active-low,
+    /// matching the dominant RV32-Debug TAP convention.
+    #[serde(default = "default_true")]
+    pub trst_active_low: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Deserialize)]
