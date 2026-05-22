@@ -271,6 +271,21 @@ struct CosimArgs {
     /// `jacquard sim --help` and ADR 0010 for details.
     #[clap(long = "cell-library", value_name = "PATH")]
     cell_library: Vec<PathBuf>,
+
+    /// Path to a recorded `remote_bitbang` byte stream. When set
+    /// alongside a `jtag` peripheral in sim_config.json, cosim drives
+    /// the configured TCK/TMS/TDI/(TRST) pins from this stream — the
+    /// deterministic-replay path from discussion #77. Capture
+    /// `remote_bitbang` traffic via `scripts/capture_bitbang.py`.
+    #[clap(long = "jtag-replay", value_name = "PATH")]
+    jtag_replay: Option<PathBuf>,
+
+    /// Cosim edges per JTAG stream byte. Default 4 — chosen against
+    /// the "chip-clock ≥ 2× TCK" assumption that holds by construction
+    /// in any chipflow design running a debug TAP. Bump for designs
+    /// with faster TCK relative to the chip clock.
+    #[clap(long = "jtag-hold-cycles", value_name = "N", default_value = "4")]
+    jtag_hold_cycles: u32,
 }
 
 #[derive(Parser)]
@@ -1590,6 +1605,8 @@ fn cmd_cosim(args: CosimArgs) {
             timing_vcd: args.timing_vcd.clone(),
             dump_dff: args.dump_dff.clone(),
             dump_dff_cycles: args.dump_dff_cycles,
+            jtag_replay: args.jtag_replay.clone(),
+            jtag_hold_cycles: args.jtag_hold_cycles,
         };
 
         let result =
