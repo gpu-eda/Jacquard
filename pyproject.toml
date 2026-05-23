@@ -9,17 +9,40 @@ dependencies = []
 # Tools for fetching foundry PDKs locally. Install with `uv sync --group dev`.
 # `volare` manages the SkyWater sky130 PDK; the pinned version hash lives
 # under [tool.jacquard.pdks.sky130] below.
+#
+# `netlist-graph` is the post-synthesis netlist analysis tool used by
+# the `--trace-signals` discovery workflow (PR #83) and the timing-
+# violations debug guide (docs/timing-violations.md). Sourced from the
+# `scripts/netlist_graph` workspace member; explicit dep here so `uv
+# sync --group dev` installs the `netlist-graph` console script
+# without needing `--all-packages` (which also pulls in chipflow-
+# examples and mcu_soc_sky130).
 dev = [
     "volare>=0.20",
+    "netlist-graph",
 ]
 
 [tool.uv.workspace]
-members = ["vendor/chipflow-examples", "designs/mcu_soc_sky130"]
+members = [
+    "vendor/chipflow-examples",
+    "designs/mcu_soc_sky130",
+    # Bundled with the workspace so `uv run netlist-graph` works from
+    # the repo root without `cd scripts/netlist_graph` first. The
+    # tool's own pyproject.toml under `scripts/netlist_graph/`
+    # provides the `[project.scripts] netlist-graph` console entry;
+    # this membership exposes it on the workspace's `uv run` path.
+    # See docs/timing-violations.md for usage examples and the
+    # `--trace-signals` PR (#83) for the in-design VCD trace flow
+    # that pairs with netlist-graph's `drivers`/`search` commands
+    # for signal-name discovery.
+    "scripts/netlist_graph",
+]
 
 [tool.uv.sources]
 chipflow-lib = { git = "https://github.com/ChipFlow/chipflow-lib.git" }
 chipflow-digital-ip = { git = "https://github.com/ChipFlow/chipflow-digital-ip" }
 amaranth-soc = { git = "https://github.com/amaranth-lang/amaranth-soc" }
+netlist-graph = { workspace = true }
 
 # Pinned foundry PDK versions. Tests that need real Liberty (e.g. the
 # sky130 multi-corner integration test under crates/opensta-to-ir) read
