@@ -15,6 +15,7 @@ pub mod cpu_reference;
 pub mod input_stim;
 pub mod models;
 pub mod setup;
+pub mod sram_dump;
 pub mod sram_preload;
 pub mod timing_ir_loader;
 pub mod vcd_io;
