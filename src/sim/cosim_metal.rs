@@ -1028,15 +1028,17 @@ pub(crate) fn build_gpio_mapping(
             .or_else(|| parse_gpio_index(&pin_name, "gpio_out"));
         if let Some(gpio_idx) = gpio_idx {
             let mut aigpin_iv = aig.pin2aigpin_iv[i];
-            // Top-level inout: pin2aigpin_iv stays usize::MAX (the
-            // port has Direction::Unknown so the AIG builder never
-            // wires it as an InputPort or output driver). Recover
-            // by consulting the bidir-pad observability table — for
-            // any wafer.space-style `bi_24t` pad on this net, the
-            // core-side `A` aigpin is registered as `<pin>__out`.
-            if netlistdb.pindirect[i] == Direction::Unknown
-                && aigpin_iv == usize::MAX
-            {
+            // Top-level inout: pin2aigpin_iv on a wafer.space-style
+            // `bi_24t` pad resolves to the input-side `Y` aigpin
+            // (PAD→core), which is non-MAX but absent from
+            // output_map. The OUTPUT direction's aigpin (core `A`→PAD)
+            // is registered under `<pin>__out` in
+            // extra_observable_names; falling back unconditionally
+            // (when found) overrides the input-side resolution with
+            // the actual output driver. Safe when the synthetic name
+            // is absent: aigpin_iv stays as-is and we fall through to
+            // the existing diagnostic.
+            if netlistdb.pindirect[i] == Direction::Unknown {
                 let synth_name = format!("{pin_name}__out");
                 if let Some(&aigpin) = extra_observable_by_name.get(&synth_name) {
                     aigpin_iv = aigpin;
