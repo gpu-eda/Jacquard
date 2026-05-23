@@ -2239,6 +2239,13 @@ pub fn run_cosim(
     };
     sram_data.fill(0);
 
+    // SRAM write dumper (JACQUARD_SRAM_DUMP=<path>). Opt-in
+    // diagnostic that snapshots `sram_storage` per batch and emits
+    // a per-block write log at end of simulation. See
+    // `src/sim/sram_dump.rs` for the report format.
+    let mut sram_dumper =
+        crate::sim::sram_dump::SramDumper::from_env(aig, netlistdb, script);
+
     // SRAM preload (issue #80, ADR 0011 § "SRAM preload"). When
     // `sim_config.json` declares `sram_init`, parse the named ELF
     // file's PT_LOAD segments and pack them into the design's
@@ -3824,6 +3831,18 @@ pub fn run_cosim(
         total_batches += 1;
         tick += batch;
 
+        // SRAM write dumper: snapshot per batch and accumulate
+        // per-block write events. Cheap when disabled (None).
+        if let Some(dumper) = sram_dumper.as_mut() {
+            let storage: &[u32] = unsafe {
+                std::slice::from_raw_parts(
+                    sram_data_buffer.contents() as *const u32,
+                    script.sram_storage_size as usize,
+                )
+            };
+            dumper.snapshot_and_diff(storage, tick as u64);
+        }
+
         // Deep diagnostics: SRAM activity + flash transaction tracking
         if deep_diag && tick > reset_edges && batch == 1 {
             unsafe {
@@ -4075,6 +4094,26 @@ pub fn run_cosim(
             us_per_edge,
             sim_elapsed.as_secs_f64()
         );
+    }
+
+    if let Some(dumper) = sram_dumper.as_ref() {
+        match dumper.write_dump() {
+            Ok(n) => {
+                println!(
+                    "JACQUARD_SRAM_DUMP: wrote {} write event(s) across {} block(s) → {}",
+                    n,
+                    dumper.block_count(),
+                    dumper.output_path().display()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "JACQUARD_SRAM_DUMP: failed to write {}: {}",
+                    dumper.output_path().display(),
+                    e
+                );
+            }
+        }
     }
 
     // Warn about input commands that never fired (likely a wait that the
