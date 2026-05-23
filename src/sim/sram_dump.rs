@@ -41,6 +41,17 @@ pub struct BlockMeta {
     pub used_addr_width: u32,
     /// Data bits actually wired (8 for OCD; 32 for full-bus).
     pub data_width_bits: u32,
+    /// Composed write-enable AIG-pin iv values per data bit.
+    /// `iv = (aigpin << 1) | inv`. `iv == 0` means the composition
+    /// collapsed to literal-0 (a constant zero → writes can never
+    /// fire); `iv == 1` means literal-1 (writes always fire — also
+    /// suspicious); anything else is a real composed AIG pin and
+    /// the write-enable can flip at runtime.
+    ///
+    /// Populated only for slots 0..`data_width_bits` — entries
+    /// beyond that are deliberately left at 0 by the AIG-side
+    /// composition and would be redundant to surface.
+    pub wr_en_iv: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -85,12 +96,18 @@ impl SramDumper {
         for (&cellid, &storage_offset) in script.sram_cell_storage_offsets.iter() {
             let name = format!("{}", netlistdb.cellnames[cellid]);
             let (used_addr_width, data_width_bits) = derive_widths(aig, cellid);
+            let wr_en_iv: Vec<usize> = aig
+                .srams
+                .get(&cellid)
+                .map(|ram| ram.port_w_wr_en_iv[..data_width_bits as usize].to_vec())
+                .unwrap_or_default();
             blocks.push(BlockMeta {
                 cellid,
                 name,
                 storage_offset,
                 used_addr_width,
                 data_width_bits,
+                wr_en_iv,
             });
         }
         blocks.sort_by_key(|b| b.storage_offset);
@@ -234,6 +251,26 @@ impl SramDumper {
                 1u32 << b.used_addr_width,
                 b.data_width_bits
             )?;
+            // Composed write-enable: surface each bit's iv. A row
+            // of literal-0 across all bits is the signature of a
+            // dead composition (clken or one of the polarised
+            // control signals collapsed). Real composed pins have
+            // iv >= 2 (aigpin index 1 means iv 2 or 3 — anything
+            // below 2 is a constant). We tag the diagnostic up-front
+            // so a grep for "wr_en_status=dead" pulls the failing
+            // blocks straight out of the dump.
+            let wr_en_str: Vec<String> = b.wr_en_iv.iter().map(|iv| iv.to_string()).collect();
+            let dead = !b.wr_en_iv.is_empty() && b.wr_en_iv.iter().all(|&iv| iv == 0);
+            let always_on = !b.wr_en_iv.is_empty() && b.wr_en_iv.iter().all(|&iv| iv == 1);
+            let status = if dead {
+                "dead (all wr_en collapsed to literal 0 — writes will never fire)"
+            } else if always_on {
+                "always-on (all wr_en literal 1 — every clock edge writes)"
+            } else {
+                "live"
+            };
+            writeln!(w, "#   port_w_wr_en_iv=[{}]", wr_en_str.join(","))?;
+            writeln!(w, "#   wr_en_status={}", status)?;
             writeln!(w, "#   write_events={}", block_events.len())?;
 
             if block_events.is_empty() {
@@ -316,6 +353,7 @@ mod tests {
             storage_offset: offset,
             used_addr_width: 10,
             data_width_bits: 8,
+            wr_en_iv: vec![42; 8],
         }
     }
 
