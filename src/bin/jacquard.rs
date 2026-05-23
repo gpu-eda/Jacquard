@@ -128,6 +128,16 @@ struct SimArgs {
     #[clap(long = "cell-library", value_name = "PATH")]
     cell_library: Vec<PathBuf>,
 
+    /// Path to a file listing internal signals to surface in the
+    /// output VCD. One hierarchical signal name per line (`.` for
+    /// hierarchy, optional trailing `[N]` for bit index). `#`
+    /// comments and blank lines ignored. Each resolved net is
+    /// registered as a primary output via `extra_observable_names`
+    /// and appears in the output VCD alongside top-level IO. See
+    /// `src/sim/trace_signals.rs` for full syntax.
+    #[clap(long = "trace-signals", value_name = "PATH")]
+    trace_signals: Option<PathBuf>,
+
     /// Path to a Jacquard timing-IR (.jtir) file. Generate with the
     /// `opensta-to-ir` preprocessing tool. Mutually exclusive with `--sdf`.
     #[clap(long)]
@@ -272,6 +282,14 @@ struct CosimArgs {
     #[clap(long = "cell-library", value_name = "PATH")]
     cell_library: Vec<PathBuf>,
 
+    /// Path to a file listing internal signals to surface in the
+    /// output VCD. One hierarchical signal name per line; see
+    /// `jacquard sim --trace-signals --help` for the full file
+    /// format. Resolved nets appear in `--timing-vcd` and
+    /// `--stimulus-vcd` outputs alongside top-level IO.
+    #[clap(long = "trace-signals", value_name = "PATH")]
+    trace_signals: Option<PathBuf>,
+
     /// Path to a recorded `remote_bitbang` byte stream. When set
     /// alongside a `jtag` peripheral in sim_config.json, cosim drives
     /// the configured TCK/TMS/TDI/(TRST) pins from this stream — the
@@ -347,6 +365,7 @@ fn cmd_sim(args: SimArgs) {
         timing_ir: args.timing_ir.clone(),
         timing_corner: args.timing_corner.clone(),
         cell_library: args.cell_library.clone(),
+        trace_signals: args.trace_signals.clone(),
     };
 
     #[allow(unused_mut)]
@@ -1495,6 +1514,7 @@ fn cmd_dump_paths(args: DumpPathsArgs) {
         timing_ir: args.timing_ir.clone(),
         timing_corner: None,
         cell_library: Vec::new(),
+        trace_signals: None,
     };
 
     let mut design = setup::load_design(&design_args);
@@ -1579,6 +1599,7 @@ fn cmd_cosim(args: CosimArgs) {
             timing_ir: args.timing_ir.clone(),
             timing_corner: None,
             cell_library: args.cell_library.clone(),
+            trace_signals: args.trace_signals.clone(),
         };
 
         let mut design = setup::load_design(&design_args);

@@ -48,6 +48,14 @@ pub struct DesignArgs {
     /// `kind` annotations. See ADR 0010 and
     /// `docs/plans/declarative-cell-metadata.md`.
     pub cell_library: Vec<PathBuf>,
+    /// Optional `--trace-signals <PATH>` — file with one
+    /// hierarchical signal name per line. Resolved against
+    /// `netlistdb.netname2id` after AIG construction; each resolved
+    /// aigpin is registered into `aig.extra_observable_names` so the
+    /// existing VCD-emission path surfaces it as a top-level wire.
+    /// See `src/sim/trace_signals.rs` for the file format and
+    /// resolution semantics.
+    pub trace_signals: Option<PathBuf>,
 }
 
 /// Result of loading a design: everything needed for simulation.
@@ -142,6 +150,32 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
         Some(&runtime_lib)
     };
     let mut aig = AIG::from_netlistdb_with_cells(&netlistdb, cell_lib_ref);
+
+    // Register user-supplied trace signals (--trace-signals). Must
+    // run before staging/partitioning so the resolved aigpins land
+    // in primary_outputs and get state-buffer slots. Unresolved
+    // names log warnings but don't abort.
+    if let Some(trace_path) = args.trace_signals.as_ref() {
+        match crate::sim::trace_signals::read_trace_file(trace_path) {
+            Ok(names) => {
+                let (registered, dropped) =
+                    crate::sim::trace_signals::register_trace_signals(
+                        &mut aig,
+                        &netlistdb,
+                        &names,
+                    );
+                clilog::info!(
+                    "--trace-signals: registered {} signal(s), dropped {} (file: {})",
+                    registered,
+                    dropped,
+                    trace_path.display()
+                );
+            }
+            Err(e) => {
+                clilog::warn!("--trace-signals: {}; skipping", e);
+            }
+        }
+    }
 
     // Load display format info from JSON if available
     let json_path = args
