@@ -1563,15 +1563,14 @@ because the cap was reached.</li>
 </li>
 </ul>
 <h3 id="3-trace-backwards-with-netlist_graph"><a class="header" href="#3-trace-backwards-with-netlist_graph">3. Trace Backwards with netlist_graph</a></h3>
-<p>Use the <a href="../scripts/netlist_graph/">netlist_graph tool</a> to trace the combinational logic cone feeding the DFF:</p>
-<pre><code class="language-bash">cd scripts/netlist_graph
-
-# Find the DFF data input driver chain
+<p>Use the <a href="../scripts/netlist_graph/">netlist_graph tool</a> to trace the combinational logic cone feeding the DFF. After <code>uv sync --group dev</code>, the <code>netlist-graph</code> console script is on the workspace's <code>uv run</code> path — no <code>cd</code> required:</p>
+<pre><code class="language-bash"># Find the DFF data input driver chain
 uv run netlist-graph drivers design.v "dff_name.D" -d 10
 
 # Search for DFFs matching a pattern
 uv run netlist-graph search design.v "dff_out*"
 </code></pre>
+<p>Discovered signal names can be passed directly into <code>jacquard sim --trace-signals &lt;file&gt;</code> / <code>jacquard cosim --trace-signals &lt;file&gt;</code> (one name per line) to surface them in the output VCD alongside top-level IO.</p>
 <h3 id="4-detailed-timing-analysis-with-cvc"><a class="header" href="#4-detailed-timing-analysis-with-cvc">4. Detailed Timing Analysis with CVC</a></h3>
 <p>For per-signal accuracy (no 32-signal approximation), use CVC (open-src-cvc) with SDF back-annotation:</p>
 <pre><code class="language-bash"># Run CVC with SDF timing
