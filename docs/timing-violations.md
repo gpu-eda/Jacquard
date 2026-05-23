@@ -228,17 +228,17 @@ Each word covers 32 bits of state. The DFFs in that word have `data_state_pos / 
 
 ### 3. Trace Backwards with netlist_graph
 
-Use the [netlist_graph tool](../scripts/netlist_graph/) to trace the combinational logic cone feeding the DFF:
+Use the [netlist_graph tool](../scripts/netlist_graph/) to trace the combinational logic cone feeding the DFF. After `uv sync --group dev`, the `netlist-graph` console script is on the workspace's `uv run` path — no `cd` required:
 
 ```bash
-cd scripts/netlist_graph
-
 # Find the DFF data input driver chain
 uv run netlist-graph drivers design.v "dff_name.D" -d 10
 
 # Search for DFFs matching a pattern
 uv run netlist-graph search design.v "dff_out*"
 ```
+
+Discovered signal names can be passed directly into `jacquard sim --trace-signals <file>` / `jacquard cosim --trace-signals <file>` (one name per line) to surface them in the output VCD alongside top-level IO.
 
 ### 4. Detailed Timing Analysis with CVC
 

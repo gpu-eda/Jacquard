@@ -135,9 +135,9 @@ Available designs: NVDLA (254 MB), Rocket (124 MB), Gemmini (165 MB).
 
 **IMPORTANT**: Use this tool for tracing signal paths in post-synthesis netlists. It's much faster than manual grep-based analysis.
 
-```bash
-cd scripts/netlist_graph
+Install via `uv sync --group dev` from repo root — `netlist-graph` is a workspace member, so the console script is on the workspace's `uv run` path. No `cd` required.
 
+```bash
 # Trace what drives a signal (backwards through logic)
 uv run netlist-graph drivers <netlist.v> "<signal>" -d 8
 
