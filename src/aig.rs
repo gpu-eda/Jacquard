@@ -2333,6 +2333,16 @@ impl AIG {
                 let mut ce_active_iv: usize = 1; // tied-high (active)
                 let mut we_global_active_iv: usize = 1; // tied-high (active)
                 let mut we_mask_active_iv: [usize; 32] = [1; 32]; // tied-high per bit
+                // Diagnostic counters: how many pin IDs did netlistdb
+                // produce for each control bus? Used to surface the
+                // OCD-style "WEN was supposed to be 8 distinct nets
+                // but came through as 1 (or 0)" case at construction
+                // time — that's the netlist-shape signature behind
+                // mask-collapsed write composition. See PR #82's
+                // wafer.space diagnosis.
+                let mut wm_pins_matched: usize = 0;
+                let mut ce_pins_matched: usize = 0;
+                let mut we_pins_matched: usize = 0;
                 for pinid in netlistdb.cell2pin.iter_set(cellid) {
                     let pin_name = netlistdb.pinnames[pinid].1.as_str();
                     let bit = netlistdb.pinnames[pinid].2.map(|i| i as usize);
@@ -2348,12 +2358,14 @@ impl AIG {
                     } else if let Some(ce) = &ram_ports.chip_enable {
                         if pin_name == ce.pin {
                             ce_active_iv = polarised(pin_iv, ce.polarity);
+                            ce_pins_matched += 1;
                             continue;
                         }
                     }
                     if let Some(we) = &ram_ports.write_enable {
                         if pin_name == we.pin {
                             we_global_active_iv = polarised(pin_iv, we.polarity);
+                            we_pins_matched += 1;
                             continue;
                         }
                     }
@@ -2362,6 +2374,7 @@ impl AIG {
                             let idx = bit.unwrap_or(0);
                             if idx < we_mask_active_iv.len() {
                                 we_mask_active_iv[idx] = polarised(pin_iv, wm.polarity);
+                                wm_pins_matched += 1;
                             }
                             continue;
                         }
@@ -2393,6 +2406,66 @@ impl AIG {
                 let data_width = ram_ports.width as usize;
                 let clken_ce = aig.add_and_gate(clken_iv, ce_active_iv);
                 let clken_ce_we = aig.add_and_gate(clken_ce, we_global_active_iv);
+                // Cross-check schema-declared shapes against netlistdb
+                // pin matches. The schema-declared write_mask, for
+                // example, expects bit-granularity to produce one
+                // matched pin per data bit; if only one matched
+                // (the bus came through as single-bit) all data bits
+                // share `clken_ce_we` and the per-byte gating is
+                // ineffective. Surface as warnings — composition
+                // still proceeds with whatever bound — so downstream
+                // tools (and the sram_dump's mask-collapsed status)
+                // have authoritative confirmation of the failure
+                // mode rather than guessing from aigpin patterns.
+                if let Some(wm) = &ram_ports.write_mask {
+                    let expected = match wm.granularity {
+                        crate::cell_library::MaskGranularity::Bit => data_width,
+                        crate::cell_library::MaskGranularity::Byte => data_width.div_ceil(8),
+                    };
+                    if wm_pins_matched != expected {
+                        clilog::warn!(
+                            "explicit-port RAM cell {} ({}): schema declares write_mask `{}` \
+                             with granularity={:?} (expects {} pin(s) for data_width={}), \
+                             but netlistdb produced {} matching pin(s). \
+                             Composition will leave {} bit(s) ungated — writes will \
+                             share a single enable signal. Likely netlist shape: \
+                             WEN driven as single-bit instead of a bus, OR pin name \
+                             mismatch between schema and instantiation.",
+                            cellid,
+                            netlistdb.celltypes[cellid].as_str(),
+                            wm.pin,
+                            wm.granularity,
+                            expected,
+                            data_width,
+                            wm_pins_matched,
+                            expected.saturating_sub(wm_pins_matched)
+                        );
+                    }
+                }
+                if let Some(ce) = &ram_ports.chip_enable {
+                    if ce_pins_matched == 0 {
+                        clilog::warn!(
+                            "explicit-port RAM cell {} ({}): schema declares chip_enable=`{}` \
+                             but no matching pin found on the netlistdb cell — CE will \
+                             default to always-active (literal 1), gating away.",
+                            cellid,
+                            netlistdb.celltypes[cellid].as_str(),
+                            ce.pin
+                        );
+                    }
+                }
+                if let Some(we) = &ram_ports.write_enable {
+                    if we_pins_matched == 0 {
+                        clilog::warn!(
+                            "explicit-port RAM cell {} ({}): schema declares write_enable=`{}` \
+                             but no matching pin found on the netlistdb cell — WE will \
+                             default to always-active.",
+                            cellid,
+                            netlistdb.celltypes[cellid].as_str(),
+                            we.pin
+                        );
+                    }
+                }
                 for i in 0..data_width.min(sram.port_w_wr_en_iv.len()) {
                     sram.port_w_wr_en_iv[i] =
                         aig.add_and_gate(clken_ce_we, we_mask_active_iv[i]);
@@ -3792,6 +3865,22 @@ data_out     = \"Q\"
             "port_r_en_iv should be a composed AIG pin, got 0"
         );
 
+        // Per-bit WEN[i] must produce 8 DISTINCT write-enable
+        // aigpins — otherwise the AIG dedup at `add_and_gate(X, 1)`
+        // returning `X` causes all 8 slots to share one signal,
+        // which means the bit-granular mask is ineffective and no
+        // byte ever writes. Regression for PR #82's wafer.space
+        // diagnosis (16 OCD blocks, all 8 `port_w_wr_en_iv` slots
+        // identical per block → mask-collapse signature).
+        let wr_en: Vec<usize> = ram.port_w_wr_en_iv[..8].to_vec();
+        let distinct: std::collections::HashSet<usize> = wr_en.iter().copied().collect();
+        assert_eq!(
+            distinct.len(),
+            8,
+            "OCD WEN[7:0] should produce 8 distinct write-enable aigpins; \
+             got {wr_en:?} (only {} distinct — mask collapsed to one signal)",
+            distinct.len()
+        );
     }
 
     #[test]

@@ -262,10 +262,24 @@ impl SramDumper {
             let wr_en_str: Vec<String> = b.wr_en_iv.iter().map(|iv| iv.to_string()).collect();
             let dead = !b.wr_en_iv.is_empty() && b.wr_en_iv.iter().all(|&iv| iv == 0);
             let always_on = !b.wr_en_iv.is_empty() && b.wr_en_iv.iter().all(|&iv| iv == 1);
+            // "Mask-collapsed": every bit's wr_en is the same composed
+            // aigpin (>= 2). Signature of `we_mask_active_iv[i] = 1`
+            // (literal-1) for all i, which means `add_and_gate(X, 1)`
+            // returns X identically per bit. Composition treated the
+            // write-mask as either absent or single-bit. The bit-
+            // granular mask is therefore ineffective; either no byte
+            // writes (if X is constantly 0 at runtime) or all-or-none
+            // bytes write together.
+            let mask_collapsed = b.wr_en_iv.len() >= 2
+                && b.wr_en_iv.iter().all(|&iv| iv >= 2)
+                && b.wr_en_iv.iter().all(|&iv| iv == b.wr_en_iv[0]);
             let status = if dead {
                 "dead (all wr_en collapsed to literal 0 — writes will never fire)"
             } else if always_on {
                 "always-on (all wr_en literal 1 — every clock edge writes)"
+            } else if mask_collapsed {
+                "mask-collapsed (all wr_en bits share one aigpin — \
+                 per-bit WEN pin loop never bound, granularity ineffective)"
             } else {
                 "live"
             };
