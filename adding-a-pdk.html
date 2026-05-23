@@ -501,14 +501,57 @@ kind = "ram"
     --cell-library deps/gf180mcu_ocd_ip_sram/cells/gf180mcu_ocd_ip_sram__sram1024x8m8wm1/gf180mcu_ocd_ip_sram__sram1024x8m8wm1__blackbox.v
 </code></pre>
 <p>The <code>--cell-library</code> flag is repeatable for multi-IP designs.</p>
-<h3 id="what-kind--ram-delivers-in-v10"><a class="header" href="#what-kind--ram-delivers-in-v10">What <code>kind = "ram"</code> delivers in v1.0</a></h3>
-<p>The cell's output pins become X-source slots in the AIG. The SRAM's
-internal memory behaviour is <strong>not</strong> modelled in v1.0 — sufficient for
-designs whose CPU executes from boot ROM / register file and never
-reads SRAM contents at the timescales Jacquard simulates
-(the heartbeat-verification case driving this work). Real memory
-modelling lands in a future
-schema version with explicit port-mapping (<code>[cells.NAME.ports]</code>).</p>
+<h3 id="what-kind--ram-delivers--opaque-vs-explicit-port-modes"><a class="header" href="#what-kind--ram-delivers--opaque-vs-explicit-port-modes">What <code>kind = "ram"</code> delivers — opaque vs explicit-port modes</a></h3>
+<p>There are two modes depending on whether the manifest includes a
+<code>[cells.NAME.ram]</code> port-mapping sub-table:</p>
+<p><strong>Opaque mode</strong> (no <code>ram</code> sub-table, schema v1.0+): the cell's
+output pins become X-source slots in the AIG. The SRAM's internal
+memory behaviour is <strong>not</strong> modelled. Sufficient for designs whose
+CPU executes from boot ROM / register file and never reads SRAM
+contents at the timescales Jacquard simulates.</p>
+<p><strong>Explicit-port mode</strong> (with <code>ram</code> sub-table, schema v1.1+, ADR
+0011): outputs are wired to a real AIG-backed RAMBlock, writes
+populate per-entry storage, reads return what was written. Real
+memory modelling end-to-end. Use this when the CPU reads its own
+SRAM (the common case for any design beyond heartbeat
+verification).</p>
+<p>Schema (full example, mirroring the upstream OCD GF180MCU SRAM):</p>
+<pre><code class="language-toml">schema_version = "1.1"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]
+kind = "ram"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1.ram]
+depth = 1024
+width = 8
+clock        = { pin = "CLK", edge = "pos" }
+chip_enable  = { pin = "CEN", polarity = "low" }
+write_enable = { pin = "GWEN", polarity = "low" }
+write_mask   = { pin = "WEN", polarity = "low", granularity = "bit" }
+address      = "A"
+data_in      = "D"
+data_out     = "Q"
+</code></pre>
+<p>Field semantics, defaults, and the multi-port-SRAM/async/wider-than-32-bit
+out-of-scope items are documented in
+<a href="adr/0011-ram-port-mapping-schema.html">ADR 0011</a>. Polarity defaults
+to <code>low</code>; clock edge defaults to <code>pos</code>; mask granularity defaults
+to <code>bit</code>. All three control pins (<code>chip_enable</code> / <code>write_enable</code> /
+<code>write_mask</code>) are optional — omit them for sync SRAMs without
+those signals.</p>
+<h3 id="preloading-sram-contents-at-sim-start"><a class="header" href="#preloading-sram-contents-at-sim-start">Preloading SRAM contents at sim start</a></h3>
+<p>Once a SRAM is in explicit-port mode, its contents can be preloaded
+from an ELF file via <code>sim_config.json</code>:</p>
+<pre><code class="language-json">{
+  "sram_init": {
+    "elf_path": "build/firmware.elf"
+  }
+}
+</code></pre>
+<p>The ELF's PT_LOAD segments are packed into the SRAM's backing
+storage before tick 0; the lowest loadable virtual address is taken
+as SRAM address 0. Single-SRAM designs only — multi-SRAM
+instance-targeting is a future schema extension (issue #80).</p>
 <h3 id="other-kinds"><a class="header" href="#other-kinds">Other kinds</a></h3>
 <ul>
 <li><code>filler</code>, <code>endcap</code>, <code>tap</code> — physical-only, contribute no logic.</li>

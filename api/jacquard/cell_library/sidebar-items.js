@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CellKind","LoadError"],"struct":["CellEntry","ChainedPinProvider","ManifestFile","RuntimeCellLibrary"]};
+window.SIDEBAR_ITEMS = {"enum":["CellKind","ClockEdge","LoadError","MaskGranularity","Polarity"],"struct":["CellEntry","ChainedPinProvider","ClockPin","EnablePin","ManifestFile","RamPortMap","RuntimeCellLibrary","WriteMaskPin"]};
