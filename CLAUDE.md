@@ -153,6 +153,10 @@ uv run netlist-graph search <netlist.v> "<pattern>"
 # Generate watchlist JSON for signal monitoring
 uv run netlist-graph watchlist <netlist.v> output.json signal1 signal2 ...
 
+# Generate SRAM port trace file for --trace-signals
+uv run netlist-graph sram-ports <netlist.v> --manifest lib.cells.toml -o sram_trace.txt
+uv run netlist-graph sram-ports <netlist.v> --cell-type SRAM  # auto-detect by name
+
 # Interactive mode for exploration
 uv run netlist-graph interactive <netlist.v>
 ```
@@ -164,7 +168,22 @@ uv run netlist-graph drivers tests/timing_test/minimal_build/6_final.v "spiflash
 
 # Trace reset path to CPU
 uv run netlist-graph path tests/timing_test/minimal_build/6_final.v "gpio_in[40]" "ibus__cyc"
+
+# SRAM observability: discover port wires, then trace them
+uv run netlist-graph sram-ports design.v --cell-type SRAM -o sram_trace.txt
+jacquard cosim design.v --config sim.json --trace-signals sram_trace.txt --timing-vcd out.vcd
 ```
+
+### In-Design Signal Tracing (`--trace-signals`)
+
+The `--trace-signals <PATH>` flag on `jacquard sim` and `jacquard cosim` surfaces user-selected internal nets in the output VCD alongside top-level IO. The trace file is one hierarchical signal name per line (`#` comments and blank lines ignored). Signal names are resolved against `netlistdb` using a multi-candidate parser that handles Yosys-flattened, scalar-expanded, and structurally-hierarchical naming conventions.
+
+The recommended workflow for SRAM observability is wire-level tracing via `--trace-signals` rather than the env-var-gated `JACQUARD_SRAM_DUMP`:
+1. `netlist-graph sram-ports` discovers SRAM port wire names from the netlist
+2. `--trace-signals` surfaces them in the VCD with full per-tick accuracy (via GPU ring buffer)
+3. Post-process the VCD to reconstruct bus values (future: wire-bundle scripting)
+
+**Open question**: is it worth porting `netlist-graph` to Rust? The Python tool handles large netlists (40K cells in ~1s) but shares no code with the Rust `netlistdb`/`sverilogparse` parsers. A Rust port could reuse `sverilogparse` directly and integrate with `jacquard` as a subcommand.
 
 ### Timing Violation Detection
 
