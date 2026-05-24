@@ -2,6 +2,7 @@
 
 import logging
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import networkx as nx
@@ -117,3 +118,30 @@ def parse_netlist(netlist_path: Path) -> nx.DiGraph:
     logger.info(f"Graph has {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
 
     return G
+
+
+@dataclass
+class CellInstance:
+    cell_type: str
+    inst_name: str
+    ports: dict[str, list[str]]
+
+
+def parse_cell_instances(netlist_path: Path) -> list[CellInstance]:
+    """Parse all cell instances from a netlist, preserving port→net mappings."""
+    content = netlist_path.read_text()
+    skip_types = {"wire", "input", "output", "inout", "module", "assign", "endmodule"}
+    cells = []
+    for match in CELL_PATTERN.finditer(content):
+        cell_type = match.group(1)
+        if cell_type in skip_types:
+            continue
+        inst_name = match.group(2).strip()
+        ports_str = match.group(3)
+        ports: dict[str, list[str]] = {}
+        for port_match in PORT_PATTERN.finditer(ports_str):
+            pin_name = port_match.group(1)
+            nets = extract_nets(port_match.group(2))
+            ports[pin_name] = nets
+        cells.append(CellInstance(cell_type, inst_name, ports))
+    return cells

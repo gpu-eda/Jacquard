@@ -403,5 +403,134 @@ def interactive_mode(netlist: Path):
             click.echo(f"Unknown command: {line}")
 
 
+@main.command("sram-ports")
+@click.argument("netlist", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--manifest",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to .cells.toml manifest declaring RAM port mappings (ADR 0011).",
+)
+@click.option(
+    "--cell-type", "-c",
+    type=str,
+    default=None,
+    help="Match cell types by substring (e.g., 'SRAM'). Emits all ports.",
+)
+@click.option(
+    "--output", "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write trace file (default: stdout).",
+)
+def sram_ports(netlist: Path, manifest: Path | None, cell_type: str | None, output: Path | None):
+    """Emit SRAM port wires as a --trace-signals file.
+
+    Finds all SRAM cell instances in NETLIST and outputs the connected
+    net names for address, data, and write-control ports. The output
+    can be fed directly to `jacquard cosim --trace-signals`.
+
+    Requires a .cells.toml manifest (--manifest) that declares RAM
+    port mappings per ADR 0011, or auto-detects $__RAMGEM_SYNC_ cells
+    from the AIGPDK synthesis flow.
+
+    Examples:
+
+        netlist-graph sram-ports design.v --manifest lib.cells.toml -o sram_trace.txt
+
+        netlist-graph sram-ports design.v > sram_trace.txt
+    """
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    from netlist_graph.parser import parse_cell_instances
+
+    cells = parse_cell_instances(netlist)
+    click.echo(f"Parsed {len(cells)} cell instances", err=True)
+
+    ram_port_maps: dict[str, dict] = {}
+
+    if manifest:
+        with open(manifest, "rb") as f:
+            mf = tomllib.load(f)
+        for cell_name, entry in mf.get("cells", {}).items():
+            if entry.get("kind") == "ram" and "ram" in entry:
+                ram_port_maps[cell_name] = entry["ram"]
+        click.echo(
+            f"Manifest: {len(ram_port_maps)} RAM cell type(s): "
+            + ", ".join(ram_port_maps.keys()),
+            err=True,
+        )
+
+    # Built-in: AIGPDK $__RAMGEM_SYNC_
+    ram_port_maps.setdefault("$__RAMGEM_SYNC_", {
+        "address": "PORT_W_ADDR",
+        "data_in": "PORT_W_WR_DATA",
+        "data_out": "PORT_R_RD_DATA",
+        "write_enable": {"pin": "PORT_W_WR_EN"},
+        "clock": {"pin": "PORT_W_CLK"},
+    })
+
+    # Collect signal names
+    signals: list[str] = []
+    instances_found = 0
+
+    for cell in cells:
+        port_map = ram_port_maps.get(cell.cell_type)
+        if port_map is None and cell_type and cell_type.upper() in cell.cell_type.upper():
+            port_map = "all"
+        if port_map is None:
+            continue
+        instances_found += 1
+        inst = cell.inst_name.lstrip("\\").rstrip(" ")
+
+        if port_map == "all":
+            key_pins = sorted(cell.ports.keys())
+        else:
+            key_pins_set: set[str] = set()
+            for field_name in ("address", "data_in", "data_out"):
+                if field_name in port_map:
+                    key_pins_set.add(port_map[field_name])
+            for field_name in ("write_enable", "write_mask", "chip_enable"):
+                if field_name in port_map:
+                    pin_spec = port_map[field_name]
+                    if isinstance(pin_spec, dict):
+                        key_pins_set.add(pin_spec["pin"])
+                    else:
+                        key_pins_set.add(pin_spec)
+            key_pins = sorted(key_pins_set)
+
+        for pin_name in key_pins:
+            nets = cell.ports.get(pin_name, [])
+            for i, net in enumerate(nets):
+                net_clean = net.lstrip("\\").rstrip(" ")
+                if len(nets) > 1:
+                    signals.append(f"# {inst}.{pin_name}[{i}]")
+                else:
+                    signals.append(f"# {inst}.{pin_name}")
+                signals.append(net_clean)
+
+    if instances_found == 0:
+        click.echo(
+            "No SRAM instances found. Check --manifest or cell type names.",
+            err=True,
+        )
+        sys.exit(1)
+
+    click.echo(
+        f"Found {instances_found} SRAM instance(s), "
+        f"{len([s for s in signals if not s.startswith('#')])} signal(s)",
+        err=True,
+    )
+
+    text = "\n".join(signals) + "\n"
+    if output:
+        output.write_text(text)
+        click.echo(f"Wrote trace file: {output}", err=True)
+    else:
+        click.echo(text, nl=False)
+
+
 if __name__ == "__main__":
     main()
