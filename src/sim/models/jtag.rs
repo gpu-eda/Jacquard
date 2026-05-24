@@ -87,6 +87,10 @@ pub struct JtagReplayModel {
     /// Currently-driven raw TRST value (0 / 1, pre-polarity). Combined
     /// with `trst.active_low` when contributing the override.
     trst_active: bool,
+    /// TCK value deferred by one edge so TMS/TDI settle before TCK
+    /// transitions. IEEE 1149.1 requires TMS/TDI stable at TCK
+    /// rising edge; applying all three atomically races the TAP.
+    pending_tck: Option<u8>,
     /// Total `'R'` (TDO-read) commands seen in the stream — emitted
     /// once at end-of-replay so the operator sees that stage 2 would
     /// have responded to them.
@@ -140,6 +144,7 @@ impl JtagReplayModel {
             tms: 1,
             tdi: 0,
             trst_active: false,
+            pending_tck: None,
             tdo_read_requests: 0,
             srst_toggles: 0,
             quit: false,
@@ -211,18 +216,34 @@ impl JtagReplayModel {
     /// Advance one cosim edge. Drains the next byte from the stream
     /// when the current drive has been held for `hold_edges`. Public
     /// for unit testing; the `PeripheralModel` impl also calls it.
+    ///
+    /// Byte application is split into two phases to satisfy IEEE
+    /// 1149.1's requirement that TMS/TDI are stable before TCK rises:
+    ///
+    ///   Phase 1 (consume edge): apply TMS/TDI immediately, defer TCK.
+    ///   Phase 2 (next edge): apply the deferred TCK value.
+    ///
+    /// This guarantees TMS/TDI have been driven into the state buffer
+    /// for at least one full cosim edge before TCK transitions,
+    /// preventing the TAP from sampling a stale TMS on the rising edge.
     pub fn step_edge(&mut self) {
+        if let Some(tck_val) = self.pending_tck.take() {
+            self.tck = tck_val;
+            return;
+        }
         if self.finished() {
             return;
         }
         if self.edges_held >= self.hold_edges {
-            // Time to consume the next byte. Reset to 1 because the
-            // consuming edge itself counts as the first edge of the
-            // new drive's hold window — so a `hold_edges = N` config
-            // gives exactly N cosim edges per byte.
             let byte = self.bytes[self.cursor];
             self.cursor += 1;
+            let old_tck = self.tck;
             self.consume_byte(byte);
+            let new_tck = self.tck;
+            if new_tck != old_tck {
+                self.tck = old_tck;
+                self.pending_tck = Some(new_tck);
+            }
             self.edges_held = 1;
         } else {
             self.edges_held += 1;
@@ -377,23 +398,31 @@ mod tests {
         // hold_edges=2 with the stream "07": first byte drives all
         // zeros, after 2 step_edges we advance to '7' which drives
         // all ones.
+        //
+        // TCK deferral adds an extra edge when TCK changes: the
+        // consume edge applies TMS/TDI but holds old TCK; the next
+        // edge applies the new TCK.
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
             10, 11, 12, None,
             2,
             b"07".to_vec(),
         );
-        // edges_held=0 < hold (2): first call eats byte '0' immediately.
+        // edges_held starts at hold_edges (2), so first step_edge
+        // consumes byte '0'. TCK was 0, stays 0 → no deferral.
         m.step_edge();
         assert_eq!(driven(&m), (0, 0, 0));
-        // edges_held=0 → 1
+        // Hold edge 2/2.
         m.step_edge();
         assert_eq!(driven(&m), (0, 0, 0));
-        // edges_held=1 → 2 → 0 (advance to '7')
+        // Consume byte '7': TMS=1, TDI=1 applied immediately, but
+        // TCK changes 0→1 so it's deferred. TCK still 0 this edge.
+        m.step_edge();
+        assert_eq!(driven(&m), (0, 1, 1));
+        // Deferred TCK=1 lands.
         m.step_edge();
         assert_eq!(driven(&m), (1, 1, 1));
-        // Stream exhausted after two bytes consumed and hold-out edges.
-        m.step_edge();
+        // Stream exhausted.
         m.step_edge();
         assert!(m.finished());
     }
@@ -412,6 +441,51 @@ mod tests {
         assert!(m.finished());
         // Should have stopped before consuming the post-Q bytes.
         assert!(m.cursor <= 3, "stopped on Q, cursor={}", m.cursor);
+    }
+
+    #[test]
+    fn step_edge_defers_tck_so_tms_settles_first() {
+        // Simulates a TLR→RTI transition: TMS drops from 1→0 one byte
+        // before TCK rises. Without deferral, TCK would rise in the
+        // same edge as TMS changing — the TAP could sample stale TMS.
+        //
+        // Stream: '2' (TCK=0,TMS=1) '0' (TCK=0,TMS=0) '4' (TCK=1,TMS=0)
+        let mut m = JtagReplayModel::new(
+            "jtag_0".into(),
+            10, 11, 12, None,
+            1,
+            b"204".to_vec(),
+        );
+        // Byte '2': TCK=0, TMS=1. Initial TCK=0 → no deferral.
+        m.step_edge();
+        assert_eq!(driven(&m), (0, 1, 0));
+        // Byte '0': TCK=0, TMS=0. TCK unchanged → no deferral.
+        m.step_edge();
+        assert_eq!(driven(&m), (0, 0, 0));
+        // Byte '4': TCK would go 0→1. TMS=0 applied immediately,
+        // but TCK deferred → still 0 this edge.
+        m.step_edge();
+        assert_eq!(driven(&m), (0, 0, 0), "TMS must settle before TCK rises");
+        // Deferred TCK=1 lands. TMS has been 0 for a full edge.
+        m.step_edge();
+        assert_eq!(driven(&m), (1, 0, 0), "TCK rises with TMS already stable");
+    }
+
+    #[test]
+    fn step_edge_no_deferral_when_tck_unchanged() {
+        // When TCK doesn't change, no deferral needed.
+        // Stream: '0' (TCK=0) '2' (TCK=0,TMS=1) — TCK stays 0.
+        let mut m = JtagReplayModel::new(
+            "jtag_0".into(),
+            10, 11, 12, None,
+            1,
+            b"02".to_vec(),
+        );
+        m.step_edge();
+        assert_eq!(driven(&m), (0, 0, 0));
+        // Byte '2': TCK stays 0, TMS changes → applied immediately.
+        m.step_edge();
+        assert_eq!(driven(&m), (0, 1, 0));
     }
 
     #[test]
