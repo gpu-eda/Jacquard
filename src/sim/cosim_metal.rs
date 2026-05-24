@@ -555,10 +555,12 @@ impl MetalSimulator {
         wb_trace_params_buffer: &metal::Buffer,
         timing_constraints_buffer: Option<&metal::Buffer>,
         arrival_state_offset: u32,
+        vcd_ring_buffer: Option<&metal::Buffer>,
     ) -> u64 {
         let batch_done = self.event_counter.get() + 1;
         let cb = self.command_queue.new_command_buffer();
         let edges_per_period = schedule_buffers.edge_buffers.len();
+        let snapshot_bytes = (2 * state_size * std::mem::size_of::<u32>()) as u64;
 
         for edge_offset in 0..batch_size {
             let sched_idx = (schedule_offset + edge_offset) % edges_per_period;
@@ -611,6 +613,18 @@ impl MetalSimulator {
                 wb_trace_channel_buffer,
                 wb_trace_params_buffer,
             );
+
+            if let Some(ring) = vcd_ring_buffer {
+                let blit = cb.new_blit_command_encoder();
+                blit.copy_from_buffer(
+                    states_buffer,
+                    0,
+                    ring,
+                    edge_offset as u64 * snapshot_bytes,
+                    snapshot_bytes,
+                );
+                blit.end_encoding();
+            }
         }
 
         // Single signal at end of entire batch
@@ -914,6 +928,16 @@ fn set_bit(state: &mut [u32], pos: u32, val: u8) {
 #[inline]
 fn clear_bit(state: &mut [u32], pos: u32) {
     state[(pos >> 5) as usize] &= !(1u32 << (pos & 31));
+}
+
+/// Convert a 0/1 bit value to a VCD scalar value.
+#[inline]
+fn bit_to_vcd_value(bit: u8) -> vcd_ng::Value {
+    if bit != 0 {
+        vcd_ng::Value::V1
+    } else {
+        vcd_ng::Value::V0
+    }
 }
 
 /// Build GPIO-to-state-buffer mapping from AIG + FlattenedScript.
@@ -2923,6 +2947,29 @@ pub fn run_cosim(
         None
     };
 
+    // ── VCD ring buffer (enables batched-mode VCD capture) ─────────────────
+    //
+    // When stimulus or timing VCD is active, we snapshot output_state after
+    // each edge via a GPU blit into a ring buffer. This allows batched dispatch
+    // (no batch=1 override) while preserving per-tick VCD accuracy.
+    let vcd_ring_buffer: Option<metal::Buffer> =
+        if stimulus_vcd_state.is_some() || timing_vcd_state.is_some() {
+            let ring_bytes = BATCH_SIZE * 2 * state_size * std::mem::size_of::<u32>();
+            let buf = simulator.device.new_buffer(
+                ring_bytes as u64,
+                MTLResourceOptions::StorageModeShared,
+            );
+            clilog::info!(
+                "VCD ring buffer: {} ticks × {} words = {:.1} MB",
+                BATCH_SIZE,
+                2 * state_size,
+                ring_bytes as f64 / 1048576.0
+            );
+            Some(buf)
+        } else {
+            None
+        };
+
     // ── DFF state dump setup (optional) ────────────────────────────────────
     //
     // When --dump-dff is specified, dump all DFF Q-values per cycle to a text file.
@@ -3098,6 +3145,8 @@ pub fn run_cosim(
     let mut prof_batch_encode: u64 = 0;
     let mut prof_gpu_wait: u64 = 0;
     let mut prof_drain: u64 = 0;
+    let mut prof_stimulus_vcd: u64 = 0;
+    let mut prof_timing_vcd: u64 = 0;
     let mut total_batches: u64 = 0;
 
     // Per-tick tracing: run 1 tick at a time for first N ticks after reset
@@ -3222,12 +3271,11 @@ pub fn run_cosim(
         // pending commands.
         let any_model_active = models.iter().any(|m| m.is_active());
         let force_single_edge = any_model_active;
+        // VCD capture uses the ring buffer — no batch=1 override needed.
         let batch = if force_single_edge {
             1
         } else if opts.check_with_cpu && tick < cpu_check_max_edges {
             1 // single tick for CPU comparison
-        } else if stimulus_vcd_state.is_some() || timing_vcd_state.is_some() {
-            1 // single tick for stimulus/timing VCD capture
         } else if dff_dump_active {
             1 // single tick for DFF state capture
         } else if trace_ticks > 0 && tick < reset_edges + trace_ticks {
@@ -3336,6 +3384,7 @@ pub fn run_cosim(
             &wb_trace_params_buffer,
             timing_constraints_buffer.as_ref(),
             arrival_state_offset,
+            vcd_ring_buffer.as_ref(),
         );
         schedule_offset = (schedule_offset + batch) % schedule_buffers.edge_buffers.len();
         prof_batch_encode += t_encode.elapsed().as_nanos() as u64;
@@ -3345,105 +3394,97 @@ pub fn run_cosim(
         simulator.spin_wait(batch_done);
         prof_gpu_wait += t_wait.elapsed().as_nanos() as u64;
 
-        // ── Write stimulus VCD entries (one timestamp per scheduler edge) ──
-        if let Some((ref mut writer, ref mapping, ref mut prev_values)) = stimulus_vcd_state {
-            let input_state: &[u32] = unsafe {
-                std::slice::from_raw_parts(states_buffer.contents() as *const u32, state_size)
-            };
-            // One cosim tick advances simulated time by gcd_ps (= half-period
-            // for single-domain). Emit signal values as currently driven on
-            // GPU-side input_state — clock and all other inputs read directly.
-            let _ = mapping.clock_period_ps; // kept for future use; gcd_ps is canonical
-            let t_edge = tick as u64 * schedule_buffers.gcd_ps;
-
-            writer.timestamp(t_edge).unwrap();
-            for (sig_idx, &(pos, vid, _is_clock)) in mapping.signals.iter().enumerate() {
-                let val = ((input_state[(pos >> 5) as usize] >> (pos & 31)) & 1) as u8;
-                if val != prev_values[sig_idx] {
-                    writer
-                        .change_scalar(
-                            vid,
-                            if val != 0 {
-                                vcd_ng::Value::V1
-                            } else {
-                                vcd_ng::Value::V0
-                            },
-                        )
-                        .unwrap();
-                    prev_values[sig_idx] = val;
-                }
-            }
-        }
-
-        // ── Write timing VCD entries (output signals with arrival offsets) ──
-        if let Some((ref mut writer, ref mapping, ref mut prev_values)) = timing_vcd_state {
-            let output_state: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    (states_buffer.contents() as *const u32).add(state_size),
-                    state_size,
-                )
-            };
-
-            // Base timestamp: rising edge of this tick (in ps).
-            // Cosim ticks represent full clock cycles; output is latched after rising edge.
-            let half_period = clock_period_ps / 2;
-            let base_timestamp = tick as u64 * clock_period_ps + half_period;
-
-            // Collect transitions with arrival time offsets, then sort by timestamp
+        // ── Drain VCD ring buffer (stimulus + timing) ──────────────────────
+        if let Some(ref ring) = vcd_ring_buffer {
+            let ring_ptr = ring.contents() as *const u32;
+            let slot_words = 2 * state_size;
             let mut timed_transitions: Vec<(u64, usize, u32)> = Vec::new();
 
-            for (i, &(output_aigpin, output_pos, _vid)) in mapping.out2vcd.iter().enumerate() {
-                let value_new = match output_pos {
-                    u32::MAX => {
-                        assert!(output_aigpin <= 1);
-                        output_aigpin as u32
-                    }
-                    pos => (output_state[(pos >> 5) as usize] >> (pos & 31)) & 1,
-                };
-
-                if value_new == prev_values[i] {
-                    continue;
-                }
-                prev_values[i] = value_new;
-
-                // Get arrival time from the arrival section of the output state
-                let arrival_ps = if output_pos != u32::MAX && arrival_state_offset > 0 {
-                    let arrival_section = &output_state[arrival_state_offset as usize..];
-                    let word_idx = (output_pos >> 5) as usize;
-                    if word_idx < rio {
-                        (arrival_section[word_idx] & 0xFFFF) as u64
-                    } else {
-                        0u64
-                    }
-                } else {
-                    0u64
-                };
-
-                let actual_timestamp = base_timestamp + arrival_ps;
-                timed_transitions.push((actual_timestamp, i, value_new));
-            }
-
-            // Sort by timestamp (stable preserves signal order within same timestamp)
-            timed_transitions.sort_by_key(|&(ts, _, _)| ts);
-
-            // Write sorted transitions
-            let mut current_timestamp = u64::MAX;
-            for &(ts, i, value_new) in &timed_transitions {
-                if ts != current_timestamp {
-                    writer.timestamp(ts).unwrap();
-                    current_timestamp = ts;
-                }
-                let (_, _, vid) = mapping.out2vcd[i];
-                writer
-                    .change_scalar(
-                        vid,
-                        if value_new != 0 {
-                            vcd_ng::Value::V1
-                        } else {
-                            vcd_ng::Value::V0
-                        },
+            for edge_in_batch in 0..batch {
+                let slot_base = unsafe {
+                    std::slice::from_raw_parts(
+                        ring_ptr.add(edge_in_batch * slot_words),
+                        slot_words,
                     )
-                    .unwrap();
+                };
+                let input_state = &slot_base[..state_size];
+                let output_state = &slot_base[state_size..];
+                let edge_tick = tick + edge_in_batch;
+
+                // Stimulus VCD
+                let t_stim = std::time::Instant::now();
+                if let Some((ref mut writer, ref mapping, ref mut prev_values)) =
+                    stimulus_vcd_state
+                {
+                    let t_edge = edge_tick as u64 * schedule_buffers.gcd_ps;
+                    writer.timestamp(t_edge).unwrap();
+                    for (sig_idx, &(pos, vid, _is_clock)) in mapping.signals.iter().enumerate() {
+                        let val = ((input_state[(pos >> 5) as usize] >> (pos & 31)) & 1) as u8;
+                        if val != prev_values[sig_idx] {
+                            writer
+                                .change_scalar(vid, bit_to_vcd_value(val))
+                                .unwrap();
+                            prev_values[sig_idx] = val;
+                        }
+                    }
+                }
+                prof_stimulus_vcd += t_stim.elapsed().as_nanos() as u64;
+
+                // Timing VCD
+                let t_timing = std::time::Instant::now();
+                if let Some((ref mut writer, ref mapping, ref mut prev_values)) =
+                    timing_vcd_state
+                {
+                    let half_period = clock_period_ps / 2;
+                    let base_timestamp = edge_tick as u64 * clock_period_ps + half_period;
+                    timed_transitions.clear();
+
+                    for (i, &(output_aigpin, output_pos, _vid)) in
+                        mapping.out2vcd.iter().enumerate()
+                    {
+                        let value_new = match output_pos {
+                            u32::MAX => {
+                                assert!(output_aigpin <= 1);
+                                output_aigpin as u32
+                            }
+                            pos => (output_state[(pos >> 5) as usize] >> (pos & 31)) & 1,
+                        };
+
+                        if value_new == prev_values[i] {
+                            continue;
+                        }
+                        prev_values[i] = value_new;
+
+                        let arrival_ps = if output_pos != u32::MAX && arrival_state_offset > 0 {
+                            let arrival_section = &output_state[arrival_state_offset as usize..];
+                            let word_idx = (output_pos >> 5) as usize;
+                            if word_idx < rio {
+                                (arrival_section[word_idx] & 0xFFFF) as u64
+                            } else {
+                                0u64
+                            }
+                        } else {
+                            0u64
+                        };
+
+                        let actual_timestamp = base_timestamp + arrival_ps;
+                        timed_transitions.push((actual_timestamp, i, value_new));
+                    }
+
+                    timed_transitions.sort_by_key(|&(ts, _, _)| ts);
+                    let mut current_timestamp = u64::MAX;
+                    for &(ts, i, value_new) in &timed_transitions {
+                        if ts != current_timestamp {
+                            writer.timestamp(ts).unwrap();
+                            current_timestamp = ts;
+                        }
+                        let (_, _, vid) = mapping.out2vcd[i];
+                        writer
+                            .change_scalar(vid, bit_to_vcd_value(value_new as u8))
+                            .unwrap();
+                    }
+                }
+                prof_timing_vcd += t_timing.elapsed().as_nanos() as u64;
             }
         }
 
@@ -3982,7 +4023,8 @@ pub fn run_cosim(
     }
 
     // Print profiling results
-    let total_ns = prof_batch_encode + prof_gpu_wait + prof_drain;
+    let total_ns =
+        prof_batch_encode + prof_gpu_wait + prof_drain + prof_stimulus_vcd + prof_timing_vcd;
     let print_prof = |name: &str, ns: u64| {
         let us = ns as f64 / 1000.0 / max_edges as f64;
         let pct = if total_ns > 0 {
@@ -3997,6 +4039,8 @@ pub fn run_cosim(
     print_prof("Batch encode + commit", prof_batch_encode);
     print_prof("GPU wait (spin)", prof_gpu_wait);
     print_prof("UART channel drain", prof_drain);
+    print_prof("Stimulus VCD write", prof_stimulus_vcd);
+    print_prof("Timing VCD write", prof_timing_vcd);
     println!(
         "  {:<32} {:>8.1}μs/tick  100.0%",
         "TOTAL (instrumented)",
