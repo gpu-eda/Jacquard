@@ -251,6 +251,11 @@ async def trst_pulse(dut, server: RemoteBitbangServer, hold_cycles: int = 30):
 async def capture(dut):
     log = logging.getLogger("capture")
     log.setLevel(logging.INFO)
+    gl_mode = bool(os.getenv("GL", ""))
+    if gl_mode and hasattr(dut, "VDD"):
+        dut.VDD.value = 1
+    if gl_mode and hasattr(dut, "VSS"):
+        dut.VSS.value = 0
 
     if CAPTURE_PATH.exists():
         CAPTURE_PATH.unlink()
@@ -332,10 +337,23 @@ async def capture(dut):
 
     server.stop()
 
-    assert dmactive_v == 1, (
-        f"dmactive_obs did not become 1 — DMI init failed "
-        f"(see {openocd_log})"
-    )
+    # In GL mode the post-PnR netlist's `dmactive_obs` top-level pin
+    # is fed by a hierarchical-reference assign (`u_dm.dmactive`) that
+    # Yosys's flat synth doesn't preserve cleanly — the pin ends up
+    # tied to an undeclared net. `data0_obs[*]` is wired through a
+    # proper port (`hart_data0_rdata`) and IS observable, so the
+    # canonical pass criterion is data0_obs only. dmactive_obs/
+    # haltreq_obs remain useful in RTL where the hierarchical-ref
+    # assign elaborates fine.
+    if gl_mode:
+        if dmactive_v != 1:
+            log.info("(GL mode) dmactive_obs is not observable via the "
+                     "top-level pin in post-PnR — informational only")
+    else:
+        assert dmactive_v == 1, (
+            f"dmactive_obs did not become 1 — DMI init failed "
+            f"(see {openocd_log})"
+        )
     assert data0_v == 0xCAFEBABE, (
         f"data0_obs = 0x{data0_v:08x} != 0xCAFEBABE — DMI write to DATA0 "
         f"didn't land (see {openocd_log})"
@@ -350,25 +368,70 @@ async def capture(dut):
 
 if __name__ == "__main__":
     rtl_dir = (TEST_DIR / "rtl").resolve()
-    sources = [
-        str(rtl_dir / "hazard3_jtag_dtm_core.v"),
-        str(rtl_dir / "hazard3_jtag_dtm.v"),
-        str(rtl_dir / "hazard3_apb_async_bridge.v"),
-        str(rtl_dir / "hazard3_sync_1bit.v"),
-        str(rtl_dir / "hazard3_dm.v"),
-        str(rtl_dir / "top.sv"),
-    ]
+    gl = bool(os.getenv("GL", ""))
+    if gl:
+        # Gate-level Icarus: replace the RTL sources with the LibreLane
+        # post-PnR netlist + the gf180mcu standard-cell library. Useful
+        # as a cross-check vs Jacquard cosim — if the gate-level Icarus
+        # run also fails the assertion, the design has a post-PnR bug
+        # independent of the cosim model layer.
+        pdk_root = os.getenv("PDK_ROOT")
+        if not pdk_root:
+            raise SystemExit("GL=1 requires PDK_ROOT to point at the gf180mcu PDK install")
+        scl_dir = (
+            Path(pdk_root)
+            / "gf180mcuD"
+            / "libs.ref"
+            / "gf180mcu_fd_sc_mcu9t5v0"
+            / "verilog"
+        )
+        scl_v = scl_dir / "gf180mcu_fd_sc_mcu9t5v0.v"
+        udp_v = scl_dir / "primitives.v"
+        if not scl_v.exists():
+            raise SystemExit(f"GL=1: standard-cell library not found at {scl_v}")
+        if not udp_v.exists():
+            raise SystemExit(f"GL=1: UDP primitives not found at {udp_v}")
+        # The post-PnR netlist has no `timescale directive (it inherits
+        # from synth) and the cell library uses its own. Drop a tiny
+        # prelude with our 1ns/1ps timescale so cocotb's clock-period
+        # computation has the precision it needs.
+        build_dir = THIS_DIR / "sim_build_gl"
+        build_dir.mkdir(parents=True, exist_ok=True)
+        timescale_v = build_dir / "_timescale.v"
+        timescale_v.write_text("`timescale 1ns/1ps\n")
+        sources = [
+            str(timescale_v),
+            str(udp_v),     # UDP primitive definitions referenced by the .lib
+            str(scl_v),     # gf180mcu_fd_sc_mcu9t5v0 cell models
+            str(TEST_DIR / "data" / "top.pnl.v"),
+        ]
+    else:
+        sources = [
+            str(rtl_dir / "hazard3_jtag_dtm_core.v"),
+            str(rtl_dir / "hazard3_jtag_dtm.v"),
+            str(rtl_dir / "hazard3_apb_async_bridge.v"),
+            str(rtl_dir / "hazard3_sync_1bit.v"),
+            str(rtl_dir / "hazard3_dm.v"),
+            str(rtl_dir / "top.sv"),
+        ]
+        build_dir = THIS_DIR / "sim_build"
+
     runner = get_runner("icarus")
+    # GL needs USE_POWER_PINS so cell library ports match the post-PnR
+    # netlist's .VDD/.VSS/.VNW/.VPW pin bindings; FUNCTIONAL skips the
+    # specify-block timing arcs we don't need for this test.
+    defines = {"USE_POWER_PINS": "1", "FUNCTIONAL": "1"} if gl else {}
     runner.build(
         verilog_sources=sources,
         includes=[str(rtl_dir)],
+        defines=defines,
         hdl_toplevel="top",
-        build_dir=str(THIS_DIR / "sim_build"),
+        build_dir=str(build_dir),
         waves=True,
     )
     runner.test(
         hdl_toplevel="top",
         test_module="capture_bitbang",
-        build_dir=str(THIS_DIR / "sim_build"),
+        build_dir=str(build_dir),
         waves=True,
     )
