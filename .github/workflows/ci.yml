@@ -842,11 +842,8 @@ jobs:
     name: JTAG Minimal Cosim (Hazard3 DTM+DM)
     runs-on: macos-runner-1
     timeout-minutes: 20
-    # Currently fails because the chip-side jtag_minimal design exposes
-    # the same TAP-stuck-in-TLR symptom as ChipFlow/Jacquard#84.
-    # Flip `continue-on-error` to false once #84 is fully resolved
-    # (the test is a deliberate regression gate for that bug class).
-    continue-on-error: true
+    # Regression gate for #84 (model-driven clock edge flags).
+    continue-on-error: false
     steps:
       - uses: actions/checkout@v4
         with:
