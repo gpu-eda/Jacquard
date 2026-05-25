@@ -1604,12 +1604,11 @@ fn cmd_cosim(args: CosimArgs) {
 
         let mut design = setup::load_design(&design_args);
 
-        // Enable timing arrival readback if --timing-vcd is set
-        if args.timing_vcd.is_some() {
-            if !design.script.timing_enabled {
-                eprintln!("Error: --timing-vcd requires --timing-ir");
-                std::process::exit(1);
-            }
+        // Enable timing arrival readback if --timing-vcd is set.
+        // When timing IR is available, arrival offsets are included;
+        // otherwise the VCD still emits output signal values (useful
+        // for --trace-signals observability without timing data).
+        if args.timing_vcd.is_some() && design.script.timing_enabled {
             design.script.enable_timing_arrivals();
         }
 

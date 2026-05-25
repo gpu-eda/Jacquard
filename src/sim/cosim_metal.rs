@@ -3116,6 +3116,80 @@ pub fn run_cosim(
         }
     };
 
+    // Model-driven clock edge tracking: when a peripheral model drives
+    // a pin that is also a clock domain's input (e.g. JTAG TCK), the
+    // scheduler's pre-computed edge flags don't match the model's actual
+    // transitions. We detect model-driven clock transitions and patch
+    // the edge flags in the current tick's ops buffer.
+    struct ModelDrivenClockState {
+        clock_input_pos: u32,
+        posedge_flag_positions: Vec<u32>,
+        negedge_flag_positions: Vec<u32>,
+        prev_value: u8,
+    }
+    let mut model_driven_clocks: Vec<ModelDrivenClockState> = Vec::new();
+    {
+        let model_pos_set: std::collections::HashSet<u32> =
+            model_driven_positions.iter().copied().collect();
+        for domain in &gpio_map.clock_domains {
+            if let Some(pos) = domain.clock_input_pos {
+                if model_pos_set.contains(&pos) {
+                    clilog::info!(
+                        "Clock domain `{}` is model-driven (pos={}); \
+                         edge flags will track model transitions",
+                        domain.name, pos
+                    );
+                    model_driven_clocks.push(ModelDrivenClockState {
+                        clock_input_pos: pos,
+                        posedge_flag_positions: domain.posedge_flag_bits.clone(),
+                        negedge_flag_positions: domain.negedge_flag_bits.clone(),
+                        prev_value: 0,
+                    });
+                }
+            }
+        }
+    }
+
+    // Helper: after model overrides are applied, patch edge flags in
+    // the current tick's ops buffer to reflect actual clock transitions.
+    let patch_model_clock_edges = |
+        clocks: &mut [ModelDrivenClockState],
+        overrides: &crate::sim::models::ModelOverrides,
+        sched_offset: usize,
+    | {
+        if clocks.is_empty() {
+            return;
+        }
+        let sched_idx = sched_offset % schedule_buffers.edge_buffers.len();
+        let (ref _params, ref ops_buf) = schedule_buffers.edge_buffers[sched_idx];
+        let len = schedule_buffers.edge_ops_lens[sched_idx];
+        let ops: &mut [BitOp] =
+            unsafe { std::slice::from_raw_parts_mut(ops_buf.contents() as *mut BitOp, len) };
+
+        for clock in clocks.iter_mut() {
+            let new_val = overrides
+                .get(&clock.clock_input_pos)
+                .copied()
+                .unwrap_or(clock.prev_value);
+            let rising = clock.prev_value == 0 && new_val == 1;
+            let falling = clock.prev_value == 1 && new_val == 0;
+            clock.prev_value = new_val;
+
+            for op in ops.iter_mut() {
+                for &pos in &clock.posedge_flag_positions {
+                    if op.position == pos {
+                        op.value = if rising { 1 } else { 0 };
+                    }
+                }
+                for &pos in &clock.negedge_flag_positions {
+                    if op.position == pos {
+                        op.value = if falling { 1 } else { 0 };
+                    }
+                }
+            }
+        }
+    };
+
     // Track schedule position across batches
     let mut schedule_offset: usize = 0;
 
@@ -3193,6 +3267,12 @@ pub fn run_cosim(
             model.contribute_overrides(&mut overrides);
         }
         update_model_driven_in_ops(&overrides);
+        // Seed initial clock values (no edge flags — no transition yet).
+        for clock in &mut model_driven_clocks {
+            if let Some(&val) = overrides.get(&clock.clock_input_pos) {
+                clock.prev_value = val;
+            }
+        }
     }
 
     while tick < max_edges {
@@ -3241,6 +3321,11 @@ pub fn run_cosim(
 
             if any_change {
                 update_model_driven_in_ops(&overrides);
+                patch_model_clock_edges(
+                    &mut model_driven_clocks,
+                    &overrides,
+                    schedule_offset,
+                );
             }
         }
 
