@@ -14,6 +14,7 @@ pub mod cosim_metal;
 pub mod cpu_reference;
 pub mod input_stim;
 pub mod models;
+pub mod run_params;
 pub mod setup;
 pub mod sram_dump;
 pub mod sram_preload;

@@ -46,6 +46,8 @@ pub struct CosimOpts {
     /// Cosim edges per JTAG stream byte. Default 4; see
     /// `JtagReplayModel` for the rationale.
     pub jtag_hold_cycles: u32,
+    /// Path to run-parameters file for reproducible jitter. See ADR 0012.
+    pub run_params: Option<std::path::PathBuf>,
 }
 
 /// Result of a co-simulation run.
@@ -2453,6 +2455,62 @@ pub fn run_cosim(
     let scheduler = MultiClockScheduler::new(&clock_timings);
     let edges_per_period = scheduler.schedule.len();
 
+    // ── Run-parameters and per-domain jitter PRNGs (ADR 0012) ─────────────
+    let run_params = {
+        use crate::sim::run_params::RunParams;
+        if let Some(ref path) = opts.run_params {
+            RunParams::load_or_generate(path)
+                .unwrap_or_else(|e| panic!("Failed to load/write run-params at {}: {}", path.display(), e))
+        } else if let Some(ref timing_vcd_path) = opts.timing_vcd {
+            let default_path = timing_vcd_path.with_file_name("run_params.json");
+            RunParams::load_or_generate(&default_path)
+                .unwrap_or_else(|e| panic!("Failed to write default run-params at {}: {}", default_path.display(), e))
+        } else {
+            RunParams::generate()
+        }
+    };
+
+    let jitter_active = config.effective_clocks().iter().any(|c| c.jitter_ps > 0);
+    if jitter_active {
+        clilog::info!(
+            "CDC jitter enabled (master_seed={}); per-domain streams derived from seed",
+            run_params.master_seed
+        );
+        if opts.check_with_cpu {
+            clilog::warn!(
+                "--check-with-cpu with jitter active: CPU baseline does not apply \
+                 jitter, so timing comparisons are meaningless"
+            );
+        }
+    }
+
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+    let mut domain_rngs: Vec<Option<(ChaCha8Rng, i64)>> = gpio_map
+        .clock_domains
+        .iter()
+        .enumerate()
+        .map(|(i, domain)| {
+            let jitter_ps = config
+                .effective_clocks()
+                .iter()
+                .find(|c| c.gpio == domain.clock_gpio.unwrap_or(usize::MAX))
+                .map(|c| c.jitter_ps)
+                .unwrap_or(0);
+            if jitter_ps > 0 {
+                let sub_seed = run_params.domain_seed(&domain.name);
+                let rng = ChaCha8Rng::seed_from_u64(sub_seed);
+                clilog::info!(
+                    "  domain '{}' (idx={}): jitter_ps={}, sub_seed={}",
+                    domain.name, i, jitter_ps, sub_seed
+                );
+                Some((rng, jitter_ps as i64))
+            } else {
+                None
+            }
+        })
+        .collect();
+
     // Instantiate CPU-side peripheral models from config. Their driven
     // input positions are appended as placeholder BitOps in each
     // edge_buffer's ops list so state_prep applies them every edge;
@@ -3475,6 +3533,7 @@ pub fn run_cosim(
             arrival_state_offset,
             vcd_ring_buffer.as_ref(),
         );
+        let batch_schedule_start = schedule_offset;
         schedule_offset = (schedule_offset + batch) % schedule_buffers.edge_buffers.len();
         prof_batch_encode += t_encode.elapsed().as_nanos() as u64;
 
@@ -3526,6 +3585,33 @@ pub fn run_cosim(
                 {
                     let half_period = clock_period_ps / 2;
                     let base_timestamp = edge_tick as u64 * clock_period_ps + half_period;
+
+                    // ADR 0012: apply jitter displacement to base timestamp.
+                    // Draw from each domain's PRNG at every tick to keep
+                    // streams stable regardless of which domain fires.
+                    let sched_idx = (batch_schedule_start + edge_in_batch)
+                        % schedule_buffers.edge_buffers.len();
+                    let mut jitter_displacement: i64 = 0;
+                    if jitter_active {
+                        use rand::Rng;
+                        let tick_edges = &scheduler.schedule[sched_idx];
+                        for (di, rng_opt) in domain_rngs.iter_mut().enumerate() {
+                            if let Some((ref mut rng, budget)) = rng_opt {
+                                let b = *budget;
+                                let d: i64 = rng.gen_range(-b..=b);
+                                if di < tick_edges.domain_edges.len()
+                                    && tick_edges.domain_edges[di].1
+                                {
+                                    jitter_displacement = d;
+                                }
+                            }
+                        }
+                    }
+                    let base_timestamp = if jitter_displacement >= 0 {
+                        base_timestamp + jitter_displacement as u64
+                    } else {
+                        base_timestamp.saturating_sub((-jitter_displacement) as u64)
+                    };
                     timed_transitions.clear();
 
                     for (i, &(output_aigpin, output_pos, _vid)) in

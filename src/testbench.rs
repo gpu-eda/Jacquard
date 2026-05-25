@@ -179,6 +179,10 @@ pub struct ClockConfig {
     pub phase_offset_ps: u64,
     /// Human-readable name for this clock domain (optional).
     pub name: Option<String>,
+    /// Maximum edge jitter in picoseconds (uniform distribution
+    /// [-jitter_ps, +jitter_ps]). Default 0 = no jitter. See ADR 0012.
+    #[serde(default)]
+    pub jitter_ps: u64,
 }
 
 // ── Testbench configuration (loaded from JSON) ──────────────────────────────
@@ -249,6 +253,7 @@ impl TestbenchConfig {
                 period_ps: self.clock_period_ps.unwrap_or(40000),
                 phase_offset_ps: 0,
                 name: Some("sys_clk".to_string()),
+                jitter_ps: 0,
             }]
         }
     }

@@ -304,6 +304,13 @@ struct CosimArgs {
     /// with faster TCK relative to the chip clock.
     #[clap(long = "jtag-hold-cycles", value_name = "N", default_value = "4")]
     jtag_hold_cycles: u32,
+
+    /// Path to a run-parameters file for reproducible jitter injection.
+    /// If the file exists, parameters are loaded from it. If not, fresh
+    /// parameters are generated and written before simulation starts.
+    /// Omit to auto-generate at `<output_dir>/run_params.json`. See ADR 0012.
+    #[clap(long = "run-params", value_name = "PATH")]
+    run_params: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -1627,6 +1634,7 @@ fn cmd_cosim(args: CosimArgs) {
             dump_dff_cycles: args.dump_dff_cycles,
             jtag_replay: args.jtag_replay.clone(),
             jtag_hold_cycles: args.jtag_hold_cycles,
+            run_params: args.run_params.clone(),
         };
 
         let result =
