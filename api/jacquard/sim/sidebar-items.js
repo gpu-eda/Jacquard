@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["cpu_reference","input_stim","models","setup","sram_dump","sram_preload","timing_ir_loader","trace_signals","vcd_io"]};
+window.SIDEBAR_ITEMS = {"mod":["cpu_reference","input_stim","models","run_params","setup","sram_dump","sram_preload","timing_ir_loader","trace_signals","vcd_io"]};
