@@ -20,7 +20,7 @@ INPUT_PINS = {
 
 # Cell pattern: cell_type instance_name (.port(net), ...);
 CELL_PATTERN = re.compile(
-    r"(\w+)\s+"  # cell type
+    r"(\$?[\w]+)\s+"  # cell type (may start with $ for Yosys internal cells)
     r"(\\[^\s]+|\w+)\s*"  # instance name (escaped or simple)
     r"\(([^;]+)\);",  # port connections
     re.MULTILINE | re.DOTALL,
