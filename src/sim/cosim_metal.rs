@@ -955,8 +955,10 @@ pub(crate) fn build_gpio_mapping(
     let mut output_bits: HashMap<usize, u32> = HashMap::new();
     let mut named_input_bits: HashMap<String, u32> = HashMap::new();
 
-    // Group clock flags by pinid → ClockDomainFlags
-    let mut clock_domain_map: HashMap<usize, (Vec<u32>, Vec<u32>)> = HashMap::new();
+    // Group clock flags by pinid → ClockDomainFlags.
+    // BTreeMap gives deterministic iteration order (ascending pinid).
+    let mut clock_domain_map: std::collections::BTreeMap<usize, (Vec<u32>, Vec<u32>)> =
+        std::collections::BTreeMap::new();
 
     // Build reverse lookup: port_name → gpio_index for port_mapping mode
     let input_name_to_gpio: HashMap<String, usize> = port_mapping
@@ -1451,14 +1453,14 @@ impl MultiClockScheduler {
             schedule_len
         );
 
-        let num_domains = timings.len();
+        let num_domains = timings.iter().map(|t| t.domain_index + 1).max().unwrap_or(0);
         let mut schedule = Vec::with_capacity(schedule_len);
 
         for tick in 0..schedule_len {
             let tick_ps = tick as u64 * gcd_ps;
             let mut domain_edges = vec![(false, false); num_domains];
 
-            for (i, timing) in timings.iter().enumerate() {
+            for timing in timings.iter() {
                 let hp = timing.half_period_ps;
                 let offset = timing.phase_offset_ps;
                 // Adjust tick_ps by phase offset
@@ -1470,11 +1472,12 @@ impl MultiClockScheduler {
                     continue;
                 }
                 let edge_count = adjusted / hp;
-                // Even edge_count = falling, odd = rising
+                // Index by domain_index (position in clock_domains) so
+                // build_edge_ops can iterate clock_domains directly.
                 if edge_count % 2 == 0 {
-                    domain_edges[i].0 = true; // falling edge
+                    domain_edges[timing.domain_index].0 = true; // falling edge
                 } else {
-                    domain_edges[i].1 = true; // rising edge
+                    domain_edges[timing.domain_index].1 = true; // rising edge
                 }
             }
 
@@ -2532,6 +2535,7 @@ pub fn run_cosim(
                 position: resolve_pin(g, "trst"),
                 active_low: jtag_cfg.trst_active_low,
             });
+            let stream_len = bytes.len();
             let model = crate::sim::models::jtag::JtagReplayModel::new(
                 "jtag_0".to_string(),
                 tck,
@@ -2544,7 +2548,7 @@ pub fn run_cosim(
             clilog::info!(
                 "JTAG replay `jtag_0`: {} stream bytes from {}, hold_edges={} \
                  (tck_gpio={}, tms_gpio={}, tdi_gpio={}, trst_gpio={:?})",
-                model.driven_positions().len(),
+                stream_len,
                 replay_path.display(),
                 opts.jtag_hold_cycles,
                 jtag_cfg.tck_gpio,
