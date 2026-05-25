@@ -24,6 +24,10 @@ changes, supersede the old ADR with a new one and update the status.
 | [0006](0006-sdf-preprocessing-model.md) | SDF preprocessing model and interim-to-release cutover | Accepted (amended 2026-05-02) |
 | [0007](0007-timing-model-fidelity-roadmap.md) | Timing model fidelity roadmap | Proposed |
 | [0008](0008-structured-timing-output.md) | Structured timing output as first-class deliverable | Approved |
+| [0009](0009-opensta-verilog-reader-inputs.md) | OpenSTA Verilog reader inputs | Accepted |
+| [0010](0010-declarative-cell-metadata.md) | Declarative cell metadata | Accepted |
+| [0011](0011-ram-port-mapping-schema.md) | RAM port-mapping schema for declarative cell metadata | Accepted |
+| [0012](0012-cdc-jitter-injection.md) | Reproducible CDC jitter injection for multi-clock cosim | Proposed |
 
 ## How the ADRs relate
 
