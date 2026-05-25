@@ -151,18 +151,16 @@ class RemoteBitbangServer:
         c = chr(b)
         if c in "01234567":
             with self._lock:
-                self._cmd_q.append((
-                    (b >> 2) & 1,   # TCK
-                    (b >> 1) & 1,   # TMS
-                    b & 1,          # TDI
-                ))
+                self._cmd_q.append(("drive", (b >> 2) & 1, (b >> 1) & 1, b & 1))
                 if len(self._cmd_q) >= self.QUEUE_LIMIT:
                     self._cmd_room.clear()
         elif c == "R":
+            # Queue inline with drives so the pump samples TDO at the
+            # cycle the 'R' is processed (otherwise we'd reply with a
+            # stale value sampled before the latest drive propagated).
             with self._lock:
-                self._tx.append(ord("0") + self.tdo)
+                self._cmd_q.append(("read", 0, 0, 0))
         elif c in "rstu":
-            # 'r'=TRST 0 SRST 0; 's'=TRST 0 SRST 1; 't'=TRST 1 SRST 0; 'u'=TRST 1 SRST 1
             with self._lock:
                 self.trst_n = 1 if c in "tu" else 0
         elif c in "Bb":
@@ -187,50 +185,63 @@ class RemoteBitbangServer:
         self._capture.close()
         self._quit.set()
 
-    def pop_drive(self):
+    def pop_cmd(self):
+        """Pop next command. Returns ('drive', tck, tms, tdi) or
+        ('read', _, _, _) or None if queue empty."""
         with self._lock:
             if not self._cmd_q:
                 return None
-            tck, tms, tdi = self._cmd_q.popleft()
+            kind, a, b, c = self._cmd_q.popleft()
             if len(self._cmd_q) < self.QUEUE_LIMIT // 2:
                 self._cmd_room.set()
-            self.tck, self.tms, self.tdi = tck, tms, tdi
-            return tck, tms, tdi
+            if kind == "drive":
+                self.tck, self.tms, self.tdi = a, b, c
+            return (kind, a, b, c)
+
+    def push_tdo_reply(self, bit: int):
+        with self._lock:
+            self._tx.append(ord("0") + (bit & 1))
 
     def wait_connected(self, timeout_s: float) -> bool:
         return self._connected.wait(timeout=timeout_s)
 
 
 async def jtag_pad_pump(dut, server: RemoteBitbangServer, hold_cycles: int):
-    """One JTAG drive per `hold_cycles` chip-clock posedges."""
+    """One JTAG cmd per `hold_cycles` chip-clock posedges.
+
+    'drive' commands set (tck, tms, tdi); 'read' commands sample tdo
+    and push the bit back to OpenOCD. Both kinds advance the pump
+    by one hold window. TRST_N is driven by the harness (`trst_pulse`)
+    directly — pad pump doesn't touch it.
+    """
     while True:
         await RisingEdge(dut.clk)
-        drive = server.pop_drive()
-        if drive is not None:
-            tck, tms, tdi = drive
-            dut.tck.value = tck
-            dut.tms.value = tms
-            dut.tdi.value = tdi
-        # Sample TDO so 'R' replies see the current value
-        try:
-            server.tdo = int(dut.tdo.value)
-        except ValueError:
-            server.tdo = 0
-        # Drive TRST_N from the server-side state (set by 'r'/'s'/'t'/'u' bytes
-        # OR by the harness directly during the initial trst_pulse).
-        dut.trst_n.value = server.trst_n
+        cmd = server.pop_cmd()
+        if cmd is not None:
+            kind, tck, tms, tdi = cmd
+            if kind == "drive":
+                dut.tck.value = tck
+                dut.tms.value = tms
+                dut.tdi.value = tdi
+            elif kind == "read":
+                try:
+                    tdo_bit = int(dut.tdo.value)
+                except ValueError:
+                    tdo_bit = 0
+                server.push_tdo_reply(tdo_bit)
         for _ in range(hold_cycles - 1):
             await RisingEdge(dut.clk)
 
 
 async def trst_pulse(dut, server: RemoteBitbangServer, hold_cycles: int = 30):
-    """Pulse TRST_N 1→0→1. Tees `'r'`/`'u'` bytes into the capture file so
-    the recorded stream reproduces the pulse for Jacquard replay."""
-    server.trst_n = 0
+    """Pulse TRST_N 1→0→1 directly. Tees `'r'`/`'u'` bytes into the
+    capture file so the recorded stream reproduces the pulse when
+    replayed through Jacquard's JtagReplayModel."""
+    dut.trst_n.value = 0
     server._capture.write(b"r")
     server._capture.flush()
     await ClockCycles(dut.clk, hold_cycles)
-    server.trst_n = 1
+    dut.trst_n.value = 1
     server._capture.write(b"u")
     server._capture.flush()
     await ClockCycles(dut.clk, 10)
@@ -247,16 +258,17 @@ async def capture(dut):
     server = RemoteBitbangServer(port=DEFAULT_PORT, capture_path=CAPTURE_PATH)
     server.start()
 
-    # Initial pin state. TRST_N starts low so the DTM's `negedge trst_n`
-    # async-reset clauses fire on the first 0→1 we do below (rather than
-    # X→0 which Icarus doesn't treat as a clean negedge).
+    # Initial pin state. TRST_N starts HIGH (deasserted) so the
+    # subsequent harness-driven 1→0→1 pulse in trst_pulse() gives the
+    # DTM's `negedge trst_n` async-reset clauses a clean negedge to
+    # fire on (Icarus does not treat X→0 as a negedge).
     dut.tck.value = 0
     dut.tms.value = 0
     dut.tdi.value = 0
-    dut.trst_n.value = 0
+    dut.trst_n.value = 1
     dut.rst_n.value = 0
 
-    cocotb.start_soon(Clock(dut.clk, 40, units="ns").start())  # 25 MHz
+    cocotb.start_soon(Clock(dut.clk, 40, unit="ns").start())  # 25 MHz
     cocotb.start_soon(jtag_pad_pump(dut, server, hold_cycles=HOLD_CYCLES))
 
     await ClockCycles(dut.clk, 20)

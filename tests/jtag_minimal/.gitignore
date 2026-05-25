@@ -1,0 +1,5 @@
+# cocotb runner build outputs
+scripts/sim_build/
+
+# OpenOCD log from capture runs (verbose; regenerated each capture)
+data/openocd.log
