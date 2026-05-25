@@ -20,6 +20,7 @@ dependencies = []
 dev = [
     "volare>=0.20",
     "netlist-graph",
+    "pytest>=9.0.3",
 ]
 
 [tool.uv.workspace]
