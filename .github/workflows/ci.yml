@@ -829,6 +829,86 @@ jobs:
             tests/mcu_soc/jacquard_replay_mcu.vcd
             tests/mcu_soc/jacquard_timed_mcu.vcd
 
+  # End-to-end JTAG cosim regression on a tiny standalone design.
+  # Vendored Hazard3 DTM+DM + fake hart drives a captured remote_bitbang
+  # stream through JtagReplayModel; CI asserts `data0_obs == 0xCAFEBABE`
+  # in the cosim VCD. Failure modes the test catches:
+  #   - JtagReplayModel TCK/TMS pacing bugs (#84)
+  #   - extra_observable_names resolution for hierarchical nets (#83)
+  #   - APB-side DMI handling in cosim_metal.rs
+  #   - Reset / TRST sequencing
+  # See tests/jtag_minimal/README.md for full design + regen flow.
+  jtag-minimal-cosim:
+    name: JTAG Minimal Cosim (Hazard3 DTM+DM)
+    runs-on: macos-runner-1
+    timeout-minutes: 20
+    # Currently fails because the chip-side jtag_minimal design exposes
+    # the same TAP-stuck-in-TLR symptom as ChipFlow/Jacquard#84.
+    # Flip `continue-on-error` to false once #84 is fully resolved
+    # (the test is a deliberate regression gate for that bug class).
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: true
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM (for OpenMP)
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          brew install llvm
+          LLVM_PREFIX=$(brew --prefix llvm)
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> $GITHUB_ENV
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
+          LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
+          echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-
+
+      - name: Run JTAG-replay cosim against post-PnR netlist
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/jtag_minimal/data/top.pnl.v \
+            --config tests/jtag_minimal/sim_config.json \
+            --top-module top \
+            --jtag-replay tests/jtag_minimal/data/bitbang.rec \
+            --jtag-hold-cycles 8 \
+            --trace-signals tests/jtag_minimal/trace_signals.txt \
+            --timing-vcd tests/jtag_minimal/data/cosim_trace.vcd \
+            --max-clock-edges 4000000 \
+            2>&1 | tee jtag_minimal_cosim.log
+
+      - name: Assert data0_obs == 0xCAFEBABE
+        run: |
+          python3 tests/jtag_minimal/scripts/check_pass.py \
+            tests/jtag_minimal/data/cosim_trace.vcd
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jtag-minimal-results
+          path: |
+            jtag_minimal_cosim.log
+            tests/jtag_minimal/data/cosim_trace.vcd
+
   # Build documentation (cargo doc + mdbook) and deploy to GitHub Pages
   docs:
     name: Documentation
