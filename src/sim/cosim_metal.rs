@@ -2543,10 +2543,11 @@ pub fn run_cosim(
     }
     if let Some(uart_cfg) = config.uart.as_ref() {
         if let Some(&rx_pos) = gpio_map.input_bits.get(&uart_cfg.rx_gpio) {
-            // baud_div_edges = clock_hz/baud * edges_per_period.
-            // edges_per_period is the schedule length in edges per LCM
-            // period; for single-domain that's 2 (= edges per clock cycle).
-            let baud_div_edges = uart_cycles_per_bit * edges_per_period as u32;
+            // baud_div_edges = uart_cycles_per_bit * edges_per_sys_clk_cycle.
+            // The UART driver counts scheduler ticks, so convert from
+            // sys_clk cycles to scheduler edges.
+            let edges_per_sys_clk = (clock_period_ps / scheduler.gcd_ps) as u32;
+            let baud_div_edges = uart_cycles_per_bit * edges_per_sys_clk;
             let driver = crate::sim::models::uart::UartRxDriver::new(
                 "uart_0".to_string(),
                 rx_pos,
@@ -2674,19 +2675,21 @@ pub fn run_cosim(
     };
 
     // Edge-granularity conversion: config fields `reset_cycles` and
-    // `num_cycles` are user-facing in clock cycles, but internal counters
+    // `num_cycles` are user-facing in sys_clk cycles, but internal counters
     // (the main loop's `tick` variable, scheduler offsets, UART decoder
-    // current_cycle) advance per scheduler edge. For single-domain that's
-    // 2 edges per period; for multi-domain this is the LCM-period edge
-    // count and "cycle" is interpreted as one LCM period (see open follow-up
-    // about multi-domain event comparison).
-    let edges_per_cycle = schedule_buffers.edge_buffers.len();
-    let reset_edges = config.reset_cycles * edges_per_cycle;
+    // current_cycle) advance per scheduler edge (one GCD tick).
+    //
+    // edges_per_sys_clk_cycle = how many scheduler ticks per one sys_clk
+    // cycle. For single-clock that's 2 (posedge + negedge). For multi-clock
+    // it's still 2 because sys_clk always has exactly one rising + one
+    // falling edge per period regardless of other clocks in the schedule.
+    let edges_per_sys_clk_cycle = clock_period_ps / schedule_buffers.gcd_ps;
+    let reset_edges = config.reset_cycles * edges_per_sys_clk_cycle as usize;
     // CLI --max-clock-edges is already in edges; config `num_cycles` is in
-    // cycles and gets multiplied here.
+    // sys_clk cycles and gets multiplied here.
     let max_edges = opts
         .max_clock_edges
-        .unwrap_or(config.num_cycles * edges_per_cycle);
+        .unwrap_or(config.num_cycles * edges_per_sys_clk_cycle as usize);
 
     // ── GPU Flash IO buffers ────────────────────────────────────────────
 
@@ -2844,7 +2847,7 @@ pub fn run_cosim(
         // GPU UART decoder's `current_cycle` advances per gpu_io_step call (=
         // once per scheduler edge), so it counts edges. Convert the user-
         // friendly cycles_per_bit (= clock_hz/baud) into edges_per_bit.
-        p.cycles_per_bit = uart_cycles_per_bit * edges_per_cycle as u32;
+        p.cycles_per_bit = uart_cycles_per_bit * edges_per_sys_clk_cycle as u32;
     }
 
     // UartChannel (shared ring buffer, CPU drains after each batch)
@@ -3088,8 +3091,8 @@ pub fn run_cosim(
         }
         writeln!(writer, "#").unwrap();
 
-        // dump_dff_cycles is user-facing (cycles); internal counter is in edges.
-        let max_dump_edges = opts.dump_dff_cycles * edges_per_cycle;
+        // dump_dff_cycles is user-facing (sys_clk cycles); internal counter is in edges.
+        let max_dump_edges = opts.dump_dff_cycles * edges_per_sys_clk_cycle as usize;
         clilog::info!(
             "DFF dump enabled: {} DFFs, {} cycles ({} edges) → {}",
             entries.len(),
