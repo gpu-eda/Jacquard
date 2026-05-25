@@ -3,3 +3,10 @@ scripts/sim_build/
 
 # OpenOCD log from capture runs (verbose; regenerated each capture)
 data/openocd.log
+
+# LibreLane outputs — `librelane/runs/` is per-run; `final/` is the
+# saved-views snapshot. The post-PnR netlist we care about lives at
+# `data/top.pnl.v` (committed) — extracted from `final/pnl/top.pnl.v`
+# at the tail of each LibreLane run.
+librelane/runs/
+final/
