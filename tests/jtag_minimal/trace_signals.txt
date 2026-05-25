@@ -1,0 +1,50 @@
+# Trace signals for tests/jtag_minimal/ cosim.
+# Resolved via netlistdb name lookup (PR #83 mechanism). The post-PnR
+# netlist (data/top.pnl.v) carries these as top-level ports thanks to
+# SYNTH_HIERARCHY_MODE: flatten in librelane/config.yaml.
+
+# dmactive: DM's first sticky bit. OpenOCD's init writes DMCONTROL with
+# dmactive=1; this pin should reach 1 during the captured stream replay.
+dmactive_obs
+
+# haltreq: DM's halt-request line. OpenOCD's riscv driver toggles this
+# during examination. Bonus signal — not required for pass criterion.
+haltreq_obs
+
+# data0_obs[31:0] — the magic value 0xCAFEBABE lands here after the
+# captured stream's `riscv dmi_write 0x04 0xcafebabe`. Pass criterion:
+# at end of simulation, data0_obs bits must form 0xCAFEBABE
+#   = 32'b 11001010 11111110 10111010 10111110
+#   = bit[31..24]: CA, bit[23..16]: FE, bit[15..8]: BA, bit[7..0]: BE
+data0_obs[0]
+data0_obs[1]
+data0_obs[2]
+data0_obs[3]
+data0_obs[4]
+data0_obs[5]
+data0_obs[6]
+data0_obs[7]
+data0_obs[8]
+data0_obs[9]
+data0_obs[10]
+data0_obs[11]
+data0_obs[12]
+data0_obs[13]
+data0_obs[14]
+data0_obs[15]
+data0_obs[16]
+data0_obs[17]
+data0_obs[18]
+data0_obs[19]
+data0_obs[20]
+data0_obs[21]
+data0_obs[22]
+data0_obs[23]
+data0_obs[24]
+data0_obs[25]
+data0_obs[26]
+data0_obs[27]
+data0_obs[28]
+data0_obs[29]
+data0_obs[30]
+data0_obs[31]

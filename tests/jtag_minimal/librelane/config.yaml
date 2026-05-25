@@ -1,0 +1,90 @@
+meta:
+  version: 3
+  flow: Classic
+  substituting_steps:
+    # Skip Yosys's "network is combinational" check — ABC is invoked
+    # on each module separately, and a Hazard3 DM sub-block trips it
+    # spuriously. The top-level netlist has ~500 flops; the check
+    # complaint is a false positive on the per-module decomposition.
+    Checker.YosysSynthChecks: null
+    # Same idea for verilator lint — Hazard3 emits ~335 warnings (most
+    # are unused-signal nags from the SBA tie-off) and we're not
+    # signing off this design, just producing a netlist for cosim.
+    Checker.LintWarnings: null
+
+DESIGN_NAME: top
+
+# Source list. The vendored Hazard3 debug subtree (5 files) plus our
+# top.sv wrapper. Order: leaf modules first so module-resolution
+# during elaboration is deterministic.
+VERILOG_FILES:
+  - dir::../rtl/hazard3_sync_1bit.v
+  - dir::../rtl/hazard3_apb_async_bridge.v
+  - dir::../rtl/hazard3_jtag_dtm_core.v
+  - dir::../rtl/hazard3_jtag_dtm.v
+  - dir::../rtl/hazard3_dm.v
+  - dir::../rtl/top.sv
+
+# `hazard3_compat.vh` is included from top.sv (defines an empty
+# HAZARD3_REG_KEEP_ATTRIBUTE).
+VERILOG_INCLUDE_DIRS:
+  - dir::../rtl
+
+# Clock: 25 MHz target. Matches the cocotb capture run (40 ns period).
+CLOCK_PORT: clk
+CLOCK_PERIOD: 40
+
+# Standard cell library — gf180mcu 9T, 5V. Matches what jacquard
+# cosim's GF180MCU pin classifier already handles.
+STD_CELL_LIBRARY: gf180mcu_fd_sc_mcu9t5v0
+
+# Standalone test design — no padframe, no macros, no shuttle slot
+# constraints. Small absolute die to keep synth + PnR fast.
+FP_SIZING: absolute
+DIE_AREA: [0, 0, 500, 500]
+
+# Place CTS root on the clk pin.
+CLOCK_NET: clk
+
+# Conservative density target. Design is tiny (~500 cells), so room
+# to spare; PnR convergence is the priority over density.
+PL_TARGET_DENSITY_PCT: 35
+
+# Power / ground nets (single domain; no separate analog supply).
+VDD_NETS:
+  - VDD
+GND_NETS:
+  - VSS
+
+# Tight PDN — minimal stripes since the die is tiny.
+PDN_VWIDTH: 2
+PDN_HWIDTH: 2
+PDN_VSPACING: 1
+PDN_HSPACING: 1
+PDN_VPITCH: 60
+PDN_HPITCH: 60
+PDN_CORE_RING: True
+PDN_CORE_RING_VWIDTH: 5
+PDN_CORE_RING_HWIDTH: 5
+PDN_CORE_VERTICAL_LAYER: Metal2
+PDN_CORE_HORIZONTAL_LAYER: Metal3
+
+# Don't error on Magic DRC violations — we're after a working
+# post-PnR netlist for cosim, not signoff. Same rationale for
+# KLayout DRC.
+ERROR_ON_MAGIC_DRC: False
+
+# Fix hold violations early.
+PL_RESIZER_HOLD_SLACK_MARGIN: 0.3
+GRT_RESIZER_HOLD_SLACK_MARGIN: 0.3
+
+# Flat synth (no hierarchy preservation) — gives Jacquard's parser
+# the simplest possible netlist to walk.
+SYNTH_HIERARCHY_MODE: flatten
+
+# Match the cocotb harness: TRST_N enters the chip as an async-reset
+# input to the DTM, so don't let synth merge or optimise those flops.
+# (Hazard3's HAZARD3_REG_KEEP_ATTRIBUTE handles this in RTL; the
+# compat header in rtl/hazard3_compat.vh stubs the attribute out, so
+# we rely on Yosys default behaviour. If retiming were a problem the
+# RTL would need the attribute restored.)

@@ -1,0 +1,35 @@
+{
+    "_comment": "Jacquard cosim testbench config for jtag_minimal. Drives the post-PnR netlist (data/top.pnl.v) from the captured remote_bitbang stream (data/bitbang.rec) via JtagReplayModel. Observable design outputs (data0_obs, dmactive_obs, haltreq_obs) are surfaced via --trace-signals into the timing VCD; pass criterion is checked by the CI step grepping data0_obs[*] bit transitions.",
+    "netlist_path": "tests/jtag_minimal/data/top.pnl.v",
+    "clock_gpio": 0,
+    "reset_gpio": 1,
+    "reset_active_high": false,
+    "reset_cycles": 100,
+    "num_cycles": 4000000,
+    "clock_period_ps": 40000,
+    "_clocks_comment": "AIG detects two clock domains: the chip's `clk` (continuous) and `tck` (driven by JtagReplayModel on the bytes' schedule). Both must be declared in `clocks` so MultiClockScheduler allocates a tick slot for each — the model overrides `tck` at each byte transition.",
+    "clocks": [
+        {"gpio": 0, "period_ps": 40000,  "name": "sys_clk"},
+        {"gpio": 2, "period_ps": 160000, "name": "tck"}
+    ],
+    "jtag": {
+        "tck_gpio": 2,
+        "tms_gpio": 3,
+        "tdi_gpio": 4,
+        "trst_gpio": 5,
+        "trst_active_low": true
+    },
+    "port_mapping": {
+        "inputs": {
+            "0": "clk",
+            "1": "rst_n",
+            "2": "tck",
+            "3": "tms",
+            "4": "tdi",
+            "5": "trst_n"
+        },
+        "outputs": {
+            "6": "tdo"
+        }
+    }
+}
