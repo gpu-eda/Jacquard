@@ -380,8 +380,8 @@ fn cmd_sim(args: SimArgs) {
 
     // Enable timing arrival readback if --timing-vcd is set
     if args.timing_vcd {
-        if args.sdf.is_none() && args.liberty.is_none() {
-            eprintln!("Error: --timing-vcd requires --sdf or --liberty");
+        if args.sdf.is_none() && args.liberty.is_none() && args.timing_ir.is_none() {
+            eprintln!("Error: --timing-vcd requires --sdf, --liberty, or --timing-ir");
             std::process::exit(1);
         }
         design.script.enable_timing_arrivals();

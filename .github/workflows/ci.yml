@@ -240,17 +240,71 @@ jobs:
             echo "WARNING: No X values in xprop output VCD"
           fi
 
-      - name: Run Metal simulation with timing VCD (inv_chain_pnr)
+      - name: Run Metal simulation with timing (inv_chain_pnr)
         run: |
+          set -o pipefail
           cargo run --release --features metal --bin jacquard -- sim \
             tests/timing_test/inv_chain_pnr/inv_chain.v \
             tests/timing_test/inv_chain_pnr/inv_chain_stimulus.vcd \
             tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd \
             1 \
-            --sdf tests/timing_test/inv_chain_pnr/inv_chain_test_ps.sdf \
-            --sdf-corner typ \
+            --timing-ir tests/timing_test/inv_chain_pnr/inv_chain.jtir \
             --timing-vcd \
+            --timing-report tests/timing_test/inv_chain_pnr/timing_report.json \
+            --timing-summary \
             2>&1 | tee metal_timed.txt
+
+      - name: Validate timing report JSON shape
+        run: |
+          python3 - <<'PY'
+          import json, sys
+
+          with open("tests/timing_test/inv_chain_pnr/timing_report.json") as f:
+              report = json.load(f)
+
+          errors = []
+
+          # Top-level keys
+          for key in ("schema_version", "metadata", "stats", "violations", "per_word", "worst_slack"):
+              if key not in report:
+                  errors.append(f"missing top-level key: {key}")
+
+          # schema_version is semver-like
+          sv = report.get("schema_version", "")
+          if len(sv.split(".")) != 3:
+              errors.append(f"schema_version not semver: {sv}")
+
+          # metadata fields
+          meta = report.get("metadata", {})
+          for key in ("design", "clock_period_ps", "cycles_run", "jacquard_version"):
+              if key not in meta:
+                  errors.append(f"missing metadata.{key}")
+          if meta.get("cycles_run", 0) < 1:
+              errors.append(f"cycles_run too low: {meta.get('cycles_run')}")
+
+          # stats fields
+          stats = report.get("stats", {})
+          for key in ("setup_violations", "hold_violations"):
+              if key not in stats:
+                  errors.append(f"missing stats.{key}")
+
+          # violations is an array
+          if not isinstance(report.get("violations"), list):
+              errors.append("violations is not an array")
+
+          # worst_slack has setup and hold arrays
+          ws = report.get("worst_slack", {})
+          for key in ("setup", "hold"):
+              if not isinstance(ws.get(key), list):
+                  errors.append(f"worst_slack.{key} is not an array")
+
+          if errors:
+              for e in errors:
+                  print(f"FAIL: {e}", file=sys.stderr)
+              sys.exit(1)
+          print(f"Timing report valid: schema {sv}, {meta.get('cycles_run')} cycles, "
+                f"{stats.get('setup_violations', 0)} setup / {stats.get('hold_violations', 0)} hold violations")
+          PY
 
       - name: Upload VCD artifacts
         uses: actions/upload-artifact@v4
@@ -261,6 +315,7 @@ jobs:
             tests/timing_test/ci_output.vcd
             tests/timing_test/ci_xprop_output.vcd
             tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd
+            tests/timing_test/inv_chain_pnr/timing_report.json
             metal_timing.txt
             metal_xprop.txt
             metal_timed.txt

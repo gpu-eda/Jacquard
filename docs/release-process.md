@@ -109,12 +109,11 @@ These items are tracked in [`docs/plans/post-phase-0-roadmap.md`](plans/post-pha
       runners as the CUDA/HIP CI jobs above.
 - [x] Bounded violations array (`--timing-report-max-violations`,
       default 100k).
-- [ ] **End-to-end `--timing-report` test on Metal CI.** Now
-      unblocked: `macos-runner-1` is live and the sky130 multi-corner
-      test passes there. Wire a small `--timing-report` test against
-      `benchmarks/dataset/nvdla*` (or any small corpus design) in
-      the `metal` CI job; validate the JSON shape against
-      `tests/timing_ir/sample_reports/two_violations.json`.
+- [x] End-to-end `--timing-report` test on Metal CI. The
+      `inv_chain_pnr` sim step uses `--timing-ir` (pre-generated
+      `.jtir` checked in) + `--timing-report` + `--timing-summary`;
+      a follow-up step validates the JSON shape (top-level keys,
+      semver schema version, metadata, stats, arrays).
 - [x] GF180MCU enablement (Phases 0–6) shipped. See
       `docs/plans/gf180mcu-enablement.md`. Phase 7 (wafer.space
       test-run-1 design integration) deferred pending design

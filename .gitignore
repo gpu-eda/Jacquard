@@ -39,6 +39,8 @@ tb_verify_sim
 # canonical binary the regression test diffs against; the .json sidecar
 # is for PR-time review. Both ship.
 !tests/timing_ir/corpus/**/*.jtir
+# Pre-generated timing IR for CI (Metal runner lacks OpenSTA + Liberty)
+!tests/timing_test/inv_chain_pnr/inv_chain.jtir
 
 # Build output directories
 **/build/results/
