@@ -28,6 +28,7 @@ changes, supersede the old ADR with a new one and update the status.
 | [0010](0010-declarative-cell-metadata.md) | Declarative cell metadata | Accepted |
 | [0011](0011-ram-port-mapping-schema.md) | RAM port-mapping schema for declarative cell metadata | Accepted |
 | [0012](0012-cdc-jitter-injection.md) | Reproducible CDC jitter injection for multi-clock cosim | Proposed |
+| [0013](0013-plural-peripheral-configs.md) | Cosim peripheral model architecture | Proposed |
 
 ## How the ADRs relate
 
@@ -46,6 +47,13 @@ changes, supersede the old ADR with a new one and update the status.
   back those outputs at scale (δ(T), clock-tree skew, wire delay).
   Scheduling for both lives in
   [`../plans/post-phase-0-roadmap.md`](../plans/post-phase-0-roadmap.md).
+
+- **0013** documents the cosim peripheral model architecture (CPU-side
+  `PeripheralModel` trait, GPU-side kernel functions, ring buffers)
+  and establishes the `effective_*()` plural-config convention for
+  multi-instance peripherals (UART first, then Flash/JTAG when
+  needed). Plan doc:
+  [`../plans/multi-peripheral-cosim.md`](../plans/multi-peripheral-cosim.md).
 
 ## Adding a new ADR
 
