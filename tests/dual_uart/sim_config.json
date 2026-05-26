@@ -1,0 +1,33 @@
+{
+    "clock_gpio": 0,
+    "reset_gpio": 1,
+    "reset_active_high": false,
+    "reset_cycles": 10,
+    "num_cycles": 100000,
+    "clock_period_ps": 40000,
+    "uarts": [
+        {
+            "name": "console",
+            "tx_gpio": 2,
+            "rx_gpio": 99,
+            "baud_rate": 115200
+        },
+        {
+            "name": "debug",
+            "tx_gpio": 3,
+            "rx_gpio": 99,
+            "baud_rate": 115200
+        }
+    ],
+    "output_events": "dual_uart_events.json",
+    "port_mapping": {
+        "inputs": {
+            "0": "clk",
+            "1": "rst_n"
+        },
+        "outputs": {
+            "2": "tx0",
+            "3": "tx1"
+        }
+    }
+}

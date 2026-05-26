@@ -307,6 +307,19 @@ jobs:
                 f"{stats.get('setup_violations', 0)} setup / {stats.get('hold_violations', 0)} hold violations")
           PY
 
+      - name: Run dual-UART cosim (multi-UART regression, issue #90)
+        run: |
+          set -o pipefail
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/dual_uart/dual_uart_synth.gv \
+            --config tests/dual_uart/sim_config.json \
+            --top-module dual_uart_top \
+            --max-clock-edges 10000 \
+            2>&1 | tee dual_uart_cosim.txt
+
+      - name: Verify dual-UART output
+        run: python3 tests/dual_uart/check_pass.py dual_uart_events.json
+
       - name: Upload VCD artifacts
         uses: actions/upload-artifact@v4
         if: always()
@@ -317,6 +330,8 @@ jobs:
             tests/timing_test/ci_xprop_output.vcd
             tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd
             tests/timing_test/inv_chain_pnr/timing_report.json
+            dual_uart_cosim.txt
+            dual_uart_events.json
             metal_timing.txt
             metal_xprop.txt
             metal_timed.txt
