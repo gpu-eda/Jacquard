@@ -127,6 +127,9 @@ struct FlashModelParams {
     flash_data_size: u32,
 }
 
+const MAX_UARTS: usize = 4;
+const UART_CHANNEL_CAP: usize = 4096;
+
 /// GPU-side UART decoder state (must match Metal UartDecoderState).
 #[repr(C)]
 struct UartDecoderState {
@@ -138,13 +141,21 @@ struct UartDecoderState {
     current_cycle: u32,
 }
 
+/// Per-channel config within UartParams (must match Metal UartPerChannelConfig).
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct UartPerChannelConfig {
+    tx_out_pos: u32,
+    cycles_per_bit: u32,
+}
+
 /// Parameters for UART in gpu_io_step kernel (must match Metal UartParams).
 #[repr(C)]
 struct UartParams {
     state_size: u32,
-    tx_out_pos: u32,
-    cycles_per_bit: u32,
-    has_uart: u32,
+    n_uarts: u32,
+    _pad: [u32; 2],
+    channels: [UartPerChannelConfig; MAX_UARTS],
 }
 
 /// GPU-side UART channel (must match Metal UartChannel).
@@ -153,7 +164,7 @@ struct UartChannel {
     write_head: u32,
     capacity: u32,
     _pad: [u32; 2],
-    data: [u8; 4096],
+    data: [u8; UART_CHANNEL_CAP],
 }
 
 const WB_TRACE_MAX_ADR_BITS: usize = 30;
@@ -2226,19 +2237,38 @@ pub fn run_cosim(
     // CLI --clock-period overrides config file clock_period_ps; default 1000ps (1GHz) if neither set
     let clock_period_ps = opts.clock_period.or(config.clock_period_ps).unwrap_or(1000);
     let clock_hz = 1_000_000_000_000u64 / clock_period_ps;
-    let uart_baud = config.uart.as_ref().map(|u| u.baud_rate).unwrap_or(115200);
-    let uart_cycles_per_bit = config
-        .uart
-        .as_ref()
-        .and_then(|u| u.cycles_per_bit)
-        .unwrap_or_else(|| (clock_hz / uart_baud as u64) as u32);
+    let effective_uarts = config.effective_uarts();
+    assert!(
+        effective_uarts.len() <= MAX_UARTS,
+        "Too many UARTs configured ({}, max {})",
+        effective_uarts.len(),
+        MAX_UARTS
+    );
+    let uart_configs: Vec<_> = effective_uarts
+        .iter()
+        .enumerate()
+        .map(|(i, u)| {
+            let baud = u.baud_rate;
+            let cpb = u
+                .cycles_per_bit
+                .unwrap_or_else(|| (clock_hz / baud as u64) as u32);
+            let name = u
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("uart_{}", i));
+            clilog::info!(
+                "UART '{}': tx_gpio={}, rx_gpio={}, baud={}, cycles_per_bit={}",
+                name, u.tx_gpio, u.rx_gpio, baud, cpb
+            );
+            (name, u.tx_gpio, u.rx_gpio, cpb)
+        })
+        .collect();
     clilog::info!(
-        "Clock period: {} ps ({} MHz), UART cycles_per_bit: {}",
+        "Clock period: {} ps ({} MHz), {} UART(s) configured",
         clock_period_ps,
         clock_hz / 1_000_000,
-        uart_cycles_per_bit
+        uart_configs.len()
     );
-    let uart_tx_gpio = config.uart.as_ref().map(|u| u.tx_gpio);
 
     // ── Initialize Metal simulator and GPU state buffers ─────────────────
 
@@ -2541,28 +2571,24 @@ pub fn run_cosim(
             ),
         }
     }
-    if let Some(uart_cfg) = config.uart.as_ref() {
-        if let Some(&rx_pos) = gpio_map.input_bits.get(&uart_cfg.rx_gpio) {
-            // baud_div_edges = uart_cycles_per_bit * edges_per_sys_clk_cycle.
-            // The UART driver counts scheduler ticks, so convert from
-            // sys_clk cycles to scheduler edges.
+    for (name, _tx_gpio, rx_gpio, cpb) in &uart_configs {
+        if let Some(&rx_pos) = gpio_map.input_bits.get(rx_gpio) {
             let edges_per_sys_clk = (clock_period_ps / scheduler.gcd_ps) as u32;
-            let baud_div_edges = uart_cycles_per_bit * edges_per_sys_clk;
+            let baud_div_edges = cpb * edges_per_sys_clk;
             let driver = crate::sim::models::uart::UartRxDriver::new(
-                "uart_0".to_string(),
+                name.clone(),
                 rx_pos,
                 baud_div_edges,
             );
             clilog::info!(
-                "UART RX driver `uart_0` baud_div_edges={} (rx_gpio={})",
-                baud_div_edges,
-                uart_cfg.rx_gpio
+                "UART RX driver `{}` baud_div_edges={} (rx_gpio={})",
+                name, baud_div_edges, rx_gpio
             );
             register_model(Box::new(driver), &mut models, &mut model_driven_positions);
         } else {
             clilog::warn!(
-                "UART config rx_gpio={} not in input mapping; RX driver disabled",
-                uart_cfg.rx_gpio
+                "UART '{}' rx_gpio={} not in input mapping; RX driver disabled",
+                name, rx_gpio
             );
         }
     }
@@ -2815,24 +2841,29 @@ pub fn run_cosim(
         );
     }
 
-    // ── GPU UART IO buffers ─────────────────────────────────────────────
+    // ── GPU UART IO buffers (multi-instance, ADR 0013) ──────────────────
 
-    // UartDecoderState (shared, persistent across ticks)
+    let n_uarts = uart_configs.len();
+
+    // UartDecoderState[MAX_UARTS] (shared, persistent across ticks)
     let uart_state_buffer = simulator.device.new_buffer(
-        std::mem::size_of::<UartDecoderState>() as u64,
+        (std::mem::size_of::<UartDecoderState>() * MAX_UARTS) as u64,
         MTLResourceOptions::StorageModeShared,
     );
     unsafe {
-        let us = &mut *(uart_state_buffer.contents() as *mut UartDecoderState);
-        us.state = 0; // IDLE
-        us.last_tx = 1; // TX line idle high
-        us.start_cycle = 0;
-        us.bits_received = 0;
-        us.value = 0;
-        us.current_cycle = 0;
+        let base = uart_state_buffer.contents() as *mut UartDecoderState;
+        for i in 0..MAX_UARTS {
+            let us = &mut *base.add(i);
+            us.state = 0; // IDLE
+            us.last_tx = 1; // TX line idle high
+            us.start_cycle = 0;
+            us.bits_received = 0;
+            us.value = 0;
+            us.current_cycle = 0;
+        }
     }
 
-    // UartParams (constant)
+    // UartParams (constant, with per-channel configs)
     let uart_params_buffer = simulator.device.new_buffer(
         std::mem::size_of::<UartParams>() as u64,
         MTLResourceOptions::StorageModeShared,
@@ -2840,27 +2871,33 @@ pub fn run_cosim(
     unsafe {
         let p = &mut *(uart_params_buffer.contents() as *mut UartParams);
         p.state_size = state_size as u32;
-        p.has_uart = if config.uart.is_some() { 1 } else { 0 };
-        p.tx_out_pos = uart_tx_gpio
-            .and_then(|tx| gpio_map.output_bits.get(&tx).copied())
-            .unwrap_or(0);
-        // GPU UART decoder's `current_cycle` advances per gpu_io_step call (=
-        // once per scheduler edge), so it counts edges. Convert the user-
-        // friendly cycles_per_bit (= clock_hz/baud) into edges_per_bit.
-        p.cycles_per_bit = uart_cycles_per_bit * edges_per_sys_clk_cycle as u32;
+        p.n_uarts = n_uarts as u32;
+        p._pad = [0; 2];
+        p.channels = [UartPerChannelConfig::default(); MAX_UARTS];
+        for (i, (_, tx_gpio, _, cpb)) in uart_configs.iter().enumerate() {
+            p.channels[i].tx_out_pos = gpio_map
+                .output_bits
+                .get(tx_gpio)
+                .copied()
+                .unwrap_or(0);
+            // GPU decoder counts scheduler edges, not clock cycles
+            p.channels[i].cycles_per_bit = cpb * edges_per_sys_clk_cycle as u32;
+        }
     }
 
-    // UartChannel (shared ring buffer, CPU drains after each batch)
+    // UartChannel[MAX_UARTS] (shared ring buffers, CPU drains after each batch)
     let uart_channel_buffer = simulator.device.new_buffer(
-        std::mem::size_of::<UartChannel>() as u64,
+        (std::mem::size_of::<UartChannel>() * MAX_UARTS) as u64,
         MTLResourceOptions::StorageModeShared,
     );
     unsafe {
-        let ch = &mut *(uart_channel_buffer.contents() as *mut UartChannel);
-        ch.write_head = 0;
-        ch.capacity = 4096;
-        ch._pad = [0; 2];
-        // data doesn't need to be zeroed (ring buffer semantics)
+        let base = uart_channel_buffer.contents() as *mut UartChannel;
+        for i in 0..MAX_UARTS {
+            let ch = &mut *base.add(i);
+            ch.write_head = 0;
+            ch.capacity = UART_CHANNEL_CAP as u32;
+            ch._pad = [0; 2];
+        }
     }
 
     // ── GPU Wishbone Bus Trace buffers ────────────────────────────────
@@ -3277,7 +3314,8 @@ pub fn run_cosim(
 
     // UART event collection (CPU-side, populated from channel drain)
     let mut uart_events: Vec<UartEvent> = Vec::new();
-    let mut uart_read_head: u32 = 0;
+    let mut uart_read_heads: Vec<u32> = vec![0u32; n_uarts];
+    let uart_names: Vec<String> = uart_configs.iter().map(|(name, _, _, _)| name.clone()).collect();
     let mut wb_trace_read_head: u32 = 0;
 
     // Profiling accumulators
@@ -3987,28 +4025,33 @@ pub fn run_cosim(
             }
         }
 
-        // Drain UART channel (CPU reads decoded bytes from GPU ring buffer)
+        // Drain UART channels (CPU reads decoded bytes from GPU ring buffers)
         let t_drain = std::time::Instant::now();
         unsafe {
-            let channel = &*(uart_channel_buffer.contents() as *const UartChannel);
-            while uart_read_head < channel.write_head {
-                let byte = channel.data[(uart_read_head % channel.capacity) as usize];
-                let ch = if byte >= 32 && byte < 127 {
-                    byte as char
-                } else {
-                    '.'
-                };
-                clilog::info!("UART TX: 0x{:02X} '{}'", byte, ch);
-                uart_events.push(UartEvent {
-                    timestamp: tick, // approximate edge
-                    peripheral: "uart_0".to_string(),
-                    event: "tx".to_string(),
-                    payload: byte,
-                });
-                if let Some(d) = input_dispatcher.as_mut() {
-                    d.on_event("uart_0", "tx", &serde_json::json!(byte));
+            let base = uart_channel_buffer.contents() as *const UartChannel;
+            for i in 0..n_uarts {
+                let channel = &*base.add(i);
+                let name = &uart_names[i];
+                while uart_read_heads[i] < channel.write_head {
+                    let byte =
+                        channel.data[(uart_read_heads[i] % channel.capacity) as usize];
+                    let ch = if byte >= 32 && byte < 127 {
+                        byte as char
+                    } else {
+                        '.'
+                    };
+                    clilog::info!("UART '{}' TX: 0x{:02X} '{}'", name, byte, ch);
+                    uart_events.push(UartEvent {
+                        timestamp: tick,
+                        peripheral: name.clone(),
+                        event: "tx".to_string(),
+                        payload: byte,
+                    });
+                    if let Some(d) = input_dispatcher.as_mut() {
+                        d.on_event(name, "tx", &serde_json::json!(byte));
+                    }
+                    uart_read_heads[i] += 1;
                 }
-                uart_read_head += 1;
             }
         }
         // Drain WB trace channel
@@ -4166,18 +4209,23 @@ pub fn run_cosim(
         if tick > 0 && tick % 100000 < BATCH_SIZE {
             let elapsed = sim_start.elapsed();
             let us_per_edge = elapsed.as_micros() as f64 / tick as f64;
-            // Read UART TX bit and decoder state for diagnostics
+            // Read first UART's TX bit and decoder state for diagnostics
             let (uart_tx_val, uart_dec_state, uart_dec_cycle) = unsafe {
                 let up = &*(uart_params_buffer.contents() as *const UartParams);
-                let st = std::slice::from_raw_parts(
-                    states_buffer.contents() as *const u32,
-                    2 * state_size,
-                );
-                let tx_word = state_size + (up.tx_out_pos as usize >> 5);
-                let tx_bit = up.tx_out_pos & 31;
-                let tx_val = (st[tx_word] >> tx_bit) & 1;
-                let us = &*(uart_state_buffer.contents() as *const UartDecoderState);
-                (tx_val, us.state, us.current_cycle)
+                if up.n_uarts > 0 {
+                    let st = std::slice::from_raw_parts(
+                        states_buffer.contents() as *const u32,
+                        2 * state_size,
+                    );
+                    let tx_pos = up.channels[0].tx_out_pos;
+                    let tx_word = state_size + (tx_pos as usize >> 5);
+                    let tx_bit = tx_pos & 31;
+                    let tx_val = (st[tx_word] >> tx_bit) & 1;
+                    let us = &*(uart_state_buffer.contents() as *const UartDecoderState);
+                    (tx_val, us.state, us.current_cycle)
+                } else {
+                    (0, 0, 0)
+                }
             };
             clilog::info!(
                 "Tick {} / {} ({:.1}μs/tick, batches={}, UART bytes={}, tx={}, uart_st={}, uart_cyc={})",

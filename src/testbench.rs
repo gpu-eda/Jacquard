@@ -202,6 +202,8 @@ pub struct TestbenchConfig {
     pub flash: Option<FlashConfig>,
     pub uart: Option<UartConfig>,
     #[serde(default)]
+    pub uarts: Vec<UartConfig>,
+    #[serde(default)]
     pub gpios: Vec<GpioConfig>,
     /// JTAG replay peripheral. When present together with a CLI
     /// `--jtag-replay <PATH>`, cosim drives the configured pins
@@ -257,6 +259,18 @@ impl TestbenchConfig {
             }]
         }
     }
+
+    /// Return the effective UART configurations (ADR 0013).
+    ///
+    /// Merges legacy singular `uart` (prepended) with the plural `uarts`
+    /// list, mirroring the `effective_clocks()` pattern.
+    pub fn effective_uarts(&self) -> Vec<UartConfig> {
+        let mut out = self.uarts.clone();
+        if let Some(ref u) = self.uart {
+            out.insert(0, u.clone());
+        }
+        out
+    }
 }
 
 /// Configuration for post-layout timing simulation.
@@ -299,6 +313,8 @@ pub struct FlashConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct UartConfig {
+    #[serde(default)]
+    pub name: Option<String>,
     pub tx_gpio: usize,
     pub rx_gpio: usize,
     pub baud_rate: u32,
@@ -542,5 +558,69 @@ impl WatchlistEntry {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn uart(name: Option<&str>, tx: usize) -> UartConfig {
+        UartConfig {
+            name: name.map(String::from),
+            tx_gpio: tx,
+            rx_gpio: tx + 1,
+            baud_rate: 115200,
+            cycles_per_bit: None,
+        }
+    }
+
+    fn minimal_config() -> TestbenchConfig {
+        serde_json::from_str(
+            r#"{
+                "clock_gpio": 0,
+                "reset_gpio": 1,
+                "reset_active_high": true,
+                "reset_cycles": 10,
+                "num_cycles": 100
+            }"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn effective_uarts_empty_when_neither_set() {
+        let cfg = minimal_config();
+        assert!(cfg.effective_uarts().is_empty());
+    }
+
+    #[test]
+    fn effective_uarts_from_legacy_singular() {
+        let mut cfg = minimal_config();
+        cfg.uart = Some(uart(None, 10));
+        let uarts = cfg.effective_uarts();
+        assert_eq!(uarts.len(), 1);
+        assert_eq!(uarts[0].tx_gpio, 10);
+    }
+
+    #[test]
+    fn effective_uarts_from_plural() {
+        let mut cfg = minimal_config();
+        cfg.uarts = vec![uart(Some("a"), 10), uart(Some("b"), 20)];
+        let uarts = cfg.effective_uarts();
+        assert_eq!(uarts.len(), 2);
+        assert_eq!(uarts[0].name.as_deref(), Some("a"));
+        assert_eq!(uarts[1].name.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn effective_uarts_merges_legacy_prepended() {
+        let mut cfg = minimal_config();
+        cfg.uart = Some(uart(Some("legacy"), 5));
+        cfg.uarts = vec![uart(Some("new"), 15)];
+        let uarts = cfg.effective_uarts();
+        assert_eq!(uarts.len(), 2);
+        assert_eq!(uarts[0].name.as_deref(), Some("legacy"));
+        assert_eq!(uarts[1].name.as_deref(), Some("new"));
     }
 }

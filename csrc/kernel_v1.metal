@@ -1019,7 +1019,10 @@ kernel void gpu_flash_model_step(
     flash_state->last_error_cmd = last_error_cmd;
 }
 
-// ── UART Decoder State + Channel ─────────────────────────────────────────────
+// ── UART Decoder State + Channel (ADR 0013: multi-instance) ─────────────────
+
+#define MAX_UARTS 4
+#define UART_CHANNEL_CAP 4096
 
 struct UartDecoderState {
     u32 state;          // 0=IDLE, 1=START, 2=DATA, 3=STOP
@@ -1030,18 +1033,23 @@ struct UartDecoderState {
     u32 current_cycle;  // incremented each call
 };
 
+struct UartPerChannelConfig {
+    u32 tx_out_pos;
+    u32 cycles_per_bit;
+};
+
 struct UartParams {
     u32 state_size;
-    u32 tx_out_pos;       // output state bit position for UART TX
-    u32 cycles_per_bit;   // clock_hz / baud_rate
-    u32 has_uart;         // 0 = skip
+    u32 n_uarts;          // 0 = skip, up to MAX_UARTS
+    u32 _pad[2];
+    UartPerChannelConfig channels[MAX_UARTS];
 };
 
 struct UartChannel {
     u32 write_head;       // CPU reads this to know how many bytes are available
     u32 capacity;
     u32 _pad[2];
-    uchar data[4096];     // decoded bytes ring buffer
+    uchar data[UART_CHANNEL_CAP];
 };
 
 // ── Wishbone Bus Trace Structs ──────────────────────────────────────────────
@@ -1109,17 +1117,20 @@ kernel void gpu_io_step(
     #define READ_OUT_BIT(pos) \
         (((pos) != 0xFFFFFFFFu) ? ((states[state_size + ((pos) >> 5)] >> ((pos) & 31u)) & 1u) : 0u)
 
-    // ── UART TX decoder ─────────────────────────────────────────────────
-    if (uart_params.has_uart != 0) {
-        u32 cycles_per_bit = uart_params.cycles_per_bit;
-        u32 tx = READ_OUT_BIT(uart_params.tx_out_pos);
+    // ── UART TX decoder (multi-instance, ADR 0013) ────────────────────
+    for (u32 ui = 0; ui < uart_params.n_uarts && ui < MAX_UARTS; ui++) {
+        u32 cycles_per_bit = uart_params.channels[ui].cycles_per_bit;
+        u32 tx = READ_OUT_BIT(uart_params.channels[ui].tx_out_pos);
 
-        u32 cycle = uart_state->current_cycle;
-        u32 st = uart_state->state;
-        u32 last_tx = uart_state->last_tx;
-        u32 start_cycle = uart_state->start_cycle;
-        u32 bits_received = uart_state->bits_received;
-        u32 value = uart_state->value;
+        device UartDecoderState* us = &uart_state[ui];
+        device UartChannel* uc = &uart_channel[ui];
+
+        u32 cycle = us->current_cycle;
+        u32 st = us->state;
+        u32 last_tx = us->last_tx;
+        u32 start_cycle = us->start_cycle;
+        u32 bits_received = us->bits_received;
+        u32 value = us->value;
 
         if (st == 0) {
             if (last_tx == 1 && tx == 0) {
@@ -1151,21 +1162,21 @@ kernel void gpu_io_step(
         } else if (st == 3) {
             if (cycle >= start_cycle + cycles_per_bit / 2) {
                 if (tx == 1) {
-                    u32 head = uart_channel->write_head;
-                    u32 cap = uart_channel->capacity;
-                    uart_channel->data[head % cap] = (uchar)(value & 0xFF);
-                    uart_channel->write_head = head + 1;
+                    u32 head = uc->write_head;
+                    u32 cap = uc->capacity;
+                    uc->data[head % cap] = (uchar)(value & 0xFF);
+                    uc->write_head = head + 1;
                 }
                 st = 0;
             }
         }
 
-        uart_state->state = st;
-        uart_state->last_tx = tx;
-        uart_state->start_cycle = start_cycle;
-        uart_state->bits_received = bits_received;
-        uart_state->value = value;
-        uart_state->current_cycle = cycle + 1;
+        us->state = st;
+        us->last_tx = tx;
+        us->start_cycle = start_cycle;
+        us->bits_received = bits_received;
+        us->value = value;
+        us->current_cycle = cycle + 1;
     }
 
     // ── Wishbone bus trace ──────────────────────────────────────────────
