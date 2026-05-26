@@ -2826,25 +2826,42 @@ outcome; kept for the audit trail.</li>
 <tr><td><a href="adr/0010-declarative-cell-metadata.html">0010</a></td><td>Declarative cell metadata</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0011-ram-port-mapping-schema.html">0011</a></td><td>RAM port-mapping schema for declarative cell metadata</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Proposed</td></tr>
+<tr><td><a href="adr/0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Proposed</td></tr>
 </tbody></table>
 </div>
 <h2 id="how-the-adrs-relate"><a class="header" href="#how-the-adrs-relate">How the ADRs relate</a></h2>
 <ul>
-<li><strong>0001 / 0003 / 0005 / 0006</strong> describe the timing oracle stack:
+<li>
+<p><strong>0001 / 0003 / 0005 / 0006</strong> describe the timing oracle stack:
 OpenSTA as the ground truth (0001), vendored at a pinned revision
 with its own corpus reused (0005), driving SDF preprocessing
 out-of-process (0006). The earlier OpenTimer in-process plan (0003)
-was retired after the spike (<a href="adr/../spikes/opentimer-sky130.html"><code>../spikes/opentimer-sky130.md</code></a>).</li>
-<li><strong>0002</strong> is the data contract those tools talk over — a JSON timing
-IR consumed by Jacquard, produced by <code>opensta-to-ir</code>.</li>
-<li><strong>0004</strong> governs how PDK-specific testing happens for NDA-bound
-contributors without leaking files into the public repo.</li>
-<li><strong>0007 / 0008</strong> are the forward-looking pair: 0008 (Approved)
+was retired after the spike (<a href="adr/../spikes/opentimer-sky130.html"><code>../spikes/opentimer-sky130.md</code></a>).</p>
+</li>
+<li>
+<p><strong>0002</strong> is the data contract those tools talk over — a JSON timing
+IR consumed by Jacquard, produced by <code>opensta-to-ir</code>.</p>
+</li>
+<li>
+<p><strong>0004</strong> governs how PDK-specific testing happens for NDA-bound
+contributors without leaking files into the public repo.</p>
+</li>
+<li>
+<p><strong>0007 / 0008</strong> are the forward-looking pair: 0008 (Approved)
 defines the structured timing output Jacquard owes downstream
 flows; 0007 (Proposed) sketches the model-fidelity work needed to
 back those outputs at scale (δ(T), clock-tree skew, wire delay).
 Scheduling for both lives in
-<a href="adr/../plans/post-phase-0-roadmap.html"><code>../plans/post-phase-0-roadmap.md</code></a>.</li>
+<a href="adr/../plans/post-phase-0-roadmap.html"><code>../plans/post-phase-0-roadmap.md</code></a>.</p>
+</li>
+<li>
+<p><strong>0013</strong> documents the cosim peripheral model architecture (CPU-side
+<code>PeripheralModel</code> trait, GPU-side kernel functions, ring buffers)
+and establishes the <code>effective_*()</code> plural-config convention for
+multi-instance peripherals (UART first, then Flash/JTAG when
+needed). Plan doc:
+<a href="adr/../plans/multi-peripheral-cosim.html"><code>../plans/multi-peripheral-cosim.md</code></a>.</p>
+</li>
 </ul>
 <h2 id="adding-a-new-adr"><a class="header" href="#adding-a-new-adr">Adding a new ADR</a></h2>
 <ol>
