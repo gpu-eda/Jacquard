@@ -19,7 +19,7 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
@@ -34,7 +34,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -57,7 +57,7 @@ jobs:
     name: opensta-to-ir Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
 
@@ -92,7 +92,7 @@ jobs:
       # across runs because the version is constant.
       - name: Cache CUDD
         id: cache-cudd
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/cudd-3.0.0
           key: cudd-3.0.0-v1
@@ -113,7 +113,7 @@ jobs:
       # changes.
       - name: Cache OpenSTA build
         id: cache-opensta
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: vendor/opensta/build
           key: opensta-${{ steps.opensta-sha.outputs.sha }}-cudd-3.0.0-v1
@@ -125,7 +125,7 @@ jobs:
         run: scripts/build-opensta.sh
 
       - name: Cache cargo (opensta-to-ir + timing-ir)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index/
@@ -148,7 +148,7 @@ jobs:
     # macos-runner-1 (Apple Silicon + Metal GPU).
     runs-on: macos-runner-1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
@@ -173,7 +173,7 @@ jobs:
           echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -321,7 +321,7 @@ jobs:
         run: python3 tests/dual_uart/check_pass.py dual_uart_events.json
 
       - name: Upload VCD artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: vcd-outputs
@@ -345,7 +345,7 @@ jobs:
     if: ${{ false }}
     runs-on: nvidia-runner-1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
@@ -364,7 +364,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -413,7 +413,7 @@ jobs:
           fi
 
       - name: Upload CUDA artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: cuda-outputs
@@ -434,7 +434,7 @@ jobs:
     if: ${{ false }}
     runs-on: nvidia-runner-1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
@@ -485,7 +485,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -534,7 +534,7 @@ jobs:
           fi
 
       - name: Upload HIP artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: hip-outputs
@@ -551,7 +551,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
@@ -580,7 +580,7 @@ jobs:
     name: Benchmarks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
@@ -590,7 +590,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -618,7 +618,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: benchmark_results.txt
@@ -633,7 +633,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
 
@@ -650,7 +650,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Install OpenSTA build deps
         run: |
@@ -661,7 +661,7 @@ jobs:
 
       - name: Cache CUDD
         id: cache-cudd
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/cudd-3.0.0
           key: cudd-3.0.0-v1
@@ -680,7 +680,7 @@ jobs:
       # runs first warms it for the other.
       - name: Cache OpenSTA build
         id: cache-opensta
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: vendor/opensta/build
           key: opensta-${{ steps.opensta-sha.outputs.sha }}-cudd-3.0.0-v1
@@ -692,7 +692,7 @@ jobs:
         run: scripts/build-opensta.sh
 
       - name: Cache cargo (opensta-to-ir)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index/
@@ -709,7 +709,7 @@ jobs:
       # ~500MB download happens once and warm runs reuse it.
       - name: Cache volare PDK (sky130A)
         id: cache-volare
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.volare
           key: volare-sky130A-c6d73a35f524070e85faff4a6a9eef49553ebc2b
@@ -740,7 +740,7 @@ jobs:
             --output tests/mcu_soc/data/6_final.jtir
 
       - name: Upload MCU SoC timing IR artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mcu-soc-jtir
           path: tests/mcu_soc/data/6_final.jtir
@@ -755,7 +755,7 @@ jobs:
     timeout-minutes: 30
     needs: [prepare-mcu-soc-jtir]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           persist-credentials: true
@@ -777,10 +777,10 @@ jobs:
           echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -833,7 +833,7 @@ jobs:
           fi
 
       - name: Download MCU SoC timing IR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mcu-soc-jtir
           path: tests/mcu_soc/data/
@@ -887,7 +887,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mcu-soc-results
@@ -916,7 +916,7 @@ jobs:
     # Regression gate for #84 (model-driven clock edge flags).
     continue-on-error: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           persist-credentials: true
@@ -936,7 +936,7 @@ jobs:
           echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -969,7 +969,7 @@ jobs:
             tests/jtag_minimal/data/cosim_trace.vcd
 
       - name: Upload artefacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: jtag-minimal-results
@@ -982,7 +982,7 @@ jobs:
     name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
@@ -992,7 +992,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -1059,11 +1059,11 @@ jobs:
     name: CVC Reference Simulation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Cache CVC binary
         id: cache-cvc
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/cvc/bin
           key: cvc-binary-debug-v4-toplevel-makefile
@@ -1150,7 +1150,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: cvc-reference-results
@@ -1166,18 +1166,18 @@ jobs:
     needs: [metal, cvc-reference]
     if: always() && needs.metal.result == 'success' && needs.cvc-reference.result == 'success'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v7
 
       - name: Download Metal artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: vcd-outputs
           path: metal-results/
 
       - name: Download CVC artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvc-reference-results
           path: cvc-results/
@@ -1206,7 +1206,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: timing-comparison-results
@@ -1222,17 +1222,17 @@ jobs:
     needs: [mcu-soc-metal]
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
         run: git submodule update --init vendor/sky130_fd_sc_hd
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v7
 
       - name: Cache CVC binary
         id: cache-cvc
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/cvc/bin
           key: cvc-binary-debug-v2
@@ -1257,7 +1257,7 @@ jobs:
         run: echo "$HOME/cvc/bin" >> "$GITHUB_PATH"
 
       - name: Download Metal artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mcu-soc-results
           path: metal-results/
@@ -1305,7 +1305,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mcu-soc-cvc-results
@@ -1321,18 +1321,18 @@ jobs:
     needs: [mcu-soc-metal, mcu-soc-cvc]
     if: always() && needs.mcu-soc-metal.result == 'success' && needs.mcu-soc-cvc.result == 'success'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v7
 
       - name: Download Metal artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mcu-soc-results
           path: metal-results/
 
       - name: Download CVC artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mcu-soc-cvc-results
           path: cvc-results/
@@ -1375,7 +1375,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mcu-soc-comparison-results

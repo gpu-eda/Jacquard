@@ -37,12 +37,12 @@ jobs:
           sudo swapon /swapfile
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Generate RTLIL
         run: |
@@ -180,7 +180,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create or update PR
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: auto/update-mcu-soc-data
           commit-message: "Update MCU SoC test data from librelane rebuild"
