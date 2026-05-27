@@ -2827,10 +2827,27 @@ outcome; kept for the audit trail.</li>
 <tr><td><a href="adr/0011-ram-port-mapping-schema.html">0011</a></td><td>RAM port-mapping schema for declarative cell metadata</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Proposed</td></tr>
 <tr><td><a href="adr/0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Proposed</td></tr>
+<tr><td><a href="adr/0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted</td></tr>
+<tr><td><a href="adr/0015-boomerang-execution-model.html">0015</a></td><td>Boomerang execution model and GPU resource mapping</td><td>Accepted</td></tr>
+<tr><td><a href="adr/0016-selective-x-propagation.html">0016</a></td><td>Selective X-propagation</td><td>Accepted</td></tr>
+<tr><td><a href="adr/0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted</td></tr>
 </tbody></table>
 </div>
 <h2 id="how-the-adrs-relate"><a class="header" href="#how-the-adrs-relate">How the ADRs relate</a></h2>
 <ul>
+<li>
+<p><strong>0014 / 0015</strong> document the core simulation pipeline: 0014
+explains why the AIG (and-inverter graph) is the simulation IR —
+its uniform AND-gate structure enables the boomerang reduction tree
+and eliminates per-cell dispatch in the GPU kernel.  0015 describes
+the boomerang execution model itself — the 13-level hierarchical
+reduction tree, the GPU resource limits it imposes (8191 inputs,
+8191 outputs, 4095 intermediates, 64 SRAM groups per partition),
+the hypergraph partitioning that distributes work across GPU blocks,
+and the packed instruction format (<code>FlattenedScriptV1</code>) consumed by
+the kernel.  Together they document the path from gate-level
+Verilog to GPU kernel execution that the GEM paper describes.</p>
+</li>
 <li>
 <p><strong>0001 / 0003 / 0005 / 0006</strong> describe the timing oracle stack:
 OpenSTA as the ground truth (0001), vendored at a pinned revision
@@ -2855,12 +2872,17 @@ Scheduling for both lives in
 <a href="adr/../plans/post-phase-0-roadmap.html"><code>../plans/post-phase-0-roadmap.md</code></a>.</p>
 </li>
 <li>
-<p><strong>0013</strong> documents the cosim peripheral model architecture (CPU-side
-<code>PeripheralModel</code> trait, GPU-side kernel functions, ring buffers)
-and establishes the <code>effective_*()</code> plural-config convention for
-multi-instance peripherals (UART first, then Flash/JTAG when
-needed). Plan doc:
-<a href="adr/../plans/multi-peripheral-cosim.html"><code>../plans/multi-peripheral-cosim.md</code></a>.</p>
+<p><strong>0013 / 0017</strong> cover the cosim runtime: 0013 documents the
+peripheral model architecture (CPU-side <code>PeripheralModel</code> trait,
+GPU-side kernel patterns, ring buffers, plural-config convention);
+0017 documents the execution model (batch dispatch loop,
+multi-clock scheduler, edges-vs-cycles semantics).</p>
+</li>
+<li>
+<p><strong>0016</strong> accepts the selective X-propagation design documented in
+<a href="adr/../selective-x-propagation.html"><code>docs/selective-x-propagation.md</code></a>.
+The full seven-phase design lives there; the ADR is a thin
+acceptance record with a summary of key choices.</p>
 </li>
 </ul>
 <h2 id="adding-a-new-adr"><a class="header" href="#adding-a-new-adr">Adding a new ADR</a></h2>
