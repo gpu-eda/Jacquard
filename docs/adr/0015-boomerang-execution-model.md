@@ -37,9 +37,9 @@ The 13 hierarchy levels map to three GPU execution tiers:
 | Levels | Width | GPU mechanism |
 |--------|-------|---------------|
 | hier[0] | 8192 → 4096 | 256 threads, shared memory reduction (threads 128-255 compute, 0-127 supply inputs) |
-| hier[1..3] | 4096 → 512 | Shared memory reduction with barrier between levels; only threads in `[hier_width, 2×hier_width)` compute — the rest idle |
-| hier[4..7] | 512 → 32 | Warp/SIMD shuffle (`__shfl_down_sync` / `simd_shuffle_down`) — no barrier needed |
-| hier[8..12] | 32 → 1 | Bit-level operations within a single `u32` on thread 0 |
+| hier[1–3] | 4096 → 512 | Shared memory reduction with barrier between levels; only threads in `[hier_width, 2×hier_width)` compute — the rest idle |
+| hier[4–7] | 512 → 32 | Warp/SIMD shuffle (`__shfl_down_sync` / `simd_shuffle_down`) — no barrier needed |
+| hier[8–12] | 32 → 1 | Bit-level operations within a single `u32` on thread 0 |
 
 At each level, every position computes `(a XOR xora) AND (b XOR xorb)
 OR orb` — the same AND-with-invert operation from the AIG.  When

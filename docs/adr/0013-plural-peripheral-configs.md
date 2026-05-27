@@ -65,7 +65,8 @@ The dispatch is peripheral-agnostic: `state_prep` applies whatever
 `BitOp` array it receives. Clock edges, reset, GPIO, UART RX, and
 JTAG TCK/TMS/TDI are all entries in the same ops buffer.
 
-Current CPU-side models: GPIO, UART RX, JTAG replay, I²C, SPI.
+Registered CPU-side models: GPIO, UART RX, JTAG replay (complete);
+I²C, SPI (scaffolded, output-state readback not yet wired).
 
 ### GPU-side: two model patterns
 
