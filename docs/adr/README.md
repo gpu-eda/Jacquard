@@ -29,8 +29,24 @@ changes, supersede the old ADR with a new one and update the status.
 | [0011](0011-ram-port-mapping-schema.md) | RAM port-mapping schema for declarative cell metadata | Accepted |
 | [0012](0012-cdc-jitter-injection.md) | Reproducible CDC jitter injection for multi-clock cosim | Proposed |
 | [0013](0013-plural-peripheral-configs.md) | Cosim peripheral model architecture | Proposed |
+| [0014](0014-aig-as-simulation-ir.md) | AIG as simulation intermediate representation | Accepted |
+| [0015](0015-boomerang-execution-model.md) | Boomerang execution model and GPU resource mapping | Accepted |
+| [0016](0016-selective-x-propagation.md) | Selective X-propagation | Accepted |
+| [0017](0017-cosim-execution-model.md) | Cosim execution model | Accepted |
 
 ## How the ADRs relate
+
+- **0014 / 0015** document the core simulation pipeline: 0014
+  explains why the AIG (and-inverter graph) is the simulation IR —
+  its uniform AND-gate structure enables the boomerang reduction tree
+  and eliminates per-cell dispatch in the GPU kernel.  0015 describes
+  the boomerang execution model itself — the 13-level hierarchical
+  reduction tree, the GPU resource limits it imposes (8191 inputs,
+  8191 outputs, 4095 intermediates, 64 SRAM groups per partition),
+  the hypergraph partitioning that distributes work across GPU blocks,
+  and the packed instruction format (`FlattenedScriptV1`) consumed by
+  the kernel.  Together they document the path from gate-level
+  Verilog to GPU kernel execution that the GEM paper describes.
 
 - **0001 / 0003 / 0005 / 0006** describe the timing oracle stack:
   OpenSTA as the ground truth (0001), vendored at a pinned revision
@@ -48,12 +64,15 @@ changes, supersede the old ADR with a new one and update the status.
   Scheduling for both lives in
   [`../plans/post-phase-0-roadmap.md`](../plans/post-phase-0-roadmap.md).
 
-- **0013** documents the cosim peripheral model architecture (CPU-side
-  `PeripheralModel` trait, GPU-side kernel functions, ring buffers)
-  and establishes the `effective_*()` plural-config convention for
-  multi-instance peripherals (UART first, then Flash/JTAG when
-  needed). Plan doc:
-  [`../plans/multi-peripheral-cosim.md`](../plans/multi-peripheral-cosim.md).
+- **0013 / 0017** cover the cosim runtime: 0013 documents the
+  peripheral model architecture (CPU-side `PeripheralModel` trait,
+  GPU-side kernel patterns, ring buffers, plural-config convention);
+  0017 documents the execution model (batch dispatch loop,
+  multi-clock scheduler, edges-vs-cycles semantics).
+- **0016** accepts the selective X-propagation design documented in
+  [`docs/selective-x-propagation.md`](../selective-x-propagation.md).
+  The full seven-phase design lives there; the ADR is a thin
+  acceptance record with a summary of key choices.
 
 ## Adding a new ADR
 
