@@ -635,7 +635,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v7
 
       - name: Install OpenSTA build deps
         run: |
@@ -762,7 +762,7 @@ jobs:
           echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v7
 
       - name: Cache cargo
         uses: actions/cache@v5
@@ -1153,7 +1153,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v7
 
       - name: Download Metal artifacts
         uses: actions/download-artifact@v8
@@ -1213,7 +1213,7 @@ jobs:
       - name: Init required submodules
         run: git submodule update --init vendor/sky130_fd_sc_hd
 
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v7
 
       - name: Cache CVC binary
         id: cache-cvc
@@ -1308,7 +1308,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v7
 
       - name: Download Metal artifacts
         uses: actions/download-artifact@v8
