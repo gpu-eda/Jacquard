@@ -35,17 +35,31 @@ Defined in `src/sim/models/mod.rs`:
 trait PeripheralModel {
     fn name(&self) -> &str;
     fn driven_positions(&self) -> &[u32];
-    fn step_edge(&mut self, output_state, overrides, emitted);
+    fn apply_action(&mut self, action: &QueuedAction);
+    fn step_edge(&mut self, output_state, overrides, emitted); // default: just calls contribute_overrides
     fn contribute_overrides(&self, overrides);
+    fn is_active(&self) -> bool; // default: false
 }
 ```
 
+`apply_action` is how the `InputDispatcher` feeds queued stimulus
+commands to models. `is_active` signals that the model is mid-
+transmission and needs per-edge granularity (forces batch size to 1).
+`step_edge` has a default that just calls `contribute_overrides` —
+stateless models (GPIO) only need the latter.
+
 Models are registered into a `Vec<Box<dyn PeripheralModel>>` at
-startup. Each cosim edge, the loop calls `step_edge` on every model;
-models write their pin drives into a shared `ModelOverrides` map.
-These overrides are compiled into `BitOp` arrays and applied via the
-`state_prep` GPU kernel, which patches the design's input state
-before simulation.
+startup. Each batch boundary, the loop calls `step_edge` on every
+model; models write their pin drives into a shared `ModelOverrides`
+map. These overrides are patched in-place into pre-allocated `BitOp`
+arrays (built at startup with placeholder entries for model-driven
+positions) and applied via the `state_prep` GPU kernel.
+
+**Note:** `step_edge` currently receives an empty `output_state`
+slice — GPU output state is not read back per-edge for CPU-side
+models. GPIO and UART RX don't need it; I²C and SPI bus observation
+will require wiring the output state readback when those models are
+completed.
 
 The dispatch is peripheral-agnostic: `state_prep` applies whatever
 `BitOp` array it receives. Clock edges, reset, GPIO, UART RX, and
@@ -112,7 +126,7 @@ Peripheral config lives in `sim_config.json`, deserialized into
 |---|---|---|
 | Clock | `clocks: Option<Vec<ClockConfig>>` | Yes (`effective_clocks()`) |
 | GPIO | `gpios: Vec<GpioConfig>` | Yes |
-| UART | `uart: Option<UartConfig>` | Not yet |
+| UART | `uart` + `uarts: Vec<UartConfig>` | Yes (`effective_uarts()`, #90) |
 | Flash | `flash: Option<FlashConfig>` | Not yet |
 | JTAG | `jtag: Option<JtagConfig>` | Not yet |
 | Wishbone | *(auto-detected from netlist)* | N/A |
@@ -181,7 +195,7 @@ future `cosim_common.rs`).
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Multi-UART ([#90](https://github.com/gpu-eda/Jacquard/issues/90)): first peripheral using plural-config + array-in-kernel conventions | Planned |
+| 1 | Multi-UART ([#90](https://github.com/gpu-eda/Jacquard/issues/90)): first peripheral using plural-config + array-in-kernel conventions | **Done** |
 | 2 | Refactor `gpu_io_step` to use common params/ring-buffer layout | Future |
 | 3 | Multi-Flash / external RAM (bidirectional pattern) | Deferred (no use case yet) |
 | — | Multi-JTAG | Not needed (TAP daisy-chain suffices) |

@@ -103,12 +103,23 @@ needed, doubling the bit time in multi-clock designs.
 
 ### GPU→CPU ring buffer drain
 
-After each batch completes, the CPU drains GPU-side ring buffers
-(UART channels, Wishbone trace channel) by reading from a local
-`read_head` up to the GPU-written `write_head`. No synchronisation
-beyond Metal's command buffer completion is needed — the CPU only
-reads after `waitUntilCompleted`. See ADR 0013 for the ring buffer
-struct conventions.
+After each batch completes, the CPU drains three categories of
+GPU-side state:
+
+1. **Peripheral ring buffers** — UART channels and Wishbone trace
+   channel, drained from local `read_head` to GPU-written
+   `write_head`. See ADR 0013 for struct conventions.
+2. **VCD ring buffer** — when `--stimulus-vcd` or `--timing-vcd` is
+   enabled, a separate ring buffer (`2 × state_size` words per edge)
+   captures per-tick output state on the GPU. The CPU drains it
+   after each batch to write VCD transitions. This mechanism is what
+   enables `BATCH_SIZE > 1` even with VCD output — without it, the
+   CPU would need to read output state after every single edge.
+3. **CPU reference check** — when `--check-with-cpu` is active, the
+   CPU replays the batch with the reference kernel and compares.
+
+No synchronisation beyond Metal's command buffer completion is
+needed — all drains happen after `waitUntilCompleted`.
 
 ## Consequences
 
@@ -124,9 +135,11 @@ struct conventions.
   any code that converts user-facing "cycles" to internal "ticks".
   The `edges_per_sys_clk_cycle` helper exists for this purpose.
 - Pre-allocated schedule buffers consume `O(schedule_len)` Metal
-  buffer objects at startup. For typical single-clock designs this
-  is 2 buffers; for complex multi-clock designs it can reach
-  thousands, but each is small (tens of bytes).
+  buffer pairs at startup. Each schedule entry creates two Metal
+  buffer objects (params + ops). For typical single-clock designs
+  this is 2 entries = 4 buffer objects; for complex multi-clock
+  designs it can reach thousands of entries, but each buffer is
+  small (tens of bytes).
 
 ## Cross-references
 

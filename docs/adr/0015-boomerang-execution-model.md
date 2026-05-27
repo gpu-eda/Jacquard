@@ -37,7 +37,7 @@ The 13 hierarchy levels map to three GPU execution tiers:
 | Levels | Width | GPU mechanism |
 |--------|-------|---------------|
 | hier[0] | 8192 → 4096 | 256 threads, shared memory reduction (threads 128-255 compute, 0-127 supply inputs) |
-| hier[1..3] | 4096 → 512 | Shared memory reduction with `__syncthreads` / `threadgroup_barrier` between levels |
+| hier[1..3] | 4096 → 512 | Shared memory reduction with barrier between levels; only threads in `[hier_width, 2×hier_width)` compute — the rest idle |
 | hier[4..7] | 512 → 32 | Warp/SIMD shuffle (`__shfl_down_sync` / `simd_shuffle_down`) — no barrier needed |
 | hier[8..12] | 32 → 1 | Bit-level operations within a single `u32` on thread 0 |
 
@@ -158,10 +158,26 @@ resource limits.
 packed `u32` instruction stream consumed directly by the GPU kernel.
 The script encodes:
 
-1. **Metadata section** (256 u32): Boomerang stage count, SRAM count
-   and offsets, global-read round count, output-duplicate count,
-   X-propagation flag, and a write-out hook table mapping each thread
-   to the boomerang stage+position where it should capture its output.
+1. **Metadata section** (256 u32): Per-partition control fields at
+   fixed indices, followed by the write-out hook table:
+
+   | Index | Field | Purpose |
+   |-------|-------|---------|
+   | 0 | `num_stages` | Boomerang stage count |
+   | 1 | `is_last_part` | Flag: last partition in the design |
+   | 2 | `num_ios` | Number of write-out endpoints |
+   | 3 | `io_offset` | Start offset in global state buffer |
+   | 4 | `num_srams` | SRAM block count |
+   | 5 | `sram_offset` | SRAM start offset |
+   | 6 | `num_global_read_rounds` | Input read rounds |
+   | 7 | `num_output_duplicates` | Output duplication count |
+   | 8 | `is_x_capable` | X-propagation flag (ADR 0016) |
+   | 9 | `xmask_state_offset` | X-mask offset (when X-capable) |
+   | 128..255 | write-out hook table | Maps each thread to the boomerang stage+position where it captures its output |
+
+   This layout is the load-bearing contract between Rust
+   (`flatten.rs`) and the GPU kernel (`kernel_v1.metal`,
+   `kernel_v1_impl.cuh`).
 
 2. **Global-read permutation** (2 × `NUM_THREADS_V1` per round):
    Each thread gets an index into the global state buffer and a

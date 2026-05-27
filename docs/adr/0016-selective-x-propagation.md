@@ -27,7 +27,7 @@ continue with the fast two-state path.
 The full seven-phase design, implementation details, and design
 rationale are in
 [`docs/selective-x-propagation.md`](../selective-x-propagation.md).
-All stages are implemented (Stages 1–7); dynamic narrowing is a
+Stages 1–6 are implemented; Stage 7 (dynamic X narrowing) is a
 future enhancement.
 
 ### Key design choices (summary)
