@@ -176,9 +176,10 @@ overhead when no buses are configured.</p>
 <a href="adr/0013-plural-peripheral-configs.html">ADR 0013</a>; the roadmap is in
 <a href="plans/bus-transaction-tracing.html"><code>plans/bus-transaction-tracing.md</code></a>.</p>
 <p>Bus tracing is the structured, protocol-aware counterpart to
-<a href="usage.html"><code>--trace-signals</code></a>, which surfaces <em>raw</em> internal nets in the
-output VCD. Use <code>--trace-signals</code> when you want waveforms of individual
-wires; use bus tracing when you want decoded <code>READ 0x40 =&gt; 0x1</code> records.</p>
+<a href="signal-tracing.html"><code>--trace-signals</code></a>, which surfaces <em>raw</em> internal
+nets in the output VCD. Use <code>--trace-signals</code> when you want waveforms of
+individual wires; use bus tracing when you want decoded
+<code>READ 0x40 =&gt; 0x1</code> records.</p>
 <h2 id="configuring-a-bus"><a class="header" href="#configuring-a-bus">Configuring a bus</a></h2>
 <p>Add a <code>bus_traces</code> array to <code>sim_config.json</code>. Each entry names one bus
 interface:</p>
@@ -328,7 +329,7 @@ follow-up.</li>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="timing-model-extensions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="signal-tracing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -342,7 +343,7 @@ follow-up.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="timing-model-extensions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="signal-tracing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
