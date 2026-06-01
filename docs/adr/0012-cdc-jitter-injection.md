@@ -1,6 +1,14 @@
 # ADR 0012 — Reproducible CDC jitter injection for multi-clock cosim
 
-**Status:** Proposed.
+**Status:** Accepted — design accepted and partially implemented. The
+reproducibility core (§1) and scheduler-domain jitter on the VCD
+timeline (§2, partial) are built; model-driven jitter (§3), setup/hold
+integration (§5), the `gcd_ps/2` guard, and true coincident-edge
+perturbation (§4) are not yet. The sections below describe the **decided
+design**; see [Implementation status](#implementation-status) for what is
+built versus deferred. Remaining work is tracked in
+[issue #92](https://github.com/gpu-eda/Jacquard/issues/92) and
+[`../plans/cdc-jitter-completion.md`](../plans/cdc-jitter-completion.md).
 
 ## Context
 
@@ -163,9 +171,40 @@ needing explicit permutation logic.
   `--run-params` (with jitter enabled) + `--check-with-cpu` should
   warn or error.
 
+## Implementation status
+
+The design above is accepted in full; the code implements part of it.
+This section is the source of truth on what is built. Remaining items are
+tracked in [issue #92](https://github.com/gpu-eda/Jacquard/issues/92) /
+[`../plans/cdc-jitter-completion.md`](../plans/cdc-jitter-completion.md).
+
+**Implemented:**
+
+| Part | Where |
+|------|-------|
+| Run-parameters file, `master_seed`, load/write/`load_or_generate` | `src/sim/run_params.rs` |
+| Per-domain sub-seed `hash(master_seed, name)` + per-domain `ChaCha8Rng` | `RunParams::domain_seed`; `cosim_metal.rs` |
+| `jitter_ps` per `ClockConfig` (default 0) | `src/testbench.rs` |
+| Uniform `[-jitter_ps, +jitter_ps]` draw per domain per tick | `cosim_metal.rs` |
+| Jitter displacement applied to the **timing-VCD event timestamp** | `cosim_metal.rs` (inside the `--timing-vcd` block) |
+| `master_seed` logged at INFO | `cosim_metal.rs` |
+| `--check-with-cpu` + jitter warning | `cosim_metal.rs` |
+
+**Deferred (issue #92):**
+
+| Part | ADR § | Gap |
+|------|-------|-----|
+| Setup/hold integration | §2, §5 | Jitter shifts only the VCD base timestamp; it does not feed the per-signal arrival offsets, so it produces no `--timing-report` violations. Also: jitter currently has **no effect unless `--timing-vcd` is set**. |
+| Model-driven clock jitter | §3 | No `--cdc-model-jitter-ps` flag or `patch_model_clock_edges` path; only scheduler domains jitter. |
+| True coincident-edge perturbation | §4 | A single global displacement (last firing domain wins) is applied to the shared timestamp rather than independent per-domain displacement. |
+| `gcd_ps / 2` constraint | §2 | Not validated. |
+| Persist seed unconditionally | §1 | Without `--run-params` or `--timing-vcd`, the seed is generated but not written. |
+| `master_seed` in VCD header comment | §1, §5 | INFO log only. |
+| `--cdc-jitter-seed` CI sweep | Consequences | The replay mechanism is `--run-params`; no dedicated CI sweep step yet. |
+
 ## Consequences
 
-- CI can run `--cdc-jitter-seed 1` (or a small sweep) as a lightweight
+- CI can run a small seed sweep (via `--run-params`) as a lightweight
   CDC stress test on every PR, catching synchroniser failures that the
   ideal-clock schedule hides.
 - Users debugging real silicon CDC failures can replay the exact jitter

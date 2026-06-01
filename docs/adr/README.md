@@ -27,7 +27,7 @@ changes, supersede the old ADR with a new one and update the status.
 | [0009](0009-opensta-verilog-reader-inputs.md) | OpenSTA Verilog reader inputs | Accepted |
 | [0010](0010-declarative-cell-metadata.md) | Declarative cell metadata | Accepted |
 | [0011](0011-ram-port-mapping-schema.md) | RAM port-mapping schema for declarative cell metadata | Accepted |
-| [0012](0012-cdc-jitter-injection.md) | Reproducible CDC jitter injection for multi-clock cosim | Proposed |
+| [0012](0012-cdc-jitter-injection.md) | Reproducible CDC jitter injection for multi-clock cosim | Accepted (partial) |
 | [0013](0013-plural-peripheral-configs.md) | Cosim peripheral model architecture | Accepted |
 | [0014](0014-aig-as-simulation-ir.md) | AIG as simulation intermediate representation | Accepted |
 | [0015](0015-boomerang-execution-model.md) | Boomerang execution model and GPU resource mapping | Accepted |
