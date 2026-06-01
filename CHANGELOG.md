@@ -9,6 +9,17 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+### Added
+
+- **`JACQUARD_VENDOR_DIR`** env var to override the vendored-PDK root used
+  for cell-library decomposition (`gf180mcu_fd_sc_mcu7t5v0` /
+  `sky130_fd_sc_hd` functional models). Previously the path was hardcoded
+  to `vendor/` relative to the process CWD, so a consumer running
+  `jacquard` from another working directory had to symlink `vendor/` into
+  place. Now it defaults to `vendor/` (unchanged behaviour) and honours
+  `JACQUARD_VENDOR_DIR` when set. Follows the existing `JACQUARD_*`
+  runtime-knob convention.
+
 ## [0.2.4] - 2026-06-26
 
 Documentation, tooling, and submodule-hygiene release — no change to the

@@ -28,6 +28,26 @@ use indexmap::{IndexMap, IndexSet};
 use netlistdb::{Direction, GeneralPinName, NetlistDB};
 use smallvec::SmallVec;
 
+/// Root directory under which the vendored PDK cell libraries live —
+/// `<root>/gf180mcu_fd_sc_mcu7t5v0` and `<root>/sky130_fd_sc_hd`.
+///
+/// Defaults to `vendor` (the in-repo submodule layout, resolved relative
+/// to the process CWD). Set `JACQUARD_VENDOR_DIR` to override it so a
+/// caller that runs jacquard from a different working directory can point
+/// at the vendored PDKs directly instead of symlinking `vendor/` into its
+/// CWD. Follows the existing `JACQUARD_*` runtime-knob convention.
+fn pdk_vendor_root() -> std::path::PathBuf {
+    pdk_vendor_root_from(std::env::var_os("JACQUARD_VENDOR_DIR"))
+}
+
+/// Pure core of [`pdk_vendor_root`], split out so the env-independent
+/// resolution logic is unit-testable without mutating process env.
+fn pdk_vendor_root_from(override_dir: Option<std::ffi::OsString>) -> std::path::PathBuf {
+    override_dir
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("vendor"))
+}
+
 /// Work item for iterative DFS traversal.
 /// Using two-phase approach: Visit pushes dependencies, Process computes outputs.
 #[derive(Clone, Copy)]
@@ -2286,7 +2306,7 @@ impl AIG {
         });
 
         if has_sky130 {
-            let pdk_path = std::path::PathBuf::from("vendor/sky130_fd_sc_hd/cells");
+            let pdk_path = pdk_vendor_root().join("sky130_fd_sc_hd/cells");
             let mut cell_types: Vec<String> = Vec::new();
             for cellid in 1..netlistdb.num_cells {
                 let celltype = netlistdb.celltypes[cellid].as_str();
@@ -2307,7 +2327,7 @@ impl AIG {
                 cell_descriptor,
             )
         } else if has_gf180mcu {
-            let pdk_path = std::path::PathBuf::from("vendor/gf180mcu_fd_sc_mcu7t5v0");
+            let pdk_path = pdk_vendor_root().join("gf180mcu_fd_sc_mcu7t5v0");
             let mut cell_types: Vec<String> = Vec::new();
             for cellid in 1..netlistdb.num_cells {
                 let celltype = netlistdb.celltypes[cellid].as_str();
@@ -3849,6 +3869,30 @@ impl AIG {
         };
 
         (x_capable, stats)
+    }
+}
+
+#[cfg(test)]
+mod pdk_vendor_root_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn defaults_to_vendor_when_unset() {
+        assert_eq!(pdk_vendor_root_from(None), PathBuf::from("vendor"));
+    }
+
+    #[test]
+    fn honours_override_dir() {
+        assert_eq!(
+            pdk_vendor_root_from(Some("/opt/pdks".into())),
+            PathBuf::from("/opt/pdks"),
+        );
+        // Relative overrides are taken verbatim (joined against CWD at use).
+        assert_eq!(
+            pdk_vendor_root_from(Some("some/submodule/vendor".into())),
+            PathBuf::from("some/submodule/vendor"),
+        );
     }
 }
 
