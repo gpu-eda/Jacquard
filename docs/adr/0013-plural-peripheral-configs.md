@@ -1,6 +1,9 @@
 # ADR 0013 — Cosim peripheral model architecture
 
-**Status:** Proposed
+**Status:** Accepted — the architecture is implemented and in use across
+multiple peripherals (multi-UART #90, config-driven APB3 bus tracing).
+The "Target architecture" section below tracks the remaining, optional
+refactors; the conventions it establishes are already followed.
 
 ## Context
 
