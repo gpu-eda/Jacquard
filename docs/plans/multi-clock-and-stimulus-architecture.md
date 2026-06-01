@@ -266,7 +266,12 @@ Documented now so the design space is on record:
   random X-injection on detected async-source paths. Reuses MC.1's
   boundary metadata and existing X-prop infrastructure. Distinct from
   static CDC checking (Spyglass, Real Intent), which is **explicitly out
-  of scope** — that's a different product.
+  of scope** — that's a different product. The jitter-injection half is
+  designed in [ADR 0012](../adr/0012-cdc-jitter-injection.md) and partly
+  built; remaining work is tracked in
+  [issue #92](https://github.com/gpu-eda/Jacquard/issues/92) /
+  [`cdc-jitter-completion.md`](cdc-jitter-completion.md). X-injection
+  stays deferred until MC.1 lands.
 
 ## Out of scope (explicit non-goals)
 
