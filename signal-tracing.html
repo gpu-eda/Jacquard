@@ -220,11 +220,34 @@ nothing to observe at runtime.</p>
 <p>Traced nets appear in whichever VCD the run already emits:</p>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Flag</th><th>Traced nets appear in</th></tr></thead><tbody>
 <tr><td><code>jacquard sim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the output VCD</td></tr>
-<tr><td><code>jacquard cosim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td><code>--timing-vcd</code> / <code>--stimulus-vcd</code> output</td></tr>
+<tr><td><code>jacquard cosim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the <code>--timing-vcd</code> output <strong>only</strong></td></tr>
 </tbody></table>
 </div>
 <p>They show up as ordinary VCD wires next to the top-level IO, named by the
 string you put in the trace file.</p>
+<blockquote>
+<p><strong>cosim:</strong> traced nets land in <code>--timing-vcd</code> <strong>only</strong>. The
+<code>--stimulus-vcd</code> carries primary inputs and does <em>not</em> include them, so
+if you trace a net and look in the stimulus VCD you'll see nothing.
+<code>--timing-vcd</code> does <strong>not</strong> require timing data — see
+<a href="#pre-pnr-functional-runs">Pre-PnR functional runs</a>.</p>
+</blockquote>
+<h3 id="pre-pnr-functional-runs"><a class="header" href="#pre-pnr-functional-runs">Pre-PnR functional runs</a></h3>
+<p><code>--timing-vcd</code> is the functional output path too — it does <strong>not</strong> require
+<code>--timing-ir</code>/SDF. Run a synthesized (pre-PnR) netlist through <code>cosim</code>
+with <code>--timing-vcd out.vcd</code> and you get chip outputs and traced nets per
+cycle, with transitions at clock edges (no arrival-time offsets). This is
+the right mode for functional / 4-state X-pessimism debugging, where
+there is no timing data to supply yet. Adding <code>--timing-ir</code> later only
+adds arrival-time offsets to the same VCD.</p>
+<h3 id="top-level-inout-bidir-pads"><a class="header" href="#top-level-inout-bidir-pads">Top-level inout (bidir) pads</a></h3>
+<p>A top-level <code>inout</code> pad is split into two observables in the output VCD:
+<code>&lt;pad&gt;__out</code> (the value the core drives) and <code>&lt;pad&gt;__oe</code> (the pad's
+output-enable). The raw <code>&lt;pad&gt;</code> net reads the pad's <strong>input</strong> side, so on
+an output-only or undriven cycle it can look flat — watch <code>&lt;pad&gt;__out</code> /
+<code>&lt;pad&gt;__oe</code> to see what the design is driving. Example:
+<code>bidir_PAD[12]__out</code>, <code>bidir_PAD[12]__oe</code>. These appear automatically;
+you don't need to list them in the trace file.</p>
 <h2 id="finding-signal-names"><a class="header" href="#finding-signal-names">Finding signal names</a></h2>
 <p>Use the <code>netlist-graph</code> tool (see the project README) to discover the
 exact post-synthesis names:</p>
