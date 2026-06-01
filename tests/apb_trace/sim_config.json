@@ -1,0 +1,28 @@
+{
+    "_comment": "Jacquard cosim testbench for the APB3 bus-trace test (ADR 0013). The design's APB master issues 2 writes + 2 reads to an always-ready slave, then idles. The bus_traces entry resolves the (kept) APB net names; cosim decodes the transfers and, with --bus-trace-csv, writes them as CSV. See tests/apb_trace/check.py for the pass criterion.",
+    "netlist_path": "tests/apb_trace/apb_trace_synth.gv",
+    "clock_gpio": 0,
+    "reset_gpio": 1,
+    "reset_active_high": false,
+    "reset_cycles": 10,
+    "num_cycles": 2000,
+    "clock_period_ps": 40000,
+    "bus_traces": [
+        {
+            "name": "apb0",
+            "protocol": "apb3",
+            "prefix": "",
+            "addr_bits": 8,
+            "data_bits": 32
+        }
+    ],
+    "port_mapping": {
+        "inputs": {
+            "0": "clk",
+            "1": "rst_n"
+        },
+        "outputs": {
+            "2": "trace_tap"
+        }
+    }
+}

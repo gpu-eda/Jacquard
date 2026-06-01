@@ -311,6 +311,13 @@ struct CosimArgs {
     /// Omit to auto-generate at `<output_dir>/run_params.json`. See ADR 0012.
     #[clap(long = "run-params", value_name = "PATH")]
     run_params: Option<PathBuf>,
+
+    /// Path to write decoded AHB/APB bus transactions as CSV. Requires
+    /// at least one `bus_traces` entry in sim_config.json. Columns:
+    /// `tick,bus,protocol,dir,addr,data,resp,burst`. See ADR 0013 and
+    /// `docs/plans/bus-transaction-tracing.md`.
+    #[clap(long = "bus-trace-csv", value_name = "PATH")]
+    bus_trace_csv: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -373,6 +380,7 @@ fn cmd_sim(args: SimArgs) {
         timing_corner: args.timing_corner.clone(),
         cell_library: args.cell_library.clone(),
         trace_signals: args.trace_signals.clone(),
+        extra_observable_signals: Vec::new(),
     };
 
     #[allow(unused_mut)]
@@ -1522,6 +1530,7 @@ fn cmd_dump_paths(args: DumpPathsArgs) {
         timing_corner: None,
         cell_library: Vec::new(),
         trace_signals: None,
+        extra_observable_signals: Vec::new(),
     };
 
     let mut design = setup::load_design(&design_args);
@@ -1591,6 +1600,14 @@ fn cmd_cosim(args: CosimArgs) {
             .or(config.clock_period_ps)
             .or(config.timing.as_ref().map(|t| t.clock_period_ps));
 
+        // Bus-trace pins must be registered as observable before
+        // partitioning so they get output-state slots the GPU can read.
+        let bus_trace_signals: Vec<String> = config
+            .effective_bus_traces()
+            .iter()
+            .flat_map(jacquard::sim::models::bus_trace::observed_net_names)
+            .collect();
+
         let design_args = DesignArgs {
             netlist_verilog: args.netlist_verilog.clone(),
             top_module: args.top_module.clone(),
@@ -1607,6 +1624,7 @@ fn cmd_cosim(args: CosimArgs) {
             timing_corner: None,
             cell_library: args.cell_library.clone(),
             trace_signals: args.trace_signals.clone(),
+            extra_observable_signals: bus_trace_signals,
         };
 
         let mut design = setup::load_design(&design_args);
@@ -1635,6 +1653,7 @@ fn cmd_cosim(args: CosimArgs) {
             jtag_replay: args.jtag_replay.clone(),
             jtag_hold_cycles: args.jtag_hold_cycles,
             run_params: args.run_params.clone(),
+            bus_trace_csv: args.bus_trace_csv.clone(),
         };
 
         let result =

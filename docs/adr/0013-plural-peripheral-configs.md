@@ -130,7 +130,8 @@ Peripheral config lives in `sim_config.json`, deserialized into
 | UART | `uart` + `uarts: Vec<UartConfig>` | Yes (`effective_uarts()`, #90) |
 | Flash | `flash: Option<FlashConfig>` | Not yet |
 | JTAG | `jtag: Option<JtagConfig>` | Not yet |
-| Wishbone | *(auto-detected from netlist)* | N/A |
+| Wishbone | *(auto-detected, hardcoded signal names)* | N/A (legacy) |
+| Bus trace (AHB/APB) | `bus_traces: Vec<BusTraceConfig>` | Yes (`effective_bus_traces()`) |
 
 ### Current implementation (bespoke kernels)
 
@@ -140,11 +141,42 @@ Today each GPU-side peripheral has its own kernel function:
 |---|---|---|
 | `gpu_apply_flash_din` | states[0], flash_state[1], flash_din_params[2] | Bidirectional: inject |
 | `gpu_flash_model_step` | states[0], flash_state[1], flash_model_params[2], flash_data[3] | Bidirectional: sample+advance |
-| `gpu_io_step` | states[0], uart_state[1], uart_params[2], uart_channel[3], wb_channel[4], wb_params[5] | Observe-only (combined UART + Wishbone) |
+| `gpu_io_step` | states[0], uart_state[1], uart_params[2], uart_channel[3], wb_channel[4], wb_params[5], bus_channel[6], bus_params[7] | Observe-only (UART + Wishbone + AHB/APB bus trace) |
 
 All run on thread 0 only — the per-tick work is a trivial FSM step.
-`gpu_io_step` combines two logically independent observe-only models,
-gated by `n_uarts > 0` and `has_trace` flags.
+`gpu_io_step` combines three logically independent observe-only models,
+gated by `n_uarts > 0`, `has_trace`, and `n_buses > 0` respectively.
+
+### Config-driven bus monitor (AHB/APB)
+
+The Wishbone trace (`build_wb_trace_params`) hardcodes one SoC's signal
+names (`cpu.fetch.ibus__cyc`, `spiflash.ctrl.wb_bus__ack`, …) directly
+in source. The AHB/APB bus tracer generalizes it into a **config-driven,
+protocol-aware monitor** that is the model for future bus tracing:
+
+- **Config** (`BusTraceConfig`): `name`, `protocol` (apb3 / ahb-lite /
+  ahb5), hierarchical `prefix`, `addr_bits`/`data_bits`, and optional
+  per-pin `signals` overrides. Pins default to `{prefix}{pin}`.
+- **Pin binding**: protocol pin names (`psel`, `paddr`, …) are resolved
+  to output-state positions via `resolve_to_state_pos` in
+  `trace_signals.rs` — the same multi-candidate resolver `--trace-signals`
+  uses, so Yosys-flattened / scalar-expanded / structural naming all
+  work. The pins are registered as observables before partitioning (via
+  `DesignArgs::extra_observable_signals`) so they get state-buffer slots.
+- **GPU capture / CPU decode split**: the kernel is protocol-agnostic —
+  it packs a raw beat (`addr, wdata, rdata, ctrl flags`) into the ring
+  buffer on the protocol's gating edge (`psel & penable & pready` for
+  APB), using rising-edge detection so exactly one beat is recorded per
+  completed transfer. The protocol FSM (phase pairing, burst tracking,
+  response decode) lives in plain, unit-testable Rust in
+  `src/sim/models/bus_trace.rs`. APB3 is stateless (one beat = one
+  transaction); AHB pairing is the Phase-2 extension.
+- **Output**: decoded transactions stream to CSV via `--bus-trace-csv`;
+  annotated-VCD emission is a planned follow-up.
+
+This is observe-only, so it slots into the existing post-simulate
+pattern. Migrating the hardcoded WbTrace onto this mechanism (expressing
+the VexRiscv ibus/dbus as configured buses) is a clean follow-up.
 
 ## Target architecture
 
@@ -197,8 +229,11 @@ future `cosim_common.rs`).
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Multi-UART ([#90](https://github.com/gpu-eda/Jacquard/issues/90)): first peripheral using plural-config + array-in-kernel conventions | **Done** |
+| 1b | Config-driven bus monitor, APB3 + CSV (GPU-capture/CPU-decode split) | **Done** |
 | 2 | Refactor `gpu_io_step` to use common params/ring-buffer layout | Future |
+| 2b | AHB-Lite / AHB5 bus tracing + annotated-VCD output; migrate WbTrace onto the general monitor | Future |
 | 3 | Multi-Flash / external RAM (bidirectional pattern) | Deferred (no use case yet) |
 | — | Multi-JTAG | Not needed (TAP daisy-chain suffices) |
 
-Plan doc: [`../plans/multi-peripheral-cosim.md`](../plans/multi-peripheral-cosim.md).
+Plan docs: [`../plans/multi-peripheral-cosim.md`](../plans/multi-peripheral-cosim.md),
+[`../plans/bus-transaction-tracing.md`](../plans/bus-transaction-tracing.md).

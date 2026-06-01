@@ -56,6 +56,13 @@ pub struct DesignArgs {
     /// See `src/sim/trace_signals.rs` for the file format and
     /// resolution semantics.
     pub trace_signals: Option<PathBuf>,
+    /// Additional hierarchical signal names to register as observable,
+    /// supplied programmatically rather than from a file. Any feature
+    /// that needs specific nets to have state-buffer slots before
+    /// partitioning should populate this (the bus-trace feature uses it
+    /// to surface a configured bus's pins). Registered through the same
+    /// path as `trace_signals`.
+    pub extra_observable_signals: Vec<String>,
 }
 
 /// Result of loading a design: everything needed for simulation.
@@ -175,6 +182,22 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
                 clilog::warn!("--trace-signals: {}; skipping", e);
             }
         }
+    }
+
+    // Register programmatic extra observables (e.g. bus-trace pins).
+    // Same ordering constraint as --trace-signals: must run before
+    // staging so the resolved aigpins get state-buffer slots.
+    if !args.extra_observable_signals.is_empty() {
+        let (registered, dropped) = crate::sim::trace_signals::register_trace_signals(
+            &mut aig,
+            &netlistdb,
+            &args.extra_observable_signals,
+        );
+        clilog::info!(
+            "bus-trace observables: registered {} signal(s), dropped {}",
+            registered,
+            dropped
+        );
     }
 
     // Load display format info from JSON if available

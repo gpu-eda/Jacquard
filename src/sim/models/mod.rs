@@ -10,6 +10,7 @@
 //! `chipflow/common/sim/models.h` and `chipflow/models/*.cc`. Same
 //! protocol semantics so a chipflow `input.json` is portable to Jacquard.
 
+pub mod bus_trace;
 pub mod gpio;
 pub mod i2c;
 pub mod jtag;

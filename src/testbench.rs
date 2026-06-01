@@ -238,6 +238,12 @@ pub struct TestbenchConfig {
     /// Each entry defines an independent clock domain with its own period and phase.
     #[serde(default)]
     pub clocks: Option<Vec<ClockConfig>>,
+    /// Config-driven AHB/APB bus transaction tracing. Each entry names a
+    /// bus interface in the design; cosim observes its pins on the GPU and
+    /// decodes transactions on the CPU. See `src/sim/models/bus_trace.rs`
+    /// and ADR 0013.
+    #[serde(default)]
+    pub bus_traces: Vec<BusTraceConfig>,
 }
 
 impl TestbenchConfig {
@@ -270,6 +276,16 @@ impl TestbenchConfig {
             out.insert(0, u.clone());
         }
         out
+    }
+
+    /// Return the configured bus traces (ADR 0013).
+    ///
+    /// There is no legacy singular form — `bus_traces` is new — so this
+    /// just borrows the plural list. Named for symmetry with
+    /// `effective_uarts()` / `effective_clocks()` so call sites stay
+    /// uniform across peripherals.
+    pub fn effective_bus_traces(&self) -> &[BusTraceConfig] {
+        &self.bus_traces
     }
 }
 
@@ -353,6 +369,57 @@ pub struct JtagConfig {
 
 fn default_true() -> bool {
     true
+}
+
+// ── Bus transaction tracing configuration ───────────────────────────────────
+
+/// Bus protocol selector for [`BusTraceConfig`]. APB3 is implemented;
+/// AHB-Lite / AHB5 are planned follow-ups (see
+/// `docs/plans/bus-transaction-tracing.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BusProtocol {
+    Apb3,
+    AhbLite,
+    Ahb5,
+}
+
+/// Configuration for tracing one bus interface's transactions.
+///
+/// Pin nets are derived as `{prefix}{pin}` for each protocol pin (e.g.
+/// `psel`, `penable`, `paddr`), with multi-bit pins expanded per bit.
+/// Designs whose pins don't follow that convention can remap individual
+/// logical pins via `signals` (logical pin name → explicit net name).
+#[derive(Debug, Clone, Deserialize)]
+pub struct BusTraceConfig {
+    /// Human-readable bus name, used to label transactions in CSV/VCD output.
+    pub name: String,
+    /// Bus protocol to decode.
+    pub protocol: BusProtocol,
+    /// Hierarchical net-name prefix; standard pin names are appended.
+    pub prefix: String,
+    /// Address width in bits (default 32).
+    #[serde(default = "default_bus_addr_bits")]
+    pub addr_bits: usize,
+    /// Data width in bits (default 32).
+    #[serde(default = "default_bus_data_bits")]
+    pub data_bits: usize,
+    /// Per-pin net-name overrides: logical pin (e.g. `"psel"`) → explicit
+    /// net name. Overrides the default `{prefix}{pin}` derivation.
+    #[serde(default)]
+    pub signals: HashMap<String, String>,
+}
+
+/// Default APB/AHB address and data width when a `BusTraceConfig` omits
+/// `addr_bits` / `data_bits`.
+const DEFAULT_BUS_WIDTH: usize = 32;
+
+fn default_bus_addr_bits() -> usize {
+    DEFAULT_BUS_WIDTH
+}
+
+fn default_bus_data_bits() -> usize {
+    DEFAULT_BUS_WIDTH
 }
 
 #[derive(Debug, Clone, Deserialize)]

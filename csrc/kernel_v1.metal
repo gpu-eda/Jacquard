@@ -1095,6 +1095,59 @@ struct WbTraceChannel {
     // entries[capacity] follow immediately in memory (at byte offset 16)
 };
 
+// ── Bus Transaction Trace Structs (AHB/APB, ADR 0013) ───────────────────────
+//
+// Config-driven, protocol-aware bus monitor (generalizes WbTrace). The GPU
+// captures raw per-beat bits on the protocol's gating edge; the CPU runs the
+// protocol FSM (see src/sim/models/bus_trace.rs). Observe-only.
+
+#define MAX_BUS_TRACES 4
+#define BUS_TRACE_MAX_ADR_BITS 32
+#define BUS_TRACE_MAX_DAT_BITS 32
+#define BUS_TRACE_CHANNEL_CAP 16384
+
+#define BUS_PROTO_APB3 0u
+#define BUS_PROTO_AHB_LITE 1u
+#define BUS_PROTO_AHB5 2u
+
+// Per-bus signal positions (in output state; 0xFFFFFFFF = unused).
+struct BusTraceParams {
+    u32 protocol;
+    u32 addr_bits;
+    u32 data_bits;
+    u32 sel_pos;     // APB psel
+    u32 enable_pos;  // APB penable
+    u32 ready_pos;   // APB pready / AHB hready (unused → treated as 1)
+    u32 write_pos;   // APB pwrite / AHB hwrite
+    u32 resp_pos;    // APB pslverr / AHB hresp
+    u32 addr_pos[BUS_TRACE_MAX_ADR_BITS];
+    u32 wdata_pos[BUS_TRACE_MAX_DAT_BITS];
+    u32 rdata_pos[BUS_TRACE_MAX_DAT_BITS];
+};
+
+struct BusTraceParamsAll {
+    u32 n_buses;
+    u32 _pad[3];
+    BusTraceParams buses[MAX_BUS_TRACES];
+};
+
+// Compact raw beat captured on a gating edge.
+struct BusTraceEntry {
+    u32 tick;
+    u32 flags;   // [0]=write [1]=err  [8..15]=bus_id
+    u32 addr;
+    u32 wdata;
+    u32 rdata;
+};
+
+struct BusTraceChannel {
+    u32 write_head;
+    u32 capacity;
+    u32 current_tick;
+    u32 prev_gate;   // bit i = bus i's gate level last tick (rising-edge detect)
+    // entries[capacity] follow immediately in memory (at byte offset 16)
+};
+
 // ── gpu_io_step: Combined UART decoder + Wishbone bus trace ─────────────────
 //
 // Runs once per tick. Decodes UART TX bytes, captures bus transactions.
@@ -1107,6 +1160,8 @@ kernel void gpu_io_step(
     device UartChannel* uart_channel [[buffer(3)]],
     device WbTraceChannel* wb_channel [[buffer(4)]],
     constant WbTraceParams& wb_params [[buffer(5)]],
+    device BusTraceChannel* bus_channel [[buffer(6)]],
+    constant BusTraceParamsAll& bus_params [[buffer(7)]],
     uint tid [[thread_position_in_threadgroup]]
 ) {
     if (tid != 0) return;
@@ -1227,6 +1282,59 @@ kernel void gpu_io_step(
 
         wb_channel->prev_flags = flags;
         wb_channel->current_tick = tick + 1;
+    }
+
+    // ── Bus transaction trace (AHB/APB, ADR 0013) ───────────────────────
+    // Capture raw beats on each bus's gating edge; the CPU decodes the
+    // protocol FSM. Rising-edge detection records exactly one entry per
+    // completed transfer regardless of edge cadence.
+    if (bus_params.n_buses != 0u) {
+        u32 btick = bus_channel->current_tick;
+        u32 prev = bus_channel->prev_gate;
+        u32 new_gate = 0u;
+        for (u32 b = 0u; b < bus_params.n_buses && b < MAX_BUS_TRACES; b++) {
+            constant BusTraceParams& bp = bus_params.buses[b];
+            u32 gate = 0u;
+            if (bp.protocol == BUS_PROTO_APB3) {
+                u32 sel = READ_OUT_BIT(bp.sel_pos);
+                u32 en  = READ_OUT_BIT(bp.enable_pos);
+                u32 rdy = (bp.ready_pos == 0xFFFFFFFFu) ? 1u : READ_OUT_BIT(bp.ready_pos);
+                gate = (sel & en & rdy);
+            }
+            // AHB-Lite / AHB5 gating: Phase 2.
+            new_gate |= (gate << b);
+
+            bool rising = (gate != 0u) && (((prev >> b) & 1u) == 0u);
+            if (rising) {
+                u32 write = READ_OUT_BIT(bp.write_pos);
+                u32 err   = READ_OUT_BIT(bp.resp_pos);
+                u32 addr = 0u;
+                for (u32 i = 0u; i < BUS_TRACE_MAX_ADR_BITS && i < bp.addr_bits; i++) {
+                    addr |= READ_OUT_BIT(bp.addr_pos[i]) << i;
+                }
+                u32 wdata = 0u;
+                u32 rdata = 0u;
+                for (u32 i = 0u; i < BUS_TRACE_MAX_DAT_BITS && i < bp.data_bits; i++) {
+                    wdata |= READ_OUT_BIT(bp.wdata_pos[i]) << i;
+                    rdata |= READ_OUT_BIT(bp.rdata_pos[i]) << i;
+                }
+                u32 head = bus_channel->write_head;
+                u32 cap = bus_channel->capacity;
+                if (head < cap) {
+                    device BusTraceEntry* entries =
+                        (device BusTraceEntry*)((device uchar*)bus_channel + 16);
+                    device BusTraceEntry* e = &entries[head % cap];
+                    e->tick = btick;
+                    e->flags = (write & 1u) | ((err & 1u) << 1) | (b << 8);
+                    e->addr = addr;
+                    e->wdata = wdata;
+                    e->rdata = rdata;
+                    bus_channel->write_head = head + 1u;
+                }
+            }
+        }
+        bus_channel->prev_gate = new_gate;
+        bus_channel->current_tick = btick + 1u;
     }
 
     #undef READ_OUT_BIT

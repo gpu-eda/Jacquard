@@ -40,6 +40,7 @@ use compact_str::CompactString;
 use netlistdb::{HierName, NetlistDB};
 
 use crate::aig::AIG;
+use crate::flatten::FlattenedScriptV1;
 
 /// Parsed shape of a single signal name from the trace file.
 /// `hier` is the cell-instance hierarchy (everything before the leaf
@@ -284,6 +285,47 @@ pub fn register_trace_signals(
     }
 
     (registered, dropped)
+}
+
+/// Resolve a hierarchical signal name to its bit position in the GPU
+/// output state buffer, using the same multi-candidate matching as
+/// [`register_trace_signals`] (so Yosys-flattened / scalar-expanded /
+/// structural naming all work) but reading `script.output_map` instead
+/// of registering an observable.
+///
+/// The signal must already be present in `output_map` — i.e. it is a
+/// primary output or was registered as observable before partitioning
+/// (see `DesignArgs::extra_observable_signals`). Returns `None` if the
+/// name can't be parsed, isn't in netlistdb, has no AIG mapping, or
+/// didn't land in the output state (e.g. tied to a constant).
+///
+/// Used by the cosim bus-trace param builder to bind each protocol pin
+/// to a state position the GPU kernel can read.
+pub fn resolve_to_state_pos(
+    aig: &AIG,
+    netlistdb: &NetlistDB,
+    script: &FlattenedScriptV1,
+    name: &str,
+) -> Option<u32> {
+    let candidates = parse_signal_name(name).ok()?;
+    let netid = candidates.iter().find_map(|c| {
+        let key = (c.hier.clone(), c.leaf.clone(), c.bit);
+        netlistdb.netname2id.get(&key).copied()
+    })?;
+    let pinid = netlistdb.net2pin.iter_set(netid).next()?;
+    let iv = aig.pin2aigpin_iv[pinid];
+    if iv == usize::MAX {
+        return None;
+    }
+    // The net's driver may be stored under either polarity in the
+    // output map; try the pin's polarity first, then its inversion.
+    if let Some(&pos) = script.output_map.get(&iv) {
+        return Some(pos);
+    }
+    if let Some(&pos) = script.output_map.get(&(iv ^ 1)) {
+        return Some(pos);
+    }
+    None
 }
 
 #[cfg(test)]

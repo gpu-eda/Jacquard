@@ -48,6 +48,9 @@ pub struct CosimOpts {
     pub jtag_hold_cycles: u32,
     /// Path to run-parameters file for reproducible jitter. See ADR 0012.
     pub run_params: Option<std::path::PathBuf>,
+    /// Path to write decoded AHB/APB bus transactions as CSV. Requires
+    /// at least one `bus_traces` entry in the config. See ADR 0013.
+    pub bus_trace_csv: Option<std::path::PathBuf>,
 }
 
 /// Result of a co-simulation run.
@@ -207,6 +210,84 @@ struct WbTraceChannel {
     current_tick: u32,
     prev_flags: u32,
     // entries[capacity] follow in memory
+}
+
+// ── Config-driven AHB/APB bus transaction trace (ADR 0013) ──────────────────
+
+const MAX_BUS_TRACES: usize = 4;
+const BUS_TRACE_MAX_ADR_BITS: usize = 32;
+const BUS_TRACE_MAX_DAT_BITS: usize = 32;
+const BUS_TRACE_CHANNEL_CAP: usize = 16384;
+
+/// Per-bus signal positions (must match Metal BusTraceParams).
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct BusTraceParams {
+    protocol: u32,
+    addr_bits: u32,
+    data_bits: u32,
+    sel_pos: u32,
+    enable_pos: u32,
+    ready_pos: u32,
+    write_pos: u32,
+    resp_pos: u32,
+    addr_pos: [u32; BUS_TRACE_MAX_ADR_BITS],
+    wdata_pos: [u32; BUS_TRACE_MAX_DAT_BITS],
+    rdata_pos: [u32; BUS_TRACE_MAX_DAT_BITS],
+}
+
+impl Default for BusTraceParams {
+    fn default() -> Self {
+        Self {
+            protocol: 0,
+            addr_bits: 0,
+            data_bits: 0,
+            sel_pos: 0xFFFFFFFF,
+            enable_pos: 0xFFFFFFFF,
+            ready_pos: 0xFFFFFFFF,
+            write_pos: 0xFFFFFFFF,
+            resp_pos: 0xFFFFFFFF,
+            addr_pos: [0xFFFFFFFF; BUS_TRACE_MAX_ADR_BITS],
+            wdata_pos: [0xFFFFFFFF; BUS_TRACE_MAX_DAT_BITS],
+            rdata_pos: [0xFFFFFFFF; BUS_TRACE_MAX_DAT_BITS],
+        }
+    }
+}
+
+/// All-bus params block (must match Metal BusTraceParamsAll).
+#[repr(C)]
+struct BusTraceParamsAll {
+    n_buses: u32,
+    _pad: [u32; 3],
+    buses: [BusTraceParams; MAX_BUS_TRACES],
+}
+
+/// Compact raw beat captured by the GPU (must match Metal BusTraceEntry).
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct BusTraceEntry {
+    tick: u32,
+    flags: u32,
+    addr: u32,
+    wdata: u32,
+    rdata: u32,
+}
+
+/// GPU→CPU bus trace ring buffer header (must match Metal BusTraceChannel).
+#[repr(C)]
+struct BusTraceChannel {
+    write_head: u32,
+    capacity: u32,
+    current_tick: u32,
+    prev_gate: u32,
+    // entries[capacity] follow in memory
+}
+
+/// CPU-side per-bus lane: pairs a GPU capture slot with its name and
+/// protocol decoder. Vec index == GPU `bus_id` packed into entry flags.
+struct BusTraceLane {
+    name: String,
+    decoder: crate::sim::models::bus_trace::BusTraceDecoder,
 }
 
 /// Batch size for GPU-only simulation (no per-tick CPU interaction).
@@ -500,6 +581,8 @@ impl MetalSimulator {
         uart_channel_buffer: &metal::Buffer,
         wb_trace_channel_buffer: &metal::Buffer,
         wb_trace_params_buffer: &metal::Buffer,
+        bus_trace_channel_buffer: &metal::Buffer,
+        bus_trace_params_buffer: &metal::Buffer,
     ) {
         let encoder = command_buffer.new_compute_command_encoder();
         encoder.set_compute_pipeline_state(&self.gpu_io_step_pipeline);
@@ -509,6 +592,8 @@ impl MetalSimulator {
         encoder.set_buffer(3, Some(uart_channel_buffer), 0);
         encoder.set_buffer(4, Some(wb_trace_channel_buffer), 0);
         encoder.set_buffer(5, Some(wb_trace_params_buffer), 0);
+        encoder.set_buffer(6, Some(bus_trace_channel_buffer), 0);
+        encoder.set_buffer(7, Some(bus_trace_params_buffer), 0);
         let tpg = MTLSize::new(256, 1, 1);
         encoder.dispatch_thread_groups(MTLSize::new(1, 1, 1), tpg);
         encoder.end_encoding();
@@ -566,6 +651,8 @@ impl MetalSimulator {
         uart_channel_buffer: &metal::Buffer,
         wb_trace_channel_buffer: &metal::Buffer,
         wb_trace_params_buffer: &metal::Buffer,
+        bus_trace_channel_buffer: &metal::Buffer,
+        bus_trace_params_buffer: &metal::Buffer,
         timing_constraints_buffer: Option<&metal::Buffer>,
         arrival_state_offset: u32,
         vcd_ring_buffer: Option<&metal::Buffer>,
@@ -625,6 +712,8 @@ impl MetalSimulator {
                 uart_channel_buffer,
                 wb_trace_channel_buffer,
                 wb_trace_params_buffer,
+                bus_trace_channel_buffer,
+                bus_trace_params_buffer,
             );
 
             if let Some(ring) = vcd_ring_buffer {
@@ -672,6 +761,8 @@ impl MetalSimulator {
         uart_channel_buffer: &metal::Buffer,
         wb_trace_channel_buffer: &metal::Buffer,
         wb_trace_params_buffer: &metal::Buffer,
+        bus_trace_channel_buffer: &metal::Buffer,
+        bus_trace_params_buffer: &metal::Buffer,
         timing_constraints_buffer: Option<&metal::Buffer>,
     ) {
         // Use schedule position 0 for profiling (all patterns have same kernel cost).
@@ -726,6 +817,8 @@ impl MetalSimulator {
                 uart_channel_buffer,
                 wb_trace_channel_buffer,
                 wb_trace_params_buffer,
+                bus_trace_channel_buffer,
+                bus_trace_params_buffer,
             );
         };
 
@@ -813,6 +906,8 @@ impl MetalSimulator {
                 uart_channel_buffer,
                 wb_trace_channel_buffer,
                 wb_trace_params_buffer,
+                bus_trace_channel_buffer,
+                bus_trace_params_buffer,
             );
             cb4.commit();
             cb4.wait_until_completed();
@@ -1373,6 +1468,167 @@ fn build_wb_trace_params(
     }
 
     params
+}
+
+/// Build the bus-trace GPU params block and the parallel CPU decoder
+/// lanes from the configured bus traces. The Vec index of each returned
+/// lane equals the GPU `bus_id` packed into entry flags, so the drain
+/// loop can route each beat to the right decoder.
+///
+/// Only APB3 is wired in Phase 1; AHB-Lite / AHB5 entries are skipped
+/// with a warning (see `docs/plans/bus-transaction-tracing.md`).
+fn build_bus_trace_params(
+    aig: &AIG,
+    netlistdb: &NetlistDB,
+    script: &FlattenedScriptV1,
+    configs: &[crate::testbench::BusTraceConfig],
+) -> (BusTraceParamsAll, Vec<BusTraceLane>) {
+    use crate::sim::models::bus_trace::{pin_basename, BusTraceDecoder};
+    use crate::sim::trace_signals::resolve_to_state_pos;
+    use crate::testbench::BusProtocol;
+
+    let mut all = BusTraceParamsAll {
+        n_buses: 0,
+        _pad: [0; 3],
+        buses: [BusTraceParams::default(); MAX_BUS_TRACES],
+    };
+    let mut lanes: Vec<BusTraceLane> = Vec::new();
+
+    let resolve =
+        |name: &str| resolve_to_state_pos(aig, netlistdb, script, name).unwrap_or(0xFFFFFFFF);
+
+    for cfg in configs.iter() {
+        if all.n_buses as usize >= MAX_BUS_TRACES {
+            clilog::warn!(
+                "bus-trace: more than {} buses configured; `{}` and later ignored",
+                MAX_BUS_TRACES,
+                cfg.name
+            );
+            break;
+        }
+        match cfg.protocol {
+            BusProtocol::Apb3 => {}
+            other => {
+                clilog::warn!(
+                    "bus-trace `{}`: protocol {:?} not yet implemented (Phase 2); skipping",
+                    cfg.name,
+                    other
+                );
+                continue;
+            }
+        }
+
+        let addr_bits = cfg.addr_bits.min(BUS_TRACE_MAX_ADR_BITS);
+        let data_bits = cfg.data_bits.min(BUS_TRACE_MAX_DAT_BITS);
+        if cfg.addr_bits > BUS_TRACE_MAX_ADR_BITS || cfg.data_bits > BUS_TRACE_MAX_DAT_BITS {
+            clilog::warn!(
+                "bus-trace `{}`: addr/data width capped at {}/{} bits (Phase 1)",
+                cfg.name,
+                BUS_TRACE_MAX_ADR_BITS,
+                BUS_TRACE_MAX_DAT_BITS
+            );
+        }
+
+        let mut p = BusTraceParams {
+            protocol: 0, // APB3
+            addr_bits: addr_bits as u32,
+            data_bits: data_bits as u32,
+            sel_pos: resolve(&pin_basename(cfg, "psel")),
+            enable_pos: resolve(&pin_basename(cfg, "penable")),
+            ready_pos: resolve(&pin_basename(cfg, "pready")),
+            write_pos: resolve(&pin_basename(cfg, "pwrite")),
+            resp_pos: resolve(&pin_basename(cfg, "pslverr")),
+            ..Default::default()
+        };
+        let abase = pin_basename(cfg, "paddr");
+        for b in 0..addr_bits {
+            p.addr_pos[b] = resolve(&format!("{abase}[{b}]"));
+        }
+        let wbase = pin_basename(cfg, "pwdata");
+        let rbase = pin_basename(cfg, "prdata");
+        for b in 0..data_bits {
+            p.wdata_pos[b] = resolve(&format!("{wbase}[{b}]"));
+            p.rdata_pos[b] = resolve(&format!("{rbase}[{b}]"));
+        }
+
+        if p.sel_pos == 0xFFFFFFFF || p.enable_pos == 0xFFFFFFFF {
+            clilog::warn!(
+                "bus-trace `{}`: psel/penable did not resolve (prefix `{}`) — \
+                 this bus will not capture. Check the prefix / `signals` overrides.",
+                cfg.name,
+                cfg.prefix
+            );
+        } else {
+            let n_addr = p.addr_pos.iter().filter(|&&x| x != 0xFFFFFFFF).count();
+            clilog::info!(
+                "bus-trace `{}` (APB3): psel/penable resolved, addr {}/{} bits, \
+                 pready={} pslverr={}",
+                cfg.name,
+                n_addr,
+                addr_bits,
+                p.ready_pos != 0xFFFFFFFF,
+                p.resp_pos != 0xFFFFFFFF
+            );
+        }
+
+        let idx = all.n_buses as usize;
+        all.buses[idx] = p;
+        all.n_buses += 1;
+        lanes.push(BusTraceLane {
+            name: cfg.name.clone(),
+            decoder: BusTraceDecoder::new(cfg.protocol),
+        });
+    }
+
+    (all, lanes)
+}
+
+/// Write decoded bus transactions to a CSV file (ADR 0013). Columns:
+/// `tick,bus,protocol,dir,addr,data,resp,burst`. Addresses and data are
+/// hex (`0x…`); `burst` is `beat/len` for AHB bursts, empty otherwise.
+fn write_bus_trace_csv(
+    path: &std::path::Path,
+    txns: &[(u32, crate::sim::models::bus_trace::BusTransaction)],
+    lanes: &[BusTraceLane],
+) -> std::io::Result<()> {
+    use crate::testbench::BusProtocol;
+    use std::io::Write;
+
+    let f = std::fs::File::create(path)?;
+    let mut w = std::io::BufWriter::new(f);
+    writeln!(w, "tick,bus,protocol,dir,addr,data,resp,burst")?;
+    for (bus_id, t) in txns {
+        let name = lanes
+            .get(*bus_id as usize)
+            .map(|l| l.name.as_str())
+            .unwrap_or("?");
+        let proto = match t.protocol {
+            BusProtocol::Apb3 => "apb3",
+            BusProtocol::AhbLite => "ahb-lite",
+            BusProtocol::Ahb5 => "ahb5",
+        };
+        let burst = match t.burst {
+            Some(b) => match b.len {
+                Some(len) => format!("{}/{}", b.beat, len),
+                None => format!("{}/?", b.beat),
+            },
+            None => String::new(),
+        };
+        writeln!(
+            w,
+            "{},{},{},{},0x{:X},0x{:X},{},{}",
+            t.tick,
+            name,
+            proto,
+            t.dir.as_str(),
+            t.addr,
+            t.data,
+            t.resp.as_str(),
+            burst
+        )?;
+    }
+    w.flush()?;
+    Ok(())
 }
 
 /// Write flash data input to GPIO state.
@@ -2927,6 +3183,38 @@ pub fn run_cosim(
         ch.prev_flags = 0;
     }
 
+    // ── GPU AHB/APB Bus Transaction Trace buffers (ADR 0013) ──────────
+    // Always allocated (the kernel binds slots 6/7 unconditionally); the
+    // kernel skips capture when n_buses == 0.
+    let (bus_trace_params, mut bus_lanes) =
+        build_bus_trace_params(aig, netlistdb, script, config.effective_bus_traces());
+    let bus_trace_params_buffer = simulator.device.new_buffer(
+        std::mem::size_of::<BusTraceParamsAll>() as u64,
+        MTLResourceOptions::StorageModeShared,
+    );
+    unsafe {
+        let p = &mut *(bus_trace_params_buffer.contents() as *mut BusTraceParamsAll);
+        *p = bus_trace_params;
+    }
+    let bus_channel_byte_size = std::mem::size_of::<BusTraceChannel>()
+        + BUS_TRACE_CHANNEL_CAP * std::mem::size_of::<BusTraceEntry>();
+    let bus_trace_channel_buffer = simulator.device.new_buffer(
+        bus_channel_byte_size as u64,
+        MTLResourceOptions::StorageModeShared,
+    );
+    unsafe {
+        let ch = &mut *(bus_trace_channel_buffer.contents() as *mut BusTraceChannel);
+        ch.write_head = 0;
+        ch.capacity = BUS_TRACE_CHANNEL_CAP as u32;
+        ch.current_tick = 0;
+        ch.prev_gate = 0;
+    }
+    // Accumulated decoded transactions (bus_id, transaction), drained
+    // each batch. The name is looked up from `bus_lanes` at CSV-write
+    // time, so the hot drain path stays allocation-free.
+    let mut bus_transactions: Vec<(u32, crate::sim::models::bus_trace::BusTransaction)> =
+        Vec::new();
+
     // Pre-write params for all simulation stages (they don't change between ticks)
     for stage_i in 0..num_major_stages {
         simulator.write_params(
@@ -2965,6 +3253,8 @@ pub fn run_cosim(
             &uart_channel_buffer,
             &wb_trace_channel_buffer,
             &wb_trace_params_buffer,
+            &bus_trace_channel_buffer,
+            &bus_trace_params_buffer,
             timing_constraints_buffer.as_ref(),
         );
 
@@ -3317,6 +3607,7 @@ pub fn run_cosim(
     let mut uart_read_heads: Vec<u32> = vec![0u32; n_uarts];
     let uart_names: Vec<String> = uart_configs.iter().map(|(name, _, _, _)| name.clone()).collect();
     let mut wb_trace_read_head: u32 = 0;
+    let mut bus_trace_read_head: u32 = 0;
 
     // Profiling accumulators
     let mut prof_batch_encode: u64 = 0;
@@ -3570,6 +3861,8 @@ pub fn run_cosim(
             &uart_channel_buffer,
             &wb_trace_channel_buffer,
             &wb_trace_params_buffer,
+            &bus_trace_channel_buffer,
+            &bus_trace_params_buffer,
             timing_constraints_buffer.as_ref(),
             arrival_state_offset,
             vcd_ring_buffer.as_ref(),
@@ -4088,6 +4381,37 @@ pub fn run_cosim(
                 wb_trace_read_head += 1;
             }
         }
+        // Drain AHB/APB bus trace channel: route each raw beat to its
+        // bus's protocol decoder, collecting completed transactions.
+        if !bus_lanes.is_empty() {
+            use crate::sim::models::bus_trace::RawBeat;
+            unsafe {
+                let ch = &*(bus_trace_channel_buffer.contents() as *const BusTraceChannel);
+                let entries_ptr = (bus_trace_channel_buffer.contents() as *const u8)
+                    .add(std::mem::size_of::<BusTraceChannel>())
+                    as *const BusTraceEntry;
+                while bus_trace_read_head < ch.write_head {
+                    let idx = (bus_trace_read_head % ch.capacity) as usize;
+                    let e = &*entries_ptr.add(idx);
+                    let bus_id = (e.flags >> 8) & 0xFF;
+                    if let Some(lane) = bus_lanes.get_mut(bus_id as usize) {
+                        let beat = RawBeat {
+                            tick: e.tick as u64,
+                            bus_id,
+                            write: (e.flags & 1) != 0,
+                            err: (e.flags >> 1) & 1 != 0,
+                            addr: e.addr as u64,
+                            wdata: e.wdata as u64,
+                            rdata: e.rdata as u64,
+                        };
+                        if let Some(txn) = lane.decoder.push(beat) {
+                            bus_transactions.push((bus_id, txn));
+                        }
+                    }
+                    bus_trace_read_head += 1;
+                }
+            }
+        }
         prof_drain += t_drain.elapsed().as_nanos() as u64;
 
         total_batches += 1;
@@ -4277,6 +4601,29 @@ pub fn run_cosim(
 
     let sim_elapsed = sim_start.elapsed();
     clilog::finish!(timer_sim);
+
+    // ── Bus transaction trace output (ADR 0013) ──────────────────────────
+    if !bus_lanes.is_empty() {
+        clilog::info!(
+            "bus-trace: decoded {} transaction(s) across {} bus(es)",
+            bus_transactions.len(),
+            bus_lanes.len()
+        );
+        if let Some(csv_path) = opts.bus_trace_csv.as_ref() {
+            match write_bus_trace_csv(csv_path, &bus_transactions, &bus_lanes) {
+                Ok(()) => clilog::info!(
+                    "bus-trace: wrote {} transaction(s) to {}",
+                    bus_transactions.len(),
+                    csv_path.display()
+                ),
+                Err(e) => clilog::warn!(
+                    "bus-trace: failed to write CSV to {}: {}",
+                    csv_path.display(),
+                    e
+                ),
+            }
+        }
+    }
 
     // ── State buffer diagnostics ─────────────────────────────────────────
 

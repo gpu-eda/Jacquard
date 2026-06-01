@@ -320,6 +320,20 @@ jobs:
       - name: Verify dual-UART output
         run: python3 tests/dual_uart/check_pass.py dual_uart_events.json
 
+      - name: Run APB3 bus-trace cosim (ADR 0013)
+        run: |
+          set -o pipefail
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/apb_trace/apb_trace_synth.gv \
+            --config tests/apb_trace/sim_config.json \
+            --top-module apb_trace \
+            --max-clock-edges 200 \
+            --bus-trace-csv apb_trace.csv \
+            2>&1 | tee apb_trace_cosim.txt
+
+      - name: Verify APB3 bus-trace output
+        run: python3 tests/apb_trace/check.py apb_trace.csv
+
       - name: Upload VCD artifacts
         uses: actions/upload-artifact@v4
         if: always()
@@ -332,6 +346,8 @@ jobs:
             tests/timing_test/inv_chain_pnr/timing_report.json
             dual_uart_cosim.txt
             dual_uart_events.json
+            apb_trace_cosim.txt
+            apb_trace.csv
             metal_timing.txt
             metal_xprop.txt
             metal_timed.txt
