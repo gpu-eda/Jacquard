@@ -7,6 +7,7 @@
 - [Timing Simulation](timing-simulation.md)
 - [Timing Violations](timing-violations.md)
 - [Timing Model Extensions](timing-model-extensions.md)
+- [Signal Tracing](signal-tracing.md)
 - [Bus Transaction Tracing](bus-tracing.md)
 - [Adding a New PDK](adding-a-pdk.md)
 - [Troubleshooting VCD](troubleshooting-vcd.md)

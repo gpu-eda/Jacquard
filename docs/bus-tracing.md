@@ -24,9 +24,10 @@ The design rationale lives in
 [`plans/bus-transaction-tracing.md`](plans/bus-transaction-tracing.md).
 
 Bus tracing is the structured, protocol-aware counterpart to
-[`--trace-signals`](usage.md), which surfaces *raw* internal nets in the
-output VCD. Use `--trace-signals` when you want waveforms of individual
-wires; use bus tracing when you want decoded `READ 0x40 => 0x1` records.
+[`--trace-signals`](signal-tracing.md), which surfaces *raw* internal
+nets in the output VCD. Use `--trace-signals` when you want waveforms of
+individual wires; use bus tracing when you want decoded
+`READ 0x40 => 0x1` records.
 
 ## Configuring a bus
 

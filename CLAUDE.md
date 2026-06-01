@@ -176,7 +176,7 @@ jacquard cosim design.v --config sim.json --trace-signals sram_trace.txt --timin
 
 ### In-Design Signal Tracing (`--trace-signals`)
 
-The `--trace-signals <PATH>` flag on `jacquard sim` and `jacquard cosim` surfaces user-selected internal nets in the output VCD alongside top-level IO. The trace file is one hierarchical signal name per line (`#` comments and blank lines ignored). Signal names are resolved against `netlistdb` using a multi-candidate parser that handles Yosys-flattened, scalar-expanded, and structurally-hierarchical naming conventions.
+The `--trace-signals <PATH>` flag on `jacquard sim` and `jacquard cosim` surfaces user-selected internal nets in the output VCD alongside top-level IO. The trace file is one hierarchical signal name per line (`#` comments and blank lines ignored). Signal names are resolved against `netlistdb` using a multi-candidate parser that handles Yosys-flattened, scalar-expanded, and structurally-hierarchical naming conventions. Full user guide: `docs/signal-tracing.md`.
 
 The recommended workflow for SRAM observability is wire-level tracing via `--trace-signals` rather than the env-var-gated `JACQUARD_SRAM_DUMP`:
 1. `netlist-graph sram-ports` discovers SRAM port wire names from the netlist
