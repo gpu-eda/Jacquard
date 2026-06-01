@@ -1599,6 +1599,28 @@ fn cmd_cosim(args: CosimArgs) {
             serde_json::from_reader(reader).expect("Failed to parse config JSON");
         clilog::info!("Loaded testbench config: {:?}", config);
 
+        // The positional netlist argument always wins; config.netlist_path
+        // is informational here. Warn on a mismatch so the logs (which echo
+        // the config) don't silently describe a different file than the one
+        // actually being simulated — a real foot-gun when reusing a config.
+        if let Some(cfg_netlist) = config.netlist_path.as_deref() {
+            let cfg_path = std::path::Path::new(cfg_netlist);
+            let arg_path = args.netlist_verilog.as_path();
+            let same = match (cfg_path.canonicalize(), arg_path.canonicalize()) {
+                (Ok(a), Ok(b)) => a == b,
+                _ => cfg_path == arg_path,
+            };
+            if !same {
+                clilog::warn!(
+                    "config netlist_path ({}) differs from the positional netlist \
+                     argument ({}) — the positional argument is what runs; \
+                     config.netlist_path is ignored.",
+                    cfg_netlist,
+                    arg_path.display()
+                );
+            }
+        }
+
         // Determine clock period (CLI > config root > config.timing).
         let clock_period_ps = args
             .clock_period

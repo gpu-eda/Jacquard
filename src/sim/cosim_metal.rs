@@ -4532,8 +4532,11 @@ pub fn run_cosim(
             }
         }
 
-        // Progress logging
-        if tick > 0 && tick % 100000 < BATCH_SIZE {
+        // Progress logging: once per ~100k-edge window. Gate on the
+        // actual `batch` (not the BATCH_SIZE constant) — VCD/trace flags
+        // force single-tick mode (batch=1), where the old constant made
+        // this fire BATCH_SIZE times per window and flood the log.
+        if tick > 0 && tick % 100000 < batch {
             let elapsed = sim_start.elapsed();
             let us_per_edge = elapsed.as_micros() as f64 / tick as f64;
             // Read first UART's TX bit and decoder state for diagnostics
