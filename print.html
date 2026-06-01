@@ -2993,7 +2993,7 @@ outcome; kept for the audit trail.</li>
 <tr><td><a href="adr/0009-opensta-verilog-reader-inputs.html">0009</a></td><td>OpenSTA Verilog reader inputs</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0010-declarative-cell-metadata.html">0010</a></td><td>Declarative cell metadata</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0011-ram-port-mapping-schema.html">0011</a></td><td>RAM port-mapping schema for declarative cell metadata</td><td>Accepted</td></tr>
-<tr><td><a href="adr/0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Proposed</td></tr>
+<tr><td><a href="adr/0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Accepted (partial)</td></tr>
 <tr><td><a href="adr/0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0015-boomerang-execution-model.html">0015</a></td><td>Boomerang execution model and GPU resource mapping</td><td>Accepted</td></tr>
@@ -3957,7 +3957,15 @@ JTAG-DM workflow that surfaced the schema need.</li>
 <a href="https://github.com/RTimothyEdwards/gf180mcu_ocd_ip_sram">RTimothyEdwards/gf180mcu_ocd_ip_sram</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0012--reproducible-cdc-jitter-injection-for-multi-clock-cosim"><a class="header" href="#adr-0012--reproducible-cdc-jitter-injection-for-multi-clock-cosim">ADR 0012 — Reproducible CDC jitter injection for multi-clock cosim</a></h1>
-<p><strong>Status:</strong> Proposed.</p>
+<p><strong>Status:</strong> Accepted — design accepted and partially implemented. The
+reproducibility core (§1) and scheduler-domain jitter on the VCD
+timeline (§2, partial) are built; model-driven jitter (§3), setup/hold
+integration (§5), the <code>gcd_ps/2</code> guard, and true coincident-edge
+perturbation (§4) are not yet. The sections below describe the <strong>decided
+design</strong>; see <a href="adr/0012-cdc-jitter-injection.html#implementation-status">Implementation status</a> for what is
+built versus deferred. Remaining work is tracked in
+<a href="https://github.com/gpu-eda/Jacquard/issues/92">issue #92</a> and
+<a href="adr/../plans/cdc-jitter-completion.html"><code>../plans/cdc-jitter-completion.md</code></a>.</p>
 <h2 id="context-11"><a class="header" href="#context-11">Context</a></h2>
 <p>The multi-clock scheduler (<code>MultiClockScheduler</code> in <code>cosim_metal.rs</code>)
 pre-computes a fixed LCM-based edge schedule: every clock domain fires
@@ -4095,9 +4103,36 @@ compared against the CPU baseline. The flag combination
 <code>--run-params</code> (with jitter enabled) + <code>--check-with-cpu</code> should
 warn or error.</li>
 </ul>
+<h2 id="implementation-status"><a class="header" href="#implementation-status">Implementation status</a></h2>
+<p>The design above is accepted in full; the code implements part of it.
+This section is the source of truth on what is built. Remaining items are
+tracked in <a href="https://github.com/gpu-eda/Jacquard/issues/92">issue #92</a> /
+<a href="adr/../plans/cdc-jitter-completion.html"><code>../plans/cdc-jitter-completion.md</code></a>.</p>
+<p><strong>Implemented:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Part</th><th>Where</th></tr></thead><tbody>
+<tr><td>Run-parameters file, <code>master_seed</code>, load/write/<code>load_or_generate</code></td><td><code>src/sim/run_params.rs</code></td></tr>
+<tr><td>Per-domain sub-seed <code>hash(master_seed, name)</code> + per-domain <code>ChaCha8Rng</code></td><td><code>RunParams::domain_seed</code>; <code>cosim_metal.rs</code></td></tr>
+<tr><td><code>jitter_ps</code> per <code>ClockConfig</code> (default 0)</td><td><code>src/testbench.rs</code></td></tr>
+<tr><td>Uniform <code>[-jitter_ps, +jitter_ps]</code> draw per domain per tick</td><td><code>cosim_metal.rs</code></td></tr>
+<tr><td>Jitter displacement applied to the <strong>timing-VCD event timestamp</strong></td><td><code>cosim_metal.rs</code> (inside the <code>--timing-vcd</code> block)</td></tr>
+<tr><td><code>master_seed</code> logged at INFO</td><td><code>cosim_metal.rs</code></td></tr>
+<tr><td><code>--check-with-cpu</code> + jitter warning</td><td><code>cosim_metal.rs</code></td></tr>
+</tbody></table>
+</div>
+<p><strong>Deferred (issue #92):</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Part</th><th>ADR §</th><th>Gap</th></tr></thead><tbody>
+<tr><td>Setup/hold integration</td><td>§2, §5</td><td>Jitter shifts only the VCD base timestamp; it does not feed the per-signal arrival offsets, so it produces no <code>--timing-report</code> violations. Also: jitter currently has <strong>no effect unless <code>--timing-vcd</code> is set</strong>.</td></tr>
+<tr><td>Model-driven clock jitter</td><td>§3</td><td>No <code>--cdc-model-jitter-ps</code> flag or <code>patch_model_clock_edges</code> path; only scheduler domains jitter.</td></tr>
+<tr><td>True coincident-edge perturbation</td><td>§4</td><td>A single global displacement (last firing domain wins) is applied to the shared timestamp rather than independent per-domain displacement.</td></tr>
+<tr><td><code>gcd_ps / 2</code> constraint</td><td>§2</td><td>Not validated.</td></tr>
+<tr><td>Persist seed unconditionally</td><td>§1</td><td>Without <code>--run-params</code> or <code>--timing-vcd</code>, the seed is generated but not written.</td></tr>
+<tr><td><code>master_seed</code> in VCD header comment</td><td>§1, §5</td><td>INFO log only.</td></tr>
+<tr><td><code>--cdc-jitter-seed</code> CI sweep</td><td>Consequences</td><td>The replay mechanism is <code>--run-params</code>; no dedicated CI sweep step yet.</td></tr>
+</tbody></table>
+</div>
 <h2 id="consequences-11"><a class="header" href="#consequences-11">Consequences</a></h2>
 <ul>
-<li>CI can run <code>--cdc-jitter-seed 1</code> (or a small sweep) as a lightweight
+<li>CI can run a small seed sweep (via <code>--run-params</code>) as a lightweight
 CDC stress test on every PR, catching synchroniser failures that the
 ideal-clock schedule hides.</li>
 <li>Users debugging real silicon CDC failures can replay the exact jitter
@@ -6732,6 +6767,81 @@ now, but the general design should port cleanly when CUDA cosim lands.</li>
 <p>This generalizes the cosim peripheral architecture — update <strong>ADR-0013</strong>
 (plural-peripheral configs) to record the config-driven bus-monitor pattern and
 the GPU-capture/CPU-decode split, once Phase 1 is real.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="plan-complete-adr-0012-cdc-jitter-injection"><a class="header" href="#plan-complete-adr-0012-cdc-jitter-injection">Plan: complete ADR 0012 CDC jitter injection</a></h1>
+<p>Tracks the deferred half of <a href="plans/../adr/0012-cdc-jitter-injection.html">ADR 0012</a>.
+Issue: <a href="https://github.com/gpu-eda/Jacquard/issues/92">#92</a>.</p>
+<h2 id="where-it-stands"><a class="header" href="#where-it-stands">Where it stands</a></h2>
+<p>Implemented: the run-parameters file + per-domain seeded PRNG
+(<code>src/sim/run_params.rs</code>), <code>jitter_ps</code> per <code>ClockConfig</code>, the uniform
+per-domain draw, and a jitter displacement applied to the <strong>timing-VCD
+event timestamp</strong> (<code>cosim_metal.rs</code>, inside the <code>--timing-vcd</code> block
+only). So today jitter perturbs the <em>waveform timeline</em> but nothing
+else — it does not reach the setup/hold checker, model-driven clocks,
+or coincident-edge ordering.</p>
+<p>The goal of this plan is to make jitter actually stress CDC paths, then
+extend it to model-driven clocks and tidy the loose ends, so ADR 0012's
+present-tense design fully matches the code.</p>
+<h2 id="phase-1--jitter-reaches-the-timing-checker-the-core-value"><a class="header" href="#phase-1--jitter-reaches-the-timing-checker-the-core-value">Phase 1 — Jitter reaches the timing checker (the core value)</a></h2>
+<p>Right now <code>jitter_displacement</code> only adjusts the VCD <code>base_timestamp</code>
+(<code>cosim_metal.rs:~3928-3948</code>) and is computed <em>inside</em> the timing-VCD
+emission block, so it has no effect without <code>--timing-vcd</code> and never
+influences violations.</p>
+<ul>
+<li>Hoist the per-tick per-domain displacement draw out of the VCD block
+so it is available whenever <code>jitter_active</code>, independent of
+<code>--timing-vcd</code>.</li>
+<li>Apply each domain's displacement to the <strong>arrival offsets</strong> that
+setup/hold checking consumes (the <code>arrival_state</code> section), not just
+the VCD base timestamp — so a jittered edge can move a margin across
+the setup/hold boundary and surface in <code>--timing-report</code>.</li>
+<li><strong>True per-domain perturbation</strong> (ADR §4): keep a displacement <em>per
+firing domain</em> this tick rather than the current single global value
+(the loop overwrites <code>jitter_displacement</code> with the last domain's
+draw). Coincident edges from domains A and B then move independently,
+exercising both orderings over a seed sweep.</li>
+</ul>
+<p>Verify: a small two-domain design with a deliberately marginal CDC path;
+assert that a seed sweep produces both "no violation" and "violation"
+outcomes, and that a fixed seed reproduces exactly.</p>
+<h2 id="phase-2--model-driven-clock-jitter-adr-3"><a class="header" href="#phase-2--model-driven-clock-jitter-adr-3">Phase 2 — Model-driven clock jitter (ADR §3)</a></h2>
+<p>Model-driven clocks (<code>JtagReplayModel</code>, SPI SCK, …) bypass the scheduler
+and currently get no jitter.</p>
+<ul>
+<li>Add <code>--cdc-model-jitter-ps &lt;N&gt;</code> (and/or per-model <code>jitter_ps</code> in
+config) → a budget + seeded stream via <code>RunParams::domain_seed(model_name)</code>.</li>
+<li>After a model fires its edge, displace the <strong>timing-model arrival</strong>
+for that transition (not the functional edge — the DFF still samples
+on the same tick), mirroring the Phase 1 arrival-offset path.</li>
+</ul>
+<p>Verify: extend <code>tests/jtag_minimal</code> (model-driven TCK) with a model
+jitter budget; confirm reproducibility and that TCK→sys_clk CDC margins
+vary by seed.</p>
+<h2 id="phase-3--hygiene--correctness-guards"><a class="header" href="#phase-3--hygiene--correctness-guards">Phase 3 — Hygiene / correctness guards</a></h2>
+<ul>
+<li><strong><code>gcd_ps / 2</code> constraint</strong> (ADR §2): at startup, error (or clamp with
+a loud warning) if any <code>jitter_ps &gt; scheduler.gcd_ps / 2</code>, since larger
+values would reorder edges across GCD ticks.</li>
+<li><strong>Always persist the seed</strong> (ADR §1): when neither <code>--run-params</code> nor
+<code>--timing-vcd</code> is given, <code>RunParams::generate()</code> currently does not
+write the file. Persist to a default path unconditionally so every run
+is replayable.</li>
+<li><strong>master_seed in the VCD header</strong> (ADR §1/§5): emit the master seed as
+a VCD header comment in <code>vcd_io.rs</code>, so the seed is recoverable from an
+output artifact, not just the INFO log.</li>
+</ul>
+<h2 id="phase-4--ci-cdc-stress-sweep-adr-consequences"><a class="header" href="#phase-4--ci-cdc-stress-sweep-adr-consequences">Phase 4 — CI CDC stress sweep (ADR Consequences)</a></h2>
+<p>Once jitter feeds violations (Phase 1), add a lightweight CI step: run
+the marginal-CDC design across a few sequential seeds, upload each run's
+<code>run_params.json</code> as an artifact, fail if an unexpected violation
+appears. Gives every PR a cheap CDC regression.</p>
+<h2 id="out-of-scope-separate-adrs--plans"><a class="header" href="#out-of-scope-separate-adrs--plans">Out of scope (separate ADRs / plans)</a></h2>
+<ul>
+<li>X-injection on CDC paths (needs MC.1 island partitioner — ADR 0012
+"Deferred").</li>
+<li>Non-uniform jitter distributions (Gaussian period jitter, etc.) — the
+seed+budget interface is distribution-agnostic, add later.</li>
+<li>Frequency sweep / DFS.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="spike--opentimer-on-sky130-and-mcu-soc"><a class="header" href="#spike--opentimer-on-sky130-and-mcu-soc">Spike — OpenTimer on SKY130 and MCU SoC</a></h1>
 <p><strong>Status:</strong> Proposed. Not yet executed.</p>
 <p><strong>Time box:</strong> Half a day. Extend by up to one day if initial signs are positive but hitting specific SKY130 quirks. Abort and fall back if first-four-hours progress is blocked.</p>
