@@ -260,10 +260,14 @@ struct CosimArgs {
     #[clap(long)]
     stimulus_vcd: Option<PathBuf>,
 
-    /// Enable timing-accurate VCD output with per-signal arrival times.
+    /// Write the cosim output VCD: chip outputs plus any
+    /// `--trace-signals` nets, per cycle. This is also the functional
+    /// (pre-PnR) output path — the only flag that dumps observable
+    /// design state for a functional run.
     ///
-    /// Requires `--timing-ir`. Signal transitions in the output VCD are
-    /// offset from clock edges by their computed arrival times. Forces
+    /// `--timing-ir` is OPTIONAL here: with it, transitions are offset
+    /// from clock edges by their computed arrival times; without it,
+    /// transitions emit at clock edges (no timing data needed). Forces
     /// single-tick mode.
     #[clap(long)]
     timing_vcd: Option<PathBuf>,
@@ -285,8 +289,9 @@ struct CosimArgs {
     /// Path to a file listing internal signals to surface in the
     /// output VCD. One hierarchical signal name per line; see
     /// `jacquard sim --trace-signals --help` for the full file
-    /// format. Resolved nets appear in `--timing-vcd` and
-    /// `--stimulus-vcd` outputs alongside top-level IO.
+    /// format. Resolved nets appear in the `--timing-vcd` output
+    /// alongside top-level IO. (The `--stimulus-vcd` carries primary
+    /// inputs only and does NOT include traced nets.)
     #[clap(long = "trace-signals", value_name = "PATH")]
     trace_signals: Option<PathBuf>,
 

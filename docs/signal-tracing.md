@@ -76,10 +76,36 @@ Traced nets appear in whichever VCD the run already emits:
 | Command | Flag | Traced nets appear in |
 |---------|------|------------------------|
 | `jacquard sim`   | `--trace-signals <FILE>` | the output VCD |
-| `jacquard cosim` | `--trace-signals <FILE>` | `--timing-vcd` / `--stimulus-vcd` output |
+| `jacquard cosim` | `--trace-signals <FILE>` | the `--timing-vcd` output **only** |
 
 They show up as ordinary VCD wires next to the top-level IO, named by the
 string you put in the trace file.
+
+> **cosim:** traced nets land in `--timing-vcd` **only**. The
+> `--stimulus-vcd` carries primary inputs and does *not* include them, so
+> if you trace a net and look in the stimulus VCD you'll see nothing.
+> `--timing-vcd` does **not** require timing data — see
+> [Pre-PnR functional runs](#pre-pnr-functional-runs).
+
+### Pre-PnR functional runs
+
+`--timing-vcd` is the functional output path too — it does **not** require
+`--timing-ir`/SDF. Run a synthesized (pre-PnR) netlist through `cosim`
+with `--timing-vcd out.vcd` and you get chip outputs and traced nets per
+cycle, with transitions at clock edges (no arrival-time offsets). This is
+the right mode for functional / 4-state X-pessimism debugging, where
+there is no timing data to supply yet. Adding `--timing-ir` later only
+adds arrival-time offsets to the same VCD.
+
+### Top-level inout (bidir) pads
+
+A top-level `inout` pad is split into two observables in the output VCD:
+`<pad>__out` (the value the core drives) and `<pad>__oe` (the pad's
+output-enable). The raw `<pad>` net reads the pad's **input** side, so on
+an output-only or undriven cycle it can look flat — watch `<pad>__out` /
+`<pad>__oe` to see what the design is driving. Example:
+`bidir_PAD[12]__out`, `bidir_PAD[12]__oe`. These appear automatically;
+you don't need to list them in the trace file.
 
 ## Finding signal names
 
