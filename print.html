@@ -3121,10 +3121,34 @@ changes, supersede the old ADR with a new one and update the status.</p>
 <h2 id="status-legend"><a class="header" href="#status-legend">Status legend</a></h2>
 <ul>
 <li><strong>Accepted / Approved</strong> — current, in effect.</li>
+<li><strong>Accepted (partial)</strong> — design ratified and partly built; the ADR
+carries an <code>## Implementation status</code> section (see below).</li>
 <li><strong>Proposed</strong> — drafted, not yet ratified.</li>
 <li><strong>Superseded</strong> — historical, replaced by a later ADR or by a spike
 outcome; kept for the audit trail.</li>
 </ul>
+<h2 id="keeping-status-honest"><a class="header" href="#keeping-status-honest">Keeping status honest</a></h2>
+<p>An ADR's <strong>Status is a claim about the codebase</strong>, not an aspiration.
+Before setting or changing it, <strong>verify the claim against the
+implementation</strong> — read the code; don't trust the previous status or a
+feature's "done" framing. The same goes for any present-tense statement
+<em>inside</em> an ADR ("jitter feeds the setup/hold checker"): it's a
+verifiable claim, so check it.</p>
+<ul>
+<li><strong>Don't bump Proposed → Accepted just because a design merged.</strong>
+Confirm the decision is actually in effect in the code.</li>
+<li>When a design is ratified but only <strong>partly built</strong>, use
+<strong><code>Accepted (partial)</code></strong> and add an <strong><code>## Implementation status</code></strong>
+section splitting <em>implemented</em> (with file references) from <em>deferred</em>
+(with the specific gap). <a href="adr/0012-cdc-jitter-injection.html">ADR 0012</a> is
+the worked example.</li>
+<li><strong>Deferred work gets a home:</strong> a plan under <code>docs/plans/</code> and a
+tracking issue, cross-linked from the ADR's status section, so the
+unbuilt half isn't lost.</li>
+</ul>
+<p>This extends to user-facing docs and <code>--help</code> text: a sentence telling
+the reader how the tool behaves is a verifiable claim — check it against
+the code before writing it.</p>
 <h2 id="index"><a class="header" href="#index">Index</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>#</th><th>Title</th><th>Status</th></tr></thead><tbody>
 <tr><td><a href="adr/0001-opensta-as-oracle.html">0001</a></td><td>OpenSTA as the timing correctness oracle and sole STA path</td><td>Accepted (scope expanded 2026-05-01)</td></tr>
@@ -3202,7 +3226,8 @@ acceptance record with a summary of key choices.</p>
 <ol>
 <li>Pick the next number (highest existing + 1).</li>
 <li>Filename: <code>NNNN-short-kebab-title.md</code>.</li>
-<li>Start with <code># ADR NNNN — &lt;title&gt;</code> and a <code>**Status:**</code> line.</li>
+<li>Start with <code># ADR NNNN — &lt;title&gt;</code> and a <code>**Status:**</code> line — set it
+to match the code, not the intent (see <a href="adr/index.html#keeping-status-honest">Keeping status honest</a>).</li>
 <li>Standard sections: Context, Decision, Consequences. Add Amendment
 blocks dated when the decision is revisited; do not rewrite
 accepted history.</li>
