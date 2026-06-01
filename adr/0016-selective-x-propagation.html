@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Architecture Decision Records - Jacquard Documentation</title>
+        <title>0016 — Selective X-propagation - Jacquard Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -155,111 +155,64 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="architecture-decision-records"><a class="header" href="#architecture-decision-records">Architecture Decision Records</a></h1>
-<p>ADRs capture decisions worth understanding later: the context, the
-options considered, and the rationale for the choice. They are
-numbered, append-only, and never silently rewritten — if a decision
-changes, supersede the old ADR with a new one and update the status.</p>
-<h2 id="status-legend"><a class="header" href="#status-legend">Status legend</a></h2>
-<ul>
-<li><strong>Accepted / Approved</strong> — current, in effect.</li>
-<li><strong>Proposed</strong> — drafted, not yet ratified.</li>
-<li><strong>Superseded</strong> — historical, replaced by a later ADR or by a spike
-outcome; kept for the audit trail.</li>
-</ul>
-<h2 id="index"><a class="header" href="#index">Index</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>#</th><th>Title</th><th>Status</th></tr></thead><tbody>
-<tr><td><a href="0001-opensta-as-oracle.html">0001</a></td><td>OpenSTA as the timing correctness oracle and sole STA path</td><td>Accepted (scope expanded 2026-05-01)</td></tr>
-<tr><td><a href="0002-timing-ir.html">0002</a></td><td>Timing intermediate representation</td><td>Accepted</td></tr>
-<tr><td><a href="0003-opentimer-primary-sta.html">0003</a></td><td>OpenTimer as in-process reference STA</td><td>Superseded (2026-05-01) — spike failed; OpenSTA subprocess only</td></tr>
-<tr><td><a href="0004-private-pdk-testing.html">0004</a></td><td>Private PDK testing track</td><td>Accepted</td></tr>
-<tr><td><a href="0005-opensta-vendoring-and-corpus.html">0005</a></td><td>OpenSTA vendoring and test-corpus strategy</td><td>Accepted</td></tr>
-<tr><td><a href="0006-sdf-preprocessing-model.html">0006</a></td><td>SDF preprocessing model and interim-to-release cutover</td><td>Accepted (amended 2026-05-02)</td></tr>
-<tr><td><a href="0007-timing-model-fidelity-roadmap.html">0007</a></td><td>Timing model fidelity roadmap</td><td>Proposed</td></tr>
-<tr><td><a href="0008-structured-timing-output.html">0008</a></td><td>Structured timing output as first-class deliverable</td><td>Approved</td></tr>
-<tr><td><a href="0009-opensta-verilog-reader-inputs.html">0009</a></td><td>OpenSTA Verilog reader inputs</td><td>Accepted</td></tr>
-<tr><td><a href="0010-declarative-cell-metadata.html">0010</a></td><td>Declarative cell metadata</td><td>Accepted</td></tr>
-<tr><td><a href="0011-ram-port-mapping-schema.html">0011</a></td><td>RAM port-mapping schema for declarative cell metadata</td><td>Accepted</td></tr>
-<tr><td><a href="0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Proposed</td></tr>
-<tr><td><a href="0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Accepted</td></tr>
-<tr><td><a href="0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted</td></tr>
-<tr><td><a href="0015-boomerang-execution-model.html">0015</a></td><td>Boomerang execution model and GPU resource mapping</td><td>Accepted</td></tr>
-<tr><td><a href="0016-selective-x-propagation.html">0016</a></td><td>Selective X-propagation</td><td>Accepted</td></tr>
-<tr><td><a href="0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted</td></tr>
-</tbody></table>
-</div>
-<h2 id="how-the-adrs-relate"><a class="header" href="#how-the-adrs-relate">How the ADRs relate</a></h2>
-<ul>
-<li>
-<p><strong>0014 / 0015</strong> document the core simulation pipeline: 0014
-explains why the AIG (and-inverter graph) is the simulation IR —
-its uniform AND-gate structure enables the boomerang reduction tree
-and eliminates per-cell dispatch in the GPU kernel.  0015 describes
-the boomerang execution model itself — the 13-level hierarchical
-reduction tree, the GPU resource limits it imposes (8191 inputs,
-8191 outputs, 4095 intermediates, 64 SRAM groups per partition),
-the hypergraph partitioning that distributes work across GPU blocks,
-and the packed instruction format (<code>FlattenedScriptV1</code>) consumed by
-the kernel.  Together they document the path from gate-level
-Verilog to GPU kernel execution that the GEM paper describes.</p>
-</li>
-<li>
-<p><strong>0001 / 0003 / 0005 / 0006</strong> describe the timing oracle stack:
-OpenSTA as the ground truth (0001), vendored at a pinned revision
-with its own corpus reused (0005), driving SDF preprocessing
-out-of-process (0006). The earlier OpenTimer in-process plan (0003)
-was retired after the spike (<a href="../spikes/opentimer-sky130.html"><code>../spikes/opentimer-sky130.md</code></a>).</p>
-</li>
-<li>
-<p><strong>0002</strong> is the data contract those tools talk over — a JSON timing
-IR consumed by Jacquard, produced by <code>opensta-to-ir</code>.</p>
-</li>
-<li>
-<p><strong>0004</strong> governs how PDK-specific testing happens for NDA-bound
-contributors without leaking files into the public repo.</p>
-</li>
-<li>
-<p><strong>0007 / 0008</strong> are the forward-looking pair: 0008 (Approved)
-defines the structured timing output Jacquard owes downstream
-flows; 0007 (Proposed) sketches the model-fidelity work needed to
-back those outputs at scale (δ(T), clock-tree skew, wire delay).
-Scheduling for both lives in
-<a href="../plans/post-phase-0-roadmap.html"><code>../plans/post-phase-0-roadmap.md</code></a>.</p>
-</li>
-<li>
-<p><strong>0013 / 0017</strong> cover the cosim runtime: 0013 documents the
-peripheral model architecture (CPU-side <code>PeripheralModel</code> trait,
-GPU-side kernel patterns, ring buffers, plural-config convention);
-0017 documents the execution model (batch dispatch loop,
-multi-clock scheduler, edges-vs-cycles semantics).</p>
-</li>
-<li>
-<p><strong>0016</strong> accepts the selective X-propagation design documented in
+                        <h1 id="adr-0016--selective-x-propagation"><a class="header" href="#adr-0016--selective-x-propagation">ADR 0016 — Selective X-propagation</a></h1>
+<p><strong>Status:</strong> Accepted</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Jacquard's default two-state (0/1) simulation silently resolves
+uninitialised DFF and SRAM outputs to zero. This masks
+initialisation bugs that real hardware would expose as unknown (X)
+values, and creates false mismatches when comparing against
+four-state RTL simulators.</p>
+<p>Naively upgrading the entire simulator to four-state logic would
+double storage and roughly halve throughput. In a well-designed SoC
+after reset, typically less than 5% of signals are genuinely
+X-capable.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>Implement <strong>selective X-propagation</strong> controlled by the <code>--xprop</code>
+CLI flag. Static analysis at compile time identifies X-source
+signals (uninitialised DFFs, SRAM read ports); forward-cone
+computation classifies each partition as X-capable or X-free. Only
+X-capable partitions run an X-aware kernel variant; the rest
+continue with the fast two-state path.</p>
+<p>The full seven-phase design, implementation details, and design
+rationale are in
 <a href="../selective-x-propagation.html"><code>docs/selective-x-propagation.md</code></a>.
-The full seven-phase design lives there; the ADR is a thin
-acceptance record with a summary of key choices.</p>
-</li>
-</ul>
-<h2 id="adding-a-new-adr"><a class="header" href="#adding-a-new-adr">Adding a new ADR</a></h2>
+Stages 1–6 are implemented; Stage 7 (dynamic X narrowing) is a
+future enhancement.</p>
+<h3 id="key-design-choices-summary"><a class="header" href="#key-design-choices-summary">Key design choices (summary)</a></h3>
 <ol>
-<li>Pick the next number (highest existing + 1).</li>
-<li>Filename: <code>NNNN-short-kebab-title.md</code>.</li>
-<li>Start with <code># ADR NNNN — &lt;title&gt;</code> and a <code>**Status:**</code> line.</li>
-<li>Standard sections: Context, Decision, Consequences. Add Amendment
-blocks dated when the decision is revisited; do not rewrite
-accepted history.</li>
-<li>Add the row to the table above.</li>
+<li><strong>Partition-level granularity</strong> — entire partition runs X-aware
+or not. ~95% of partitions are typically X-free after reset.</li>
+<li><strong>Conservative SRAM X</strong> — all reads return X until any write.
+Per-address tracking deferred.</li>
+<li><strong>No reset-aware analysis</strong> — all DFFs start as X; the fixpoint
+iteration naturally resolves reset-connected DFFs.</li>
+<li><strong>State buffer doubling</strong> — X-mask words occupy
+<code>[reg_io_state_size .. 2*reg_io_state_size)</code> when enabled.
+X-free partitions ignore the mask entirely.</li>
+<li><strong>Runtime flag, not compile-time</strong> — <code>--xprop</code> on <code>jacquard sim</code>;
+no new Cargo features needed.</li>
 </ol>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li>X-capable partitions pay ~2× storage and ALU cost; X-free
+partitions (the vast majority) pay nothing.</li>
+<li>VCD output includes <code>x</code> values when <code>--xprop</code> is enabled,
+compatible with standard four-state VCD tools.</li>
+<li>The <code>--check-with-cpu</code> reference path includes an X-aware CPU
+kernel for validation.</li>
+<li>Benchmarks (<code>benches/xprop.rs</code>) track the overhead.</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../handoff-discipline.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../adr/0015-boomerang-execution-model.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../adr/0001-opensta-as-oracle.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../adr/0017-cosim-execution-model.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -269,11 +222,11 @@ accepted history.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../handoff-discipline.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../adr/0015-boomerang-execution-model.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../adr/0001-opensta-as-oracle.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../adr/0017-cosim-execution-model.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

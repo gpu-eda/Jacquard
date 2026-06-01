@@ -1,0 +1,463 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0015 — Boomerang execution model and GPU resource mapping - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ChipFlow/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="adr-0015--boomerang-execution-model-and-gpu-resource-mapping"><a class="header" href="#adr-0015--boomerang-execution-model-and-gpu-resource-mapping">ADR 0015 — Boomerang execution model and GPU resource mapping</a></h1>
+<p><strong>Status:</strong> Accepted</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Once the design is converted to an AIG (ADR 0014), the combinational
+logic must be mapped onto GPU hardware for parallel evaluation.  GPUs
+offer massive parallelism but impose rigid constraints: fixed thread
+counts per block, limited shared memory, and synchronous SIMT
+execution within a warp/SIMD group.</p>
+<p>The GEM paper (Guo et al., "GEM: GPU-Accelerated Emulator-Inspired
+RTL Simulation," DAC 2025) introduces a "virtual Boolean processor"
+organised as a <strong>boomerang</strong> hierarchical reduction tree.  This ADR
+documents how the boomerang maps to GPU hardware, the resource limits
+it imposes, and the partitioning and instruction-generation pipeline
+that stays within those limits.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<h3 id="1-boomerang-reduction-tree"><a class="header" href="#1-boomerang-reduction-tree">1. Boomerang reduction tree</a></h3>
+<p>A single GPU block (CUDA/HIP) or threadgroup (Metal) executes one
+<strong>partition</strong> of the design.  Each partition evaluates a subset of the
+AIG's endpoint groups (DFFs, primary outputs, SRAMs, etc.) by
+reducing their combinational fan-in cones through a hierarchical
+binary tree called the <strong>boomerang</strong>.</p>
+<p>The boomerang has <code>BOOMERANG_NUM_STAGES = 13</code> levels, giving a
+reduction width of <code>2^13 = 8192</code> leaf positions.  Each thread in the
+block handles 32 bits (one <code>u32</code>), so the block uses <code>8192 / 32 = 256</code> threads (<code>NUM_THREADS_V1</code> in <code>flatten.rs</code>).</p>
+<p>The 13 hierarchy levels map to three GPU execution tiers:</p>
+<div class="table-wrapper"><table><thead><tr><th>Levels</th><th>Width</th><th>GPU mechanism</th></tr></thead><tbody>
+<tr><td>hier[0]</td><td>8192 → 4096</td><td>256 threads, shared memory reduction (threads 128-255 compute, 0-127 supply inputs)</td></tr>
+<tr><td>hier[1–3]</td><td>4096 → 512</td><td>Shared memory reduction with barrier between levels; only threads in <code>[hier_width, 2×hier_width)</code> compute — the rest idle</td></tr>
+<tr><td>hier[4–7]</td><td>512 → 32</td><td>Warp/SIMD shuffle (<code>__shfl_down_sync</code> / <code>simd_shuffle_down</code>) — no barrier needed</td></tr>
+<tr><td>hier[8–12]</td><td>32 → 1</td><td>Bit-level operations within a single <code>u32</code> on thread 0</td></tr>
+</tbody></table>
+</div>
+<p>At each level, every position computes <code>(a XOR xora) AND (b XOR xorb) OR orb</code> — the same AND-with-invert operation from the AIG.  When
+<code>orb</code> is all-ones, the position acts as a pass-through (forwarding
+input <code>a</code> unchanged).  This single instruction pattern handles AND
+gates, inversions, and wiring with zero branch divergence.</p>
+<p>Between boomerang stages (when the AIG is too deep for a single
+8192-wide tree), a <strong>shuffle permutation</strong> redistributes results from
+shared memory back to thread-local registers.  The shuffle is encoded
+as 16-bit index pairs in the script, allowing arbitrary re-routing of
+signals between stages.</p>
+<h3 id="2-gpu-resource-limits-and-partition-constraints"><a class="header" href="#2-gpu-resource-limits-and-partition-constraints">2. GPU resource limits and partition constraints</a></h3>
+<p>The boomerang's fixed geometry imposes hard resource limits on each
+partition.  These are documented in <code>src/pe.rs</code> on the <code>Partition</code>
+struct:</p>
+<div class="table-wrapper"><table><thead><tr><th>Resource</th><th>Limit</th><th>Derivation</th></tr></thead><tbody>
+<tr><td>Unique inputs</td><td>8191</td><td>8192 leaf positions minus Tie0.  Each input occupies a leaf slot; duplicates consume additional slots.  Global-read rounds pack multiple state words into each thread's initial register.</td></tr>
+<tr><td>Unique outputs</td><td>8191</td><td>Write-out slots in the boomerang hierarchy, addressed by stage+position pairs.  Outputs include DFF data pins, primary outputs, and SRAM port signals.</td></tr>
+<tr><td>Intermediate pins per stage</td><td>4095</td><td>The hier[1] level has <code>2^(13-1) = 4096</code> positions.  One position is reserved for Tie0.  Intermediates are AIG pins that are produced in one boomerang stage and consumed in the next.</td></tr>
+<tr><td>SRAM output groups</td><td>64</td><td><code>8192 / (32 * 4) = 64</code>.  Each SRAM occupies 4 write-out groups (32-bit read-data, address, write-data, write-enable).  <code>BOOMERANG_MAX_WRITEOUTS = 1 &lt;&lt; (13 - 5) = 256</code> total write-out slots, of which SRAMs consume 4 each.</td></tr>
+</tbody></table>
+</div>
+<p>Write-out slots are 32-bit-aligned groups within the hier[1] level.
+The total write-out capacity is <code>BOOMERANG_MAX_WRITEOUTS = 256</code>.
+SRAMs and "output duplicates" (same data pin driven by DFFs with
+different clock enables) consume write-out slots from this budget.  A
+<code>quick_reject()</code> pre-check catches obvious overflows before the
+expensive full build.</p>
+<p>When a partition exceeds these limits, <code>Partition::build_one()</code>
+returns <code>None</code> and the partitioner must split the endpoint set
+further.</p>
+<h3 id="3-hypergraph-partitioning-with-repcut"><a class="header" href="#3-hypergraph-partitioning-with-repcut">3. Hypergraph partitioning with RepCut</a></h3>
+<p>The design's endpoint groups are distributed across GPU blocks by
+<strong>RepCut</strong> (<code>src/repcut.rs</code>), which constructs a weighted hypergraph
+and partitions it using <strong>mt-kahypar</strong>.</p>
+<p><strong>Why a hypergraph, not a graph:</strong>  In a standard graph, an edge
+connects exactly two vertices.  But a single AIG node (an AND gate
+deep in the combinational cone) may be shared by many endpoint groups
+— its "edge" in the connectivity structure is a hyperedge spanning
+all groups that depend on it.  Modelling this as pairwise graph edges
+would lose the information that cutting this one node simultaneously
+affects all connected groups.  Hypergraph partitioning minimises the
+actual communication cost (shared signals that must be read from
+global memory by multiple blocks).</p>
+<p><strong>Why mt-kahypar:</strong>  mt-kahypar is a state-of-the-art multilevel
+hypergraph partitioner with <code>LargeK</code> support (many partitions in one
+pass) and parallel execution.  The implementation uses:</p>
+<ul>
+<li><code>Preset::LargeK</code> — optimised for k &gt;&gt; 2.</li>
+<li><code>epsilon = 0.2</code> — 20% imbalance tolerance, giving the partitioner
+flexibility to reduce cut while keeping partitions roughly equal.</li>
+<li><code>Objective::Soed</code> — Sum of External Degrees, which counts how many
+partition boundaries each hyperedge crosses.  This directly
+correlates with the number of global memory reads each block must
+perform.</li>
+<li>Vertex weights proportional to estimated evaluation cost (accounting
+for sub-graph size and fanout sharing).</li>
+<li>Hyperedge weights equal to the number of AIG nodes with that
+endpoint reachability pattern.</li>
+<li>Hyperedge size cap at 1000 nodes (reservoir-sampled beyond that) to
+keep partitioning tractable for signals with extreme fanout.</li>
+</ul>
+<p>The hypergraph construction itself is the bottleneck for large
+designs: for each AIG node, RepCut computes a bitset of which
+endpoint groups it can reach via forward traversal.  Nodes with
+identical reachability sets are clustered into a single hyperedge.
+This is done in parallel across bitset blocks (<code>REPCUT_BITSET_BLOCK_SIZE = 4096</code>) using Rayon.</p>
+<h3 id="4-greedy-merge-back-strategy"><a class="header" href="#4-greedy-merge-back-strategy">4. Greedy merge-back strategy</a></h3>
+<p>mt-kahypar produces an initial partition assignment, but the
+partition count is typically much larger than needed (set to 2x the
+number of GPU blocks).  <code>process_partitions()</code> in <code>pe.rs</code> then
+aggressively merges partitions:</p>
+<ol>
+<li>
+<p><strong>Bitset-based overlap scoring:</strong> For each pair of partitions,
+compute the union of their AIG node bitsets.  The merge cost is
+<code>|union| - max(|A|, |B|)</code> — lower is better, indicating more
+shared sub-graph.  This is <code>O(num_aigpins/64)</code> per pair instead of
+full DFS.</p>
+</li>
+<li>
+<p><strong>Speculative parallel trials:</strong> Merge candidates are sorted by
+overlap cost.  Up to <code>parallel_trial_stride</code> merges are attempted
+in parallel using <code>Rayon</code>, with a cancel-on-success <code>AtomicBool</code>
+to abort remaining trials once a valid merge is found.  The stride
+doubles on each iteration.</p>
+</li>
+<li>
+<p><strong>Quality gate:</strong> A merged partition is rejected if it would
+increase the maximum boomerang stage count beyond
+<code>max_original_nstages + max_stage_degrad</code>.  This prevents merges
+that technically fit in resource limits but would degrade
+simulation throughput by adding extra boomerang stages.</p>
+</li>
+<li>
+<p><strong>Blacklisting:</strong> Failed merge attempts are blacklisted for that
+partition to avoid redundant retries.  Cancelled (interrupted by a
+parallel success) trials are <em>not</em> blacklisted — the merge may
+still be valid in a future iteration.</p>
+</li>
+</ol>
+<p>The result: 2x-4x fewer partitions than the initial hypergraph
+solution, with each partition fully validated to fit within boomerang
+resource limits.</p>
+<h3 id="5-flattenedscript-instruction-generation"><a class="header" href="#5-flattenedscript-instruction-generation">5. FlattenedScript instruction generation</a></h3>
+<p><code>src/flatten.rs</code> converts partitions into <code>FlattenedScriptV1</code> — a
+packed <code>u32</code> instruction stream consumed directly by the GPU kernel.
+The script encodes:</p>
+<ol>
+<li>
+<p><strong>Metadata section</strong> (256 u32): Per-partition control fields at
+fixed indices, followed by the write-out hook table:</p>
+<div class="table-wrapper"><table><thead><tr><th>Index</th><th>Field</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>0</td><td><code>num_stages</code></td><td>Boomerang stage count</td></tr>
+<tr><td>1</td><td><code>is_last_part</code></td><td>Flag: last partition in the design</td></tr>
+<tr><td>2</td><td><code>num_ios</code></td><td>Number of write-out endpoints</td></tr>
+<tr><td>3</td><td><code>io_offset</code></td><td>Start offset in global state buffer</td></tr>
+<tr><td>4</td><td><code>num_srams</code></td><td>SRAM block count</td></tr>
+<tr><td>5</td><td><code>sram_offset</code></td><td>SRAM start offset</td></tr>
+<tr><td>6</td><td><code>num_global_read_rounds</code></td><td>Input read rounds</td></tr>
+<tr><td>7</td><td><code>num_output_duplicates</code></td><td>Output duplication count</td></tr>
+<tr><td>8</td><td><code>is_x_capable</code></td><td>X-propagation flag (ADR 0016)</td></tr>
+<tr><td>9</td><td><code>xmask_state_offset</code></td><td>X-mask offset (when X-capable)</td></tr>
+<tr><td>128..255</td><td>write-out hook table</td><td>Maps each thread to the boomerang stage+position where it captures its output</td></tr>
+</tbody></table>
+</div>
+<p>This layout is the load-bearing contract between Rust
+(<code>flatten.rs</code>) and the GPU kernel (<code>kernel_v1.metal</code>,
+<code>kernel_v1_impl.cuh</code>).</p>
+</li>
+<li>
+<p><strong>Global-read permutation</strong> (2 × <code>NUM_THREADS_V1</code> per round):
+Each thread gets an index into the global state buffer and a
+bitmask.  The thread reads one u32 from global memory and extracts
+the bits indicated by the mask using a <code>pext</code>-like loop.  Rounds
+are packed to maximise throughput (each thread accumulates up to
+32 bits across rounds).  An index high-bit flag distinguishes
+previous-cycle state from current-cycle inter-stage intermediates.</p>
+</li>
+<li>
+<p><strong>Boomerang sections</strong> (per stage, <code>NUM_THREADS_V1 × 20</code> u32):</p>
+<ul>
+<li>16 u32 per thread: shuffle permutation (16-bit index pairs
+selecting source bits from shared memory)</li>
+<li>4 u32 per thread: AND-gate flags (<code>xora</code>, <code>xorb</code>, <code>orb</code>) plus a
+padding slot reused for gate-delay injection (u16 picoseconds)</li>
+</ul>
+</li>
+<li>
+<p><strong>Global write-out</strong>: SRAM and output-duplicate permutations,
+clock-enable conditions, and data-inversion flags for committing
+results back to the state buffer.</p>
+</li>
+</ol>
+<p>The entire script is uploaded to device memory once and read
+sequentially by the kernel.  Script reads are overlapped with
+computation via double-buffering (reading the next stage's data while
+computing the current stage's AND gates).</p>
+<h3 id="6-pipeline-staging-for-deep-circuits"><a class="header" href="#6-pipeline-staging-for-deep-circuits">6. Pipeline staging for deep circuits</a></h3>
+<p>When a design's combinational depth exceeds the boomerang's capacity,
+<code>src/staging.rs</code> splits the AIG into <strong>major stages</strong> at user-
+specified level thresholds (<code>--level-split 30</code> or <code>--level-split 20,40</code>).</p>
+<p>Each major stage gets its own <code>StagedAIG</code> with:</p>
+<ul>
+<li><code>primary_inputs</code>: the AIG pins produced by previous stages (or the
+design's actual primary inputs for the first stage).</li>
+<li><code>primary_output_pins</code>: live AIG pins at the split boundary that
+must be forwarded to the next stage.</li>
+<li><code>endpoints</code>: the original AIG endpoint groups whose combinational
+depth falls within this stage.</li>
+</ul>
+<p>Major stages execute sequentially on the GPU (the kernel loops over
+them).  Between stages, intermediate values are written to the
+output state buffer and re-read by the next stage's global-read
+permutation (indicated by the high-bit flag in the index).</p>
+<p>Staging trades latency (more sequential kernel dispatches) for
+fitting within the 8192-wide boomerang.  Without it, designs with</p>
+<blockquote>
+<p>50-level combinational paths would fail partitioning entirely.</p>
+</blockquote>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<p><strong>Enables:</strong></p>
+<ul>
+<li><strong>Fixed, branch-free GPU kernel.</strong> The kernel has no per-node
+dispatch — every thread executes the same AND-XOR-OR instruction at
+every boomerang level.  This maximises SIMT utilisation across
+CUDA, HIP, and Metal.</li>
+<li><strong>Deterministic shared-memory budget.</strong> The 256-thread, 8192-bit
+boomerang uses a fixed amount of shared memory (threadgroup memory
+on Metal), independent of the design.  No dynamic allocation, no
+shared-memory pressure variation between blocks.</li>
+<li><strong>Scalable partitioning.</strong> The hypergraph partitioner + greedy
+merge naturally adapts to designs from hundreds to millions of
+gates.  Larger designs get more partitions; the GPU kernel is the
+same.</li>
+<li><strong>Technology independence at the kernel level.</strong> The GPU kernel
+knows nothing about AIGPDK, SKY130, or GF180MCU.  It executes
+packed u32 scripts.  All cell-library knowledge is absorbed during
+AIG construction and script generation.</li>
+</ul>
+<p><strong>Constrains:</strong></p>
+<ul>
+<li><strong>8191-input/output ceiling per partition.</strong> Designs with extremely
+wide buses or highly connected sub-circuits may require aggressive
+partitioning, which increases inter-partition communication (global
+memory reads).  The <code>--level-split</code> option helps by splitting deep
+cones into multiple stages, but wide cones remain fundamentally
+limited by the 8192-slot boomerang.</li>
+<li><strong>Write-out slot scarcity for SRAM-heavy designs.</strong> Each SRAM
+consumes 4 write-out slots.  With <code>BOOMERANG_MAX_WRITEOUTS = 256</code>,
+a partition can hold at most 64 SRAMs — and fewer when output
+duplicates also need slots.  Designs with many small memories may
+need finer partitioning than their gate count alone would suggest.</li>
+<li><strong>Fixed thread count.</strong> The 256-thread block size is hardcoded
+(<code>NUM_THREADS_V1</code>).  On GPUs where the SM/CU could benefit from
+larger blocks (e.g., occupancy tuning), there's no flexibility.
+Changing this would require redesigning the boomerang hierarchy
+depth and the bit-packing in the script format.</li>
+<li><strong>Script size grows with partition depth.</strong> Each boomerang stage
+adds <code>~20 × 256 = 5120</code> u32 entries to the script.  Very deep
+partitions (many boomerang stages) produce large scripts that may
+pressure GPU memory bandwidth for the script reads, though
+double-buffering mitigates this.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../adr/0014-aig-as-simulation-ir.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../adr/0016-selective-x-propagation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../adr/0014-aig-as-simulation-ir.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../adr/0016-selective-x-propagation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

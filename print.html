@@ -1888,11 +1888,179 @@ entry.1 = entry.1.max(d);   // fall (same value!)
 <li><code>docs/adr/0001-opensta-as-oracle.md</code> — STA path; OpenSTA out of process is committed (post-supersedure of ADR 0003).</li>
 <li><code>docs/adr/0003-opentimer-primary-sta.md</code> — <strong>Superseded.</strong> Original in-process STA proposal; spike Q2 fail moved Jacquard to OpenSTA-only. See <code>docs/spikes/opentimer-sky130.md</code>.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="bus-transaction-tracing-ahb--apb"><a class="header" href="#bus-transaction-tracing-ahb--apb">Bus Transaction Tracing (AHB / APB)</a></h1>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<p><code>jacquard cosim</code> can decode on-chip bus transactions and emit them in a
+compact, transaction-level form — one row per transfer, rather than raw
+per-cycle waveforms. You declare the bus interfaces to watch in
+<code>sim_config.json</code>; cosim observes their pins on the GPU each tick and
+runs the protocol decode on the CPU, writing decoded transactions to a
+CSV file.</p>
+<p>This is <strong>observe-only</strong>: the tracer watches signals the design already
+drives, it never drives anything. It adds no measurable simulation
+overhead when no buses are configured.</p>
+<div class="table-wrapper"><table><thead><tr><th>Protocol</th><th>Status</th></tr></thead><tbody>
+<tr><td><strong>APB3</strong></td><td>Supported</td></tr>
+<tr><td>AHB-Lite</td><td>Planned (pipelined address/data pairing, burst tracking)</td></tr>
+<tr><td>AHB5</td><td>Planned (AHB-Lite + security / exclusive signals)</td></tr>
+</tbody></table>
+</div>
+<p>The design rationale lives in
+<a href="adr/0013-plural-peripheral-configs.html">ADR 0013</a>; the roadmap is in
+<a href="plans/bus-transaction-tracing.html"><code>plans/bus-transaction-tracing.md</code></a>.</p>
+<p>Bus tracing is the structured, protocol-aware counterpart to
+<a href="usage.html"><code>--trace-signals</code></a>, which surfaces <em>raw</em> internal nets in the
+output VCD. Use <code>--trace-signals</code> when you want waveforms of individual
+wires; use bus tracing when you want decoded <code>READ 0x40 =&gt; 0x1</code> records.</p>
+<h2 id="configuring-a-bus"><a class="header" href="#configuring-a-bus">Configuring a bus</a></h2>
+<p>Add a <code>bus_traces</code> array to <code>sim_config.json</code>. Each entry names one bus
+interface:</p>
+<pre><code class="language-json">{
+    "netlist_path": "build/soc.gv",
+    "clock_gpio": 0,
+    "reset_gpio": 1,
+    "num_cycles": 100000,
+    "clock_period_ps": 40000,
+
+    "bus_traces": [
+        {
+            "name": "dmi",
+            "protocol": "apb3",
+            "prefix": "soc.dm.",
+            "addr_bits": 9,
+            "data_bits": 32
+        }
+    ]
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Required</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>yes</td><td>Label for this bus in the CSV <code>bus</code> column.</td></tr>
+<tr><td><code>protocol</code></td><td>yes</td><td><code>apb3</code> (or <code>ahb-lite</code> / <code>ahb5</code> once supported).</td></tr>
+<tr><td><code>prefix</code></td><td>yes</td><td>Hierarchical net-name prefix; standard pin names are appended (see below). May be <code>""</code> for top-level pins.</td></tr>
+<tr><td><code>addr_bits</code></td><td>no (default 32)</td><td>Address bus width.</td></tr>
+<tr><td><code>data_bits</code></td><td>no (default 32)</td><td>Data bus width.</td></tr>
+<tr><td><code>signals</code></td><td>no</td><td>Per-pin net-name overrides (see <a href="bus-tracing.html#pin-resolution">Pin resolution</a>).</td></tr>
+</tbody></table>
+</div>
+<h3 id="pin-names"><a class="header" href="#pin-names">Pin names</a></h3>
+<p>By default each protocol pin is resolved as <code>{prefix}{pin}</code>. For APB3:</p>
+<div class="table-wrapper"><table><thead><tr><th>Logical pin</th><th>Default net</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>psel</code></td><td><code>{prefix}psel</code></td><td>required</td></tr>
+<tr><td><code>penable</code></td><td><code>{prefix}penable</code></td><td>required</td></tr>
+<tr><td><code>pwrite</code></td><td><code>{prefix}pwrite</code></td><td>direction</td></tr>
+<tr><td><code>paddr</code></td><td><code>{prefix}paddr[i]</code></td><td><code>addr_bits</code> wide</td></tr>
+<tr><td><code>pwdata</code></td><td><code>{prefix}pwdata[i]</code></td><td><code>data_bits</code> wide</td></tr>
+<tr><td><code>prdata</code></td><td><code>{prefix}prdata[i]</code></td><td><code>data_bits</code> wide</td></tr>
+<tr><td><code>pready</code></td><td><code>{prefix}pready</code></td><td>optional — <strong>unresolved is treated as always-ready (1)</strong></td></tr>
+<tr><td><code>pslverr</code></td><td><code>{prefix}pslverr</code></td><td>optional — unresolved is treated as no-error (0)</td></tr>
+</tbody></table>
+</div>
+<p>So a bus with <code>"prefix": "soc.dm."</code> looks for <code>soc.dm.psel</code>,
+<code>soc.dm.paddr[0]</code>, …, <code>soc.dm.prdata[31]</code>.</p>
+<p>If your design's pins don't follow that convention, remap individual
+logical pins with <code>signals</code>:</p>
+<pre><code class="language-json">{
+    "name": "periph",
+    "protocol": "apb3",
+    "prefix": "soc.apb.",
+    "signals": {
+        "psel": "soc.apb_decode.sel_periph",
+        "prdata": "soc.apb_mux.readback"
+    }
+}
+</code></pre>
+<h2 id="running"><a class="header" href="#running">Running</a></h2>
+<pre><code class="language-bash">cargo run -r --features metal --bin jacquard -- cosim \
+    build/soc.gv \
+    --config sim_config.json \
+    --bus-trace-csv bus.csv
+</code></pre>
+<p>At startup each bus logs whether it resolved:</p>
+<pre><code>bus-trace `dmi` (APB3): psel/penable resolved, addr 9/9 bits, pready=true pslverr=true
+</code></pre>
+<p>and at the end:</p>
+<pre><code>bus-trace: decoded 12 transaction(s) across 1 bus(es)
+bus-trace: wrote 12 transaction(s) to bus.csv
+</code></pre>
+<h2 id="csv-output"><a class="header" href="#csv-output">CSV output</a></h2>
+<pre><code>tick,bus,protocol,dir,addr,data,resp,burst
+24,dmi,apb3,WR,0x10,0xCAFEBABE,OK,
+30,dmi,apb3,RD,0x10,0xCAFEBABE,OK,
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Column</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>tick</code></td><td>Cosim edge at which the transfer completed. One clock cycle = 2 edges (rising + falling) for a single-domain design.</td></tr>
+<tr><td><code>bus</code></td><td>The configured bus <code>name</code>.</td></tr>
+<tr><td><code>protocol</code></td><td><code>apb3</code> / <code>ahb-lite</code> / <code>ahb5</code>.</td></tr>
+<tr><td><code>dir</code></td><td><code>WR</code> or <code>RD</code>.</td></tr>
+<tr><td><code>addr</code></td><td>Transfer address (hex).</td></tr>
+<tr><td><code>data</code></td><td><code>pwdata</code> for writes, <code>prdata</code> for reads (hex).</td></tr>
+<tr><td><code>resp</code></td><td><code>OK</code> or <code>ERR</code> (from <code>pslverr</code> / <code>hresp</code>).</td></tr>
+<tr><td><code>burst</code></td><td>AHB burst position <code>beat/len</code> (empty for APB).</td></tr>
+</tbody></table>
+</div>
+<h2 id="pin-resolution"><a class="header" href="#pin-resolution">Pin resolution</a></h2>
+<p>For the GPU to read a bus pin each tick, that net must (1) exist in the
+post-synthesis netlist under a resolvable name and (2) survive into the
+simulation's output state. Two consequences:</p>
+<ul>
+<li>
+<p><strong>Names must survive synthesis.</strong> The resolver uses the same
+multi-candidate matcher as <code>--trace-signals</code>, so Yosys-flattened
+(<code>\soc.dm.psel</code>), scalar-expanded (<code>soc.dm.paddr[3]</code>), and
+structurally-hierarchical names all work. But synthesis is free to
+rename or delete <em>combinational</em> nets. The robust pattern is to make
+the bus signals <strong>registers</strong> (their DFF Q outputs keep their names),
+or to annotate the RTL nets with <code>(* keep *)</code>.</p>
+</li>
+<li>
+<p><strong>Constant-folded bits read as 0 — correctly.</strong> If a design only ever
+drives, say, addresses <code>0x00</code> and <code>0x04</code>, synthesis folds every
+address bit except <code>paddr[2]</code> to a constant. The startup log then
+shows e.g. <code>addr 1/8 bits</code>. This is expected: the tracer reconstructs
+the full value correctly because the dropped bits are genuinely 0.</p>
+</li>
+</ul>
+<p><code>pready</code> / <code>pslverr</code> are allowed to be absent. A common case is an
+always-ready slave that ties <code>pready</code> high — it folds to a constant,
+fails to resolve, and the tracer correctly treats the bus as
+always-ready.</p>
+<h2 id="worked-example"><a class="header" href="#worked-example">Worked example</a></h2>
+<p><code>tests/apb_trace/</code> is a self-contained, synthesizable APB3 system used
+as the CI regression. Its master issues a fixed program — two writes
+then two reads — to a register-file slave, and <code>check.py</code> asserts the
+decoded CSV. See <a href="../tests/apb_trace/README.html"><code>tests/apb_trace/README.md</code></a>.</p>
+<pre><code class="language-bash">yosys -s tests/apb_trace/synth.tcl          # (from tests/apb_trace/)
+cargo run -r --features metal --bin jacquard -- cosim \
+    tests/apb_trace/apb_trace_synth.gv \
+    --config tests/apb_trace/sim_config.json \
+    --top-module apb_trace \
+    --max-clock-edges 200 \
+    --bus-trace-csv apb.csv
+python3 tests/apb_trace/check.py apb.csv
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Symptom</th><th>Cause / fix</th></tr></thead><tbody>
+<tr><td><code>psel/penable did not resolve … this bus will not capture</code></td><td>The <code>prefix</code> is wrong, or the nets were optimized away. Find the real names with <code>uv run netlist-graph search &lt;netlist&gt; psel</code>, then fix <code>prefix</code> or add <code>signals</code> overrides.</td></tr>
+<tr><td>Zero transactions decoded</td><td>Gate never asserted. Check that <code>psel</code>/<code>penable</code> resolve (startup log) and that the bus is actually exercised within <code>--max-clock-edges</code>.</td></tr>
+<tr><td>Address or data always 0</td><td><code>paddr</code>/<code>pwdata</code>/<code>prdata</code> nets didn't resolve (renamed/folded). Confirm with <code>netlist-graph search</code>; mark the RTL nets <code>(* keep *)</code> and re-synthesize.</td></tr>
+<tr><td>Reads return stale/wrong data</td><td>The slave must present <code>prdata</code> during the ACCESS phase. Register <code>prdata</code> so its value is stable when <code>psel &amp; penable</code> are high.</td></tr>
+</tbody></table>
+</div>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ul>
+<li>APB3 only for now; AHB-Lite / AHB5 and annotated-VCD output are the
+next phases (see the <a href="plans/bus-transaction-tracing.html">plan</a>).</li>
+<li>Up to 4 buses per run, addresses/data up to 32 bits.</li>
+<li>Cosim is Metal-only today, so bus tracing is Metal-only.</li>
+<li>The legacy hardcoded Wishbone trace (a separate, SoC-specific path) is
+unaffected; folding it onto this general mechanism is a planned
+follow-up.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adding-a-new-pdk-for-post-layout-simulation"><a class="header" href="#adding-a-new-pdk-for-post-layout-simulation">Adding a New PDK for Post-Layout Simulation</a></h1>
 <p>This guide documents the process of enabling a new process design kit (PDK) for
 gate-level simulation in Jacquard. It is based on the SKY130 enablement and captures
 every integration point.</p>
-<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
 <p>Jacquard natively supports AIGPDK (its own synthesis library of AND gates, DFFs, and
 SRAMs). Supporting a foundry PDK like SKY130 requires teaching the simulator how
 to interpret the PDK's standard cells: their pin directions, their boolean
@@ -2826,7 +2994,7 @@ outcome; kept for the audit trail.</li>
 <tr><td><a href="adr/0010-declarative-cell-metadata.html">0010</a></td><td>Declarative cell metadata</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0011-ram-port-mapping-schema.html">0011</a></td><td>RAM port-mapping schema for declarative cell metadata</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Proposed</td></tr>
-<tr><td><a href="adr/0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Proposed</td></tr>
+<tr><td><a href="adr/0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0015-boomerang-execution-model.html">0015</a></td><td>Boomerang execution model and GPU resource mapping</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0016-selective-x-propagation.html">0016</a></td><td>Selective X-propagation</td><td>Accepted</td></tr>
@@ -3356,6 +3524,1396 @@ accepted history.</li>
 <li><code>../adr/0002-timing-ir.md</code> — IR schema versioning policy that the JSON report mirrors.</li>
 <li><code>../project-scope.md</code> — output stability constraints that apply to any user-facing format.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0009--opensta-verilog-reader-input-constraints"><a class="header" href="#adr-0009--opensta-verilog-reader-input-constraints">ADR 0009 — OpenSTA Verilog reader input constraints</a></h1>
+<p><strong>Status:</strong> Accepted.</p>
+<h2 id="context-8"><a class="header" href="#context-8">Context</a></h2>
+<p>OpenSTA's <code>read_verilog</code> Tcl command is structural-only: it accepts cell
+instantiations and bare-net <code>assign</code> statements but rejects RTL
+operators (<code>~</code>, <code>&amp;</code>, <code>|</code>, <code>^</code>), bit-selects in assigns, and ranged
+concatenations. Violations surface as <code>Error: &lt;file&gt; line &lt;N&gt;, syntax error</code> and exit 1. This is a long-standing OpenSTA limitation, not a
+flag.</p>
+<p>Two patterns make this surprising in practice — both have already
+caught us once:</p>
+<ol>
+<li>
+<p><strong>Final-stage outputs from the LibreLane/OpenROAD flow are
+sometimes wrapped.</strong> LibreLane itself only ever reads structural
+netlists (<code>&lt;design&gt;.pnl.v</code> — verified locally on
+<code>chip_top.pnl.v</code>: zero RTL operators, single module). The wrapping
+is added by downstream integration tooling — for the SkyWater
+openframe flow, chipflow's harness wraps the LibreLane output in
+<code>openframe_project_wrapper</code> to patch active-low OEB pins into the
+pad ring, producing the <code>assign gpio_oeb[0] = ~( ... );</code> pattern.
+The combined file (<code>tests/mcu_soc/data/6_final.v</code>) contains both
+the readable-by-OpenSTA structural <code>top</code> module <em>and</em> the
+wrapper's unreadable RTL. The SDF was generated against the inner
+<code>top</code>, not the wrapper — matching what LibreLane's own STA saw.</p>
+</li>
+<li>
+<p><strong>Post-synthesis Verilog has the right form but the wrong cells.</strong>
+Pre-P&amp;R synthesis output (e.g. <code>top_synth.v</code>) is fully structural
+and uses the same module name <code>top</code> as the post-P&amp;R body, so it
+<em>looks</em> like an acceptable substitute. It is not: the SDF
+references hundreds of thousands of P&amp;R-inserted cells
+(<code>clkbuf_regs_*</code> CTS buffers, <code>ANTENNA_*</code> diodes, <code>delaybuf_*</code>,
+fillers) that simply do not exist in synthesis output. OpenSTA
+quietly drops SDF entries whose endpoints are not in the loaded
+design; the resulting IR back-annotates only the surviving subset.
+Concrete numbers from the MCU SoC fixture: <code>top_synth.v</code> has
+31,500 cells; <code>module top</code> inside <code>6_final.v</code> has 266,746. Feeding
+<code>top_synth.v</code> would silently drop ~88% of the design's structure.</p>
+</li>
+</ol>
+<p>Past convention (<code>docs/plans/ws3-cosim-sdf-followup.md</code>, pre
+2026-05-18) recommended substituting <code>top_synth.v</code> to dodge the
+wrapper-parse error. The contemporaneous verification log
+(<code>28162 matched, 2090 unmatched</code>) reported the jtir-to-cosim-netlist
+match rate, <em>not</em> SDF coverage against the jtir — high surface
+"working" while the IR was missing most of the design's real
+timing. That recommendation is retracted in the same change as this
+ADR lands.</p>
+<h2 id="decision-8"><a class="header" href="#decision-8">Decision</a></h2>
+<p>The "structural-only" constraint is <strong>owned by <code>opensta-to-ir</code></strong>,
+not by the caller. Specifically:</p>
+<ol>
+<li>
+<p><strong><code>opensta-to-ir</code> filters Verilog inputs at invocation time.</strong> For
+each <code>--verilog</code> file, it extracts the <code>module &lt;--top&gt; … endmodule</code> block before handing files to OpenSTA. Files that do
+not contain <code>module &lt;--top&gt;</code> (sub-module-only files in
+hierarchical designs) are passed through unchanged. The wrapper
+modules that LibreLane + wafer.space integration adds — and any
+future analogues — are simply not seen by OpenSTA. Implementation
+in <code>crates/opensta-to-ir/src/verilog_filter.rs</code>; integration test
+coverage in <code>tests/opensta_integration.rs</code>.</p>
+</li>
+<li>
+<p><strong>The cell-set match against the SDF is the caller's
+responsibility.</strong> <code>opensta-to-ir</code> cannot determine programmatically
+whether a given Verilog input is the right design stage for a
+given SDF. The CI fixture comment in <code>prepare-mcu-soc-jtir</code>
+captures the rule for sky130 mcu_soc; copy the <em>spirit</em> (use the
+post-P&amp;R structural body, not synthesis output) when adding new
+fixtures, but don't copy a per-design extraction recipe — there
+no longer is one to copy.</p>
+</li>
+</ol>
+<p><strong>Architectural alternative (separate concern):</strong> the upstream
+chipflow harness could preserve LibreLane's pre-wrap <code>&lt;top&gt;.pnl.v</code>
+alongside its wrapped <code>&lt;top&gt;_final.v</code> output. That would make
+<code>opensta-to-ir</code>'s in-tool extraction a no-op for the common chipflow
+case, but it would not obviate the filter — third-party LibreLane +
+wafer.space users (hazard3 and future tapeouts using the vanilla
+flow) hit the same wrapper pattern. The filter is the right place
+for the fix because it covers both <code>opensta-to-ir</code> as a CLI and
+<code>jacquard sim --sdf</code> (which subprocesses <code>opensta-to-ir</code>).</p>
+<h2 id="consequences-8"><a class="header" href="#consequences-8">Consequences</a></h2>
+<ul>
+<li>End-user runs of <code>jacquard sim --sdf &lt;path&gt;</code> and the standalone
+<code>opensta-to-ir</code> tool both transparently handle the LibreLane +
+wafer.space wrapper pattern. No flags, no preprocessing recipe in
+user-facing docs.</li>
+<li>Match-rate metrics in the IR consumer measure jtir coverage
+against the <em>consuming</em> netlist, not against the source SDF. A
+high match rate is necessary but not sufficient — confirm the jtir
+contains the post-P&amp;R cell population separately (e.g. by spot
+checking for <code>clkbuf_regs_*</code> / <code>ANTENNA_*</code> arcs in the IR JSON
+sidecar) before declaring a flow "working".</li>
+<li>The filter assumes <code>module &lt;--top&gt; … endmodule</code> is line-anchored
+in the Verilog source. Machine-generated post-P&amp;R netlists meet
+this; hand-rolled Verilog that opens a module mid-line would not.
+If that ever surfaces, upgrade the filter to use a real Verilog
+tokenizer (<code>sverilogparse</code> is already a workspace dependency).</li>
+<li>This ADR retroactively retracts the <code>top_synth.v</code> recommendation
+in <code>docs/plans/ws3-cosim-sdf-followup.md</code>; that doc is corrected
+in the same change.</li>
+</ul>
+<h2 id="links-8"><a class="header" href="#links-8">Links</a></h2>
+<ul>
+<li>ADR 0001 — OpenSTA as oracle and sole STA path (the upstream
+tool whose constraints these are).</li>
+<li>ADR 0006 — SDF preprocessing model (the surrounding flow that
+consumes these inputs).</li>
+<li><code>docs/plans/ws3-cosim-sdf-followup.md</code> — the prior workaround
+this ADR corrects.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0010--declarative-cell-metadata-for-pdk-enablement"><a class="header" href="#adr-0010--declarative-cell-metadata-for-pdk-enablement">ADR 0010 — Declarative cell metadata for PDK enablement</a></h1>
+<p><strong>Status:</strong> Accepted.</p>
+<h2 id="context-9"><a class="header" href="#context-9">Context</a></h2>
+<p>PDK enablement today is <em>per-PDK code + vendored Verilog</em> (see
+<code>src/sky130.rs</code>, <code>src/gf180mcu.rs</code>, <code>src/gf180mcu_pdk.rs</code>, the
+<code>build.rs</code> pin-table scanner). Adding a new cell family — third-party
+IP memories, hard macros, foundry-supplied blocks — requires
+vendoring Verilog into <code>jacquard/vendor/</code>, extending the <code>build.rs</code>
+scanner, editing prefix matchers (<code>is_&lt;pdk&gt;_cell</code>,
+<code>extract_cell_type</code>), and adding entries to hand-curated <code>matches!()</code>
+lists (<code>is_filler_cell</code>, <code>is_io_pad_cell</code>, <code>is_sequential_cell</code>,
+<code>is_multi_output_cell</code>, …). Each of those last is data masquerading
+as code; PR #64 (2026-05-18 power-pin + wired-filler shortcuts for
+wafer.space) is the most recent example of the pattern.</p>
+<p>The acute trigger is <code>gf180mcu_ocd_ip_sram__sram1024x8m8wm1</code> — Tim
+Edwards' OCD 3.3V port of the GF180MCU SRAM IP, used in a downstream
+wafer.space tapeout. The cell is third-party IP (not in Jacquard's
+<code>vendor/</code>), doesn't match <code>is_gf180mcu_cell</code>'s prefix walk
+(<code>fd_*</code> / <code>ws_*</code> only), has no pin table, and isn't filler-stubbable.
+Issue <a href="https://github.com/ChipFlow/Jacquard/issues/67">#67</a> captures
+the discussion.</p>
+<p>The same pattern will repeat for every wafer.space tapeout that
+includes IP outside Jacquard's vendored library — hazard3, future
+chips. Code-gating each one through a Jacquard PR doesn't scale.</p>
+<h2 id="decision-9"><a class="header" href="#decision-9">Decision</a></h2>
+<p>PDK enablement gains a <strong>declarative metadata path</strong> alongside the
+existing built-in classifiers. The decision separates cleanly into
+two tiers; this ADR commits to Tier 1 + a minimal Tier 2 slice now,
+and explicitly defers the larger Tier 2 schema (port-mapping
+semantics) to a future ADR after real adoption data.</p>
+<h3 id="tier-1--runtime-cell-library---cell-library-pathv"><a class="header" href="#tier-1--runtime-cell-library---cell-library-pathv">Tier 1 — runtime cell library (<code>--cell-library &lt;PATH&gt;.v</code>)</a></h3>
+<p><code>sverilogparse</code> (already a workspace dependency) parses user-supplied
+Verilog files at startup and populates the <code>LeafPinProvider</code> for
+every <code>module … endmodule</code> block found. Handles <code>input</code> / <code>output</code> /
+<code>inout</code>. Replaces the <code>build.rs</code> scanner for newly-added cells;
+existing built-in tables stay as fallback.</p>
+<p>Flag is <strong>repeatable</strong>: <code>--cell-library a.v --cell-library b.v</code> for
+designs that pull in multiple IP libraries. Files are parsed in
+order; later files override earlier ones for collisions (with a
+warning).</p>
+<h3 id="tier-2-minimal-slice--kind-discriminator-in-toml"><a class="header" href="#tier-2-minimal-slice--kind-discriminator-in-toml">Tier 2 (minimal slice) — <code>kind</code> discriminator in TOML</a></h3>
+<p>Each cell library may be accompanied by a TOML manifest declaring
+the <em>kind</em> of each cell — the same classification today's
+<code>is_filler_cell</code> / <code>is_sequential_cell</code> / etc. encode in
+<code>matches!()</code> lists. Manifest path mirrors the library path
+(<code>foo.v</code> → <code>foo.cells.toml</code>) and is loaded automatically when
+present; an explicit <code>--cell-manifest &lt;PATH&gt;.toml</code> flag overrides
+the autoloading behaviour.</p>
+<pre><code class="language-toml">schema_version = "1.0"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]
+kind = "ram"
+
+[cells.gf180mcu_fd_io__fillcap_18_h]
+kind = "filler"
+</code></pre>
+<p>Recognised <code>kind</code> values (v1.0): <code>std</code>, <code>dff</code>, <code>latch</code>,
+<code>clock_gate</code>, <code>ram</code>, <code>filler</code>, <code>endcap</code>, <code>tap</code>, <code>io_pad_input</code>,
+<code>io_pad_output</code>, <code>io_pad_bidir</code>, <code>delay</code>, <code>multi_output</code>,
+<code>tie_high</code>, <code>tie_low</code>.</p>
+<p>Schema versioning: top-level <code>schema_version</code> is mandatory. v1.x
+additive rule — new optional keys / new <code>kind</code> values are
+non-breaking; semantics of existing <code>kind</code> values must not narrow.</p>
+<h3 id="kind--ram-semantics-in-v10-opaque-ram-mode"><a class="header" href="#kind--ram-semantics-in-v10-opaque-ram-mode"><code>kind = "ram"</code> semantics in v1.0 (opaque-RAM mode)</a></h3>
+<p><code>aig.rs</code> today has two hardcoded RAM detection paths:
+<code>celltype == "$__RAMGEM_SYNC_"</code> (line 775, port_r/port_w resolution
+from Yosys <code>memlib_yosys.txt</code>) and <code>starts_with("CF_SRAM_")</code> (line
+1006, <code>.DO</code> output resolution for ChipFlow's single-port
+convention). Neither matches <code>gf180mcu_ocd_ip_sram_*</code> or arbitrary
+third-party SRAM IP.</p>
+<p>In v1.0, <code>kind = "ram"</code> allocates a <code>RAMBlock</code> slot in <strong>opaque
+mode</strong>: the cell's outputs are routed to X-source slots, no port
+resolution is attempted, no memory behaviour is modelled. This is
+sufficient for designs whose CPU executes from boot ROM / register
+file and never reads SRAM contents at the timescales Jacquard
+simulates (the heartbeat-verification use case driving this work).
+The existing <code>compute_x_sources</code> test path at <code>src/aig.rs:3247-3273</code>
+already validates the X-source convergence shape.</p>
+<p>When real memory modelling is required, future schema versions add
+explicit port mapping (<code>[cells.NAME.ports]</code> sub-tables) — the
+opaque mode stays as the documented fallback.</p>
+<h3 id="integration-ordering"><a class="header" href="#integration-ordering">Integration ordering</a></h3>
+<p><code>aig.rs</code> cell-type recognition slots the manifest path <strong>after</strong> the
+existing recognisers:</p>
+<pre><code class="language-text">1. celltype == "$__RAMGEM_SYNC_"  → RAMBlock with port_r/port_w   (unchanged)
+2. starts_with("CF_SRAM_")        → RAMBlock with .DO              (unchanged)
+3. PdkVariant::classify(celltype) → built-in classifier dispatch    (unchanged)
+4. NEW: manifest.lookup(celltype) → manifest-declared kind dispatch
+</code></pre>
+<p>The new path activates only for cells none of the existing
+recognisers match AND that have a manifest entry. All existing
+tests stay green without churn.</p>
+<h3 id="deferred-to-a-future-adr"><a class="header" href="#deferred-to-a-future-adr">Deferred to a future ADR</a></h3>
+<ul>
+<li><strong>Port-mapping schema</strong> (<code>[cells.NAME.ports]</code> sub-tables, polarity
+annotations, bus-width inference, write-enable encoding). This is
+a small behavioural description language doing more than
+classification; needs concrete adoption data before its schema is
+fixed.</li>
+<li><strong>Built-in classifier removal.</strong> <code>sky130.rs</code> /
+<code>gf180mcu.rs</code> / <code>gf180mcu_pdk.rs</code> classification tables stay as
+fallback through the entire migration. Removal happens only after
+the manifest pathway is the source of truth for at least one PDK
+in production.</li>
+<li><strong><code>build.rs</code> pin-table scanner removal.</strong> Same rule: removed LAST,
+after manifests cover the built-in PDKs.</li>
+</ul>
+<h2 id="consequences-9"><a class="header" href="#consequences-9">Consequences</a></h2>
+<ul>
+<li>Third-party IP unblocks without Jacquard PRs. Users ship a
+<code>&lt;library&gt;.cells.toml</code> alongside their <code>&lt;library&gt;.v</code>; CI flows
+point <code>--cell-library</code> at both. The driving wafer.space tapeout's
+<code>chip_top.pnl.v</code> clears <code>gf180mcu_ocd_ip_sram__sram1024x8m8wm1</code>
+by shipping a six-line manifest entry.</li>
+<li>The "vendor + edit code + extend lists" PR workflow for new IP
+becomes "ship a manifest, no Jacquard change". <code>docs/adding-a-pdk.md</code>
+evolves to document the manifest pathway as the primary route.</li>
+<li>The opaque-RAM semantics is honest about what v1.0 delivers — no
+silent partial memory modelling. The contract is "RAMBlock
+allocated, outputs X-source, no read/write behaviour" until a
+future schema version adds explicit ports.</li>
+<li>Existing built-in PDK code stays load-bearing through the
+transition. No risk of regression in sky130 / gf180mcu test
+flows during the migration.</li>
+</ul>
+<h2 id="links-9"><a class="header" href="#links-9">Links</a></h2>
+<ul>
+<li>Issue <a href="https://github.com/ChipFlow/Jacquard/issues/67">#67</a> —
+design discussion.</li>
+<li>PR #64 (<code>9281e57</code>) — most recent per-PDK-code-as-data workaround
+this ADR resolves.</li>
+<li>ADR 0009 — OpenSTA Verilog reader input constraints
+(<code>sverilogparse</code> is already in-tree for unrelated reasons; Tier 1
+reuses that dep).</li>
+<li><code>docs/plans/declarative-cell-metadata.md</code> — implementation phasing.</li>
+<li><code>docs/plans/gf180mcu-enablement.md</code> § Follow-on cleanup items
+1, 2, 3 — superseded by this ADR.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0011--ram-port-mapping-schema-for-declarative-cell-metadata"><a class="header" href="#adr-0011--ram-port-mapping-schema-for-declarative-cell-metadata">ADR 0011 — RAM port-mapping schema for declarative cell metadata</a></h1>
+<p><strong>Status:</strong> Accepted.</p>
+<h2 id="context-10"><a class="header" href="#context-10">Context</a></h2>
+<p><a href="adr/0010-declarative-cell-metadata.html">ADR 0010</a> shipped a minimal Tier 2
+slice with one <code>kind</code> discriminator per cell. For <code>kind = "ram"</code>
+specifically, v1.0 declares the cell-as-opaque: the AIG allocates a
+<code>RAMBlock</code> slot but routes outputs to X-source slots without
+resolving read/write port semantics. That's sufficient for "design
+boots from ROM, never reads SRAM contents" cases but <strong>fails the
+moment a real CPU writes to SRAM and expects to read its data back</strong>.</p>
+<p>The acute trigger is the JTAG-DM firmware-load path enabled by
+<a href="https://github.com/ChipFlow/Jacquard/pull/78">PR #78</a>: OpenOCD
+walks a debug-module sequence that culminates in abstract-memory
+writes into the design's SRAM, then jumps the CPU to that memory.
+Because the SRAM is opaque (no backing storage, writes go nowhere),
+the CPU boots to garbage. Issue
+<a href="https://github.com/ChipFlow/Jacquard/issues/80">#80</a> captures the
+symptom and notes that wiring <code>SramInitConfig</code> is the smaller sibling
+problem — pre-loading SRAM contents at tick 0 — but the bigger gap
+is that <code>kind = "ram"</code> doesn't model writes at all.</p>
+<p>ADR 0010 § "Deferred to a future ADR" listed the port-mapping
+schema explicitly:</p>
+<blockquote>
+<p>Port-mapping schema (<code>[cells.NAME.ports]</code> sub-tables, polarity
+annotations, bus-width inference, write-enable encoding). This is
+a small behavioural description language doing more than
+classification; needs concrete adoption data before its schema is
+fixed.</p>
+</blockquote>
+<p>The OCD GF180MCU SRAM (<code>gf180mcu_ocd_ip_sram__sram1024x8m8wm1</code>) — a
+real third-party IP cell behind the apitronix-semiconductor /
+hazard3 / future wafer.space tapeout pipelines — gives us the
+concrete adoption-data input. This ADR fixes the schema against
+that worked example.</p>
+<h2 id="worked-example-the-ocd-sram"><a class="header" href="#worked-example-the-ocd-sram">Worked example: the OCD SRAM</a></h2>
+<p>The upstream behavioural model
+(<a href="https://github.com/RTimothyEdwards/gf180mcu_ocd_ip_sram">RTimothyEdwards/gf180mcu_ocd_ip_sram</a>)
+declares:</p>
+<pre><code class="language-verilog">module gf180mcu_ocd_ip_sram__sram1024x8m8wm1 (
+    CLK, CEN, GWEN, WEN, A, D, Q
+);
+  input         CLK;                // posedge clock
+  input         CEN;                // chip enable, active-low
+  input         GWEN;               // global write enable, active-low
+  input  [7:0]  WEN;                // per-bit write mask, active-low
+  input  [9:0]  A;                  // address (1024 entries)
+  input  [7:0]  D;                  // data in
+  output [7:0]  Q;                  // data out
+  reg    [7:0]  mem[1023:0];        // backing storage
+</code></pre>
+<p>Read semantics: on posedge <code>CLK</code>, when <code>!CEN &amp;&amp; GWEN</code> → <code>Q = mem[A]</code>.
+Write semantics: on posedge <code>CLK</code>, when <code>!CEN &amp;&amp; !GWEN &amp;&amp; !(&amp;WEN)</code> →
+<code>mem[A][i] = D[i]</code> for each <code>i</code> where <code>!WEN[i]</code>.</p>
+<p>The schema needs to capture: per-pin polarity (active-low vs
+active-high), per-pin role (clock / chip-enable / write-enable /
+mask / address / data-in / data-out), bus widths (derived from the
+Verilog declaration; not redeclared), mask granularity (per-bit vs
+per-byte vs none).</p>
+<h2 id="decision-10"><a class="header" href="#decision-10">Decision</a></h2>
+<p>Extend the <code>&lt;library&gt;.cells.toml</code> schema with an optional <code>ram</code>
+sub-table on entries declaring <code>kind = "ram"</code>. Presence of the
+sub-table promotes a cell from <strong>opaque</strong> (v1.0 semantics) to
+<strong>explicit</strong> — outputs are properly wired to the AIG-backed
+<code>RAMBlock</code>, writes populate backing storage, reads return what was
+written.</p>
+<h3 id="schema-v11"><a class="header" href="#schema-v11">Schema (v1.1)</a></h3>
+<pre><code class="language-toml">schema_version = "1.1"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]
+kind = "ram"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1.ram]
+depth = 1024
+width = 8
+clock        = { pin = "CLK", edge = "pos" }
+chip_enable  = { pin = "CEN", polarity = "low" }
+write_enable = { pin = "GWEN", polarity = "low" }
+write_mask   = { pin = "WEN", polarity = "low", granularity = "bit" }
+address      = "A"
+data_in      = "D"
+data_out     = "Q"
+</code></pre>
+<h3 id="field-semantics"><a class="header" href="#field-semantics">Field semantics</a></h3>
+<ul>
+<li><strong><code>depth</code></strong> (required, integer): number of addressable entries.
+Must satisfy <code>depth ≤ 2^AIGPDK_SRAM_ADDR_WIDTH</code> (8192 today).</li>
+<li><strong><code>width</code></strong> (required, integer 1..=32): bit-width of each entry.
+Capped at 32 by <code>RAMBlock</code>'s fixed-size port arrays.</li>
+<li><strong><code>clock</code></strong> (required, table): <code>pin</code> is the clock input pin name;
+<code>edge</code> defaults to <code>"pos"</code>. <code>"neg"</code> is accepted (matches gf180mcu
+<code>dffnq</code>-family negedge convention).</li>
+<li><strong><code>chip_enable</code></strong> (optional, table): <code>pin</code> + <code>polarity</code> (default
+<code>"low"</code>). When the pin's effective level is inactive, the cell
+neither reads nor writes for that cycle. Omit for sync SRAMs that
+are always-enabled.</li>
+<li><strong><code>write_enable</code></strong> (optional, table): <code>pin</code> + <code>polarity</code> (default
+<code>"low"</code>). Gates <strong>all</strong> writes regardless of mask. The OCD SRAM's
+<code>GWEN</code>. Omit for SRAMs without a global write-enable.</li>
+<li><strong><code>write_mask</code></strong> (optional, table): per-bit / per-byte write
+enables. <code>pin</code> is the mask pin name; <code>polarity</code> defaults to
+<code>"low"</code>; <code>granularity</code> is <code>"bit"</code> (default) or <code>"byte"</code>. The mask
+width must match <code>width</code> (bit) or <code>width / 8</code> (byte). Omit for
+SRAMs without per-bit masking — in that case the global
+<code>write_enable</code> controls the whole word.</li>
+<li><strong><code>address</code></strong> / <strong><code>data_in</code></strong> / <strong><code>data_out</code></strong> (required,
+string): pin names. Bus widths are read from the Verilog (via
+<code>sverilogparse</code>) — not re-declared here.</li>
+</ul>
+<h3 id="optional-cells-no-ram-block"><a class="header" href="#optional-cells-no-ram-block">Optional cells (no <code>ram</code> block)</a></h3>
+<p>Cells declaring <code>kind = "ram"</code> <em>without</em> the <code>ram</code> sub-table fall
+back to v1.0 <strong>opaque mode</strong> — outputs route to X-source slots, no
+backing storage, no port resolution. The contract is unchanged for
+existing consumers.</p>
+<h3 id="backing-storage"><a class="header" href="#backing-storage">Backing storage</a></h3>
+<p>Cells with an explicit <code>ram</code> block allocate a <code>RAMBlock</code> with
+<code>port_r_*</code> and <code>port_w_*</code> arrays populated from resolved pin
+positions. The simulator's existing GPU-side SRAM machinery handles
+reads, writes, and per-entry backing memory; no new kernel work is
+required.</p>
+<h3 id="schema-versioning"><a class="header" href="#schema-versioning">Schema versioning</a></h3>
+<p>The top-level <code>schema_version</code> field bumps from <code>"1.0"</code> to <code>"1.1"</code>.
+v1.0 manifests continue to parse — the <code>ram</code> sub-table is purely
+additive. Loaders that don't recognise the new sub-table (none
+today; this ADR ships the loader simultaneously) would treat
+flagged cells as opaque RAMs, which is a graceful degradation.</p>
+<h3 id="sram-preload-sibling-work"><a class="header" href="#sram-preload-sibling-work">SRAM preload (sibling work)</a></h3>
+<p><code>TestbenchConfig::sram_init</code> (an existing schema field declared in
+<code>src/testbench.rs</code> but unwired today — issue
+<a href="https://github.com/ChipFlow/Jacquard/issues/80">#80</a>) becomes
+load-bearing once explicit-port RAMs have backing storage. The
+preload path:</p>
+<ol>
+<li>Parse ELF segments from <code>sram_init.elf_path</code>.</li>
+<li>Match segments to SRAM instances by virtual-address overlap with
+declared SRAM regions.</li>
+<li>Write segment bytes into each matched SRAM's backing memory at
+tick 0.</li>
+</ol>
+<p>Schema extensions to <code>SramInitConfig</code> (instance targeting,
+multi-section support) land alongside the implementation but don't
+require an ADR — purely additive JSON schema work.</p>
+<h2 id="consequences-10"><a class="header" href="#consequences-10">Consequences</a></h2>
+<ul>
+<li>The OCD GF180MCU SRAM (and any structurally similar third-party
+IP — 1RW, sync, optional per-bit mask) becomes simulable end-to-end
+via the manifest pathway. Real CPU writes populate real memory.</li>
+<li>The opaque-mode fallback stays load-bearing for cells the consumer
+hasn't taken the time to schema-map — important so the cell-library
+pathway doesn't <em>require</em> schema work just to load a cell library.</li>
+<li>JTAG-DM-driven firmware load (PR #78 stage 1) becomes end-to-end
+testable in cosim. Closes the chicken-and-egg loop for designs
+whose firmware-load mechanism is what cosim is trying to validate.</li>
+<li>The schema is opinionated: 1-port (1RW), sync-only, write-mask is
+bit OR byte (not arbitrary). Multi-port SRAMs (<code>2RW</code>, <code>1R1W</code>),
+async SRAMs, and write-mask-with-stripes encodings are explicitly
+out of scope. Adding them is a future schema version (v1.2+);
+doesn't break v1.1 manifests.</li>
+</ul>
+<h2 id="out-of-scope"><a class="header" href="#out-of-scope">Out of scope</a></h2>
+<ul>
+<li><strong>Multi-port SRAMs.</strong> Most foundry IPs in our ecosystem are
+single-port. Dual-port designs are a meaningful follow-up but
+not driven by any in-tree fixture today.</li>
+<li><strong>Async (non-clocked) SRAMs.</strong> Hardly seen in synthesised
+digital designs at modern PDKs. Not modeled.</li>
+<li><strong>Width &gt; 32 bits.</strong> Bounded by <code>RAMBlock</code>'s array sizes;
+consumers wider than 32 should split into multiple instances.</li>
+<li><strong>Built-in classifier removal.</strong> Same rule as ADR 0010 — the
+<code>$__RAMGEM_SYNC_</code> and <code>CF_SRAM_*</code> recognisers stay as fallback;
+manifest-declared RAMs supplement, don't replace.</li>
+</ul>
+<h2 id="links-10"><a class="header" href="#links-10">Links</a></h2>
+<ul>
+<li>ADR 0010 — Declarative cell metadata (the parent decision deferring
+this schema).</li>
+<li>Issue <a href="https://github.com/ChipFlow/Jacquard/issues/80">#80</a> —
+driving consumer.</li>
+<li>PR <a href="https://github.com/ChipFlow/Jacquard/pull/78">#78</a> — the
+JTAG-DM workflow that surfaced the schema need.</li>
+<li>Upstream OCD SRAM behavioural model:
+<a href="https://github.com/RTimothyEdwards/gf180mcu_ocd_ip_sram">RTimothyEdwards/gf180mcu_ocd_ip_sram</a>.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0012--reproducible-cdc-jitter-injection-for-multi-clock-cosim"><a class="header" href="#adr-0012--reproducible-cdc-jitter-injection-for-multi-clock-cosim">ADR 0012 — Reproducible CDC jitter injection for multi-clock cosim</a></h1>
+<p><strong>Status:</strong> Proposed.</p>
+<h2 id="context-11"><a class="header" href="#context-11">Context</a></h2>
+<p>The multi-clock scheduler (<code>MultiClockScheduler</code> in <code>cosim_metal.rs</code>)
+pre-computes a fixed LCM-based edge schedule: every clock domain fires
+at perfectly rational offsets forever. Real hardware doesn't do that —
+PLL jitter, clock-tree skew, and propagation delay make coincident
+edges land in unpredictable order. CDC synchronizers are designed to
+tolerate this, but RTL bugs (missing synchronizers, gray-code errors,
+handshake protocol violations) only surface when edge alignment varies
+from the ideal.</p>
+<p>The motivating incident was
+<a href="https://github.com/ChipFlow/Jacquard/actions/runs/26413667030">PR #89 / run 26413667030</a>:
+a scheduler index bug caused sys_clk to fire at TCK's period, making
+CDC synchronizers between the JTAG and system clock domains marginal.
+The test passed intermittently because Metal GPU scheduling jitter
+shifted the effective phase relationship. Once the bug was fixed
+(commit <code>5bb07c3</code>), determinism was restored — but the experience
+highlighted that <strong>no deliberate mechanism exists to stress-test CDC
+paths under controlled timing skew</strong>.</p>
+<p>Additionally, cosim's model-driven clocks (<code>JtagReplayModel</code>,
+<code>SpiFlashModel</code>, etc.) override the scheduler's periodic pattern with
+software-driven edges. These introduce a distinct CDC concern:
+model-driven clock transitions are phase-locked to the host-side
+dispatch loop, not to the design's system clock. The same jitter
+injection infrastructure must cover both scheduler-derived and
+model-driven clock edges.</p>
+<p>The multi-clock plan (<code>docs/plans/multi-clock-and-stimulus-architecture.md</code>)
+lists "CDC verification mode: jitter injection on coincident edges and
+random X-injection on detected async-source paths" as a future
+capability. This ADR formalises the design for the jitter injection
+half; X-injection is deferred to a follow-up ADR that depends on MC.1
+(island partitioner) landing.</p>
+<h2 id="decision-11"><a class="header" href="#decision-11">Decision</a></h2>
+<h3 id="1-run-parameters-file-and-per-domain-seeded-prng"><a class="header" href="#1-run-parameters-file-and-per-domain-seeded-prng">1. Run-parameters file and per-domain seeded PRNG</a></h3>
+<p>Simulation runs that use any non-deterministic feature (jitter, future
+partition randomisation, model-driven timing offsets) are governed by a
+<strong>run-parameters file</strong> (<code>--run-params &lt;path&gt;</code>):</p>
+<pre><code class="language-json">{
+  "master_seed": 8429173640281
+}
+</code></pre>
+<p>From the master seed, a <strong>per-domain sub-seed</strong> is derived for each
+clock domain and each model-driven clock (e.g.
+<code>sub_seed = hash(master_seed, domain_name)</code>). Each domain gets its own
+independent PRNG stream. This ensures reproducibility even when the
+number of PRNG draws per domain is path-dependent — a reactive model
+that fires more or fewer edges based on design output doesn't
+contaminate another domain's displacement sequence.</p>
+<p><strong>Behaviour:</strong></p>
+<ul>
+<li><code>--run-params &lt;path&gt;</code> supplied, file exists: load parameters from it.
+The run is a deterministic replay.</li>
+<li><code>--run-params &lt;path&gt;</code> supplied, file does not exist: generate a
+master seed from system entropy, <strong>write the file immediately</strong>
+(before the simulation loop starts), then run. The user gets
+reproducibility even if the process crashes mid-simulation.</li>
+<li>No <code>--run-params</code> flag: generate a master seed, write to a default
+location (<code>&lt;output_dir&gt;/run_params.json</code> next to the output VCD)
+<strong>before simulation begins</strong>. Always persisted — the user can
+re-run any simulation by passing the written file back.</li>
+</ul>
+<p>The master seed is also logged at INFO level and included in the VCD
+header comment, so even without the file the seed is recoverable from
+logs.</p>
+<p>Rationale: "random testing that can't be replayed isn't testing," but
+forcing users to pick seeds upfront discourages use. Writing the file
+before simulation means every run — even a crashed one — is
+reproducible after the fact. Per-domain streams mean the seed alone is
+sufficient; no displacement log is needed.</p>
+<p>For CI seed sweeps, a wrapper generates N parameter files with
+sequential seeds and fans out runs. Each failure ships with its
+parameter file as an artifact — <code>gh run download</code> gives you
+everything needed to reproduce locally.</p>
+<h3 id="2-per-domain-jitter-budget"><a class="header" href="#2-per-domain-jitter-budget">2. Per-domain jitter budget</a></h3>
+<p>A new <code>jitter_ps</code> field on <code>ClockConfig</code> in <code>sim_config.json</code> declares
+the maximum edge displacement in picoseconds for that domain:</p>
+<pre><code class="language-json">{
+  "clocks": [
+    { "gpio": 0, "period_ps": 40000, "name": "sys_clk", "jitter_ps": 200 },
+    { "gpio": 2, "period_ps": 160000, "name": "tck", "jitter_ps": 0 }
+  ]
+}
+</code></pre>
+<p>At each edge, the scheduler draws a signed displacement from a uniform
+distribution <code>[-jitter_ps, +jitter_ps]</code> and shifts the edge forward or
+backward within the GCD granularity window. The resulting edge still
+fires within the same GCD tick (no reordering across ticks), but the
+<em>effective</em> arrival time recorded in the state buffer (and honoured by
+setup/hold checkers) shifts. Disabling jitter (<code>jitter_ps: 0</code>) is the
+default and produces today's ideal-clock behaviour.</p>
+<p>Constraint: jitter must not exceed <code>gcd_ps / 2</code>; larger values would
+re-order edges across GCD ticks and require a fundamentally different
+scheduling model.</p>
+<h3 id="3-model-driven-clock-jitter"><a class="header" href="#3-model-driven-clock-jitter">3. Model-driven clock jitter</a></h3>
+<p>Model-driven clocks (JTAG TCK, SPI SCK, etc.) bypass the scheduler's
+periodic edges. Their jitter path is different:</p>
+<ul>
+<li>A <code>--cdc-model-jitter-ps &lt;N&gt;</code> flag (or per-model <code>jitter_ps</code> in the
+config) specifies the budget for model-driven transitions.</li>
+<li>After <code>patch_model_clock_edges</code> fires the edge, the arrival-time
+offset recorded in the timing state is displaced by a PRNG-drawn
+value from the same seeded generator.</li>
+<li>This does NOT delay the functional edge (the DFF still samples on
+the same tick) — it shifts the <em>timing-model</em> arrival so that
+setup/hold checks against the receiving domain see a different
+margin each run.</li>
+</ul>
+<p>The functional-vs-timing split means jitter injection doesn't change
+combinational propagation (which would require an event-driven kernel),
+only the timing oracle's view of when edges "really" arrived. This is
+consistent with Jacquard's philosophy: functional correctness is
+cycle-accurate, timing is an overlay.</p>
+<h3 id="4-coincident-edge-perturbation"><a class="header" href="#4-coincident-edge-perturbation">4. Coincident-edge perturbation</a></h3>
+<p>When two domains have edges scheduled at the same GCD tick (coincident
+edges), their relative order is undefined in real hardware. The jitter
+mechanism naturally handles this: if domain A's jitter shifts it
++100ps and domain B's shifts it -50ps, the timing model sees A after
+B, which may differ from the next run's draw. This exercises both
+"A-before-B" and "B-before-A" orderings over a seed sweep without
+needing explicit permutation logic.</p>
+<h3 id="5-integration-with-existing-infrastructure"><a class="header" href="#5-integration-with-existing-infrastructure">5. Integration with existing infrastructure</a></h3>
+<ul>
+<li><strong>Setup/hold checker</strong> (<code>timing_report.rs</code>): already receives
+arrival-time offsets. Jittered arrivals feed directly into the
+existing violation detection — a jitter-induced setup violation
+appears in <code>--timing-report</code> output with the jittered arrival
+annotated.</li>
+<li><strong>VCD ring buffer</strong>: records the jittered arrival time so waveform
+viewers show the displaced edge.</li>
+<li><strong>X-prop</strong> (future): when MC.1 identifies CDC boundaries, X-injection
+on violated paths can use the same PRNG stream for correlated
+randomisation.</li>
+<li><strong><code>--check-with-cpu</code></strong>: the CPU baseline does NOT apply jitter
+(it doesn't model timing at all). Jitter-mode results should not be
+compared against the CPU baseline. The flag combination
+<code>--run-params</code> (with jitter enabled) + <code>--check-with-cpu</code> should
+warn or error.</li>
+</ul>
+<h2 id="consequences-11"><a class="header" href="#consequences-11">Consequences</a></h2>
+<ul>
+<li>CI can run <code>--cdc-jitter-seed 1</code> (or a small sweep) as a lightweight
+CDC stress test on every PR, catching synchroniser failures that the
+ideal-clock schedule hides.</li>
+<li>Users debugging real silicon CDC failures can replay the exact jitter
+pattern that triggered the issue.</li>
+<li>The design is forward-compatible with X-injection (the PRNG
+infrastructure and per-domain budgets are reusable).</li>
+<li>Model-driven clocks get explicit jitter coverage rather than relying
+on accidental GPU scheduling delays.</li>
+<li>No kernel changes required — jitter is a host-side timing-model
+overlay on the existing edge schedule.</li>
+</ul>
+<h2 id="deferred"><a class="header" href="#deferred">Deferred</a></h2>
+<ul>
+<li><strong>X-injection on CDC paths.</strong> Requires MC.1's island partitioner to
+identify which DFF outputs cross domains. Separate ADR once MC.1
+lands.</li>
+<li><strong>Frequency sweep / DFS simulation.</strong> Changing a clock's period
+mid-simulation is orthogonal to jitter. Captured in the multi-clock
+plan as a future axis.</li>
+<li><strong>Per-path jitter profiles.</strong> Real jitter isn't uniform — PLLs have
+period jitter (Gaussian), recovered clocks have cycle-to-cycle jitter
+(bounded), external clocks have frequency offset (deterministic
+drift). V1 uses uniform; richer distributions can be added later
+without API changes (the seed + budget interface is distribution-agnostic).</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0013--cosim-peripheral-model-architecture"><a class="header" href="#adr-0013--cosim-peripheral-model-architecture">ADR 0013 — Cosim peripheral model architecture</a></h1>
+<p><strong>Status:</strong> Accepted — the architecture is implemented and in use across
+multiple peripherals (multi-UART #90, config-driven APB3 bus tracing).
+The "Target architecture" section below tracks the remaining, optional
+refactors; the conventions it establishes are already followed.</p>
+<h2 id="context-12"><a class="header" href="#context-12">Context</a></h2>
+<p>Jacquard's cosim mode runs reactive peripheral models alongside the
+GPU-simulated design: SPI flash serves firmware, UART decodes serial
+output, JTAG replays debug sessions, GPIO drives/observes pins, and
+Wishbone trace captures bus transactions. The architecture evolved
+organically; this ADR documents the current design, identifies the
+abstractions emerging from it, and establishes conventions for
+extending it.</p>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<h3 id="execution-domains"><a class="header" href="#execution-domains">Execution domains</a></h3>
+<p>Peripheral work splits across CPU and GPU. The boundary follows a
+simple rule: models that <strong>drive input pins</strong> (must react to design
+output each edge) run on the CPU; models that <strong>observe output pins</strong>
+(pure consumers of post-simulation state) or <strong>exchange data
+bidirectionally</strong> with the design run on the GPU for zero-copy access
+to the state buffer.</p>
+<p>Some peripherals span both domains. UART has a CPU-side RX driver
+(feeds bytes into the design's RX input pin) and a GPU-side TX decoder
+(reads the design's TX output pin).</p>
+<h3 id="cpu-side-peripheralmodel-trait"><a class="header" href="#cpu-side-peripheralmodel-trait">CPU-side: <code>PeripheralModel</code> trait</a></h3>
+<p>Defined in <code>src/sim/models/mod.rs</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>trait PeripheralModel {
+    fn name(&amp;self) -&gt; &amp;str;
+    fn driven_positions(&amp;self) -&gt; &amp;[u32];
+    fn apply_action(&amp;mut self, action: &amp;QueuedAction);
+    fn step_edge(&amp;mut self, output_state, overrides, emitted); // default: just calls contribute_overrides
+    fn contribute_overrides(&amp;self, overrides);
+    fn is_active(&amp;self) -&gt; bool; // default: false
+}
+<span class="boring">}</span></code></pre></pre>
+<p><code>apply_action</code> is how the <code>InputDispatcher</code> feeds queued stimulus
+commands to models. <code>is_active</code> signals that the model is mid-
+transmission and needs per-edge granularity (forces batch size to 1).
+<code>step_edge</code> has a default that just calls <code>contribute_overrides</code> —
+stateless models (GPIO) only need the latter.</p>
+<p>Models are registered into a <code>Vec&lt;Box&lt;dyn PeripheralModel&gt;&gt;</code> at
+startup. Each batch boundary, the loop calls <code>step_edge</code> on every
+model; models write their pin drives into a shared <code>ModelOverrides</code>
+map. These overrides are patched in-place into pre-allocated <code>BitOp</code>
+arrays (built at startup with placeholder entries for model-driven
+positions) and applied via the <code>state_prep</code> GPU kernel.</p>
+<p><strong>Note:</strong> <code>step_edge</code> currently receives an empty <code>output_state</code>
+slice — GPU output state is not read back per-edge for CPU-side
+models. GPIO and UART RX don't need it; I²C and SPI bus observation
+will require wiring the output state readback when those models are
+completed.</p>
+<p>The dispatch is peripheral-agnostic: <code>state_prep</code> applies whatever
+<code>BitOp</code> array it receives. Clock edges, reset, GPIO, UART RX, and
+JTAG TCK/TMS/TDI are all entries in the same ops buffer.</p>
+<p>Registered CPU-side models: GPIO, UART RX, JTAG replay (complete);
+I²C, SPI (scaffolded, output-state readback not yet wired).</p>
+<h3 id="gpu-side-two-model-patterns"><a class="header" href="#gpu-side-two-model-patterns">GPU-side: two model patterns</a></h3>
+<p>GPU-side models fall into two categories distinguished by their
+data-flow relationship to the simulation:</p>
+<p><strong>Observe-only (post-simulate):</strong> The model reads output state after
+simulation and produces results (decoded bytes, bus traces) into a
+ring buffer. It never writes to input state. One kernel call per
+edge, after <code>simulate_v1_stage</code>.</p>
+<p><strong>Bidirectional (pre+post simulate):</strong> The model both reads the
+design's outputs <em>and</em> injects data into the design's inputs. This
+requires two kernel calls per edge — one before simulation (inject
+response data into input state) and one after (read request signals
+from output state, advance the model's FSM).</p>
+<div class="table-wrapper"><table><thead><tr><th>Pattern</th><th>When</th><th>Current models</th></tr></thead><tbody>
+<tr><td>Observe-only</td><td>Post-simulate</td><td>UART TX decoder, Wishbone bus trace</td></tr>
+<tr><td>Bidirectional</td><td>Pre-simulate (inject) + post-simulate (sample, advance)</td><td>SPI Flash</td></tr>
+</tbody></table>
+</div>
+<p>Any memory-mapped peripheral (external SRAM, I²C EEPROM, etc.)
+would follow the bidirectional pattern.</p>
+<h3 id="per-edge-execution-order"><a class="header" href="#per-edge-execution-order">Per-edge execution order</a></h3>
+<pre><code>state_prep (apply clk/gpio/jtag pin drives from CPU-side models)
+  → [bidirectional: inject] — e.g. gpu_apply_flash_din
+    → simulate_v1_stage ×N (combinational logic evaluation)
+  → [bidirectional: sample+advance] — e.g. gpu_flash_model_step
+  → [observe-only] — e.g. gpu_io_step (UART TX + Wishbone)
+</code></pre>
+<p>CPU-side <code>PeripheralModel::step_edge</code> runs between GPU batches.</p>
+<h3 id="gpucpu-communication-ring-buffers"><a class="header" href="#gpucpu-communication-ring-buffers">GPU→CPU communication: ring buffers</a></h3>
+<p>GPU-side models produce output into fixed-size ring buffers in device
+memory. The CPU drains these after each GPU batch completes, reading
+from a local <code>read_head</code> up to the GPU-written <code>write_head</code>. No
+synchronisation beyond Metal's command buffer completion is needed.</p>
+<p>Current ring buffers:</p>
+<div class="table-wrapper"><table><thead><tr><th>Buffer</th><th>Element</th><th>Capacity</th></tr></thead><tbody>
+<tr><td><code>UartChannel</code></td><td><code>u8</code> (decoded bytes)</td><td>4096</td></tr>
+<tr><td><code>WbTraceChannel</code></td><td><code>WbTraceEntry</code> (20 bytes)</td><td>16384</td></tr>
+</tbody></table>
+</div>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
+<p>Peripheral config lives in <code>sim_config.json</code>, deserialized into
+<code>TestbenchConfig</code> (<code>src/testbench.rs</code>):</p>
+<div class="table-wrapper"><table><thead><tr><th>Peripheral</th><th>Field</th><th>Plural?</th></tr></thead><tbody>
+<tr><td>Clock</td><td><code>clocks: Option&lt;Vec&lt;ClockConfig&gt;&gt;</code></td><td>Yes (<code>effective_clocks()</code>)</td></tr>
+<tr><td>GPIO</td><td><code>gpios: Vec&lt;GpioConfig&gt;</code></td><td>Yes</td></tr>
+<tr><td>UART</td><td><code>uart</code> + <code>uarts: Vec&lt;UartConfig&gt;</code></td><td>Yes (<code>effective_uarts()</code>, #90)</td></tr>
+<tr><td>Flash</td><td><code>flash: Option&lt;FlashConfig&gt;</code></td><td>Not yet</td></tr>
+<tr><td>JTAG</td><td><code>jtag: Option&lt;JtagConfig&gt;</code></td><td>Not yet</td></tr>
+<tr><td>Wishbone</td><td><em>(auto-detected, hardcoded signal names)</em></td><td>N/A (legacy)</td></tr>
+<tr><td>Bus trace (AHB/APB)</td><td><code>bus_traces: Vec&lt;BusTraceConfig&gt;</code></td><td>Yes (<code>effective_bus_traces()</code>)</td></tr>
+</tbody></table>
+</div>
+<h3 id="current-implementation-bespoke-kernels"><a class="header" href="#current-implementation-bespoke-kernels">Current implementation (bespoke kernels)</a></h3>
+<p>Today each GPU-side peripheral has its own kernel function:</p>
+<div class="table-wrapper"><table><thead><tr><th>Kernel</th><th>Slots</th><th>Pattern</th></tr></thead><tbody>
+<tr><td><code>gpu_apply_flash_din</code></td><td>states[0], flash_state[1], flash_din_params[2]</td><td>Bidirectional: inject</td></tr>
+<tr><td><code>gpu_flash_model_step</code></td><td>states[0], flash_state[1], flash_model_params[2], flash_data[3]</td><td>Bidirectional: sample+advance</td></tr>
+<tr><td><code>gpu_io_step</code></td><td>states[0], uart_state[1], uart_params[2], uart_channel[3], wb_channel[4], wb_params[5], bus_channel[6], bus_params[7]</td><td>Observe-only (UART + Wishbone + AHB/APB bus trace)</td></tr>
+</tbody></table>
+</div>
+<p>All run on thread 0 only — the per-tick work is a trivial FSM step.
+<code>gpu_io_step</code> combines three logically independent observe-only models,
+gated by <code>n_uarts &gt; 0</code>, <code>has_trace</code>, and <code>n_buses &gt; 0</code> respectively.</p>
+<h3 id="config-driven-bus-monitor-ahbapb"><a class="header" href="#config-driven-bus-monitor-ahbapb">Config-driven bus monitor (AHB/APB)</a></h3>
+<p>The Wishbone trace (<code>build_wb_trace_params</code>) hardcodes one SoC's signal
+names (<code>cpu.fetch.ibus__cyc</code>, <code>spiflash.ctrl.wb_bus__ack</code>, …) directly
+in source. The AHB/APB bus tracer generalizes it into a <strong>config-driven,
+protocol-aware monitor</strong> that is the model for future bus tracing:</p>
+<ul>
+<li><strong>Config</strong> (<code>BusTraceConfig</code>): <code>name</code>, <code>protocol</code> (apb3 / ahb-lite /
+ahb5), hierarchical <code>prefix</code>, <code>addr_bits</code>/<code>data_bits</code>, and optional
+per-pin <code>signals</code> overrides. Pins default to <code>{prefix}{pin}</code>.</li>
+<li><strong>Pin binding</strong>: protocol pin names (<code>psel</code>, <code>paddr</code>, …) are resolved
+to output-state positions via <code>resolve_to_state_pos</code> in
+<code>trace_signals.rs</code> — the same multi-candidate resolver <code>--trace-signals</code>
+uses, so Yosys-flattened / scalar-expanded / structural naming all
+work. The pins are registered as observables before partitioning (via
+<code>DesignArgs::extra_observable_signals</code>) so they get state-buffer slots.</li>
+<li><strong>GPU capture / CPU decode split</strong>: the kernel is protocol-agnostic —
+it packs a raw beat (<code>addr, wdata, rdata, ctrl flags</code>) into the ring
+buffer on the protocol's gating edge (<code>psel &amp; penable &amp; pready</code> for
+APB), using rising-edge detection so exactly one beat is recorded per
+completed transfer. The protocol FSM (phase pairing, burst tracking,
+response decode) lives in plain, unit-testable Rust in
+<code>src/sim/models/bus_trace.rs</code>. APB3 is stateless (one beat = one
+transaction); AHB pairing is the Phase-2 extension.</li>
+<li><strong>Output</strong>: decoded transactions stream to CSV via <code>--bus-trace-csv</code>;
+annotated-VCD emission is a planned follow-up.</li>
+</ul>
+<p>This is observe-only, so it slots into the existing post-simulate
+pattern. Migrating the hardcoded WbTrace onto this mechanism (expressing
+the VexRiscv ibus/dbus as configured buses) is a clean follow-up.</p>
+<h2 id="target-architecture"><a class="header" href="#target-architecture">Target architecture</a></h2>
+<p>The two patterns (observe-only, bidirectional) and the common
+conventions (ring buffers, params structs, per-instance config arrays)
+should be codified so new peripherals follow a template:</p>
+<h3 id="common-conventions"><a class="header" href="#common-conventions">Common conventions</a></h3>
+<ul>
+<li><strong>Params struct layout:</strong> <code>{ u32 state_size; u32 n_active; u32 _pad[2]; PerInstanceConfig configs[MAX_N]; }</code> — uniform header, compile-time <code>MAX_N</code> cap.</li>
+<li><strong>Ring buffer struct:</strong> <code>{ u32 write_head; u32 capacity; u32 _pad[2]; T data[CAP]; }</code> — shared across all models producing GPU→CPU output.</li>
+<li><strong>Buffer sizing:</strong> always <code>MAX_N</code> elements regardless of <code>n_active</code>. Wastes negligible memory for small N.</li>
+<li><strong>Guard pattern:</strong> <code>for (i = 0; i &lt; n_active &amp;&amp; i &lt; MAX_N; i++)</code> replaces the current <code>has_foo != 0</code> booleans.</li>
+</ul>
+<h3 id="model-registration"><a class="header" href="#model-registration">Model registration</a></h3>
+<p>New GPU-side models declare which pattern they follow:</p>
+<ul>
+<li><strong>Observe-only:</strong> register a post-simulate kernel. Receives output state (read-only), writes to ring buffer.</li>
+<li><strong>Bidirectional:</strong> register a pre-simulate kernel (inject into input state) and a post-simulate kernel (read output state, advance FSM).</li>
+</ul>
+<p>Today this registration is implicit in <code>cosim_metal.rs</code>'s
+<code>encode_and_commit_gpu_batch</code>. Formalizing it is a future step —
+the convention is sufficient while the model count is small.</p>
+<h3 id="plural-config-convention"><a class="header" href="#plural-config-convention">Plural config convention</a></h3>
+<p>To support multi-instance peripherals (multiple UARTs, potentially
+multiple flash chips or RAM banks):</p>
+<ul>
+<li>Legacy singular field kept via <code>#[serde(default)]</code>.</li>
+<li>New plural field alongside (e.g. <code>uarts: Vec&lt;UartConfig&gt;</code>).</li>
+<li><code>effective_&lt;peripheral&gt;() -&gt; Vec&lt;Config&gt;</code> merges both.</li>
+<li>Each config struct gains <code>name: Option&lt;String&gt;</code> for labelling.</li>
+</ul>
+<p>This mirrors the existing <code>effective_clocks()</code> pattern.</p>
+<h3 id="cross-backend-considerations"><a class="header" href="#cross-backend-considerations">Cross-backend considerations</a></h3>
+<p>Cosim is Metal-only today. CUDA/HIP paths (<code>kernel_v1_impl.cuh</code>)
+implement the core simulation kernel but have no <code>gpu_io_step</code> or
+flash kernels. When CUDA/HIP cosim is added, the same two-pattern
+taxonomy applies — the kernel implementations will differ but the
+Rust-side buffer allocation, config resolution, and drain logic can
+be shared via feature-gated code in <code>cosim_metal.rs</code> (or a
+future <code>cosim_common.rs</code>).</p>
+<h2 id="phasing"><a class="header" href="#phasing">Phasing</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Phase</th><th>Scope</th><th>Status</th></tr></thead><tbody>
+<tr><td>1</td><td>Multi-UART (<a href="https://github.com/gpu-eda/Jacquard/issues/90">#90</a>): first peripheral using plural-config + array-in-kernel conventions</td><td><strong>Done</strong></td></tr>
+<tr><td>1b</td><td>Config-driven bus monitor, APB3 + CSV (GPU-capture/CPU-decode split)</td><td><strong>Done</strong></td></tr>
+<tr><td>2</td><td>Refactor <code>gpu_io_step</code> to use common params/ring-buffer layout</td><td>Future</td></tr>
+<tr><td>2b</td><td>AHB-Lite / AHB5 bus tracing + annotated-VCD output; migrate WbTrace onto the general monitor</td><td>Future</td></tr>
+<tr><td>3</td><td>Multi-Flash / external RAM (bidirectional pattern)</td><td>Deferred (no use case yet)</td></tr>
+<tr><td>—</td><td>Multi-JTAG</td><td>Not needed (TAP daisy-chain suffices)</td></tr>
+</tbody></table>
+</div>
+<p>Plan docs: <a href="adr/../plans/multi-peripheral-cosim.html"><code>../plans/multi-peripheral-cosim.md</code></a>,
+<a href="adr/../plans/bus-transaction-tracing.html"><code>../plans/bus-transaction-tracing.md</code></a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0014--aig-as-simulation-intermediate-representation"><a class="header" href="#adr-0014--aig-as-simulation-intermediate-representation">ADR 0014 — AIG as simulation intermediate representation</a></h1>
+<p><strong>Status:</strong> Accepted</p>
+<h2 id="context-13"><a class="header" href="#context-13">Context</a></h2>
+<p>Jacquard simulates gate-level RTL designs on GPUs by converting
+technology-mapped netlists into an executable form.  The choice of
+intermediate representation (IR) determines how easily the design maps
+to GPU hardware, how much the representation compresses, and what
+classes of optimisation are available at compile time.</p>
+<p>Gate-level netlists arrive from synthesis tools (Yosys, Synopsys DC)
+mapped to a variety of cell libraries: the project's own AIGPDK
+library, SKY130, or GF180MCU.  Each library uses different cell names
+and pin conventions; the IR must abstract over these while preserving
+the combinational and sequential semantics exactly.</p>
+<p>The GEM paper (Guo et al., "GEM: GPU-Accelerated Emulator-Inspired
+RTL Simulation," DAC 2025) describes a "virtual Boolean processor"
+that evaluates combinational logic as a tree of AND-with-invert
+operations — directly motivating an and-inverter graph.</p>
+<h2 id="decision-12"><a class="header" href="#decision-12">Decision</a></h2>
+<h3 id="1-uniform-and-gate-ir"><a class="header" href="#1-uniform-and-gate-ir">1. Uniform AND-gate IR</a></h3>
+<p>All combinational logic is represented as an <strong>and-inverter graph</strong>
+(AIG).  Every node in the combinational cone is one of:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum DriverType {
+    AndGate(usize, usize),    // inputs with inversion bits
+    InputPort(usize),         // primary input
+    InputClockFlag(usize, u8),// clock edge flag
+    DFF(usize),               // sequential (D flip-flop output)
+    SRAM(usize),              // memory block output
+    Tie0,                     // constant zero
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Only <code>AndGate</code> has combinational fan-in.  The two operands carry an
+inversion bit in their LSB (<code>aigpin_id &lt;&lt; 1 | invert</code>), giving the
+full <code>{AND, NAND, NOR, OR}</code> family with a single node type.
+Inverters and buffers are absorbed into the inversion bits rather than
+creating separate nodes, keeping the graph compact.</p>
+<p>This uniformity is the key property: because every combinational node
+is the same <code>(a XOR xa) AND (b XOR xb)</code> operation, the boomerang
+reduction tree (ADR 0015) can execute them all with a single GPU
+instruction pattern — no opcode decode, no per-cell dispatch.</p>
+<h3 id="2-conversion-path-netlistdb-to-aig"><a class="header" href="#2-conversion-path-netlistdb-to-aig">2. Conversion path: NetlistDB to AIG</a></h3>
+<p>The conversion is implemented in <code>src/aig.rs</code> via
+<code>AIG::from_netlistdb_impl()</code>.  It handles three cell library
+families:</p>
+<div class="table-wrapper"><table><thead><tr><th>Library</th><th>Strategy</th></tr></thead><tbody>
+<tr><td>AIGPDK (native)</td><td>Cells are already AND gates, DFFs, SRAMs — direct mapping</td></tr>
+<tr><td>SKY130</td><td>Load Verilog behavioural models from <code>vendor/sky130_fd_sc_hd/</code>, decompose each cell into AND gates via <code>decompose_with_pdk()</code></td></tr>
+<tr><td>GF180MCU</td><td>Load behavioural models from <code>vendor/gf180mcu_fd_sc_mcu7t5v0/</code>, decompose similarly</td></tr>
+<tr><td>RuntimeCellLibrary</td><td>User-supplied cell metadata (ADR 0010) for cells outside vendored PDKs</td></tr>
+</tbody></table>
+</div>
+<p>The decomposition process for technology-specific cells:</p>
+<ol>
+<li><strong>Clock tracing</strong>: Identify sequential cells (DFFs, SRAMs), trace
+clock pins to primary inputs, create <code>InputClockFlag</code> drivers for
+posedge/negedge detection.</li>
+<li><strong>Iterative DFS</strong>: Walk the netlist in topological order.  For each
+unvisited output pin, recursively decompose driving cells into AND
+gates using the PDK behavioural models.  An <code>and_gate_cache</code>
+deduplicates structurally identical sub-expressions.</li>
+<li><strong>Multi-output cells</strong>: SKY130 cells like full adders with
+multiple outputs get special handling — shared sub-expressions are
+computed once and reused via postprocess hooks.</li>
+<li><strong>Fanout construction</strong>: After all pins are processed, CSR-format
+fanout arrays are built for efficient traversal.</li>
+</ol>
+<p>AIG pins are guaranteed to be in topological order (pin <code>i</code> is
+defined before any pin that depends on it), which the downstream
+pipeline relies on for level computation and scheduling.</p>
+<h3 id="3-endpointgroup-abstraction"><a class="header" href="#3-endpointgroup-abstraction">3. EndpointGroup abstraction</a></h3>
+<p>The AIG partitions its outputs into <strong>endpoint groups</strong> — the units
+of work that partitions must realise:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum EndpointGroup&lt;'i&gt; {
+    PrimaryOutput(usize),     // top-level output pin
+    DFF(&amp;'i DFF),             // D flip-flop: data + clock-enable
+    RAMBlock(&amp;'i RAMBlock),   // SRAM: addr, data, enables
+    SimControl(&amp;'i SimControlNode), // $stop/$finish
+    Display(&amp;'i DisplayNode), // $display/$write
+    StagedIOPin(usize),       // inter-stage boundary (from --level-split)
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Each variant bundles the signals that must be evaluated together: a
+DFF needs both its D input and clock-enable; an SRAM needs address,
+data, and write-enable buses.  The <code>for_each_input()</code> method
+enumerates all AIG pins feeding an endpoint group, which the
+hypergraph partitioner (RepCut) uses to build connectivity and the
+partition executor (pe.rs) uses to determine resource requirements.</p>
+<p>This grouping is important because the boomerang reduction tree
+produces results in 32-bit-aligned write-out slots.  Endpoint groups
+that share a write-out slot are co-located in the hierarchy; groups
+that need different clock-enable conditions (e.g., two DFFs with
+different clocks driving the same data pin) generate "output
+duplicates" that consume additional write-out capacity.</p>
+<h3 id="4-why-aig-over-alternatives"><a class="header" href="#4-why-aig-over-alternatives">4. Why AIG over alternatives</a></h3>
+<p><strong>BDDs (Binary Decision Diagrams):</strong> BDDs can represent Boolean
+functions canonically but suffer from exponential blowup for many
+practical circuits (e.g., multipliers).  The canonical form is useful
+for equivalence checking but unnecessary for simulation, where we
+just need to evaluate.  BDDs also have no natural mapping to the
+GPU's SIMT execution model.</p>
+<p><strong>Truth tables / LUTs:</strong> Lookup tables scale exponentially with input
+count.  A 6-input LUT (as in Xilinx FPGAs) covers individual cells
+efficiently but doesn't compose — cascading LUTs requires separate
+evaluation steps.  AIGs compose naturally: the output of one AND gate
+feeds the input of the next, forming a tree that maps directly to the
+boomerang hierarchy.</p>
+<p><strong>Technology-mapped netlist (direct execution):</strong> Keeping the
+original cell library would require per-cell-type dispatch in the GPU
+kernel — a conditional branch per node.  GPU SIMT execution penalises
+warp divergence heavily; a uniform operation eliminates this entirely.
+The conversion cost (one-time decomposition at compile time) is
+negligible compared to the simulation runtime.</p>
+<p><strong>MIG (Majority-Inverter Graph):</strong> MIGs are a more compact
+representation (3-input majority gates) but the 3-input structure
+doesn't map as cleanly to binary reduction trees.  AIGs are the
+industry standard for synthesis and verification tools (ABC, AIGER
+format), making interop straightforward.</p>
+<p>The AIG's key advantage is that it reduces the GPU kernel to a single
+bit-parallel operation repeated across a hierarchical tree — no
+opcode dispatch, no conditional branching, maximum SIMT utilisation.</p>
+<h2 id="consequences-12"><a class="header" href="#consequences-12">Consequences</a></h2>
+<p><strong>Enables:</strong></p>
+<ul>
+<li>The boomerang reduction tree (ADR 0015) works because every node is
+the same AND-with-invert operation.  A heterogeneous IR would
+require per-node dispatch and break the hierarchical reduction
+pattern.</li>
+<li>Technology independence: the same GPU kernel and partition executor
+handle AIGPDK, SKY130, and GF180MCU designs.  Adding a new PDK
+requires only a decomposition module, not kernel changes.</li>
+<li>Structural deduplication via <code>and_gate_cache</code> reduces graph size
+when multiple cells share sub-expressions.</li>
+<li>The inversion-bit encoding (<code>pin_iv = aigpin &lt;&lt; 1 | invert</code>)
+eliminates inverter/buffer nodes entirely — these are free in
+hardware too, so the IR's size correlates better with actual
+simulation cost than a technology-mapped netlist would.</li>
+</ul>
+<p><strong>Constrains:</strong></p>
+<ul>
+<li><strong>No latches or async logic.</strong> The AIG assumes clean register
+boundaries: DFFs capture on clock edges, combinational logic is
+acyclic between registers.  Level-sensitive latches and
+combinational loops would require iterative evaluation that the
+current pipeline doesn't support (see <code>docs/simulation-architecture.md</code>
+§ "Known Issues").</li>
+<li><strong>Decomposition quality matters.</strong> A poor decomposition of a
+complex cell (e.g., a mux-heavy datapath cell) can produce a deep
+AND tree that requires more boomerang stages.  The SKY130 and
+GF180MCU decompositions are hand-tuned for the common cells; exotic
+cells from other PDKs may decompose sub-optimally.</li>
+<li><strong>No gate-delay preservation in the AIG itself.</strong> The AIG is a
+functional (Boolean) representation.  Timing information from
+Liberty/SDF is loaded separately and overlaid onto the AIG's pin
+structure via <code>gate_delays</code> and <code>aigpin_cell_origins</code>.  This means
+the AIG construction can re-order or deduplicate nodes without
+worrying about timing — but it also means the timing model must
+reconstruct the mapping from AIG pins back to physical cells.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0015--boomerang-execution-model-and-gpu-resource-mapping"><a class="header" href="#adr-0015--boomerang-execution-model-and-gpu-resource-mapping">ADR 0015 — Boomerang execution model and GPU resource mapping</a></h1>
+<p><strong>Status:</strong> Accepted</p>
+<h2 id="context-14"><a class="header" href="#context-14">Context</a></h2>
+<p>Once the design is converted to an AIG (ADR 0014), the combinational
+logic must be mapped onto GPU hardware for parallel evaluation.  GPUs
+offer massive parallelism but impose rigid constraints: fixed thread
+counts per block, limited shared memory, and synchronous SIMT
+execution within a warp/SIMD group.</p>
+<p>The GEM paper (Guo et al., "GEM: GPU-Accelerated Emulator-Inspired
+RTL Simulation," DAC 2025) introduces a "virtual Boolean processor"
+organised as a <strong>boomerang</strong> hierarchical reduction tree.  This ADR
+documents how the boomerang maps to GPU hardware, the resource limits
+it imposes, and the partitioning and instruction-generation pipeline
+that stays within those limits.</p>
+<h2 id="decision-13"><a class="header" href="#decision-13">Decision</a></h2>
+<h3 id="1-boomerang-reduction-tree"><a class="header" href="#1-boomerang-reduction-tree">1. Boomerang reduction tree</a></h3>
+<p>A single GPU block (CUDA/HIP) or threadgroup (Metal) executes one
+<strong>partition</strong> of the design.  Each partition evaluates a subset of the
+AIG's endpoint groups (DFFs, primary outputs, SRAMs, etc.) by
+reducing their combinational fan-in cones through a hierarchical
+binary tree called the <strong>boomerang</strong>.</p>
+<p>The boomerang has <code>BOOMERANG_NUM_STAGES = 13</code> levels, giving a
+reduction width of <code>2^13 = 8192</code> leaf positions.  Each thread in the
+block handles 32 bits (one <code>u32</code>), so the block uses <code>8192 / 32 = 256</code> threads (<code>NUM_THREADS_V1</code> in <code>flatten.rs</code>).</p>
+<p>The 13 hierarchy levels map to three GPU execution tiers:</p>
+<div class="table-wrapper"><table><thead><tr><th>Levels</th><th>Width</th><th>GPU mechanism</th></tr></thead><tbody>
+<tr><td>hier[0]</td><td>8192 → 4096</td><td>256 threads, shared memory reduction (threads 128-255 compute, 0-127 supply inputs)</td></tr>
+<tr><td>hier[1–3]</td><td>4096 → 512</td><td>Shared memory reduction with barrier between levels; only threads in <code>[hier_width, 2×hier_width)</code> compute — the rest idle</td></tr>
+<tr><td>hier[4–7]</td><td>512 → 32</td><td>Warp/SIMD shuffle (<code>__shfl_down_sync</code> / <code>simd_shuffle_down</code>) — no barrier needed</td></tr>
+<tr><td>hier[8–12]</td><td>32 → 1</td><td>Bit-level operations within a single <code>u32</code> on thread 0</td></tr>
+</tbody></table>
+</div>
+<p>At each level, every position computes <code>(a XOR xora) AND (b XOR xorb) OR orb</code> — the same AND-with-invert operation from the AIG.  When
+<code>orb</code> is all-ones, the position acts as a pass-through (forwarding
+input <code>a</code> unchanged).  This single instruction pattern handles AND
+gates, inversions, and wiring with zero branch divergence.</p>
+<p>Between boomerang stages (when the AIG is too deep for a single
+8192-wide tree), a <strong>shuffle permutation</strong> redistributes results from
+shared memory back to thread-local registers.  The shuffle is encoded
+as 16-bit index pairs in the script, allowing arbitrary re-routing of
+signals between stages.</p>
+<h3 id="2-gpu-resource-limits-and-partition-constraints"><a class="header" href="#2-gpu-resource-limits-and-partition-constraints">2. GPU resource limits and partition constraints</a></h3>
+<p>The boomerang's fixed geometry imposes hard resource limits on each
+partition.  These are documented in <code>src/pe.rs</code> on the <code>Partition</code>
+struct:</p>
+<div class="table-wrapper"><table><thead><tr><th>Resource</th><th>Limit</th><th>Derivation</th></tr></thead><tbody>
+<tr><td>Unique inputs</td><td>8191</td><td>8192 leaf positions minus Tie0.  Each input occupies a leaf slot; duplicates consume additional slots.  Global-read rounds pack multiple state words into each thread's initial register.</td></tr>
+<tr><td>Unique outputs</td><td>8191</td><td>Write-out slots in the boomerang hierarchy, addressed by stage+position pairs.  Outputs include DFF data pins, primary outputs, and SRAM port signals.</td></tr>
+<tr><td>Intermediate pins per stage</td><td>4095</td><td>The hier[1] level has <code>2^(13-1) = 4096</code> positions.  One position is reserved for Tie0.  Intermediates are AIG pins that are produced in one boomerang stage and consumed in the next.</td></tr>
+<tr><td>SRAM output groups</td><td>64</td><td><code>8192 / (32 * 4) = 64</code>.  Each SRAM occupies 4 write-out groups (32-bit read-data, address, write-data, write-enable).  <code>BOOMERANG_MAX_WRITEOUTS = 1 &lt;&lt; (13 - 5) = 256</code> total write-out slots, of which SRAMs consume 4 each.</td></tr>
+</tbody></table>
+</div>
+<p>Write-out slots are 32-bit-aligned groups within the hier[1] level.
+The total write-out capacity is <code>BOOMERANG_MAX_WRITEOUTS = 256</code>.
+SRAMs and "output duplicates" (same data pin driven by DFFs with
+different clock enables) consume write-out slots from this budget.  A
+<code>quick_reject()</code> pre-check catches obvious overflows before the
+expensive full build.</p>
+<p>When a partition exceeds these limits, <code>Partition::build_one()</code>
+returns <code>None</code> and the partitioner must split the endpoint set
+further.</p>
+<h3 id="3-hypergraph-partitioning-with-repcut"><a class="header" href="#3-hypergraph-partitioning-with-repcut">3. Hypergraph partitioning with RepCut</a></h3>
+<p>The design's endpoint groups are distributed across GPU blocks by
+<strong>RepCut</strong> (<code>src/repcut.rs</code>), which constructs a weighted hypergraph
+and partitions it using <strong>mt-kahypar</strong>.</p>
+<p><strong>Why a hypergraph, not a graph:</strong>  In a standard graph, an edge
+connects exactly two vertices.  But a single AIG node (an AND gate
+deep in the combinational cone) may be shared by many endpoint groups
+— its "edge" in the connectivity structure is a hyperedge spanning
+all groups that depend on it.  Modelling this as pairwise graph edges
+would lose the information that cutting this one node simultaneously
+affects all connected groups.  Hypergraph partitioning minimises the
+actual communication cost (shared signals that must be read from
+global memory by multiple blocks).</p>
+<p><strong>Why mt-kahypar:</strong>  mt-kahypar is a state-of-the-art multilevel
+hypergraph partitioner with <code>LargeK</code> support (many partitions in one
+pass) and parallel execution.  The implementation uses:</p>
+<ul>
+<li><code>Preset::LargeK</code> — optimised for k &gt;&gt; 2.</li>
+<li><code>epsilon = 0.2</code> — 20% imbalance tolerance, giving the partitioner
+flexibility to reduce cut while keeping partitions roughly equal.</li>
+<li><code>Objective::Soed</code> — Sum of External Degrees, which counts how many
+partition boundaries each hyperedge crosses.  This directly
+correlates with the number of global memory reads each block must
+perform.</li>
+<li>Vertex weights proportional to estimated evaluation cost (accounting
+for sub-graph size and fanout sharing).</li>
+<li>Hyperedge weights equal to the number of AIG nodes with that
+endpoint reachability pattern.</li>
+<li>Hyperedge size cap at 1000 nodes (reservoir-sampled beyond that) to
+keep partitioning tractable for signals with extreme fanout.</li>
+</ul>
+<p>The hypergraph construction itself is the bottleneck for large
+designs: for each AIG node, RepCut computes a bitset of which
+endpoint groups it can reach via forward traversal.  Nodes with
+identical reachability sets are clustered into a single hyperedge.
+This is done in parallel across bitset blocks (<code>REPCUT_BITSET_BLOCK_SIZE = 4096</code>) using Rayon.</p>
+<h3 id="4-greedy-merge-back-strategy"><a class="header" href="#4-greedy-merge-back-strategy">4. Greedy merge-back strategy</a></h3>
+<p>mt-kahypar produces an initial partition assignment, but the
+partition count is typically much larger than needed (set to 2x the
+number of GPU blocks).  <code>process_partitions()</code> in <code>pe.rs</code> then
+aggressively merges partitions:</p>
+<ol>
+<li>
+<p><strong>Bitset-based overlap scoring:</strong> For each pair of partitions,
+compute the union of their AIG node bitsets.  The merge cost is
+<code>|union| - max(|A|, |B|)</code> — lower is better, indicating more
+shared sub-graph.  This is <code>O(num_aigpins/64)</code> per pair instead of
+full DFS.</p>
+</li>
+<li>
+<p><strong>Speculative parallel trials:</strong> Merge candidates are sorted by
+overlap cost.  Up to <code>parallel_trial_stride</code> merges are attempted
+in parallel using <code>Rayon</code>, with a cancel-on-success <code>AtomicBool</code>
+to abort remaining trials once a valid merge is found.  The stride
+doubles on each iteration.</p>
+</li>
+<li>
+<p><strong>Quality gate:</strong> A merged partition is rejected if it would
+increase the maximum boomerang stage count beyond
+<code>max_original_nstages + max_stage_degrad</code>.  This prevents merges
+that technically fit in resource limits but would degrade
+simulation throughput by adding extra boomerang stages.</p>
+</li>
+<li>
+<p><strong>Blacklisting:</strong> Failed merge attempts are blacklisted for that
+partition to avoid redundant retries.  Cancelled (interrupted by a
+parallel success) trials are <em>not</em> blacklisted — the merge may
+still be valid in a future iteration.</p>
+</li>
+</ol>
+<p>The result: 2x-4x fewer partitions than the initial hypergraph
+solution, with each partition fully validated to fit within boomerang
+resource limits.</p>
+<h3 id="5-flattenedscript-instruction-generation"><a class="header" href="#5-flattenedscript-instruction-generation">5. FlattenedScript instruction generation</a></h3>
+<p><code>src/flatten.rs</code> converts partitions into <code>FlattenedScriptV1</code> — a
+packed <code>u32</code> instruction stream consumed directly by the GPU kernel.
+The script encodes:</p>
+<ol>
+<li>
+<p><strong>Metadata section</strong> (256 u32): Per-partition control fields at
+fixed indices, followed by the write-out hook table:</p>
+<div class="table-wrapper"><table><thead><tr><th>Index</th><th>Field</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>0</td><td><code>num_stages</code></td><td>Boomerang stage count</td></tr>
+<tr><td>1</td><td><code>is_last_part</code></td><td>Flag: last partition in the design</td></tr>
+<tr><td>2</td><td><code>num_ios</code></td><td>Number of write-out endpoints</td></tr>
+<tr><td>3</td><td><code>io_offset</code></td><td>Start offset in global state buffer</td></tr>
+<tr><td>4</td><td><code>num_srams</code></td><td>SRAM block count</td></tr>
+<tr><td>5</td><td><code>sram_offset</code></td><td>SRAM start offset</td></tr>
+<tr><td>6</td><td><code>num_global_read_rounds</code></td><td>Input read rounds</td></tr>
+<tr><td>7</td><td><code>num_output_duplicates</code></td><td>Output duplication count</td></tr>
+<tr><td>8</td><td><code>is_x_capable</code></td><td>X-propagation flag (ADR 0016)</td></tr>
+<tr><td>9</td><td><code>xmask_state_offset</code></td><td>X-mask offset (when X-capable)</td></tr>
+<tr><td>128..255</td><td>write-out hook table</td><td>Maps each thread to the boomerang stage+position where it captures its output</td></tr>
+</tbody></table>
+</div>
+<p>This layout is the load-bearing contract between Rust
+(<code>flatten.rs</code>) and the GPU kernel (<code>kernel_v1.metal</code>,
+<code>kernel_v1_impl.cuh</code>).</p>
+</li>
+<li>
+<p><strong>Global-read permutation</strong> (2 × <code>NUM_THREADS_V1</code> per round):
+Each thread gets an index into the global state buffer and a
+bitmask.  The thread reads one u32 from global memory and extracts
+the bits indicated by the mask using a <code>pext</code>-like loop.  Rounds
+are packed to maximise throughput (each thread accumulates up to
+32 bits across rounds).  An index high-bit flag distinguishes
+previous-cycle state from current-cycle inter-stage intermediates.</p>
+</li>
+<li>
+<p><strong>Boomerang sections</strong> (per stage, <code>NUM_THREADS_V1 × 20</code> u32):</p>
+<ul>
+<li>16 u32 per thread: shuffle permutation (16-bit index pairs
+selecting source bits from shared memory)</li>
+<li>4 u32 per thread: AND-gate flags (<code>xora</code>, <code>xorb</code>, <code>orb</code>) plus a
+padding slot reused for gate-delay injection (u16 picoseconds)</li>
+</ul>
+</li>
+<li>
+<p><strong>Global write-out</strong>: SRAM and output-duplicate permutations,
+clock-enable conditions, and data-inversion flags for committing
+results back to the state buffer.</p>
+</li>
+</ol>
+<p>The entire script is uploaded to device memory once and read
+sequentially by the kernel.  Script reads are overlapped with
+computation via double-buffering (reading the next stage's data while
+computing the current stage's AND gates).</p>
+<h3 id="6-pipeline-staging-for-deep-circuits"><a class="header" href="#6-pipeline-staging-for-deep-circuits">6. Pipeline staging for deep circuits</a></h3>
+<p>When a design's combinational depth exceeds the boomerang's capacity,
+<code>src/staging.rs</code> splits the AIG into <strong>major stages</strong> at user-
+specified level thresholds (<code>--level-split 30</code> or <code>--level-split 20,40</code>).</p>
+<p>Each major stage gets its own <code>StagedAIG</code> with:</p>
+<ul>
+<li><code>primary_inputs</code>: the AIG pins produced by previous stages (or the
+design's actual primary inputs for the first stage).</li>
+<li><code>primary_output_pins</code>: live AIG pins at the split boundary that
+must be forwarded to the next stage.</li>
+<li><code>endpoints</code>: the original AIG endpoint groups whose combinational
+depth falls within this stage.</li>
+</ul>
+<p>Major stages execute sequentially on the GPU (the kernel loops over
+them).  Between stages, intermediate values are written to the
+output state buffer and re-read by the next stage's global-read
+permutation (indicated by the high-bit flag in the index).</p>
+<p>Staging trades latency (more sequential kernel dispatches) for
+fitting within the 8192-wide boomerang.  Without it, designs with</p>
+<blockquote>
+<p>50-level combinational paths would fail partitioning entirely.</p>
+</blockquote>
+<h2 id="consequences-13"><a class="header" href="#consequences-13">Consequences</a></h2>
+<p><strong>Enables:</strong></p>
+<ul>
+<li><strong>Fixed, branch-free GPU kernel.</strong> The kernel has no per-node
+dispatch — every thread executes the same AND-XOR-OR instruction at
+every boomerang level.  This maximises SIMT utilisation across
+CUDA, HIP, and Metal.</li>
+<li><strong>Deterministic shared-memory budget.</strong> The 256-thread, 8192-bit
+boomerang uses a fixed amount of shared memory (threadgroup memory
+on Metal), independent of the design.  No dynamic allocation, no
+shared-memory pressure variation between blocks.</li>
+<li><strong>Scalable partitioning.</strong> The hypergraph partitioner + greedy
+merge naturally adapts to designs from hundreds to millions of
+gates.  Larger designs get more partitions; the GPU kernel is the
+same.</li>
+<li><strong>Technology independence at the kernel level.</strong> The GPU kernel
+knows nothing about AIGPDK, SKY130, or GF180MCU.  It executes
+packed u32 scripts.  All cell-library knowledge is absorbed during
+AIG construction and script generation.</li>
+</ul>
+<p><strong>Constrains:</strong></p>
+<ul>
+<li><strong>8191-input/output ceiling per partition.</strong> Designs with extremely
+wide buses or highly connected sub-circuits may require aggressive
+partitioning, which increases inter-partition communication (global
+memory reads).  The <code>--level-split</code> option helps by splitting deep
+cones into multiple stages, but wide cones remain fundamentally
+limited by the 8192-slot boomerang.</li>
+<li><strong>Write-out slot scarcity for SRAM-heavy designs.</strong> Each SRAM
+consumes 4 write-out slots.  With <code>BOOMERANG_MAX_WRITEOUTS = 256</code>,
+a partition can hold at most 64 SRAMs — and fewer when output
+duplicates also need slots.  Designs with many small memories may
+need finer partitioning than their gate count alone would suggest.</li>
+<li><strong>Fixed thread count.</strong> The 256-thread block size is hardcoded
+(<code>NUM_THREADS_V1</code>).  On GPUs where the SM/CU could benefit from
+larger blocks (e.g., occupancy tuning), there's no flexibility.
+Changing this would require redesigning the boomerang hierarchy
+depth and the bit-packing in the script format.</li>
+<li><strong>Script size grows with partition depth.</strong> Each boomerang stage
+adds <code>~20 × 256 = 5120</code> u32 entries to the script.  Very deep
+partitions (many boomerang stages) produce large scripts that may
+pressure GPU memory bandwidth for the script reads, though
+double-buffering mitigates this.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0016--selective-x-propagation"><a class="header" href="#adr-0016--selective-x-propagation">ADR 0016 — Selective X-propagation</a></h1>
+<p><strong>Status:</strong> Accepted</p>
+<h2 id="context-15"><a class="header" href="#context-15">Context</a></h2>
+<p>Jacquard's default two-state (0/1) simulation silently resolves
+uninitialised DFF and SRAM outputs to zero. This masks
+initialisation bugs that real hardware would expose as unknown (X)
+values, and creates false mismatches when comparing against
+four-state RTL simulators.</p>
+<p>Naively upgrading the entire simulator to four-state logic would
+double storage and roughly halve throughput. In a well-designed SoC
+after reset, typically less than 5% of signals are genuinely
+X-capable.</p>
+<h2 id="decision-14"><a class="header" href="#decision-14">Decision</a></h2>
+<p>Implement <strong>selective X-propagation</strong> controlled by the <code>--xprop</code>
+CLI flag. Static analysis at compile time identifies X-source
+signals (uninitialised DFFs, SRAM read ports); forward-cone
+computation classifies each partition as X-capable or X-free. Only
+X-capable partitions run an X-aware kernel variant; the rest
+continue with the fast two-state path.</p>
+<p>The full seven-phase design, implementation details, and design
+rationale are in
+<a href="adr/../selective-x-propagation.html"><code>docs/selective-x-propagation.md</code></a>.
+Stages 1–6 are implemented; Stage 7 (dynamic X narrowing) is a
+future enhancement.</p>
+<h3 id="key-design-choices-summary"><a class="header" href="#key-design-choices-summary">Key design choices (summary)</a></h3>
+<ol>
+<li><strong>Partition-level granularity</strong> — entire partition runs X-aware
+or not. ~95% of partitions are typically X-free after reset.</li>
+<li><strong>Conservative SRAM X</strong> — all reads return X until any write.
+Per-address tracking deferred.</li>
+<li><strong>No reset-aware analysis</strong> — all DFFs start as X; the fixpoint
+iteration naturally resolves reset-connected DFFs.</li>
+<li><strong>State buffer doubling</strong> — X-mask words occupy
+<code>[reg_io_state_size .. 2*reg_io_state_size)</code> when enabled.
+X-free partitions ignore the mask entirely.</li>
+<li><strong>Runtime flag, not compile-time</strong> — <code>--xprop</code> on <code>jacquard sim</code>;
+no new Cargo features needed.</li>
+</ol>
+<h2 id="consequences-14"><a class="header" href="#consequences-14">Consequences</a></h2>
+<ul>
+<li>X-capable partitions pay ~2× storage and ALU cost; X-free
+partitions (the vast majority) pay nothing.</li>
+<li>VCD output includes <code>x</code> values when <code>--xprop</code> is enabled,
+compatible with standard four-state VCD tools.</li>
+<li>The <code>--check-with-cpu</code> reference path includes an X-aware CPU
+kernel for validation.</li>
+<li>Benchmarks (<code>benches/xprop.rs</code>) track the overhead.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0017--cosim-execution-model"><a class="header" href="#adr-0017--cosim-execution-model">ADR 0017 — Cosim execution model</a></h1>
+<p><strong>Status:</strong> Accepted</p>
+<h2 id="context-16"><a class="header" href="#context-16">Context</a></h2>
+<p>The cosim mode runs a GPU-simulated design alongside reactive
+peripheral models (flash, UART, JTAG, GPIO) that drive and observe
+design pins each clock edge. The execution model must balance two
+competing needs: GPU throughput (which favours large batches of
+edges dispatched as a single command buffer) and peripheral
+responsiveness (which requires CPU-side model updates between edges).</p>
+<p>This ADR documents the batch dispatch loop, the multi-clock
+scheduler, and the time-domain abstractions that tie them together.</p>
+<h2 id="decision-15"><a class="header" href="#decision-15">Decision</a></h2>
+<h3 id="batch-dispatch-loop"><a class="header" href="#batch-dispatch-loop">Batch dispatch loop</a></h3>
+<p>The cosim main loop groups consecutive scheduler edges into
+<strong>batches</strong> of up to <code>BATCH_SIZE = 1024</code> edges. Each batch is
+encoded into a single Metal command buffer and dispatched to the
+GPU. Between batches, CPU-side peripheral models (<code>PeripheralModel:: step_edge</code>) run, ring buffers are drained, and model overrides are
+compiled into <code>BitOp</code> arrays for the next batch.</p>
+<p>Per-edge execution within a batch:</p>
+<pre><code>state_prep (apply clk/gpio/jtag pin drives via BitOps)
+  → gpu_apply_flash_din (inject flash MISO into input state)
+    → simulate_v1_stage ×N (combinational logic evaluation)
+  → gpu_flash_model_step (read MOSI, advance flash FSM)
+  → gpu_io_step (UART TX decode + Wishbone bus trace)
+</code></pre>
+<p>CPU-side models cannot observe intra-batch state changes — they see
+the output state only after the batch completes. For peripherals
+that require per-edge responsiveness (e.g. JTAG replay with tight
+hold-cycle requirements), the batch is forced to size 1 when any
+model reports <code>is_active() == true</code>.</p>
+<h3 id="why-batch_size--1024"><a class="header" href="#why-batch_size--1024">Why BATCH_SIZE = 1024</a></h3>
+<p>The batch size trades off GPU utilisation against peripheral
+latency. Smaller batches → more Metal command buffer submissions
+per second → higher overhead. Larger batches → staler CPU-side
+model state. 1024 was chosen empirically as a sweet spot:</p>
+<ul>
+<li>For peripheral-free simulation: amortises ~1ms of command buffer
+overhead across 1024 edges ≈ 1µs/edge overhead.</li>
+<li>For active peripherals (JTAG, stimulus-driven): the <code>is_active</code>
+fallback to batch=1 ensures correctness regardless of batch size.</li>
+<li>The batch size only affects cosim; the <code>sim</code> command processes the
+entire VCD in one GPU dispatch.</li>
+</ul>
+<h3 id="pre-allocated-schedule-buffers"><a class="header" href="#pre-allocated-schedule-buffers">Pre-allocated schedule buffers</a></h3>
+<p>Each scheduler edge has pre-allocated Metal buffers for its
+<code>StatePrepParams</code> and <code>BitOp</code> array (<code>ScheduleBuffers::edge_buffers</code>).
+These are allocated once at startup — not per-dispatch — to avoid
+allocation latency in the hot loop. The schedule repeats with period
+<code>edges_per_period</code> (= LCM schedule length); edge <code>N</code> reuses
+buffer <code>N % edges_per_period</code>.</p>
+<h3 id="multi-clock-scheduler"><a class="header" href="#multi-clock-scheduler">Multi-clock scheduler</a></h3>
+<p>The <code>MultiClockScheduler</code> computes a deterministic interleaving of
+edges across clock domains. Given N clocks with potentially
+different periods and phase offsets:</p>
+<ol>
+<li>Compute <code>gcd_ps</code> = GCD of all half-periods and phase offsets.
+This is the <strong>scheduler tick</strong> — the minimum time quantum.</li>
+<li>Compute <code>lcm_ps</code> = LCM of all full periods. This is the
+<strong>schedule period</strong> — the point at which the edge pattern repeats.</li>
+<li><code>schedule_len = lcm_ps / gcd_ps</code> — number of ticks per period.</li>
+<li>For each tick, compute which domains have rising/falling edges
+based on <code>(tick_ps - phase_offset) % half_period == 0</code>.</li>
+</ol>
+<p>The schedule length is capped at 1,000,000 ticks. This prevents
+degenerate clock ratios (e.g. primes) from producing unbounded
+schedules. If the cap is hit, the assertion fires with a message
+suggesting the clocks may not be commensurable at the configured
+resolution.</p>
+<h3 id="time-units-edges-vs-clock-cycles"><a class="header" href="#time-units-edges-vs-clock-cycles">Time units: edges vs clock cycles</a></h3>
+<p>A <strong>scheduler edge</strong> is one tick of the scheduler (duration =
+<code>gcd_ps</code>). A <strong>clock cycle</strong> is two half-periods of a given domain
+(= rising + falling edge). The ratio <code>edges_per_sys_clk_cycle = clock_period_ps / gcd_ps</code> converts between them.</p>
+<p>This distinction is load-bearing for peripheral timing:</p>
+<ul>
+<li>UART baud rate dividers count <strong>edges</strong>, not clock cycles.</li>
+<li>Reset duration counts <strong>edges</strong>.</li>
+<li>The <code>--max-clock-edges</code> CLI flag counts <strong>edges</strong>.</li>
+</ul>
+<p>Confusing edges with clock cycles was the root cause of the UART
+baud rate bug fixed in commit <code>a263e47</code> — <code>edges_per_period</code> (the
+LCM schedule length) was used where <code>edges_per_sys_clk_cycle</code> was
+needed, doubling the bit time in multi-clock designs.</p>
+<h3 id="gpucpu-ring-buffer-drain"><a class="header" href="#gpucpu-ring-buffer-drain">GPU→CPU ring buffer drain</a></h3>
+<p>After each batch completes, the CPU drains three categories of
+GPU-side state:</p>
+<ol>
+<li><strong>Peripheral ring buffers</strong> — UART channels and Wishbone trace
+channel, drained from local <code>read_head</code> to GPU-written
+<code>write_head</code>. See ADR 0013 for struct conventions.</li>
+<li><strong>VCD snapshot buffer</strong> — when <code>--stimulus-vcd</code> or <code>--timing-vcd</code> is
+enabled, a separate ring buffer (<code>2 × state_size</code> words per edge)
+captures per-tick output state on the GPU. The CPU drains it
+after each batch to write VCD transitions. This mechanism is what
+enables <code>BATCH_SIZE &gt; 1</code> even with VCD output — without it, the
+CPU would need to read output state after every single edge.</li>
+<li><strong>CPU reference check</strong> — when <code>--check-with-cpu</code> is active, the
+CPU replays the batch with the reference kernel and compares.</li>
+</ol>
+<p>No synchronisation beyond Metal's command buffer completion is
+needed — all drains happen after <code>waitUntilCompleted</code>.</p>
+<h2 id="consequences-15"><a class="header" href="#consequences-15">Consequences</a></h2>
+<ul>
+<li>The batch dispatch model means CPU-side peripheral models see
+output state with up to <code>BATCH_SIZE</code> edges of latency. This is
+acceptable for all current peripherals; models that need tighter
+coupling set <code>is_active() = true</code>.</li>
+<li>The 1M tick schedule cap prevents pathological memory use but
+rejects exotic clock ratios. A min-heap scheduler (proposed in
+<code>docs/plans/multi-clock-and-stimulus-architecture.md</code> as MC.2)
+would remove this limit.</li>
+<li>The edges-vs-cycles distinction must be maintained carefully in
+any code that converts user-facing "cycles" to internal "ticks".
+The <code>edges_per_sys_clk_cycle</code> helper exists for this purpose.</li>
+<li>Pre-allocated schedule buffers consume <code>O(schedule_len)</code> Metal
+buffer pairs at startup. Each schedule entry creates two Metal
+buffer objects (params + ops). For typical single-clock designs
+this is 2 entries = 4 buffer objects; for complex multi-clock
+designs it can reach thousands of entries, but each buffer is
+small (tens of bytes).</li>
+</ul>
+<h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
+<ul>
+<li>ADR 0012 — CDC jitter injection (uses the scheduler's edge
+timestamps as the injection point).</li>
+<li>ADR 0013 — Peripheral model architecture (documents GPU-side
+model patterns and ring buffers).</li>
+<li><a href="adr/../plans/multi-clock-and-stimulus-architecture.html"><code>docs/plans/multi-clock-and-stimulus-architecture.md</code></a>
+— design-space doc for the multi-clock scheduler.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="implementation-plans"><a class="header" href="#implementation-plans">Implementation Plans</a></h1>
 <p>Phased implementation plans with entry and exit criteria. Plans live
 here when the work spans multiple commits and needs an explicit
@@ -3550,7 +5108,7 @@ status in the file and here in the same commit.</li>
 <li><strong>OpenSTA upstream regressions.</strong> With OpenSTA as the sole STA path, an upstream behaviour change reaches us through <code>opensta-to-ir</code>'s output. Mitigation: pin OpenSTA in CI (per ADR 0001) and rely on the regression corpus to surface drift.</li>
 <li><strong>CRPR pessimism on tight designs.</strong> Stage 1+2 fold-in treats launch=0; a design with very heterogeneous launch arrivals will see pessimism on paths whose launch DFF also has a long clock path. Stage 3 is the lever if this matters; otherwise live with it.</li>
 </ul>
-<h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
+<h2 id="cross-references-1"><a class="header" href="#cross-references-1">Cross-references</a></h2>
 <ul>
 <li><code>../adr/0007-timing-model-fidelity-roadmap.md</code> — Pillar definitions for Phase 2.</li>
 <li><code>../adr/0008-structured-timing-output.md</code> — Output items for Phase 1.</li>
@@ -3820,7 +5378,7 @@ type. Auto-handled by <code>is_gf180mcu_cell</code>.</li>
 <li><strong>Drive-strength suffixes</strong> — GF180MCU uses integer multipliers
 (<code>inv_1</code>, <code>inv_2</code>, <code>inv_4</code>, …) matching the SKY130 convention.</li>
 </ul>
-<h2 id="links-8"><a class="header" href="#links-8">Links</a></h2>
+<h2 id="links-11"><a class="header" href="#links-11">Links</a></h2>
 <ul>
 <li><code>docs/adding-a-pdk.md</code> — canonical PDK integration recipe.</li>
 <li><code>src/sky130.rs</code>, <code>src/sky130_pdk.rs</code> — SKY130 reference
@@ -4008,7 +5566,7 @@ notes below are kept for reference but are no longer "open work".</li>
 <li><strong>WS3 cutover risk.</strong> Deleting the hand-rolled SDF parser risks regressing designs that depend on behaviour it currently provides. Exit criterion 7 requires a clean regression run before WS3 is considered complete. If coverage gaps emerge, walk-back options per ADR 0006 apply: add dialect shims to <code>opensta-to-ir</code>, or (now that Phase 3 is deferred) keep the hand-rolled parser available behind a feature flag until dialect parity is reached.</li>
 <li><strong>OpenSTA dialect coverage.</strong> OpenSTA may not accept every SDF dialect Jacquard's hand-rolled parser has been patched to handle. Such cases are tracked as either <code>opensta-to-ir</code> post-processing fixes or upstream OpenSTA contributions. Under no condition is the fix to reinstate the hand-rolled parser unless walk-back per ADR 0006 is formally triggered.</li>
 </ul>
-<h2 id="links-9"><a class="header" href="#links-9">Links</a></h2>
+<h2 id="links-12"><a class="header" href="#links-12">Links</a></h2>
 <ul>
 <li><code>../project-scope.md</code></li>
 <li><code>../timing-correctness.md</code> — acceptance criteria this plan satisfies.</li>
@@ -4816,10 +6374,368 @@ following (<code>ClockDomainFlags</code>, <code>MultiClockScheduler</code>).</li
 <li>Adjacent committed roadmap: <code>docs/plans/post-phase-0-roadmap.md</code>.</li>
 <li>Synchronous-only constraint and rationale: <code>CLAUDE.md</code> "Key limitation".</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="declarative-cell-metadata--tier-1--minimal-tier-2--port-mapping"><a class="header" href="#declarative-cell-metadata--tier-1--minimal-tier-2--port-mapping">Declarative cell metadata — Tier 1 + minimal Tier 2 + port mapping</a></h1>
+<p><strong>Status:</strong> Implemented — historical record. Tier 1, minimal Tier 2,
+and the port-mapping schema have all landed.
+<strong>ADRs:</strong></p>
+<ul>
+<li><a href="plans/../adr/0010-declarative-cell-metadata.html">0010 — Declarative cell metadata for PDK enablement</a>
+(Tier 1 + minimal Tier 2)</li>
+<li><a href="plans/../adr/0011-ram-port-mapping-schema.html">0011 — RAM port-mapping schema</a>
+(the port-mapping extension originally deferred by ADR 0010)
+<strong>Issues:</strong> <a href="https://github.com/ChipFlow/Jacquard/issues/67">#67</a>,
+<a href="https://github.com/ChipFlow/Jacquard/issues/80">#80</a>.
+<strong>Driving designs:</strong> the wafer.space <code>chip_top.pnl.v</code> blocked on
+<code>gf180mcu_ocd_ip_sram__sram1024x8m8wm1</code>, then the JTAG-DM workflow
+in PR #78 surfacing the need for real RAM backing storage.</li>
+</ul>
+<h2 id="scope-as-shipped"><a class="header" href="#scope-as-shipped">Scope (as shipped)</a></h2>
+<p>Originally scoped to one slice (Tier 1 + minimal Tier 2 — opaque
+<code>kind = "ram"</code> with no port resolution). Expanded mid-flight when
+the JTAG-DM workflow (PR #78) surfaced the need for explicit-port
+RAMs with real backing storage:</p>
+<ul>
+<li><strong>Tier 1</strong>: <code>--cell-library</code> + sverilogparse-backed pin tables
+(landed 2026-05-19 in PR #65/#68).</li>
+<li><strong>Tier 2 minimal</strong>: <code>kind</code> discriminator in TOML, opaque-RAM
+mode (landed alongside Tier 1).</li>
+<li><strong>Port-mapping schema</strong> (ADR 0011, v1.1): <code>[cells.NAME.ram]</code>
+sub-table for explicit-port RAMs with backing storage. Landed
+in this PR alongside <code>SramInitConfig</code> ELF preload (closes #80).</li>
+</ul>
+<h2 id="deliverables"><a class="header" href="#deliverables">Deliverables</a></h2>
+<ol>
+<li><strong><code>--cell-library &lt;PATH&gt;</code> CLI flag</strong> on <code>jacquard sim</code>,
+<code>jacquard cosim</code>. Repeatable. Each path is parsed via
+<code>sverilogparse</code> at startup; results merged into a runtime
+<code>LeafPinProvider</code> extension.</li>
+<li><strong><code>&lt;PATH&gt;.cells.toml</code> autoload + <code>--cell-manifest &lt;PATH&gt;</code>
+override.</strong> TOML schema as in ADR 0010 § Tier 2. Required
+field <code>schema_version = "1.0"</code>. Per-cell <code>kind</code> discriminator,
+v1.0 vocabulary.</li>
+<li><strong>New code path in <code>aig.rs</code></strong>: after <code>PdkVariant::classify</code> falls
+through (no built-in match), consult manifest. For
+<code>kind = "ram"</code>, allocate <code>RAMBlock</code> in opaque mode — outputs
+routed to X-source slots, no port resolution.</li>
+<li><strong>Tests</strong>: TOML parsing unit tests; integration test exercising
+a synthetic <code>kind = "ram"</code> cell through AIG construction + sim
+(mini fixture, not the full tapeout design).</li>
+<li><strong>Doc update — <code>docs/adding-a-pdk.md</code></strong>: new section "Adding
+third-party IP via manifest", linked from existing per-PDK
+recipes.</li>
+</ol>
+<h2 id="out-of-scope-deferred"><a class="header" href="#out-of-scope-deferred">Out of scope (deferred)</a></h2>
+<ul>
+<li>Port-mapping schema (<code>[cells.NAME.ports]</code>). Future ADR.</li>
+<li>Other <code>kind</code> values beyond what the tapeout fixture exercises
+end-to-end (<code>ram</code>, plus <code>filler</code> if cheap parity demo). Adding
+other kinds is data-only and can land per-need.</li>
+<li>Migration of built-in <code>sky130.rs</code> / <code>gf180mcu.rs</code> classifiers to
+manifest data. Stays in this codebase as the fallback.</li>
+<li><code>build.rs</code> pin-table scanner removal. Stays.</li>
+</ul>
+<h2 id="phasing-1"><a class="header" href="#phasing-1">Phasing</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Phase</th><th>Output</th></tr></thead><tbody>
+<tr><td><strong>P1</strong></td><td><code>--cell-library</code> parsing + <code>LeafPinProvider</code> extension + tests. No AIG-construction changes yet — verify pin tables alone.</td></tr>
+<tr><td><strong>P2</strong></td><td>Manifest TOML parser + <code>CellManifest</code> struct + <code>schema_version</code> validation. Standalone unit tests.</td></tr>
+<tr><td><strong>P3</strong></td><td><code>aig.rs</code> integration — manifest threaded through, new fallback path for <code>kind = "ram"</code> opaque mode. Add the <code>compute_x_sources</code>-style test exercising the new path.</td></tr>
+<tr><td><strong>P4</strong></td><td>Smoke test against a representative reduced fixture; confirm <code>jacquard sim</code> clears <code>gf180mcu_ocd_ip_sram_*</code>. The full downstream-tapeout netlist is the real-world target but not in-tree.</td></tr>
+<tr><td><strong>P5</strong></td><td>Doc update (<code>adding-a-pdk.md</code>); update <code>gf180mcu-enablement.md</code> § Follow-on cleanup to mark items 1/2/3 superseded by this work.</td></tr>
+</tbody></table>
+</div>
+<p>Each phase is its own commit. No squashing until the spike feedback
+loop confirms shape.</p>
+<h2 id="open-questions-to-settle-in-code"><a class="header" href="#open-questions-to-settle-in-code">Open questions to settle in code</a></h2>
+<ul>
+<li><strong>Autoload path discovery</strong>: spec says <code>foo.v</code> → <code>foo.cells.toml</code>
+sibling. Does that handle the multi-file library case (<code>a.v</code> +
+<code>b.v</code> sharing one manifest)? Probably yes — autoload each
+sibling, merge into the single <code>CellManifest</code>. Explicit
+<code>--cell-manifest</code> flag still wins for users who want a single
+consolidated file.</li>
+<li><strong>Conflict policy</strong>: if a cell name appears both in a built-in
+classifier AND in a manifest, built-in wins (per ADR 0010
+integration ordering). Warn on conflict to surface accidental
+collisions.</li>
+<li><strong>Empty-library noise</strong>: parsing a <code>.v</code> file containing only
+<code>(* blackbox *)</code> modules with no logic should succeed without
+warnings, since that's the expected shape for IP libraries.</li>
+</ul>
+<h2 id="not-promised"><a class="header" href="#not-promised">Not promised</a></h2>
+<ul>
+<li>Memory contents simulation for <code>kind = "ram"</code> in v1.0. Documented
+in ADR 0010 § "kind = ram semantics in v1.0".</li>
+<li>Stable opaque-RAM port routing beyond "outputs are X-source
+slots". The set of outputs is what <code>sverilogparse</code> reports; if a
+cell's port list changes, the routing follows.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="cosim-peripheral-models"><a class="header" href="#cosim-peripheral-models">Cosim Peripheral Models</a></h1>
+<p>Architecture: <a href="plans/../adr/0013-plural-peripheral-configs.html">ADR 0013</a>.</p>
+<p>This plan tracks implementation work for the cosim peripheral model
+framework. ADR 0013 documents the architecture (two execution domains,
+observe-only vs bidirectional GPU patterns, ring buffers, plural config
+convention); this doc tracks the concrete workstreams.</p>
+<h2 id="phase-1-multi-uart-90"><a class="header" href="#phase-1-multi-uart-90">Phase 1: Multi-UART (<a href="https://github.com/gpu-eda/Jacquard/issues/90">#90</a>)</a></h2>
+<p>First peripheral using the plural-config + array-in-kernel conventions
+from ADR 0013.</p>
+<h3 id="schema--srctestbenchrs"><a class="header" href="#schema--srctestbenchrs">Schema — <code>src/testbench.rs</code></a></h3>
+<p>Add <code>name: Option&lt;String&gt;</code> to <code>UartConfig</code>. Add
+<code>uarts: Vec&lt;UartConfig&gt;</code> to <code>TestbenchConfig</code>. Add
+<code>effective_uarts()</code> mirroring <code>effective_clocks()</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn effective_uarts(&amp;self) -&gt; Vec&lt;UartConfig&gt; {
+    let mut out = self.uarts.clone();
+    if let Some(ref u) = self.uart {
+        out.insert(0, u.clone());
+    }
+    out
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Existing <code>"uart": {...}</code> configs work unchanged. New form:
+<code>"uarts": [{"name": "console", ...}, {"name": "debug", ...}]</code>.
+Both may coexist; <code>uart</code> is prepended to <code>uarts</code>.</p>
+<h3 id="metal-kernel--csrckernel_v1metal"><a class="header" href="#metal-kernel--csrckernel_v1metal">Metal kernel — <code>csrc/kernel_v1.metal</code></a></h3>
+<p><code>MAX_UARTS = 4</code>. Restructure the three UART types:</p>
+<pre><code class="language-c">#define MAX_UARTS 4
+
+struct UartPerChannelConfig {
+    u32 tx_out_pos;
+    u32 cycles_per_bit;
+};
+
+struct UartParams {
+    u32 state_size;
+    u32 n_uarts;          // replaces has_uart
+    u32 _pad[2];
+    UartPerChannelConfig channels[MAX_UARTS];
+};
+</code></pre>
+<p><code>UartDecoderState</code> and <code>UartChannel</code> structs unchanged — the device
+buffers hold <code>[MAX_UARTS]</code> elements. <code>gpu_io_step</code> buffer signature
+unchanged (same 6 slots); the UART decode block becomes a loop over
+<code>n_uarts</code>.</p>
+<h3 id="rust-runtime--srcsimcosim_metalrs"><a class="header" href="#rust-runtime--srcsimcosim_metalrs">Rust runtime — <code>src/sim/cosim_metal.rs</code></a></h3>
+<ul>
+<li><strong>Repr structs</strong> (~line 130): update <code>UartParams</code> to match kernel.
+Add <code>UartPerChannelConfig</code>. Keep <code>UartDecoderState</code> and
+<code>UartChannel</code> unchanged.</li>
+<li><strong>Config resolution</strong> (~line 2229): iterate <code>effective_uarts()</code>.</li>
+<li><strong>Buffer allocation</strong> (~line 2820): size buffers for <code>MAX_UARTS</code>
+elements. Init each <code>UartDecoderState</code> with <code>last_tx=1</code>.</li>
+<li><strong>RX driver creation</strong> (~line 2544): one <code>UartRxDriver</code> per entry,
+named <code>uart_{name}</code> (fallback <code>uart_{index}</code>).</li>
+<li><strong>CPU drain</strong> (~line 3990): iterate N channels with per-channel
+<code>uart_read_head[i]</code>. Label events with UART name.</li>
+</ul>
+<h3 id="verification-1"><a class="header" href="#verification-1">Verification</a></h3>
+<ul>
+<li><code>cargo build --release --features metal</code> compiles.</li>
+<li><code>cargo test --lib</code> passes (add <code>effective_uarts</code> unit tests).</li>
+<li>Existing MCU SoC cosim CI passes unchanged (single <code>"uart"</code> config).</li>
+<li>Local smoke: temporarily edit <code>tests/jtag_minimal/sim_config.json</code>
+to use <code>"uarts": [...]</code> syntax, confirm identical results.</li>
+</ul>
+<h3 id="not-in-scope"><a class="header" href="#not-in-scope">Not in scope</a></h3>
+<ul>
+<li>Dual-UART test fixture: separate follow-up with a small 2-TX design.</li>
+<li>CUDA/HIP: cosim is Metal-only; no kernel changes needed.</li>
+</ul>
+<h2 id="future-phases"><a class="header" href="#future-phases">Future phases</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Phase</th><th>Scope</th><th>Status</th></tr></thead><tbody>
+<tr><td>2</td><td>Refactor <code>gpu_io_step</code> toward common params/ring-buffer layout</td><td>Future</td></tr>
+<tr><td>3</td><td>Multi-Flash / external RAM (bidirectional pattern)</td><td>Deferred (no use case)</td></tr>
+<tr><td>—</td><td>Multi-JTAG</td><td>Not needed (TAP daisy-chain suffices)</td></tr>
+</tbody></table>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="plan-config-driven-ahbapb-bus-transaction-tracing"><a class="header" href="#plan-config-driven-ahbapb-bus-transaction-tracing">Plan: Config-driven AHB/APB bus transaction tracing</a></h1>
+<h2 id="goal-3"><a class="header" href="#goal-3">Goal</a></h2>
+<p>Trace <strong>AHB5, AHB-Lite, and APB3</strong> bus transactions in cosim, compactly,
+without baking signal names into source. Output as <strong>CSV</strong> (machine-readable
+transaction table) and <strong>annotated VCD</strong> (transactions as a signal group for
+waveform viewers). Decode site: <strong>GPU capture + CPU protocol FSM</strong> (the kernel
+stays dumb; protocol semantics live in testable Rust).</p>
+<p>Order: <strong>APB3 first</strong> (validate against the Hazard3 JTAG-DM APB DMI in
+<code>tests/jtag_minimal/</code>), then AHB-Lite, then AHB5.</p>
+<h2 id="why-this-shape"><a class="header" href="#why-this-shape">Why this shape</a></h2>
+<p>The existing "Wishbone bus trace" (<code>build_wb_trace_params</code>,
+<code>cosim_metal.rs:1277</code>; <code>gpu_io_step</code>, <code>kernel_v1.metal:1182</code>) proves the
+<em>mechanism</em> — a GPU observe-only peripheral that packs a compact per-tick
+entry into a ring buffer only when the bus is active/changed, drained by the
+CPU — but it is <strong>hardcoded</strong> to one VexRiscv-style SoC (literal names
+<code>cpu.fetch.ibus__cyc</code>, <code>spiflash.ctrl.wb_bus__ack</code>, …). We generalize that
+mechanism into a config-driven, protocol-aware monitor. It is observe-only
+(we watch design outputs, never drive), so it fits the ADR-0013 GPU
+observe-only peripheral pattern, and gets the <code>effective_*()</code>-style plural
+config for free.</p>
+<p>Two existing pieces are reused:</p>
+<ul>
+<li><strong>Multi-candidate name resolution</strong> in <code>src/sim/trace_signals.rs</code> — handles
+Yosys-flattened / scalar-expanded / structural hierarchical naming. Refactor
+the candidate generator into a shared helper so the bus tracer binds pins the
+same way <code>--trace-signals</code> does.</li>
+<li><strong>Extra-observables VCD path</strong> (<code>emit_extra_observables</code>, <code>vcd_io.rs:635</code>) —
+the model for emitting synthesized signals into the output VCD.</li>
+</ul>
+<p>The hardcoded WbTrace is <strong>left intact</strong> for now (it has a passing test);
+migrating it onto the general mechanism is a clean follow-up, not a
+prerequisite.</p>
+<h2 id="design"><a class="header" href="#design">Design</a></h2>
+<h3 id="1-config-schema--srctestbenchrs"><a class="header" href="#1-config-schema--srctestbenchrs">1. Config schema — <code>src/testbench.rs</code></a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BusProtocol { Apb3, AhbLite, Ahb5 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BusTraceConfig {
+    pub name: String,
+    pub protocol: BusProtocol,
+    /// Hierarchical prefix; standard protocol pin names are appended.
+    pub prefix: String,
+    #[serde(default = "default_addr_bits")] pub addr_bits: usize, // 32
+    #[serde(default = "default_data_bits")] pub data_bits: usize, // 32
+    /// Optional per-pin overrides: logical pin name -&gt; explicit net name,
+    /// for designs whose pins don't follow `{prefix}{PIN}`.
+    #[serde(default)] pub signals: HashMap&lt;String, String&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Add to <code>TestbenchConfig</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[serde(default)] pub bus_traces: Vec&lt;BusTraceConfig&gt;,
+<span class="boring">}</span></code></pre></pre>
+<p>New feature, so no singular legacy form. (<code>effective_bus_traces()</code> provided
+for symmetry with <code>effective_uarts()</code>, even though it just returns the Vec.)</p>
+<h3 id="2-protocol-pin-maps--cpu-decoder--new-srcsimmodelsbus_tracers"><a class="header" href="#2-protocol-pin-maps--cpu-decoder--new-srcsimmodelsbus_tracers">2. Protocol pin maps + CPU decoder — new <code>src/sim/models/bus_trace.rs</code></a></h3>
+<p>Logical-pin tables per protocol:</p>
+<ul>
+<li><strong>APB3</strong>: <code>psel penable pwrite pready pslverr paddr[] pwdata[] prdata[]</code></li>
+<li><strong>AHB-Lite</strong>: <code>htrans[1:0] haddr[] hwrite hsize[2:0] hburst[2:0] hready hresp hwdata[] hrdata[]</code></li>
+<li><strong>AHB5</strong>: AHB-Lite + optional <code>hnonsec hexcl hexokay hmaster[]</code> (resolved
+if present, ignored if absent)</li>
+</ul>
+<p>Default net name <code>{prefix}{pin}</code> (lowercased), overridable via <code>signals</code>.
+Resolution via the shared multi-candidate resolver (item 4).</p>
+<p><code>BusTraceDecoder</code> (per bus) consumes raw captured beats and emits:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct BusTransaction {
+    pub tick: u64, pub bus: String, pub protocol: BusProtocol,
+    pub dir: Dir,            // Read | Write
+    pub addr: u64, pub data: u64,
+    pub resp: BusResp,       // Ok | Error
+    pub burst: Option&lt;BurstInfo&gt;, // beat index / length for AHB
+}
+<span class="boring">}</span></code></pre></pre>
+<ul>
+<li><strong>APB3 FSM</strong>: GPU gates capture on <code>psel &amp; penable &amp; pready</code> (access-phase
+complete), so each captured beat <em>is</em> a complete transaction. <code>dir = pwrite</code>,
+<code>data = pwrite ? pwdata : prdata</code>, <code>resp = pslverr</code>.</li>
+<li><strong>AHB FSM</strong>: GPU gates capture on <code>hready</code> high (pipeline advance) and records
+<code>htrans, haddr, hwrite, hsize, hburst, hwdata, hrdata, hresp</code>. CPU keeps a
+1-deep pending address-phase record and pairs address beat N with the data on
+beat N+1; tracks burst beat counter from <code>hburst</code>/<code>htrans==SEQ</code>.</li>
+</ul>
+<p>Pure-Rust, unit-tested with synthetic beat sequences — no GPU required. This is
+the testability win of CPU-side decode.</p>
+<h3 id="3-gpu-capture--csrckernel_v1metal--srcsimcosim_metalrs"><a class="header" href="#3-gpu-capture--csrckernel_v1metal--srcsimcosim_metalrs">3. GPU capture — <code>csrc/kernel_v1.metal</code> + <code>src/sim/cosim_metal.rs</code></a></h3>
+<p>Generalize the WbTrace structs into protocol-agnostic capture:</p>
+<pre><code class="language-c">#define MAX_BUS_TRACES 4
+#define BUS_TRACE_MAX_ADR_BITS 32
+#define BUS_TRACE_MAX_DAT_BITS 32
+
+struct BusTraceParams {           // one per configured bus
+    u32 protocol;                 // 0=apb3 1=ahb-lite 2=ahb5
+    u32 gate_a_pos, gate_b_pos, gate_c_pos;   // edge-gating bits (psel/penable/pready or hready/htrans)
+    u32 dir_pos, resp_pos;
+    u32 addr_pos[BUS_TRACE_MAX_ADR_BITS];
+    u32 wdata_pos[BUS_TRACE_MAX_DAT_BITS];
+    u32 rdata_pos[BUS_TRACE_MAX_DAT_BITS];
+    u32 ctrl_pos[8];              // htrans, hsize, hburst, hnonsec, ...
+    u32 addr_bits, data_bits;
+};
+struct BusTraceEntry { u32 tick, flags, ctrl; u32 addr, wdata, rdata; };
+struct BusTraceChannel { u32 write_head, capacity, current_tick, n_buses; /* entries follow */ };
+</code></pre>
+<p>The kernel computes the per-protocol gate, and on a gating edge packs one
+<code>BusTraceEntry</code> (bus id in <code>flags</code> high bits). No FSM, no pairing on GPU.</p>
+<p><code>gpu_io_step</code> currently uses buffer slots 0–5 (UART + WbTrace). Add slots 6–7
+for <code>BusTraceParams[]</code> + <code>BusTraceChannel</code>. Metal allows ≫8 buffers, so extend
+the existing dispatch rather than adding a kernel.</p>
+<p>Rust mirrors of the structs in <code>cosim_metal.rs</code> (next to <code>WbTraceParams</code>),
+<code>build_bus_trace_params()</code> resolving pins for each configured bus, buffer
+allocation sized <code>MAX_BUS_TRACES</code>, and a per-bus read head in the drain loop
+(near <code>cosim_metal.rs:4057</code>) feeding each <code>BusTraceDecoder</code>.</p>
+<h3 id="4-shared-signal-resolver--refactor-srcsimtrace_signalsrs"><a class="header" href="#4-shared-signal-resolver--refactor-srcsimtrace_signalsrs">4. Shared signal resolver — refactor <code>src/sim/trace_signals.rs</code></a></h3>
+<p>Extract the multi-candidate name → AIG-pin / state-position resolver
+(currently internal to trace-signal registration) into a reusable helper
+callable from <code>build_bus_trace_params</code>. Keeps one source of truth for the
+Yosys/scalar/structural naming conventions.</p>
+<h3 id="5-output"><a class="header" href="#5-output">5. Output</a></h3>
+<ul>
+<li><strong>CSV</strong> (<code>--bus-trace-csv &lt;PATH&gt;</code>): drain-time, one row per <code>BusTransaction</code>.
+Header: <code>tick,bus,protocol,dir,addr,data,resp,burst</code>. Trivial — lands in
+Phase 1.</li>
+<li><strong>Annotated VCD</strong>: synthesized per-bus VCD vars (<code>{bus}_addr</code>,
+<code>{bus}_wdata</code>/<code>{bus}_rdata</code>, <code>{bus}_dir</code>, <code>{bus}_resp</code>) that value-change at
+transaction-complete ticks. This needs a <strong>new "virtual signal" emission
+path</strong> in <code>vcd_io.rs</code>: unlike existing extra-observables (raw nets sampled
+per tick from the state buffer), these are sparse CPU-decoded events the VCD
+writer must interleave by tick. Bigger plumbing → <strong>Phase 3</strong>. Dovetails with
+the wire-bundle-scripting / Surfer direction in project memory.</li>
+</ul>
+<h3 id="6-cli--srcbinjacquardrs"><a class="header" href="#6-cli--srcbinjacquardrs">6. CLI — <code>src/bin/jacquard.rs</code></a></h3>
+<ul>
+<li><code>--bus-trace-csv &lt;PATH&gt;</code> (Phase 1)</li>
+<li>bus VCD annotation folded into the output/<code>--timing-vcd</code> when <code>bus_traces</code> is
+configured, or a dedicated <code>--bus-trace-vcd</code> flag (Phase 3)</li>
+</ul>
+<h2 id="status"><a class="header" href="#status">Status</a></h2>
+<p><strong>Phase 1 is complete</strong> (APB3 end-to-end + CSV). Validated by
+<code>tests/apb_trace/</code> — a dedicated synthesized APB3 design (the Hazard3
+JTAG-DM post-PnR netlist drops the APB addr/data nets during flattening,
+so a names-preserved design was built instead). CI step:
+<code>Run APB3 bus-trace cosim (ADR 0013)</code>. Phases 2–3 remain.</p>
+<h2 id="phasing-2"><a class="header" href="#phasing-2">Phasing</a></h2>
+<ol>
+<li><strong>Phase 1 — APB3 end-to-end.</strong> ✅ Done. Config schema, pin maps, shared
+resolver, APB3 GPU capture, APB3 CPU decoder, CSV output. Validated on
+<code>tests/apb_trace/</code> (synthesized APB3 design). APB3 FSM unit-tested.</li>
+<li><strong>Phase 2 — AHB-Lite + AHB5.</strong> Pipeline pairing, burst tracking, AHB5 extra
+signals. Unit-test the AHB FSM. Needs an AHB design to integration-test
+against (open question — see below).</li>
+<li><strong>Phase 3 — Annotated VCD.</strong> Virtual-signal emission path in <code>vcd_io.rs</code>.</li>
+<li><strong>Follow-up — migrate WbTrace</strong> onto the general mechanism (express the
+VexRiscv ibus/dbus as configured buses), then delete the hardcoded path.</li>
+</ol>
+<h2 id="verification-2"><a class="header" href="#verification-2">Verification</a></h2>
+<ul>
+<li>Unit: APB3 &amp; AHB FSM decoders against synthetic beat vectors (pure Rust, no GPU).</li>
+<li>Integration (Phase 1): cosim the Hazard3 JTAG-DM with <code>--bus-trace-csv</code>,
+assert the expected DMI register accesses (DMCONTROL/DMSTATUS) appear.</li>
+<li>Build: <code>cargo build --release --features metal</code> clean; existing cosim tests
+(single-UART, WbTrace) unaffected since <code>bus_traces</code> defaults empty.</li>
+</ul>
+<h2 id="open-questions-2"><a class="header" href="#open-questions-2">Open questions</a></h2>
+<ul>
+<li><strong>AHB integration test design.</strong> APB3 validates on the existing Hazard3
+JTAG-DM. Phase 2 needs an AHB-Lite/AHB5 design — do we have one, or synthesize
+a small AHB peripheral (like <code>tests/dual_uart/</code>)?</li>
+<li><strong>Per-bus ring vs shared ring.</strong> One <code>BusTraceChannel</code> with a bus-id field
+(simpler allocation) vs one ring per bus (no cross-bus contention). Start
+shared; revisit if a hot multi-bus design overflows.</li>
+<li><strong>CUDA/HIP.</strong> Cosim is Metal-only today; no kernel changes needed elsewhere
+now, but the general design should port cleanly when CUDA cosim lands.</li>
+</ul>
+<h2 id="adr-impact"><a class="header" href="#adr-impact">ADR impact</a></h2>
+<p>This generalizes the cosim peripheral architecture — update <strong>ADR-0013</strong>
+(plural-peripheral configs) to record the config-driven bus-monitor pattern and
+the GPU-capture/CPU-decode split, once Phase 1 is real.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="spike--opentimer-on-sky130-and-mcu-soc"><a class="header" href="#spike--opentimer-on-sky130-and-mcu-soc">Spike — OpenTimer on SKY130 and MCU SoC</a></h1>
 <p><strong>Status:</strong> Proposed. Not yet executed.</p>
 <p><strong>Time box:</strong> Half a day. Extend by up to one day if initial signs are positive but hitting specific SKY130 quirks. Abort and fall back if first-four-hours progress is blocked.</p>
-<h2 id="goal-3"><a class="header" href="#goal-3">Goal</a></h2>
+<h2 id="goal-4"><a class="header" href="#goal-4">Goal</a></h2>
 <p>Determine whether OpenTimer (MIT, C++17) can reliably parse and analyse Jacquard's real-flow inputs — SKY130 Liberty and OpenLane2 MCU SoC post-P&amp;R output — well enough to serve as Jacquard's in-process reference STA (per ADR 0003).</p>
 <p>The outcome resolves ADR 0003's <code>Pending Spike</code> status to either <code>Accepted</code> or <code>Superseded</code>.</p>
 <h2 id="out-of-scope-for-this-spike"><a class="header" href="#out-of-scope-for-this-spike">Out of scope for this spike</a></h2>
@@ -4954,7 +6870,7 @@ it's the surrounding ecosystem that doesn't.</p>
 <p>Q3 (cross-check vs OpenSTA) and Q4 (correlation with Jacquard's
 <code>timing-analysis</code>) both depend on OpenTimer producing arrivals. With Q2
 unable to produce a single path, they're moot for this spike.</p>
-<h3 id="decision-8"><a class="header" href="#decision-8">Decision</a></h3>
+<h3 id="decision-16"><a class="header" href="#decision-16">Decision</a></h3>
 <p><strong>ADR 0003 → Superseded.</strong> Per the spike's decision matrix
 ("Fail on any → ADR 0003 → Superseded. Fall back to OpenSTA-subprocess-only
 validation"), the right move is to retire the in-process-OpenTimer plan
@@ -4986,7 +6902,7 @@ No need to fetch it separately.</li>
 <li>Whether SPEF generation had to be added to the OpenLane2 flow, and what that change was.</li>
 <li>Decision: confirm, scope-limit, or supersede ADR 0003.</li>
 </ul>
-<h2 id="links-10"><a class="header" href="#links-10">Links</a></h2>
+<h2 id="links-13"><a class="header" href="#links-13">Links</a></h2>
 <ul>
 <li>ADR 0003 — OpenTimer as in-process reference STA.</li>
 <li><code>../timing-correctness.md</code> — requirement R2.</li>

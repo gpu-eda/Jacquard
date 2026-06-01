@@ -1,0 +1,408 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0013 — Cosim peripheral model architecture - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ChipFlow/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="adr-0013--cosim-peripheral-model-architecture"><a class="header" href="#adr-0013--cosim-peripheral-model-architecture">ADR 0013 — Cosim peripheral model architecture</a></h1>
+<p><strong>Status:</strong> Accepted — the architecture is implemented and in use across
+multiple peripherals (multi-UART #90, config-driven APB3 bus tracing).
+The "Target architecture" section below tracks the remaining, optional
+refactors; the conventions it establishes are already followed.</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Jacquard's cosim mode runs reactive peripheral models alongside the
+GPU-simulated design: SPI flash serves firmware, UART decodes serial
+output, JTAG replays debug sessions, GPIO drives/observes pins, and
+Wishbone trace captures bus transactions. The architecture evolved
+organically; this ADR documents the current design, identifies the
+abstractions emerging from it, and establishes conventions for
+extending it.</p>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<h3 id="execution-domains"><a class="header" href="#execution-domains">Execution domains</a></h3>
+<p>Peripheral work splits across CPU and GPU. The boundary follows a
+simple rule: models that <strong>drive input pins</strong> (must react to design
+output each edge) run on the CPU; models that <strong>observe output pins</strong>
+(pure consumers of post-simulation state) or <strong>exchange data
+bidirectionally</strong> with the design run on the GPU for zero-copy access
+to the state buffer.</p>
+<p>Some peripherals span both domains. UART has a CPU-side RX driver
+(feeds bytes into the design's RX input pin) and a GPU-side TX decoder
+(reads the design's TX output pin).</p>
+<h3 id="cpu-side-peripheralmodel-trait"><a class="header" href="#cpu-side-peripheralmodel-trait">CPU-side: <code>PeripheralModel</code> trait</a></h3>
+<p>Defined in <code>src/sim/models/mod.rs</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>trait PeripheralModel {
+    fn name(&amp;self) -&gt; &amp;str;
+    fn driven_positions(&amp;self) -&gt; &amp;[u32];
+    fn apply_action(&amp;mut self, action: &amp;QueuedAction);
+    fn step_edge(&amp;mut self, output_state, overrides, emitted); // default: just calls contribute_overrides
+    fn contribute_overrides(&amp;self, overrides);
+    fn is_active(&amp;self) -&gt; bool; // default: false
+}
+<span class="boring">}</span></code></pre></pre>
+<p><code>apply_action</code> is how the <code>InputDispatcher</code> feeds queued stimulus
+commands to models. <code>is_active</code> signals that the model is mid-
+transmission and needs per-edge granularity (forces batch size to 1).
+<code>step_edge</code> has a default that just calls <code>contribute_overrides</code> —
+stateless models (GPIO) only need the latter.</p>
+<p>Models are registered into a <code>Vec&lt;Box&lt;dyn PeripheralModel&gt;&gt;</code> at
+startup. Each batch boundary, the loop calls <code>step_edge</code> on every
+model; models write their pin drives into a shared <code>ModelOverrides</code>
+map. These overrides are patched in-place into pre-allocated <code>BitOp</code>
+arrays (built at startup with placeholder entries for model-driven
+positions) and applied via the <code>state_prep</code> GPU kernel.</p>
+<p><strong>Note:</strong> <code>step_edge</code> currently receives an empty <code>output_state</code>
+slice — GPU output state is not read back per-edge for CPU-side
+models. GPIO and UART RX don't need it; I²C and SPI bus observation
+will require wiring the output state readback when those models are
+completed.</p>
+<p>The dispatch is peripheral-agnostic: <code>state_prep</code> applies whatever
+<code>BitOp</code> array it receives. Clock edges, reset, GPIO, UART RX, and
+JTAG TCK/TMS/TDI are all entries in the same ops buffer.</p>
+<p>Registered CPU-side models: GPIO, UART RX, JTAG replay (complete);
+I²C, SPI (scaffolded, output-state readback not yet wired).</p>
+<h3 id="gpu-side-two-model-patterns"><a class="header" href="#gpu-side-two-model-patterns">GPU-side: two model patterns</a></h3>
+<p>GPU-side models fall into two categories distinguished by their
+data-flow relationship to the simulation:</p>
+<p><strong>Observe-only (post-simulate):</strong> The model reads output state after
+simulation and produces results (decoded bytes, bus traces) into a
+ring buffer. It never writes to input state. One kernel call per
+edge, after <code>simulate_v1_stage</code>.</p>
+<p><strong>Bidirectional (pre+post simulate):</strong> The model both reads the
+design's outputs <em>and</em> injects data into the design's inputs. This
+requires two kernel calls per edge — one before simulation (inject
+response data into input state) and one after (read request signals
+from output state, advance the model's FSM).</p>
+<div class="table-wrapper"><table><thead><tr><th>Pattern</th><th>When</th><th>Current models</th></tr></thead><tbody>
+<tr><td>Observe-only</td><td>Post-simulate</td><td>UART TX decoder, Wishbone bus trace</td></tr>
+<tr><td>Bidirectional</td><td>Pre-simulate (inject) + post-simulate (sample, advance)</td><td>SPI Flash</td></tr>
+</tbody></table>
+</div>
+<p>Any memory-mapped peripheral (external SRAM, I²C EEPROM, etc.)
+would follow the bidirectional pattern.</p>
+<h3 id="per-edge-execution-order"><a class="header" href="#per-edge-execution-order">Per-edge execution order</a></h3>
+<pre><code>state_prep (apply clk/gpio/jtag pin drives from CPU-side models)
+  → [bidirectional: inject] — e.g. gpu_apply_flash_din
+    → simulate_v1_stage ×N (combinational logic evaluation)
+  → [bidirectional: sample+advance] — e.g. gpu_flash_model_step
+  → [observe-only] — e.g. gpu_io_step (UART TX + Wishbone)
+</code></pre>
+<p>CPU-side <code>PeripheralModel::step_edge</code> runs between GPU batches.</p>
+<h3 id="gpucpu-communication-ring-buffers"><a class="header" href="#gpucpu-communication-ring-buffers">GPU→CPU communication: ring buffers</a></h3>
+<p>GPU-side models produce output into fixed-size ring buffers in device
+memory. The CPU drains these after each GPU batch completes, reading
+from a local <code>read_head</code> up to the GPU-written <code>write_head</code>. No
+synchronisation beyond Metal's command buffer completion is needed.</p>
+<p>Current ring buffers:</p>
+<div class="table-wrapper"><table><thead><tr><th>Buffer</th><th>Element</th><th>Capacity</th></tr></thead><tbody>
+<tr><td><code>UartChannel</code></td><td><code>u8</code> (decoded bytes)</td><td>4096</td></tr>
+<tr><td><code>WbTraceChannel</code></td><td><code>WbTraceEntry</code> (20 bytes)</td><td>16384</td></tr>
+</tbody></table>
+</div>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
+<p>Peripheral config lives in <code>sim_config.json</code>, deserialized into
+<code>TestbenchConfig</code> (<code>src/testbench.rs</code>):</p>
+<div class="table-wrapper"><table><thead><tr><th>Peripheral</th><th>Field</th><th>Plural?</th></tr></thead><tbody>
+<tr><td>Clock</td><td><code>clocks: Option&lt;Vec&lt;ClockConfig&gt;&gt;</code></td><td>Yes (<code>effective_clocks()</code>)</td></tr>
+<tr><td>GPIO</td><td><code>gpios: Vec&lt;GpioConfig&gt;</code></td><td>Yes</td></tr>
+<tr><td>UART</td><td><code>uart</code> + <code>uarts: Vec&lt;UartConfig&gt;</code></td><td>Yes (<code>effective_uarts()</code>, #90)</td></tr>
+<tr><td>Flash</td><td><code>flash: Option&lt;FlashConfig&gt;</code></td><td>Not yet</td></tr>
+<tr><td>JTAG</td><td><code>jtag: Option&lt;JtagConfig&gt;</code></td><td>Not yet</td></tr>
+<tr><td>Wishbone</td><td><em>(auto-detected, hardcoded signal names)</em></td><td>N/A (legacy)</td></tr>
+<tr><td>Bus trace (AHB/APB)</td><td><code>bus_traces: Vec&lt;BusTraceConfig&gt;</code></td><td>Yes (<code>effective_bus_traces()</code>)</td></tr>
+</tbody></table>
+</div>
+<h3 id="current-implementation-bespoke-kernels"><a class="header" href="#current-implementation-bespoke-kernels">Current implementation (bespoke kernels)</a></h3>
+<p>Today each GPU-side peripheral has its own kernel function:</p>
+<div class="table-wrapper"><table><thead><tr><th>Kernel</th><th>Slots</th><th>Pattern</th></tr></thead><tbody>
+<tr><td><code>gpu_apply_flash_din</code></td><td>states[0], flash_state[1], flash_din_params[2]</td><td>Bidirectional: inject</td></tr>
+<tr><td><code>gpu_flash_model_step</code></td><td>states[0], flash_state[1], flash_model_params[2], flash_data[3]</td><td>Bidirectional: sample+advance</td></tr>
+<tr><td><code>gpu_io_step</code></td><td>states[0], uart_state[1], uart_params[2], uart_channel[3], wb_channel[4], wb_params[5], bus_channel[6], bus_params[7]</td><td>Observe-only (UART + Wishbone + AHB/APB bus trace)</td></tr>
+</tbody></table>
+</div>
+<p>All run on thread 0 only — the per-tick work is a trivial FSM step.
+<code>gpu_io_step</code> combines three logically independent observe-only models,
+gated by <code>n_uarts &gt; 0</code>, <code>has_trace</code>, and <code>n_buses &gt; 0</code> respectively.</p>
+<h3 id="config-driven-bus-monitor-ahbapb"><a class="header" href="#config-driven-bus-monitor-ahbapb">Config-driven bus monitor (AHB/APB)</a></h3>
+<p>The Wishbone trace (<code>build_wb_trace_params</code>) hardcodes one SoC's signal
+names (<code>cpu.fetch.ibus__cyc</code>, <code>spiflash.ctrl.wb_bus__ack</code>, …) directly
+in source. The AHB/APB bus tracer generalizes it into a <strong>config-driven,
+protocol-aware monitor</strong> that is the model for future bus tracing:</p>
+<ul>
+<li><strong>Config</strong> (<code>BusTraceConfig</code>): <code>name</code>, <code>protocol</code> (apb3 / ahb-lite /
+ahb5), hierarchical <code>prefix</code>, <code>addr_bits</code>/<code>data_bits</code>, and optional
+per-pin <code>signals</code> overrides. Pins default to <code>{prefix}{pin}</code>.</li>
+<li><strong>Pin binding</strong>: protocol pin names (<code>psel</code>, <code>paddr</code>, …) are resolved
+to output-state positions via <code>resolve_to_state_pos</code> in
+<code>trace_signals.rs</code> — the same multi-candidate resolver <code>--trace-signals</code>
+uses, so Yosys-flattened / scalar-expanded / structural naming all
+work. The pins are registered as observables before partitioning (via
+<code>DesignArgs::extra_observable_signals</code>) so they get state-buffer slots.</li>
+<li><strong>GPU capture / CPU decode split</strong>: the kernel is protocol-agnostic —
+it packs a raw beat (<code>addr, wdata, rdata, ctrl flags</code>) into the ring
+buffer on the protocol's gating edge (<code>psel &amp; penable &amp; pready</code> for
+APB), using rising-edge detection so exactly one beat is recorded per
+completed transfer. The protocol FSM (phase pairing, burst tracking,
+response decode) lives in plain, unit-testable Rust in
+<code>src/sim/models/bus_trace.rs</code>. APB3 is stateless (one beat = one
+transaction); AHB pairing is the Phase-2 extension.</li>
+<li><strong>Output</strong>: decoded transactions stream to CSV via <code>--bus-trace-csv</code>;
+annotated-VCD emission is a planned follow-up.</li>
+</ul>
+<p>This is observe-only, so it slots into the existing post-simulate
+pattern. Migrating the hardcoded WbTrace onto this mechanism (expressing
+the VexRiscv ibus/dbus as configured buses) is a clean follow-up.</p>
+<h2 id="target-architecture"><a class="header" href="#target-architecture">Target architecture</a></h2>
+<p>The two patterns (observe-only, bidirectional) and the common
+conventions (ring buffers, params structs, per-instance config arrays)
+should be codified so new peripherals follow a template:</p>
+<h3 id="common-conventions"><a class="header" href="#common-conventions">Common conventions</a></h3>
+<ul>
+<li><strong>Params struct layout:</strong> <code>{ u32 state_size; u32 n_active; u32 _pad[2]; PerInstanceConfig configs[MAX_N]; }</code> — uniform header, compile-time <code>MAX_N</code> cap.</li>
+<li><strong>Ring buffer struct:</strong> <code>{ u32 write_head; u32 capacity; u32 _pad[2]; T data[CAP]; }</code> — shared across all models producing GPU→CPU output.</li>
+<li><strong>Buffer sizing:</strong> always <code>MAX_N</code> elements regardless of <code>n_active</code>. Wastes negligible memory for small N.</li>
+<li><strong>Guard pattern:</strong> <code>for (i = 0; i &lt; n_active &amp;&amp; i &lt; MAX_N; i++)</code> replaces the current <code>has_foo != 0</code> booleans.</li>
+</ul>
+<h3 id="model-registration"><a class="header" href="#model-registration">Model registration</a></h3>
+<p>New GPU-side models declare which pattern they follow:</p>
+<ul>
+<li><strong>Observe-only:</strong> register a post-simulate kernel. Receives output state (read-only), writes to ring buffer.</li>
+<li><strong>Bidirectional:</strong> register a pre-simulate kernel (inject into input state) and a post-simulate kernel (read output state, advance FSM).</li>
+</ul>
+<p>Today this registration is implicit in <code>cosim_metal.rs</code>'s
+<code>encode_and_commit_gpu_batch</code>. Formalizing it is a future step —
+the convention is sufficient while the model count is small.</p>
+<h3 id="plural-config-convention"><a class="header" href="#plural-config-convention">Plural config convention</a></h3>
+<p>To support multi-instance peripherals (multiple UARTs, potentially
+multiple flash chips or RAM banks):</p>
+<ul>
+<li>Legacy singular field kept via <code>#[serde(default)]</code>.</li>
+<li>New plural field alongside (e.g. <code>uarts: Vec&lt;UartConfig&gt;</code>).</li>
+<li><code>effective_&lt;peripheral&gt;() -&gt; Vec&lt;Config&gt;</code> merges both.</li>
+<li>Each config struct gains <code>name: Option&lt;String&gt;</code> for labelling.</li>
+</ul>
+<p>This mirrors the existing <code>effective_clocks()</code> pattern.</p>
+<h3 id="cross-backend-considerations"><a class="header" href="#cross-backend-considerations">Cross-backend considerations</a></h3>
+<p>Cosim is Metal-only today. CUDA/HIP paths (<code>kernel_v1_impl.cuh</code>)
+implement the core simulation kernel but have no <code>gpu_io_step</code> or
+flash kernels. When CUDA/HIP cosim is added, the same two-pattern
+taxonomy applies — the kernel implementations will differ but the
+Rust-side buffer allocation, config resolution, and drain logic can
+be shared via feature-gated code in <code>cosim_metal.rs</code> (or a
+future <code>cosim_common.rs</code>).</p>
+<h2 id="phasing"><a class="header" href="#phasing">Phasing</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Phase</th><th>Scope</th><th>Status</th></tr></thead><tbody>
+<tr><td>1</td><td>Multi-UART (<a href="https://github.com/gpu-eda/Jacquard/issues/90">#90</a>): first peripheral using plural-config + array-in-kernel conventions</td><td><strong>Done</strong></td></tr>
+<tr><td>1b</td><td>Config-driven bus monitor, APB3 + CSV (GPU-capture/CPU-decode split)</td><td><strong>Done</strong></td></tr>
+<tr><td>2</td><td>Refactor <code>gpu_io_step</code> to use common params/ring-buffer layout</td><td>Future</td></tr>
+<tr><td>2b</td><td>AHB-Lite / AHB5 bus tracing + annotated-VCD output; migrate WbTrace onto the general monitor</td><td>Future</td></tr>
+<tr><td>3</td><td>Multi-Flash / external RAM (bidirectional pattern)</td><td>Deferred (no use case yet)</td></tr>
+<tr><td>—</td><td>Multi-JTAG</td><td>Not needed (TAP daisy-chain suffices)</td></tr>
+</tbody></table>
+</div>
+<p>Plan docs: <a href="../plans/multi-peripheral-cosim.html"><code>../plans/multi-peripheral-cosim.md</code></a>,
+<a href="../plans/bus-transaction-tracing.html"><code>../plans/bus-transaction-tracing.md</code></a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../adr/0012-cdc-jitter-injection.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../adr/0014-aig-as-simulation-ir.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../adr/0012-cdc-jitter-injection.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../adr/0014-aig-as-simulation-ir.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

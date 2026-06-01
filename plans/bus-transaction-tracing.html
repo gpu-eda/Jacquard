@@ -1,0 +1,394 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Bus transaction tracing - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ChipFlow/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="plan-config-driven-ahbapb-bus-transaction-tracing"><a class="header" href="#plan-config-driven-ahbapb-bus-transaction-tracing">Plan: Config-driven AHB/APB bus transaction tracing</a></h1>
+<h2 id="goal"><a class="header" href="#goal">Goal</a></h2>
+<p>Trace <strong>AHB5, AHB-Lite, and APB3</strong> bus transactions in cosim, compactly,
+without baking signal names into source. Output as <strong>CSV</strong> (machine-readable
+transaction table) and <strong>annotated VCD</strong> (transactions as a signal group for
+waveform viewers). Decode site: <strong>GPU capture + CPU protocol FSM</strong> (the kernel
+stays dumb; protocol semantics live in testable Rust).</p>
+<p>Order: <strong>APB3 first</strong> (validate against the Hazard3 JTAG-DM APB DMI in
+<code>tests/jtag_minimal/</code>), then AHB-Lite, then AHB5.</p>
+<h2 id="why-this-shape"><a class="header" href="#why-this-shape">Why this shape</a></h2>
+<p>The existing "Wishbone bus trace" (<code>build_wb_trace_params</code>,
+<code>cosim_metal.rs:1277</code>; <code>gpu_io_step</code>, <code>kernel_v1.metal:1182</code>) proves the
+<em>mechanism</em> — a GPU observe-only peripheral that packs a compact per-tick
+entry into a ring buffer only when the bus is active/changed, drained by the
+CPU — but it is <strong>hardcoded</strong> to one VexRiscv-style SoC (literal names
+<code>cpu.fetch.ibus__cyc</code>, <code>spiflash.ctrl.wb_bus__ack</code>, …). We generalize that
+mechanism into a config-driven, protocol-aware monitor. It is observe-only
+(we watch design outputs, never drive), so it fits the ADR-0013 GPU
+observe-only peripheral pattern, and gets the <code>effective_*()</code>-style plural
+config for free.</p>
+<p>Two existing pieces are reused:</p>
+<ul>
+<li><strong>Multi-candidate name resolution</strong> in <code>src/sim/trace_signals.rs</code> — handles
+Yosys-flattened / scalar-expanded / structural hierarchical naming. Refactor
+the candidate generator into a shared helper so the bus tracer binds pins the
+same way <code>--trace-signals</code> does.</li>
+<li><strong>Extra-observables VCD path</strong> (<code>emit_extra_observables</code>, <code>vcd_io.rs:635</code>) —
+the model for emitting synthesized signals into the output VCD.</li>
+</ul>
+<p>The hardcoded WbTrace is <strong>left intact</strong> for now (it has a passing test);
+migrating it onto the general mechanism is a clean follow-up, not a
+prerequisite.</p>
+<h2 id="design"><a class="header" href="#design">Design</a></h2>
+<h3 id="1-config-schema--srctestbenchrs"><a class="header" href="#1-config-schema--srctestbenchrs">1. Config schema — <code>src/testbench.rs</code></a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BusProtocol { Apb3, AhbLite, Ahb5 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BusTraceConfig {
+    pub name: String,
+    pub protocol: BusProtocol,
+    /// Hierarchical prefix; standard protocol pin names are appended.
+    pub prefix: String,
+    #[serde(default = "default_addr_bits")] pub addr_bits: usize, // 32
+    #[serde(default = "default_data_bits")] pub data_bits: usize, // 32
+    /// Optional per-pin overrides: logical pin name -&gt; explicit net name,
+    /// for designs whose pins don't follow `{prefix}{PIN}`.
+    #[serde(default)] pub signals: HashMap&lt;String, String&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Add to <code>TestbenchConfig</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[serde(default)] pub bus_traces: Vec&lt;BusTraceConfig&gt;,
+<span class="boring">}</span></code></pre></pre>
+<p>New feature, so no singular legacy form. (<code>effective_bus_traces()</code> provided
+for symmetry with <code>effective_uarts()</code>, even though it just returns the Vec.)</p>
+<h3 id="2-protocol-pin-maps--cpu-decoder--new-srcsimmodelsbus_tracers"><a class="header" href="#2-protocol-pin-maps--cpu-decoder--new-srcsimmodelsbus_tracers">2. Protocol pin maps + CPU decoder — new <code>src/sim/models/bus_trace.rs</code></a></h3>
+<p>Logical-pin tables per protocol:</p>
+<ul>
+<li><strong>APB3</strong>: <code>psel penable pwrite pready pslverr paddr[] pwdata[] prdata[]</code></li>
+<li><strong>AHB-Lite</strong>: <code>htrans[1:0] haddr[] hwrite hsize[2:0] hburst[2:0] hready hresp hwdata[] hrdata[]</code></li>
+<li><strong>AHB5</strong>: AHB-Lite + optional <code>hnonsec hexcl hexokay hmaster[]</code> (resolved
+if present, ignored if absent)</li>
+</ul>
+<p>Default net name <code>{prefix}{pin}</code> (lowercased), overridable via <code>signals</code>.
+Resolution via the shared multi-candidate resolver (item 4).</p>
+<p><code>BusTraceDecoder</code> (per bus) consumes raw captured beats and emits:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct BusTransaction {
+    pub tick: u64, pub bus: String, pub protocol: BusProtocol,
+    pub dir: Dir,            // Read | Write
+    pub addr: u64, pub data: u64,
+    pub resp: BusResp,       // Ok | Error
+    pub burst: Option&lt;BurstInfo&gt;, // beat index / length for AHB
+}
+<span class="boring">}</span></code></pre></pre>
+<ul>
+<li><strong>APB3 FSM</strong>: GPU gates capture on <code>psel &amp; penable &amp; pready</code> (access-phase
+complete), so each captured beat <em>is</em> a complete transaction. <code>dir = pwrite</code>,
+<code>data = pwrite ? pwdata : prdata</code>, <code>resp = pslverr</code>.</li>
+<li><strong>AHB FSM</strong>: GPU gates capture on <code>hready</code> high (pipeline advance) and records
+<code>htrans, haddr, hwrite, hsize, hburst, hwdata, hrdata, hresp</code>. CPU keeps a
+1-deep pending address-phase record and pairs address beat N with the data on
+beat N+1; tracks burst beat counter from <code>hburst</code>/<code>htrans==SEQ</code>.</li>
+</ul>
+<p>Pure-Rust, unit-tested with synthetic beat sequences — no GPU required. This is
+the testability win of CPU-side decode.</p>
+<h3 id="3-gpu-capture--csrckernel_v1metal--srcsimcosim_metalrs"><a class="header" href="#3-gpu-capture--csrckernel_v1metal--srcsimcosim_metalrs">3. GPU capture — <code>csrc/kernel_v1.metal</code> + <code>src/sim/cosim_metal.rs</code></a></h3>
+<p>Generalize the WbTrace structs into protocol-agnostic capture:</p>
+<pre><code class="language-c">#define MAX_BUS_TRACES 4
+#define BUS_TRACE_MAX_ADR_BITS 32
+#define BUS_TRACE_MAX_DAT_BITS 32
+
+struct BusTraceParams {           // one per configured bus
+    u32 protocol;                 // 0=apb3 1=ahb-lite 2=ahb5
+    u32 gate_a_pos, gate_b_pos, gate_c_pos;   // edge-gating bits (psel/penable/pready or hready/htrans)
+    u32 dir_pos, resp_pos;
+    u32 addr_pos[BUS_TRACE_MAX_ADR_BITS];
+    u32 wdata_pos[BUS_TRACE_MAX_DAT_BITS];
+    u32 rdata_pos[BUS_TRACE_MAX_DAT_BITS];
+    u32 ctrl_pos[8];              // htrans, hsize, hburst, hnonsec, ...
+    u32 addr_bits, data_bits;
+};
+struct BusTraceEntry { u32 tick, flags, ctrl; u32 addr, wdata, rdata; };
+struct BusTraceChannel { u32 write_head, capacity, current_tick, n_buses; /* entries follow */ };
+</code></pre>
+<p>The kernel computes the per-protocol gate, and on a gating edge packs one
+<code>BusTraceEntry</code> (bus id in <code>flags</code> high bits). No FSM, no pairing on GPU.</p>
+<p><code>gpu_io_step</code> currently uses buffer slots 0–5 (UART + WbTrace). Add slots 6–7
+for <code>BusTraceParams[]</code> + <code>BusTraceChannel</code>. Metal allows ≫8 buffers, so extend
+the existing dispatch rather than adding a kernel.</p>
+<p>Rust mirrors of the structs in <code>cosim_metal.rs</code> (next to <code>WbTraceParams</code>),
+<code>build_bus_trace_params()</code> resolving pins for each configured bus, buffer
+allocation sized <code>MAX_BUS_TRACES</code>, and a per-bus read head in the drain loop
+(near <code>cosim_metal.rs:4057</code>) feeding each <code>BusTraceDecoder</code>.</p>
+<h3 id="4-shared-signal-resolver--refactor-srcsimtrace_signalsrs"><a class="header" href="#4-shared-signal-resolver--refactor-srcsimtrace_signalsrs">4. Shared signal resolver — refactor <code>src/sim/trace_signals.rs</code></a></h3>
+<p>Extract the multi-candidate name → AIG-pin / state-position resolver
+(currently internal to trace-signal registration) into a reusable helper
+callable from <code>build_bus_trace_params</code>. Keeps one source of truth for the
+Yosys/scalar/structural naming conventions.</p>
+<h3 id="5-output"><a class="header" href="#5-output">5. Output</a></h3>
+<ul>
+<li><strong>CSV</strong> (<code>--bus-trace-csv &lt;PATH&gt;</code>): drain-time, one row per <code>BusTransaction</code>.
+Header: <code>tick,bus,protocol,dir,addr,data,resp,burst</code>. Trivial — lands in
+Phase 1.</li>
+<li><strong>Annotated VCD</strong>: synthesized per-bus VCD vars (<code>{bus}_addr</code>,
+<code>{bus}_wdata</code>/<code>{bus}_rdata</code>, <code>{bus}_dir</code>, <code>{bus}_resp</code>) that value-change at
+transaction-complete ticks. This needs a <strong>new "virtual signal" emission
+path</strong> in <code>vcd_io.rs</code>: unlike existing extra-observables (raw nets sampled
+per tick from the state buffer), these are sparse CPU-decoded events the VCD
+writer must interleave by tick. Bigger plumbing → <strong>Phase 3</strong>. Dovetails with
+the wire-bundle-scripting / Surfer direction in project memory.</li>
+</ul>
+<h3 id="6-cli--srcbinjacquardrs"><a class="header" href="#6-cli--srcbinjacquardrs">6. CLI — <code>src/bin/jacquard.rs</code></a></h3>
+<ul>
+<li><code>--bus-trace-csv &lt;PATH&gt;</code> (Phase 1)</li>
+<li>bus VCD annotation folded into the output/<code>--timing-vcd</code> when <code>bus_traces</code> is
+configured, or a dedicated <code>--bus-trace-vcd</code> flag (Phase 3)</li>
+</ul>
+<h2 id="status"><a class="header" href="#status">Status</a></h2>
+<p><strong>Phase 1 is complete</strong> (APB3 end-to-end + CSV). Validated by
+<code>tests/apb_trace/</code> — a dedicated synthesized APB3 design (the Hazard3
+JTAG-DM post-PnR netlist drops the APB addr/data nets during flattening,
+so a names-preserved design was built instead). CI step:
+<code>Run APB3 bus-trace cosim (ADR 0013)</code>. Phases 2–3 remain.</p>
+<h2 id="phasing"><a class="header" href="#phasing">Phasing</a></h2>
+<ol>
+<li><strong>Phase 1 — APB3 end-to-end.</strong> ✅ Done. Config schema, pin maps, shared
+resolver, APB3 GPU capture, APB3 CPU decoder, CSV output. Validated on
+<code>tests/apb_trace/</code> (synthesized APB3 design). APB3 FSM unit-tested.</li>
+<li><strong>Phase 2 — AHB-Lite + AHB5.</strong> Pipeline pairing, burst tracking, AHB5 extra
+signals. Unit-test the AHB FSM. Needs an AHB design to integration-test
+against (open question — see below).</li>
+<li><strong>Phase 3 — Annotated VCD.</strong> Virtual-signal emission path in <code>vcd_io.rs</code>.</li>
+<li><strong>Follow-up — migrate WbTrace</strong> onto the general mechanism (express the
+VexRiscv ibus/dbus as configured buses), then delete the hardcoded path.</li>
+</ol>
+<h2 id="verification"><a class="header" href="#verification">Verification</a></h2>
+<ul>
+<li>Unit: APB3 &amp; AHB FSM decoders against synthetic beat vectors (pure Rust, no GPU).</li>
+<li>Integration (Phase 1): cosim the Hazard3 JTAG-DM with <code>--bus-trace-csv</code>,
+assert the expected DMI register accesses (DMCONTROL/DMSTATUS) appear.</li>
+<li>Build: <code>cargo build --release --features metal</code> clean; existing cosim tests
+(single-UART, WbTrace) unaffected since <code>bus_traces</code> defaults empty.</li>
+</ul>
+<h2 id="open-questions"><a class="header" href="#open-questions">Open questions</a></h2>
+<ul>
+<li><strong>AHB integration test design.</strong> APB3 validates on the existing Hazard3
+JTAG-DM. Phase 2 needs an AHB-Lite/AHB5 design — do we have one, or synthesize
+a small AHB peripheral (like <code>tests/dual_uart/</code>)?</li>
+<li><strong>Per-bus ring vs shared ring.</strong> One <code>BusTraceChannel</code> with a bus-id field
+(simpler allocation) vs one ring per bus (no cross-bus contention). Start
+shared; revisit if a hot multi-bus design overflows.</li>
+<li><strong>CUDA/HIP.</strong> Cosim is Metal-only today; no kernel changes needed elsewhere
+now, but the general design should port cleanly when CUDA cosim lands.</li>
+</ul>
+<h2 id="adr-impact"><a class="header" href="#adr-impact">ADR impact</a></h2>
+<p>This generalizes the cosim peripheral architecture — update <strong>ADR-0013</strong>
+(plural-peripheral configs) to record the config-driven bus-monitor pattern and
+the GPU-capture/CPU-decode split, once Phase 1 is real.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../plans/multi-peripheral-cosim.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../spikes/opentimer-sky130.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../plans/multi-peripheral-cosim.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../spikes/opentimer-sky130.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

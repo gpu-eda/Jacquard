@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Architecture Decision Records - Jacquard Documentation</title>
+        <title>0009 — OpenSTA Verilog reader input constraints - Jacquard Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -155,111 +155,128 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="architecture-decision-records"><a class="header" href="#architecture-decision-records">Architecture Decision Records</a></h1>
-<p>ADRs capture decisions worth understanding later: the context, the
-options considered, and the rationale for the choice. They are
-numbered, append-only, and never silently rewritten — if a decision
-changes, supersede the old ADR with a new one and update the status.</p>
-<h2 id="status-legend"><a class="header" href="#status-legend">Status legend</a></h2>
-<ul>
-<li><strong>Accepted / Approved</strong> — current, in effect.</li>
-<li><strong>Proposed</strong> — drafted, not yet ratified.</li>
-<li><strong>Superseded</strong> — historical, replaced by a later ADR or by a spike
-outcome; kept for the audit trail.</li>
-</ul>
-<h2 id="index"><a class="header" href="#index">Index</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>#</th><th>Title</th><th>Status</th></tr></thead><tbody>
-<tr><td><a href="0001-opensta-as-oracle.html">0001</a></td><td>OpenSTA as the timing correctness oracle and sole STA path</td><td>Accepted (scope expanded 2026-05-01)</td></tr>
-<tr><td><a href="0002-timing-ir.html">0002</a></td><td>Timing intermediate representation</td><td>Accepted</td></tr>
-<tr><td><a href="0003-opentimer-primary-sta.html">0003</a></td><td>OpenTimer as in-process reference STA</td><td>Superseded (2026-05-01) — spike failed; OpenSTA subprocess only</td></tr>
-<tr><td><a href="0004-private-pdk-testing.html">0004</a></td><td>Private PDK testing track</td><td>Accepted</td></tr>
-<tr><td><a href="0005-opensta-vendoring-and-corpus.html">0005</a></td><td>OpenSTA vendoring and test-corpus strategy</td><td>Accepted</td></tr>
-<tr><td><a href="0006-sdf-preprocessing-model.html">0006</a></td><td>SDF preprocessing model and interim-to-release cutover</td><td>Accepted (amended 2026-05-02)</td></tr>
-<tr><td><a href="0007-timing-model-fidelity-roadmap.html">0007</a></td><td>Timing model fidelity roadmap</td><td>Proposed</td></tr>
-<tr><td><a href="0008-structured-timing-output.html">0008</a></td><td>Structured timing output as first-class deliverable</td><td>Approved</td></tr>
-<tr><td><a href="0009-opensta-verilog-reader-inputs.html">0009</a></td><td>OpenSTA Verilog reader inputs</td><td>Accepted</td></tr>
-<tr><td><a href="0010-declarative-cell-metadata.html">0010</a></td><td>Declarative cell metadata</td><td>Accepted</td></tr>
-<tr><td><a href="0011-ram-port-mapping-schema.html">0011</a></td><td>RAM port-mapping schema for declarative cell metadata</td><td>Accepted</td></tr>
-<tr><td><a href="0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Proposed</td></tr>
-<tr><td><a href="0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Accepted</td></tr>
-<tr><td><a href="0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted</td></tr>
-<tr><td><a href="0015-boomerang-execution-model.html">0015</a></td><td>Boomerang execution model and GPU resource mapping</td><td>Accepted</td></tr>
-<tr><td><a href="0016-selective-x-propagation.html">0016</a></td><td>Selective X-propagation</td><td>Accepted</td></tr>
-<tr><td><a href="0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted</td></tr>
-</tbody></table>
-</div>
-<h2 id="how-the-adrs-relate"><a class="header" href="#how-the-adrs-relate">How the ADRs relate</a></h2>
-<ul>
-<li>
-<p><strong>0014 / 0015</strong> document the core simulation pipeline: 0014
-explains why the AIG (and-inverter graph) is the simulation IR —
-its uniform AND-gate structure enables the boomerang reduction tree
-and eliminates per-cell dispatch in the GPU kernel.  0015 describes
-the boomerang execution model itself — the 13-level hierarchical
-reduction tree, the GPU resource limits it imposes (8191 inputs,
-8191 outputs, 4095 intermediates, 64 SRAM groups per partition),
-the hypergraph partitioning that distributes work across GPU blocks,
-and the packed instruction format (<code>FlattenedScriptV1</code>) consumed by
-the kernel.  Together they document the path from gate-level
-Verilog to GPU kernel execution that the GEM paper describes.</p>
-</li>
-<li>
-<p><strong>0001 / 0003 / 0005 / 0006</strong> describe the timing oracle stack:
-OpenSTA as the ground truth (0001), vendored at a pinned revision
-with its own corpus reused (0005), driving SDF preprocessing
-out-of-process (0006). The earlier OpenTimer in-process plan (0003)
-was retired after the spike (<a href="../spikes/opentimer-sky130.html"><code>../spikes/opentimer-sky130.md</code></a>).</p>
-</li>
-<li>
-<p><strong>0002</strong> is the data contract those tools talk over — a JSON timing
-IR consumed by Jacquard, produced by <code>opensta-to-ir</code>.</p>
-</li>
-<li>
-<p><strong>0004</strong> governs how PDK-specific testing happens for NDA-bound
-contributors without leaking files into the public repo.</p>
-</li>
-<li>
-<p><strong>0007 / 0008</strong> are the forward-looking pair: 0008 (Approved)
-defines the structured timing output Jacquard owes downstream
-flows; 0007 (Proposed) sketches the model-fidelity work needed to
-back those outputs at scale (δ(T), clock-tree skew, wire delay).
-Scheduling for both lives in
-<a href="../plans/post-phase-0-roadmap.html"><code>../plans/post-phase-0-roadmap.md</code></a>.</p>
-</li>
-<li>
-<p><strong>0013 / 0017</strong> cover the cosim runtime: 0013 documents the
-peripheral model architecture (CPU-side <code>PeripheralModel</code> trait,
-GPU-side kernel patterns, ring buffers, plural-config convention);
-0017 documents the execution model (batch dispatch loop,
-multi-clock scheduler, edges-vs-cycles semantics).</p>
-</li>
-<li>
-<p><strong>0016</strong> accepts the selective X-propagation design documented in
-<a href="../selective-x-propagation.html"><code>docs/selective-x-propagation.md</code></a>.
-The full seven-phase design lives there; the ADR is a thin
-acceptance record with a summary of key choices.</p>
-</li>
-</ul>
-<h2 id="adding-a-new-adr"><a class="header" href="#adding-a-new-adr">Adding a new ADR</a></h2>
+                        <h1 id="adr-0009--opensta-verilog-reader-input-constraints"><a class="header" href="#adr-0009--opensta-verilog-reader-input-constraints">ADR 0009 — OpenSTA Verilog reader input constraints</a></h1>
+<p><strong>Status:</strong> Accepted.</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>OpenSTA's <code>read_verilog</code> Tcl command is structural-only: it accepts cell
+instantiations and bare-net <code>assign</code> statements but rejects RTL
+operators (<code>~</code>, <code>&amp;</code>, <code>|</code>, <code>^</code>), bit-selects in assigns, and ranged
+concatenations. Violations surface as <code>Error: &lt;file&gt; line &lt;N&gt;, syntax error</code> and exit 1. This is a long-standing OpenSTA limitation, not a
+flag.</p>
+<p>Two patterns make this surprising in practice — both have already
+caught us once:</p>
 <ol>
-<li>Pick the next number (highest existing + 1).</li>
-<li>Filename: <code>NNNN-short-kebab-title.md</code>.</li>
-<li>Start with <code># ADR NNNN — &lt;title&gt;</code> and a <code>**Status:**</code> line.</li>
-<li>Standard sections: Context, Decision, Consequences. Add Amendment
-blocks dated when the decision is revisited; do not rewrite
-accepted history.</li>
-<li>Add the row to the table above.</li>
+<li>
+<p><strong>Final-stage outputs from the LibreLane/OpenROAD flow are
+sometimes wrapped.</strong> LibreLane itself only ever reads structural
+netlists (<code>&lt;design&gt;.pnl.v</code> — verified locally on
+<code>chip_top.pnl.v</code>: zero RTL operators, single module). The wrapping
+is added by downstream integration tooling — for the SkyWater
+openframe flow, chipflow's harness wraps the LibreLane output in
+<code>openframe_project_wrapper</code> to patch active-low OEB pins into the
+pad ring, producing the <code>assign gpio_oeb[0] = ~( ... );</code> pattern.
+The combined file (<code>tests/mcu_soc/data/6_final.v</code>) contains both
+the readable-by-OpenSTA structural <code>top</code> module <em>and</em> the
+wrapper's unreadable RTL. The SDF was generated against the inner
+<code>top</code>, not the wrapper — matching what LibreLane's own STA saw.</p>
+</li>
+<li>
+<p><strong>Post-synthesis Verilog has the right form but the wrong cells.</strong>
+Pre-P&amp;R synthesis output (e.g. <code>top_synth.v</code>) is fully structural
+and uses the same module name <code>top</code> as the post-P&amp;R body, so it
+<em>looks</em> like an acceptable substitute. It is not: the SDF
+references hundreds of thousands of P&amp;R-inserted cells
+(<code>clkbuf_regs_*</code> CTS buffers, <code>ANTENNA_*</code> diodes, <code>delaybuf_*</code>,
+fillers) that simply do not exist in synthesis output. OpenSTA
+quietly drops SDF entries whose endpoints are not in the loaded
+design; the resulting IR back-annotates only the surviving subset.
+Concrete numbers from the MCU SoC fixture: <code>top_synth.v</code> has
+31,500 cells; <code>module top</code> inside <code>6_final.v</code> has 266,746. Feeding
+<code>top_synth.v</code> would silently drop ~88% of the design's structure.</p>
+</li>
 </ol>
+<p>Past convention (<code>docs/plans/ws3-cosim-sdf-followup.md</code>, pre
+2026-05-18) recommended substituting <code>top_synth.v</code> to dodge the
+wrapper-parse error. The contemporaneous verification log
+(<code>28162 matched, 2090 unmatched</code>) reported the jtir-to-cosim-netlist
+match rate, <em>not</em> SDF coverage against the jtir — high surface
+"working" while the IR was missing most of the design's real
+timing. That recommendation is retracted in the same change as this
+ADR lands.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>The "structural-only" constraint is <strong>owned by <code>opensta-to-ir</code></strong>,
+not by the caller. Specifically:</p>
+<ol>
+<li>
+<p><strong><code>opensta-to-ir</code> filters Verilog inputs at invocation time.</strong> For
+each <code>--verilog</code> file, it extracts the <code>module &lt;--top&gt; … endmodule</code> block before handing files to OpenSTA. Files that do
+not contain <code>module &lt;--top&gt;</code> (sub-module-only files in
+hierarchical designs) are passed through unchanged. The wrapper
+modules that LibreLane + wafer.space integration adds — and any
+future analogues — are simply not seen by OpenSTA. Implementation
+in <code>crates/opensta-to-ir/src/verilog_filter.rs</code>; integration test
+coverage in <code>tests/opensta_integration.rs</code>.</p>
+</li>
+<li>
+<p><strong>The cell-set match against the SDF is the caller's
+responsibility.</strong> <code>opensta-to-ir</code> cannot determine programmatically
+whether a given Verilog input is the right design stage for a
+given SDF. The CI fixture comment in <code>prepare-mcu-soc-jtir</code>
+captures the rule for sky130 mcu_soc; copy the <em>spirit</em> (use the
+post-P&amp;R structural body, not synthesis output) when adding new
+fixtures, but don't copy a per-design extraction recipe — there
+no longer is one to copy.</p>
+</li>
+</ol>
+<p><strong>Architectural alternative (separate concern):</strong> the upstream
+chipflow harness could preserve LibreLane's pre-wrap <code>&lt;top&gt;.pnl.v</code>
+alongside its wrapped <code>&lt;top&gt;_final.v</code> output. That would make
+<code>opensta-to-ir</code>'s in-tool extraction a no-op for the common chipflow
+case, but it would not obviate the filter — third-party LibreLane +
+wafer.space users (hazard3 and future tapeouts using the vanilla
+flow) hit the same wrapper pattern. The filter is the right place
+for the fix because it covers both <code>opensta-to-ir</code> as a CLI and
+<code>jacquard sim --sdf</code> (which subprocesses <code>opensta-to-ir</code>).</p>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li>End-user runs of <code>jacquard sim --sdf &lt;path&gt;</code> and the standalone
+<code>opensta-to-ir</code> tool both transparently handle the LibreLane +
+wafer.space wrapper pattern. No flags, no preprocessing recipe in
+user-facing docs.</li>
+<li>Match-rate metrics in the IR consumer measure jtir coverage
+against the <em>consuming</em> netlist, not against the source SDF. A
+high match rate is necessary but not sufficient — confirm the jtir
+contains the post-P&amp;R cell population separately (e.g. by spot
+checking for <code>clkbuf_regs_*</code> / <code>ANTENNA_*</code> arcs in the IR JSON
+sidecar) before declaring a flow "working".</li>
+<li>The filter assumes <code>module &lt;--top&gt; … endmodule</code> is line-anchored
+in the Verilog source. Machine-generated post-P&amp;R netlists meet
+this; hand-rolled Verilog that opens a module mid-line would not.
+If that ever surfaces, upgrade the filter to use a real Verilog
+tokenizer (<code>sverilogparse</code> is already a workspace dependency).</li>
+<li>This ADR retroactively retracts the <code>top_synth.v</code> recommendation
+in <code>docs/plans/ws3-cosim-sdf-followup.md</code>; that doc is corrected
+in the same change.</li>
+</ul>
+<h2 id="links"><a class="header" href="#links">Links</a></h2>
+<ul>
+<li>ADR 0001 — OpenSTA as oracle and sole STA path (the upstream
+tool whose constraints these are).</li>
+<li>ADR 0006 — SDF preprocessing model (the surrounding flow that
+consumes these inputs).</li>
+<li><code>docs/plans/ws3-cosim-sdf-followup.md</code> — the prior workaround
+this ADR corrects.</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../handoff-discipline.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../adr/0008-structured-timing-output.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../adr/0001-opensta-as-oracle.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../adr/0010-declarative-cell-metadata.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -269,11 +286,11 @@ accepted history.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../handoff-discipline.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../adr/0008-structured-timing-output.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../adr/0001-opensta-as-oracle.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../adr/0010-declarative-cell-metadata.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
