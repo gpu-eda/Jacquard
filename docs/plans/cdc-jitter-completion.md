@@ -8,7 +8,7 @@ Issue: [#92](https://github.com/gpu-eda/Jacquard/issues/92).
 Implemented: the run-parameters file + per-domain seeded PRNG
 (`src/sim/run_params.rs`), `jitter_ps` per `ClockConfig`, the uniform
 per-domain draw, and a jitter displacement applied to the **timing-VCD
-event timestamp** (`cosim_metal.rs`, inside the `--timing-vcd` block
+event timestamp** (`cosim_metal.rs`, inside the `--output-vcd` block
 only). So today jitter perturbs the *waveform timeline* but nothing
 else — it does not reach the setup/hold checker, model-driven clocks,
 or coincident-edge ordering.
@@ -21,12 +21,12 @@ present-tense design fully matches the code.
 
 Right now `jitter_displacement` only adjusts the VCD `base_timestamp`
 (`cosim_metal.rs:~3928-3948`) and is computed *inside* the timing-VCD
-emission block, so it has no effect without `--timing-vcd` and never
+emission block, so it has no effect without `--output-vcd` and never
 influences violations.
 
 - Hoist the per-tick per-domain displacement draw out of the VCD block
   so it is available whenever `jitter_active`, independent of
-  `--timing-vcd`.
+  `--output-vcd`.
 - Apply each domain's displacement to the **arrival offsets** that
   setup/hold checking consumes (the `arrival_state` section), not just
   the VCD base timestamp — so a jittered edge can move a margin across
@@ -62,7 +62,7 @@ vary by seed.
   a loud warning) if any `jitter_ps > scheduler.gcd_ps / 2`, since larger
   values would reorder edges across GCD ticks.
 - **Always persist the seed** (ADR §1): when neither `--run-params` nor
-  `--timing-vcd` is given, `RunParams::generate()` currently does not
+  `--output-vcd` is given, `RunParams::generate()` currently does not
   write the file. Persist to a default path unconditionally so every run
   is replayable.
 - **master_seed in the VCD header** (ADR §1/§5): emit the master seed as

@@ -31,8 +31,10 @@ pub struct CosimOpts {
     pub clock_period: Option<u64>,
     /// Path to write stimulus VCD (all primary inputs driven by cosim).
     pub stimulus_vcd: Option<std::path::PathBuf>,
-    /// Path to write timing-accurate output VCD with per-signal arrival times.
-    pub timing_vcd: Option<std::path::PathBuf>,
+    /// Path to write the output VCD (chip outputs + traced nets). Timed
+    /// with per-signal arrival offsets when timing data is available;
+    /// otherwise functional (transitions at clock edges).
+    pub output_vcd: Option<std::path::PathBuf>,
     /// Path to dump DFF Q-values per cycle (for debugging/comparison).
     /// Forces single-tick mode for the first N cycles.
     pub dump_dff: Option<std::path::PathBuf>,
@@ -2747,8 +2749,8 @@ pub fn run_cosim(
         if let Some(ref path) = opts.run_params {
             RunParams::load_or_generate(path)
                 .unwrap_or_else(|e| panic!("Failed to load/write run-params at {}: {}", path.display(), e))
-        } else if let Some(ref timing_vcd_path) = opts.timing_vcd {
-            let default_path = timing_vcd_path.with_file_name("run_params.json");
+        } else if let Some(ref output_vcd_path) = opts.output_vcd {
+            let default_path = output_vcd_path.with_file_name("run_params.json");
             RunParams::load_or_generate(&default_path)
                 .unwrap_or_else(|e| panic!("Failed to write default run-params at {}: {}", default_path.display(), e))
         } else {
@@ -3306,21 +3308,22 @@ pub fn run_cosim(
         None
     };
 
-    // ── Timing VCD setup (optional) ──────────────────────────────────────
+    // ── Output VCD setup (optional) ──────────────────────────────────────
     //
-    // When --timing-vcd is specified, we write timing-accurate output VCD
-    // with per-signal arrival time offsets from clock edges.
+    // When --output-vcd is specified, we write the output VCD (chip outputs
+    // plus traced nets). Transitions carry per-signal arrival-time offsets
+    // when timing data is available; otherwise they emit at clock edges.
 
     let rio = script.reg_io_state_size as usize;
-    let mut timing_vcd_state: Option<(
+    let mut output_vcd_state: Option<(
         vcd_ng::Writer<std::io::BufWriter<std::fs::File>>,
         crate::sim::vcd_io::OutputVCDMapping,
         Vec<u32>, // prev_values for change detection (0=V0, 1=V1, 2=initial)
-    )> = if let Some(ref timing_path) = opts.timing_vcd {
-        let file = std::fs::File::create(timing_path).unwrap_or_else(|e| {
+    )> = if let Some(ref output_path) = opts.output_vcd {
+        let file = std::fs::File::create(output_path).unwrap_or_else(|e| {
             panic!(
-                "Failed to create timing VCD {}: {}",
-                timing_path.display(),
+                "Failed to create output VCD {}: {}",
+                output_path.display(),
                 e
             )
         });
@@ -3330,9 +3333,9 @@ pub fn run_cosim(
             crate::sim::vcd_io::setup_cosim_output_vcd(&mut writer, netlistdb, aig, script);
         let prev_values = vec![2u32; mapping.out2vcd.len()]; // 2 = initial sentinel
         clilog::info!(
-            "Timing VCD enabled: {} output signals → {}",
+            "Output VCD enabled: {} output signals → {}",
             mapping.out2vcd.len(),
-            timing_path.display()
+            output_path.display()
         );
         Some((writer, mapping, prev_values))
     } else {
@@ -3341,11 +3344,11 @@ pub fn run_cosim(
 
     // ── VCD ring buffer (enables batched-mode VCD capture) ─────────────────
     //
-    // When stimulus or timing VCD is active, we snapshot output_state after
+    // When stimulus or output VCD is active, we snapshot output_state after
     // each edge via a GPU blit into a ring buffer. This allows batched dispatch
     // (no batch=1 override) while preserving per-tick VCD accuracy.
     let vcd_ring_buffer: Option<metal::Buffer> =
-        if stimulus_vcd_state.is_some() || timing_vcd_state.is_some() {
+        if stimulus_vcd_state.is_some() || output_vcd_state.is_some() {
             let ring_bytes = BATCH_SIZE * 2 * state_size * std::mem::size_of::<u32>();
             let buf = simulator.device.new_buffer(
                 ring_bytes as u64,
@@ -3614,7 +3617,7 @@ pub fn run_cosim(
     let mut prof_gpu_wait: u64 = 0;
     let mut prof_drain: u64 = 0;
     let mut prof_stimulus_vcd: u64 = 0;
-    let mut prof_timing_vcd: u64 = 0;
+    let mut prof_output_vcd: u64 = 0;
     let mut total_batches: u64 = 0;
 
     // Per-tick tracing: run 1 tick at a time for first N ticks after reset
@@ -3912,10 +3915,10 @@ pub fn run_cosim(
                 }
                 prof_stimulus_vcd += t_stim.elapsed().as_nanos() as u64;
 
-                // Timing VCD
+                // Output VCD
                 let t_timing = std::time::Instant::now();
                 if let Some((ref mut writer, ref mapping, ref mut prev_values)) =
-                    timing_vcd_state
+                    output_vcd_state
                 {
                     let half_period = clock_period_ps / 2;
                     let base_timestamp = edge_tick as u64 * clock_period_ps + half_period;
@@ -3993,7 +3996,7 @@ pub fn run_cosim(
                             .unwrap();
                     }
                 }
-                prof_timing_vcd += t_timing.elapsed().as_nanos() as u64;
+                prof_output_vcd += t_timing.elapsed().as_nanos() as u64;
             }
         }
 
@@ -4574,7 +4577,7 @@ pub fn run_cosim(
 
     // Print profiling results
     let total_ns =
-        prof_batch_encode + prof_gpu_wait + prof_drain + prof_stimulus_vcd + prof_timing_vcd;
+        prof_batch_encode + prof_gpu_wait + prof_drain + prof_stimulus_vcd + prof_output_vcd;
     let print_prof = |name: &str, ns: u64| {
         let us = ns as f64 / 1000.0 / max_edges as f64;
         let pct = if total_ns > 0 {
@@ -4590,7 +4593,7 @@ pub fn run_cosim(
     print_prof("GPU wait (spin)", prof_gpu_wait);
     print_prof("UART channel drain", prof_drain);
     print_prof("Stimulus VCD write", prof_stimulus_vcd);
-    print_prof("Timing VCD write", prof_timing_vcd);
+    print_prof("Output VCD write", prof_output_vcd);
     println!(
         "  {:<32} {:>8.1}μs/tick  100.0%",
         "TOTAL (instrumented)",

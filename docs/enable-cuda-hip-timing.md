@@ -1,4 +1,4 @@
-# Enabling --timing-vcd on CUDA/HIP Backends
+# Enabling --timed on CUDA/HIP Backends
 
 **Status**: Implementation plan for Goal step 7
 
@@ -16,7 +16,7 @@
 - Kernel has `simulate_v1_noninteractive_timed_cuda` function defined in `csrc/kernel_v1.cu`
 - **NOT exposed** to Rust via FFI bindings
 - Rust side uses only `simulate_v1_noninteractive_simple_scan` (non-timed variant)
-- Warning logged when `--timing-vcd` requested: "Timing constraints requested but CUDA timed kernel not yet wired"
+- Warning logged when `--timed` requested: "Timing constraints requested but CUDA timed kernel not yet wired"
 
 ### HIP ❌ (In Progress)
 - Kernel code in `csrc/kernel_v1.hip.cpp` shares timed implementation with CUDA
@@ -155,7 +155,7 @@ cuda-timing:
           tests/timing_test/inv_chain_pnr/stimulus.vcd \
           cuda_output.vcd 1 \
           --sdf inv_chain.sdf \
-          --timing-vcd
+          --timed
 
         # Compare against Metal baseline
         # (requires running metal variant separately or storing expected output)
@@ -180,7 +180,7 @@ cuda-timing:
 
 ## Success Criteria
 
-- [ ] CUDA kernel call uses `simulate_v1_noninteractive_timed_cuda` when `--timing-vcd` flag set
+- [ ] CUDA kernel call uses `simulate_v1_noninteractive_timed_cuda` when `--timed` flag set
 - [ ] `arrival_state_offset` parameter properly threaded to CUDA/HIP kernels
 - [ ] inv_chain_pnr timing VCD generated successfully on CUDA
 - [ ] inv_chain_pnr timing matches Metal output within ±5%

@@ -1566,7 +1566,8 @@ fn build_flattened_script_v1(
         xprop_enabled,
         partition_x_capable,
         xprop_state_offset,
-        // Timing arrival readback fields - enabled later via --timing-vcd
+        // Timing arrival readback fields - enabled later via timed output
+        // (cosim `--output-vcd` with timing data, or sim `--timed`)
         timing_arrivals_enabled: false,
         arrival_state_offset: 0,
     }

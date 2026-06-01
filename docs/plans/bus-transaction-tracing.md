@@ -154,7 +154,7 @@ Yosys/scalar/structural naming conventions.
 ### 6. CLI — `src/bin/jacquard.rs`
 
 - `--bus-trace-csv <PATH>` (Phase 1)
-- bus VCD annotation folded into the output/`--timing-vcd` when `bus_traces` is
+- bus VCD annotation folded into the output/`--output-vcd` when `bus_traces` is
   configured, or a dedicated `--bus-trace-vcd` flag (Phase 3)
 
 ## Status

@@ -1,4 +1,4 @@
-# Adding --timing-vcd Support to Cosim Mode
+# Adding --output-vcd Support to Cosim Mode
 
 **Status**: Implementation plan for Goal step 8 (final step)
 
@@ -7,14 +7,14 @@
 ## Current State
 
 ### jacquard sim ✅ (Complete)
-- Metal: `--timing-vcd` fully functional with arrival time readback
+- Metal: `--timed` fully functional with arrival time readback
 - CUDA/HIP: In progress (step 7 - kernel FFI bindings)
 - Produces timing-annotated VCD with arrival times for all signals
 - Validated against CVC reference simulator
 
 ### jacquard cosim ❌ (No timing support)
 - Supports co-simulation with external testbenches (via Verilog VCD)
-- **Does NOT support** `--timing-vcd` flag currently
+- **Does NOT support** `--output-vcd` flag currently
 - CPU-GPU synchronized stepping; peripheral models run on CPU
 - Missing: `timing_arrivals_enabled`, `arrival_state_offset` threading
 
@@ -26,14 +26,14 @@
 jacquard cosim --input stimulus.vcd --output functional.vcd
 
 # Step 2: Run again with timing to get arrival times (slow!)
-jacquard sim --input stimulus.vcd --output timed.vcd --sdf design.sdf --timing-vcd
+jacquard sim --input stimulus.vcd --output timed.vcd --sdf design.sdf --timed
 ```
 
 **Desired workflow** (step 8):
 ```bash
 # Single command produces both functional + timing outputs
 jacquard cosim --input stimulus.vcd --output timed.vcd \
-    --sdf design.sdf --timing-vcd
+    --sdf design.sdf --output-vcd
 ```
 
 ## Architecture Overview
@@ -92,7 +92,7 @@ jacquard::sim::cosim_metal::run_cosim(
 
 **Related CLI changes**:
 - Add `timing_vcd: bool` field to `CosimArgs` struct
-- Require `--sdf` when `--timing-vcd` is specified (like sim mode)
+- Require `--sdf` when `--output-vcd` is specified (like sim mode)
 
 ### Step 2: Enable Timing in Design Setup
 
@@ -102,7 +102,7 @@ jacquard::sim::cosim_metal::run_cosim(
 // Early in run_cosim, after loading design:
 if timing_vcd {
     if sdf_path.is_none() {
-        eprintln!("Error: --timing-vcd requires --sdf");
+        eprintln!("Error: --output-vcd requires --sdf");
         return;
     }
     design.script.enable_timing_arrivals();
@@ -260,11 +260,11 @@ cargo run --features metal --bin jacquard -- cosim \
     --input tests/timing_test/inv_chain_pnr/stimulus.vcd \
     --output cosim_timed.vcd \
     --sdf tests/timing_test/inv_chain_pnr/6_final.sdf \
-    --timing-vcd
+    --output-vcd
 
 # Compare against separate sim run
 cargo run --features metal --bin jacquard -- sim \
-    ... --timing-vcd
+    ... --timed
 
 # VCD diff should show identical timing annotations
 diff_timing_signals cosim_timed.vcd sim_timed.vcd
@@ -289,7 +289,7 @@ diff_timing_signals cosim_timed.vcd sim_timed.vcd
 
 ## Success Criteria
 
-- [ ] CosimArgs accepts `--timing-vcd` and `--sdf` flags
+- [ ] CosimArgs accepts `--output-vcd` and `--sdf` flags
 - [ ] `enable_timing_arrivals()` called when timing_vcd=true
 - [ ] State buffers properly expanded for arrival storage
 - [ ] `arrival_state_offset` correctly threaded to Metal kernel

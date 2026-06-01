@@ -76,22 +76,22 @@ Traced nets appear in whichever VCD the run already emits:
 | Command | Flag | Traced nets appear in |
 |---------|------|------------------------|
 | `jacquard sim`   | `--trace-signals <FILE>` | the output VCD |
-| `jacquard cosim` | `--trace-signals <FILE>` | the `--timing-vcd` output **only** |
+| `jacquard cosim` | `--trace-signals <FILE>` | the `--output-vcd` output **only** |
 
 They show up as ordinary VCD wires next to the top-level IO, named by the
 string you put in the trace file.
 
-> **cosim:** traced nets land in `--timing-vcd` **only**. The
+> **cosim:** traced nets land in `--output-vcd` **only**. The
 > `--stimulus-vcd` carries primary inputs and does *not* include them, so
 > if you trace a net and look in the stimulus VCD you'll see nothing.
-> `--timing-vcd` does **not** require timing data — see
+> `--output-vcd` does **not** require timing data — see
 > [Pre-PnR functional runs](#pre-pnr-functional-runs).
 
 ### Pre-PnR functional runs
 
-`--timing-vcd` is the functional output path too — it does **not** require
+`--output-vcd` is the functional output path too — it does **not** require
 `--timing-ir`/SDF. Run a synthesized (pre-PnR) netlist through `cosim`
-with `--timing-vcd out.vcd` and you get chip outputs and traced nets per
+with `--output-vcd out.vcd` and you get chip outputs and traced nets per
 cycle, with transitions at clock edges (no arrival-time offsets). This is
 the right mode for functional / 4-state X-pessimism debugging, where
 there is no timing data to supply yet. Adding `--timing-ir` later only
@@ -136,7 +136,7 @@ uv run netlist-graph sram-ports design.v --cell-type SRAM -o sram_trace.txt
 
 # 2. Surface them in the VCD with full per-tick accuracy
 jacquard cosim design.v --config sim.json \
-    --trace-signals sram_trace.txt --timing-vcd out.vcd
+    --trace-signals sram_trace.txt --output-vcd out.vcd
 
 # 3. Post-process the VCD to reconstruct bus values
 ```
@@ -153,7 +153,7 @@ jacquard cosim tests/jtag_minimal/data/top.pnl.v \
     --config tests/jtag_minimal/sim_config.json \
     --trace-signals tests/jtag_minimal/trace_signals.txt \
     --jtag-replay tests/jtag_minimal/data/bitbang.rec \
-    --timing-vcd out.vcd
+    --output-vcd out.vcd
 ```
 
 ## Troubleshooting
@@ -162,7 +162,7 @@ jacquard cosim tests/jtag_minimal/data/top.pnl.v \
 |---------|-------------|
 | `not found in netlistdb (tried N candidate(s))` | The name doesn't exist post-synthesis under any candidate spelling. Find the real name with `netlist-graph search`; the net may have been renamed or optimized away. |
 | Signal registered but flat in the VCD | It may resolve to a constant after optimization (the startup log notes constants are skipped), or the cone was stripped. Confirm it's a live net with `netlist-graph drivers`. |
-| Nothing appears in the VCD | Check that the run actually emits a VCD (`--timing-vcd` / `--stimulus-vcd` for cosim) and that the startup summary line reports a non-zero registered count. |
+| Nothing appears in the VCD | Check that the run actually emits a VCD (`--output-vcd` / `--stimulus-vcd` for cosim) and that the startup summary line reports a non-zero registered count. |
 
 ## Implementation notes
 

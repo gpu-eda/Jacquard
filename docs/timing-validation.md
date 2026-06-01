@@ -6,7 +6,7 @@ This document describes how GEM validates timing simulation accuracy against ref
 
 ## Overview
 
-GEM's timing simulation (`--timing-vcd` and `--enable-timing` flags) must be validated against independent reference simulators to ensure correctness. We use two reference tools:
+GEM's timing simulation (`--timed` and `--enable-timing` flags) must be validated against independent reference simulators to ensure correctness. We use two reference tools:
 
 - **CVC** (Cadence Verilog Compiler): For post-layout SDF-annotated designs (commercial tool, high confidence)
 - **Icarus Verilog**: For structural Verilog and Liberty-based timing (open source, good for pre-layout)
@@ -73,7 +73,7 @@ cvc64 +typdelays tb_cvc.v inv_chain.v 2>&1 | tee cvc.log
 cargo run -r --features metal --bin jacquard -- sim \
     6_final.v stimulus.vcd output.vcd 1 \
     --sdf 6_final.sdf \
-    --timing-vcd
+    --timed
 ```
 
 **Expected results**:
@@ -104,7 +104,7 @@ cargo run -r --features metal --bin jacquard -- sim \
     tests/mcu_soc/jacquard_timed_mcu.vcd 1 \
     --sdf tests/mcu_soc/data/6_final_stripped.sdf \
     --sdf-corner typ \
-    --timing-vcd \
+    --timed \
     --max-cycles 10000
 
 # 3. Generate CVC reference
@@ -157,7 +157,7 @@ cvc64 +typdelays tb_inv_chain.v inv_chain.v 2>&1 | tee cvc.log
 cargo run -r --features metal --bin jacquard -- sim \
     inv_chain.v stimulus.vcd jacquard_output.vcd 1 \
     --sdf inv_chain.sdf \
-    --timing-vcd
+    --timed
 
 # Compare outputs
 uv run ../../mcu_soc/cvc/compare_outputs.py jacquard_output.vcd cvc_output.vcd
@@ -349,7 +349,7 @@ Post-layout designs include routing delays and P&R context:
 | Pre-layout inv_chain | Library-only SDF generated correctly | ✅ Passing |
 | Pre-layout logic_cone | Library-only SDF generated correctly | ✅ Passing |
 | Pre-layout timing comparison | Functional output matches CVC | ⏳ In progress (CVC testbenches added) |
-| CUDA/HIP timing support | --timing-vcd flag on GPU backends | ⏳ Not yet implemented |
+| CUDA/HIP timing support | --timed flag on GPU backends | ⏳ Not yet implemented |
 | Cosim timing mode | Arrival time readback in cosim | ⏳ Not yet implemented |
 
 ## References

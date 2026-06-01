@@ -169,7 +169,7 @@ When this becomes a priority, mirror the `jacquard sim` surface:
    and the config provides SDF + Liberty paths, call
    `setup::load_sdf_via_opensta_to_ir`. Match the priority order:
    CLI > config.timing.* > nothing.
-5. **Update `--timing-vcd` error message** to mention `--sdf` again.
+5. **Update `--output-vcd` error message** to mention `--sdf` again.
 
 ### Out of scope for Option A
 

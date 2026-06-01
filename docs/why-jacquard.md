@@ -124,7 +124,7 @@ Top 2 by violation count (of 2 total words with violations):
 
 Format is for human inspection — explicitly **not** a stable parseable contract. Tools should use `--timing-report` JSON.
 
-### Timed VCD (`--timing-vcd`)
+### Timed VCD (`--timed`)
 Annotates the output VCD with per-signal arrival times. Largest, most detailed output; suitable for waveform-level inspection.
 
 - **What you get:** per-signal arrival ps at each writeout cycle.

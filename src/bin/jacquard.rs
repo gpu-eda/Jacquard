@@ -167,13 +167,13 @@ struct SimArgs {
     #[clap(long)]
     liberty: Option<PathBuf>,
 
-    /// Enable timing-accurate VCD output with per-signal arrival times.
+    /// Timing-annotate the output VCD with per-signal arrival times.
     ///
-    /// Requires --sdf. Signal transitions in the output VCD are offset from
-    /// clock edges by their computed arrival times rather than placed at the
-    /// clock edge.
+    /// Requires a timing source (`--sdf`, `--liberty`, or `--timing-ir`).
+    /// Signal transitions in the output VCD are offset from clock edges by
+    /// their computed arrival times rather than placed at the clock edge.
     #[clap(long)]
-    timing_vcd: bool,
+    timed: bool,
 
     /// Write a structured JSON timing report to <PATH> at end of run.
     /// Schema documented in `src/timing_report.rs` and ADR 0008.
@@ -269,8 +269,8 @@ struct CosimArgs {
     /// from clock edges by their computed arrival times; without it,
     /// transitions emit at clock edges (no timing data needed). Forces
     /// single-tick mode.
-    #[clap(long)]
-    timing_vcd: Option<PathBuf>,
+    #[clap(long = "output-vcd")]
+    output_vcd: Option<PathBuf>,
 
     /// Dump all DFF Q-values per cycle to a text file for debugging.
     /// Forces single-tick mode for the specified number of cycles (default 20).
@@ -289,7 +289,7 @@ struct CosimArgs {
     /// Path to a file listing internal signals to surface in the
     /// output VCD. One hierarchical signal name per line; see
     /// `jacquard sim --trace-signals --help` for the full file
-    /// format. Resolved nets appear in the `--timing-vcd` output
+    /// format. Resolved nets appear in the `--output-vcd` output
     /// alongside top-level IO. (The `--stimulus-vcd` carries primary
     /// inputs only and does NOT include traced nets.)
     #[clap(long = "trace-signals", value_name = "PATH")]
@@ -391,10 +391,10 @@ fn cmd_sim(args: SimArgs) {
     #[allow(unused_mut)]
     let mut design = setup::load_design(&design_args);
 
-    // Enable timing arrival readback if --timing-vcd is set
-    if args.timing_vcd {
+    // Enable timing arrival readback if --timed is set
+    if args.timed {
         if args.sdf.is_none() && args.liberty.is_none() && args.timing_ir.is_none() {
-            eprintln!("Error: --timing-vcd requires --sdf, --liberty, or --timing-ir");
+            eprintln!("Error: --timed requires --sdf, --liberty, or --timing-ir");
             std::process::exit(1);
         }
         design.script.enable_timing_arrivals();
@@ -597,7 +597,7 @@ fn cmd_sim(args: SimArgs) {
 
     // Write output VCD
     #[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
-    if args.timing_vcd && design.script.timing_arrivals_enabled {
+    if args.timed && design.script.timing_arrivals_enabled {
         // Timed VCD: extract arrivals and use timed writer
         let rio = design.script.reg_io_state_size as usize;
         let arrival_states = vcd_io::split_arrival_states(&gpu_states[..], &design.script);
@@ -1634,11 +1634,11 @@ fn cmd_cosim(args: CosimArgs) {
 
         let mut design = setup::load_design(&design_args);
 
-        // Enable timing arrival readback if --timing-vcd is set.
+        // Enable timing arrival readback if --output-vcd is set.
         // When timing IR is available, arrival offsets are included;
         // otherwise the VCD still emits output signal values (useful
         // for --trace-signals observability without timing data).
-        if args.timing_vcd.is_some() && design.script.timing_enabled {
+        if args.output_vcd.is_some() && design.script.timing_enabled {
             design.script.enable_timing_arrivals();
         }
 
@@ -1652,7 +1652,7 @@ fn cmd_cosim(args: CosimArgs) {
             gpu_profile: args.gpu_profile,
             clock_period: args.clock_period,
             stimulus_vcd: args.stimulus_vcd.clone(),
-            timing_vcd: args.timing_vcd.clone(),
+            output_vcd: args.output_vcd.clone(),
             dump_dff: args.dump_dff.clone(),
             dump_dff_cycles: args.dump_dff_cycles,
             jtag_replay: args.jtag_replay.clone(),

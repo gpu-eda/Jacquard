@@ -186,7 +186,7 @@ tracked in [issue #92](https://github.com/gpu-eda/Jacquard/issues/92) /
 | Per-domain sub-seed `hash(master_seed, name)` + per-domain `ChaCha8Rng` | `RunParams::domain_seed`; `cosim_metal.rs` |
 | `jitter_ps` per `ClockConfig` (default 0) | `src/testbench.rs` |
 | Uniform `[-jitter_ps, +jitter_ps]` draw per domain per tick | `cosim_metal.rs` |
-| Jitter displacement applied to the **timing-VCD event timestamp** | `cosim_metal.rs` (inside the `--timing-vcd` block) |
+| Jitter displacement applied to the **timing-VCD event timestamp** | `cosim_metal.rs` (inside the `--output-vcd` block) |
 | `master_seed` logged at INFO | `cosim_metal.rs` |
 | `--check-with-cpu` + jitter warning | `cosim_metal.rs` |
 
@@ -194,11 +194,11 @@ tracked in [issue #92](https://github.com/gpu-eda/Jacquard/issues/92) /
 
 | Part | ADR § | Gap |
 |------|-------|-----|
-| Setup/hold integration | §2, §5 | Jitter shifts only the VCD base timestamp; it does not feed the per-signal arrival offsets, so it produces no `--timing-report` violations. Also: jitter currently has **no effect unless `--timing-vcd` is set**. |
+| Setup/hold integration | §2, §5 | Jitter shifts only the VCD base timestamp; it does not feed the per-signal arrival offsets, so it produces no `--timing-report` violations. Also: jitter currently has **no effect unless `--output-vcd` is set**. |
 | Model-driven clock jitter | §3 | No `--cdc-model-jitter-ps` flag or `patch_model_clock_edges` path; only scheduler domains jitter. |
 | True coincident-edge perturbation | §4 | A single global displacement (last firing domain wins) is applied to the shared timestamp rather than independent per-domain displacement. |
 | `gcd_ps / 2` constraint | §2 | Not validated. |
-| Persist seed unconditionally | §1 | Without `--run-params` or `--timing-vcd`, the seed is generated but not written. |
+| Persist seed unconditionally | §1 | Without `--run-params` or `--output-vcd`, the seed is generated but not written. |
 | `master_seed` in VCD header comment | §1, §5 | INFO log only. |
 | `--cdc-jitter-seed` CI sweep | Consequences | The replay mechanism is `--run-params`; no dedicated CI sweep step yet. |
 

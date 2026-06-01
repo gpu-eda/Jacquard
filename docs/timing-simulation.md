@@ -280,14 +280,14 @@ This is feasible but significantly increases memory pressure and computation.
 - Arrivals tracked during boomerang reduction at all hierarchy levels
 - Per-gate delays injected via script padding slots from SDF data
 - DFF timing constraint checking at cycle boundaries (setup/hold)
-- Timing-aware VCD output (`--timing-vcd` flag)
+- Timing-aware VCD output (`--timed` flag)
 - Validated against CVC reference simulator (88ps / 7.1% conservative overestimate)
 
 ### Phase 4: Full Integration (Partial)
 
 - Timing violation events via event buffer (completed)
 - Per-cycle timing reports (completed)
-- Integration with output VCD (completed via `--timing-vcd`)
+- Integration with output VCD (completed via `--timed`)
 - Timing-aware bit packing for reduced approximation error (future)
 
 ## Conservative Timing Model: Sources of Overestimation

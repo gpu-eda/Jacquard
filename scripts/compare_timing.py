@@ -421,7 +421,7 @@ def main() -> int:
     parser.add_argument("--cvc-vcd", type=Path, required=True,
                         help="CVC output VCD")
     parser.add_argument("--jacquard-vcd", type=Path, required=True,
-                        help="Jacquard --timing-vcd output")
+                        help="Jacquard --output-vcd output")
     parser.add_argument("--clock-period-ps", type=int, required=True,
                         help="Clock period in picoseconds")
     parser.add_argument("--clock-signal", default="CLK",

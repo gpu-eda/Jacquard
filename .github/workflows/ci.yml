@@ -250,7 +250,7 @@ jobs:
             tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd \
             1 \
             --timing-ir tests/timing_test/inv_chain_pnr/inv_chain.jtir \
-            --timing-vcd \
+            --timed \
             --timing-report tests/timing_test/inv_chain_pnr/timing_report.json \
             --timing-summary \
             2>&1 | tee metal_timed.txt
@@ -864,7 +864,7 @@ jobs:
             --max-clock-edges 10000 \
             --timing-ir tests/mcu_soc/data/6_final.jtir \
             --stimulus-vcd tests/mcu_soc/stimulus.vcd \
-            --timing-vcd tests/mcu_soc/jacquard_timed_mcu.vcd \
+            --output-vcd tests/mcu_soc/jacquard_timed_mcu.vcd \
             2>&1 | tee cosim_stimulus.txt
 
       - name: Replay stimulus (non-timed, for CVC comparison)
@@ -975,7 +975,7 @@ jobs:
             --jtag-replay tests/jtag_minimal/data/bitbang.rec \
             --jtag-hold-cycles 8 \
             --trace-signals tests/jtag_minimal/trace_signals.txt \
-            --timing-vcd tests/jtag_minimal/data/cosim_trace.vcd \
+            --output-vcd tests/jtag_minimal/data/cosim_trace.vcd \
             --max-clock-edges 4000000 \
             2>&1 | tee jtag_minimal_cosim.log
 

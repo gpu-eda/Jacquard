@@ -4,13 +4,13 @@
 
 ## Context
 
-Jacquard produces timing information today through three channels: timed VCD (`--timing-vcd`), per-violation `clilog::warn!` messages on stderr, and an in-process `SimStats` counter. The `why-jacquard.md` analysis identifies a gap between the timing data Jacquard *has* internally and the answers users actually need from a flow:
+Jacquard produces timing information today through three channels: timed VCD (`--timed`), per-violation `clilog::warn!` messages on stderr, and an in-process `SimStats` counter. The `why-jacquard.md` analysis identifies a gap between the timing data Jacquard *has* internally and the answers users actually need from a flow:
 
 | User question | Today |
 |---|---|
 | Did my workload trip any violations? | `SimStats` counts (in-process API only) |
 | Which DFFs nearly missed timing? | Not extractable without parsing stderr |
-| Show me arrival distribution per signal | Reconstructable from --timing-vcd via post-processing only |
+| Show me arrival distribution per signal | Reconstructable from --timed via post-processing only |
 | Which DFF was that violation on? | State-word index + manual lookup |
 | What path caused the worst arrival? | Not available |
 | Run this in CI and fail if any violation | Possible only via stderr grep |
@@ -62,7 +62,7 @@ The following are higher-value-but-lower-priority. They land after the four requ
 
 ### Backward compatibility
 
-- All new outputs are opt-in via flags. Existing stderr behaviour and `--timing-vcd` semantics are unchanged.
+- All new outputs are opt-in via flags. Existing stderr behaviour and `--timed` semantics are unchanged.
 - Symbolic violation messages (item 1) **do** change existing stderr format. This is intentional: the current state-word-index format is not a stable contract and is not consumed by any known automation. Format change documented in changelog at land time.
 
 ### Output stability contract

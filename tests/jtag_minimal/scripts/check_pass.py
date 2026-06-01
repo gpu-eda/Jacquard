@@ -4,7 +4,7 @@
 check_pass.py — assert that a cosim run of tests/jtag_minimal/
 produced the expected `data0_obs = 0xCAFEBABE`.
 
-Reads the cosim's `--timing-vcd` output, reconstructs the 32-bit
+Reads the cosim's `--output-vcd` output, reconstructs the 32-bit
 `data0_obs` value from its 32 individual signals, and exits with:
   0  on PASS (data0_obs ended at 0xCAFEBABE)
   1  on FAIL with a diagnostic table

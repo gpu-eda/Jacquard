@@ -32,7 +32,7 @@
 //   5. Write DATA0=0xCAFEBABE
 //   6. Shutdown
 //
-// Pass criterion (asserted from cosim's --timing-vcd output):
+// Pass criterion (asserted from cosim's --output-vcd output):
 //   data0_obs ends up at 32'hCAFEBABE
 //   dmactive_obs ends up at 1
 //   haltreq_obs sees at least one 0→1 transition
