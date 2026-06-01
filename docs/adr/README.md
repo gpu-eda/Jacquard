@@ -8,9 +8,35 @@ changes, supersede the old ADR with a new one and update the status.
 ## Status legend
 
 - **Accepted / Approved** — current, in effect.
+- **Accepted (partial)** — design ratified and partly built; the ADR
+  carries an `## Implementation status` section (see below).
 - **Proposed** — drafted, not yet ratified.
 - **Superseded** — historical, replaced by a later ADR or by a spike
   outcome; kept for the audit trail.
+
+## Keeping status honest
+
+An ADR's **Status is a claim about the codebase**, not an aspiration.
+Before setting or changing it, **verify the claim against the
+implementation** — read the code; don't trust the previous status or a
+feature's "done" framing. The same goes for any present-tense statement
+*inside* an ADR ("jitter feeds the setup/hold checker"): it's a
+verifiable claim, so check it.
+
+- **Don't bump Proposed → Accepted just because a design merged.**
+  Confirm the decision is actually in effect in the code.
+- When a design is ratified but only **partly built**, use
+  **`Accepted (partial)`** and add an **`## Implementation status`**
+  section splitting *implemented* (with file references) from *deferred*
+  (with the specific gap). [ADR 0012](0012-cdc-jitter-injection.md) is
+  the worked example.
+- **Deferred work gets a home:** a plan under `docs/plans/` and a
+  tracking issue, cross-linked from the ADR's status section, so the
+  unbuilt half isn't lost.
+
+This extends to user-facing docs and `--help` text: a sentence telling
+the reader how the tool behaves is a verifiable claim — check it against
+the code before writing it.
 
 ## Index
 
@@ -78,7 +104,8 @@ changes, supersede the old ADR with a new one and update the status.
 
 1. Pick the next number (highest existing + 1).
 2. Filename: `NNNN-short-kebab-title.md`.
-3. Start with `# ADR NNNN — <title>` and a `**Status:**` line.
+3. Start with `# ADR NNNN — <title>` and a `**Status:**` line — set it
+   to match the code, not the intent (see [Keeping status honest](#keeping-status-honest)).
 4. Standard sections: Context, Decision, Consequences. Add Amendment
    blocks dated when the decision is revisited; do not rewrite
    accepted history.
