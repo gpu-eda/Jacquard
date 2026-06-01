@@ -158,11 +158,11 @@
                         <h1 id="adr-0008--structured-timing-output-as-first-class-deliverable"><a class="header" href="#adr-0008--structured-timing-output-as-first-class-deliverable">ADR 0008 — Structured timing output as first-class deliverable</a></h1>
 <p><strong>Status:</strong> Approved.</p>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
-<p>Jacquard produces timing information today through three channels: timed VCD (<code>--timing-vcd</code>), per-violation <code>clilog::warn!</code> messages on stderr, and an in-process <code>SimStats</code> counter. The <code>why-jacquard.md</code> analysis identifies a gap between the timing data Jacquard <em>has</em> internally and the answers users actually need from a flow:</p>
+<p>Jacquard produces timing information today through three channels: timed VCD (<code>--timed</code>), per-violation <code>clilog::warn!</code> messages on stderr, and an in-process <code>SimStats</code> counter. The <code>why-jacquard.md</code> analysis identifies a gap between the timing data Jacquard <em>has</em> internally and the answers users actually need from a flow:</p>
 <div class="table-wrapper"><table><thead><tr><th>User question</th><th>Today</th></tr></thead><tbody>
 <tr><td>Did my workload trip any violations?</td><td><code>SimStats</code> counts (in-process API only)</td></tr>
 <tr><td>Which DFFs nearly missed timing?</td><td>Not extractable without parsing stderr</td></tr>
-<tr><td>Show me arrival distribution per signal</td><td>Reconstructable from --timing-vcd via post-processing only</td></tr>
+<tr><td>Show me arrival distribution per signal</td><td>Reconstructable from --timed via post-processing only</td></tr>
 <tr><td>Which DFF was that violation on?</td><td>State-word index + manual lookup</td></tr>
 <tr><td>What path caused the worst arrival?</td><td>Not available</td></tr>
 <tr><td>Run this in CI and fail if any violation</td><td>Possible only via stderr grep</td></tr>
@@ -219,7 +219,7 @@
 </ol>
 <h3 id="backward-compatibility"><a class="header" href="#backward-compatibility">Backward compatibility</a></h3>
 <ul>
-<li>All new outputs are opt-in via flags. Existing stderr behaviour and <code>--timing-vcd</code> semantics are unchanged.</li>
+<li>All new outputs are opt-in via flags. Existing stderr behaviour and <code>--timed</code> semantics are unchanged.</li>
 <li>Symbolic violation messages (item 1) <strong>do</strong> change existing stderr format. This is intentional: the current state-word-index format is not a stable contract and is not consumed by any known automation. Format change documented in changelog at land time.</li>
 </ul>
 <h3 id="output-stability-contract"><a class="header" href="#output-stability-contract">Output stability contract</a></h3>

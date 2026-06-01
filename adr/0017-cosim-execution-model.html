@@ -244,7 +244,7 @@ GPU-side state:</p>
 <li><strong>Peripheral ring buffers</strong> — UART channels and Wishbone trace
 channel, drained from local <code>read_head</code> to GPU-written
 <code>write_head</code>. See ADR 0013 for struct conventions.</li>
-<li><strong>VCD snapshot buffer</strong> — when <code>--stimulus-vcd</code> or <code>--timing-vcd</code> is
+<li><strong>VCD snapshot buffer</strong> — when <code>--stimulus-vcd</code> or <code>--output-vcd</code> is
 enabled, a separate ring buffer (<code>2 × state_size</code> words per edge)
 captures per-tick output state on the GPU. The CPU drains it
 after each batch to write VCD transitions. This mechanism is what

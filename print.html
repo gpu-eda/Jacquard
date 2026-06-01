@@ -563,7 +563,7 @@ Top 2 by violation count (of 2 total words with violations):
   top/cpu/state[bit 3] [word=12] (2 violations): worst setup=- hold=-40ps arrival=10ps
 </code></pre>
 <p>Format is for human inspection — explicitly <strong>not</strong> a stable parseable contract. Tools should use <code>--timing-report</code> JSON.</p>
-<h3 id="timed-vcd---timing-vcd"><a class="header" href="#timed-vcd---timing-vcd">Timed VCD (<code>--timing-vcd</code>)</a></h3>
+<h3 id="timed-vcd---timed"><a class="header" href="#timed-vcd---timed">Timed VCD (<code>--timed</code>)</a></h3>
 <p>Annotates the output VCD with per-signal arrival times. Largest, most detailed output; suitable for waveform-level inspection.</p>
 <ul>
 <li><strong>What you get:</strong> per-signal arrival ps at each writeout cycle.</li>
@@ -1113,14 +1113,14 @@ __shared__ u8 shared_arrival[256][32];  // Per-bit arrivals
 <li>Arrivals tracked during boomerang reduction at all hierarchy levels</li>
 <li>Per-gate delays injected via script padding slots from SDF data</li>
 <li>DFF timing constraint checking at cycle boundaries (setup/hold)</li>
-<li>Timing-aware VCD output (<code>--timing-vcd</code> flag)</li>
+<li>Timing-aware VCD output (<code>--timed</code> flag)</li>
 <li>Validated against CVC reference simulator (88ps / 7.1% conservative overestimate)</li>
 </ul>
 <h3 id="phase-4-full-integration-partial"><a class="header" href="#phase-4-full-integration-partial">Phase 4: Full Integration (Partial)</a></h3>
 <ul>
 <li>Timing violation events via event buffer (completed)</li>
 <li>Per-cycle timing reports (completed)</li>
-<li>Integration with output VCD (completed via <code>--timing-vcd</code>)</li>
+<li>Integration with output VCD (completed via <code>--timed</code>)</li>
 <li>Timing-aware bit packing for reduced approximation error (future)</li>
 </ul>
 <h2 id="conservative-timing-model-sources-of-overestimation"><a class="header" href="#conservative-timing-model-sources-of-overestimation">Conservative Timing Model: Sources of Overestimation</a></h2>
@@ -1953,22 +1953,22 @@ nothing to observe at runtime.</p>
 <p>Traced nets appear in whichever VCD the run already emits:</p>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Flag</th><th>Traced nets appear in</th></tr></thead><tbody>
 <tr><td><code>jacquard sim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the output VCD</td></tr>
-<tr><td><code>jacquard cosim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the <code>--timing-vcd</code> output <strong>only</strong></td></tr>
+<tr><td><code>jacquard cosim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the <code>--output-vcd</code> output <strong>only</strong></td></tr>
 </tbody></table>
 </div>
 <p>They show up as ordinary VCD wires next to the top-level IO, named by the
 string you put in the trace file.</p>
 <blockquote>
-<p><strong>cosim:</strong> traced nets land in <code>--timing-vcd</code> <strong>only</strong>. The
+<p><strong>cosim:</strong> traced nets land in <code>--output-vcd</code> <strong>only</strong>. The
 <code>--stimulus-vcd</code> carries primary inputs and does <em>not</em> include them, so
 if you trace a net and look in the stimulus VCD you'll see nothing.
-<code>--timing-vcd</code> does <strong>not</strong> require timing data — see
+<code>--output-vcd</code> does <strong>not</strong> require timing data — see
 <a href="signal-tracing.html#pre-pnr-functional-runs">Pre-PnR functional runs</a>.</p>
 </blockquote>
 <h3 id="pre-pnr-functional-runs"><a class="header" href="#pre-pnr-functional-runs">Pre-PnR functional runs</a></h3>
-<p><code>--timing-vcd</code> is the functional output path too — it does <strong>not</strong> require
+<p><code>--output-vcd</code> is the functional output path too — it does <strong>not</strong> require
 <code>--timing-ir</code>/SDF. Run a synthesized (pre-PnR) netlist through <code>cosim</code>
-with <code>--timing-vcd out.vcd</code> and you get chip outputs and traced nets per
+with <code>--output-vcd out.vcd</code> and you get chip outputs and traced nets per
 cycle, with transitions at clock edges (no arrival-time offsets). This is
 the right mode for functional / 4-state X-pessimism debugging, where
 there is no timing data to supply yet. Adding <code>--timing-ir</code> later only
@@ -2003,7 +2003,7 @@ uv run netlist-graph sram-ports design.v --cell-type SRAM -o sram_trace.txt
 
 # 2. Surface them in the VCD with full per-tick accuracy
 jacquard cosim design.v --config sim.json \
-    --trace-signals sram_trace.txt --timing-vcd out.vcd
+    --trace-signals sram_trace.txt --output-vcd out.vcd
 
 # 3. Post-process the VCD to reconstruct bus values
 </code></pre>
@@ -2016,13 +2016,13 @@ value <code>0xCAFEBABE</code> lands in <code>data0_obs</code>:</p>
     --config tests/jtag_minimal/sim_config.json \
     --trace-signals tests/jtag_minimal/trace_signals.txt \
     --jtag-replay tests/jtag_minimal/data/bitbang.rec \
-    --timing-vcd out.vcd
+    --output-vcd out.vcd
 </code></pre>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Symptom</th><th>Cause / fix</th></tr></thead><tbody>
 <tr><td><code>not found in netlistdb (tried N candidate(s))</code></td><td>The name doesn't exist post-synthesis under any candidate spelling. Find the real name with <code>netlist-graph search</code>; the net may have been renamed or optimized away.</td></tr>
 <tr><td>Signal registered but flat in the VCD</td><td>It may resolve to a constant after optimization (the startup log notes constants are skipped), or the cone was stripped. Confirm it's a live net with <code>netlist-graph drivers</code>.</td></tr>
-<tr><td>Nothing appears in the VCD</td><td>Check that the run actually emits a VCD (<code>--timing-vcd</code> / <code>--stimulus-vcd</code> for cosim) and that the startup summary line reports a non-zero registered count.</td></tr>
+<tr><td>Nothing appears in the VCD</td><td>Check that the run actually emits a VCD (<code>--output-vcd</code> / <code>--stimulus-vcd</code> for cosim) and that the startup summary line reports a non-zero registered count.</td></tr>
 </tbody></table>
 </div>
 <h2 id="implementation-notes"><a class="header" href="#implementation-notes">Implementation notes</a></h2>
@@ -3566,11 +3566,11 @@ accepted history.</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0008--structured-timing-output-as-first-class-deliverable"><a class="header" href="#adr-0008--structured-timing-output-as-first-class-deliverable">ADR 0008 — Structured timing output as first-class deliverable</a></h1>
 <p><strong>Status:</strong> Approved.</p>
 <h2 id="context-7"><a class="header" href="#context-7">Context</a></h2>
-<p>Jacquard produces timing information today through three channels: timed VCD (<code>--timing-vcd</code>), per-violation <code>clilog::warn!</code> messages on stderr, and an in-process <code>SimStats</code> counter. The <code>why-jacquard.md</code> analysis identifies a gap between the timing data Jacquard <em>has</em> internally and the answers users actually need from a flow:</p>
+<p>Jacquard produces timing information today through three channels: timed VCD (<code>--timed</code>), per-violation <code>clilog::warn!</code> messages on stderr, and an in-process <code>SimStats</code> counter. The <code>why-jacquard.md</code> analysis identifies a gap between the timing data Jacquard <em>has</em> internally and the answers users actually need from a flow:</p>
 <div class="table-wrapper"><table><thead><tr><th>User question</th><th>Today</th></tr></thead><tbody>
 <tr><td>Did my workload trip any violations?</td><td><code>SimStats</code> counts (in-process API only)</td></tr>
 <tr><td>Which DFFs nearly missed timing?</td><td>Not extractable without parsing stderr</td></tr>
-<tr><td>Show me arrival distribution per signal</td><td>Reconstructable from --timing-vcd via post-processing only</td></tr>
+<tr><td>Show me arrival distribution per signal</td><td>Reconstructable from --timed via post-processing only</td></tr>
 <tr><td>Which DFF was that violation on?</td><td>State-word index + manual lookup</td></tr>
 <tr><td>What path caused the worst arrival?</td><td>Not available</td></tr>
 <tr><td>Run this in CI and fail if any violation</td><td>Possible only via stderr grep</td></tr>
@@ -3627,7 +3627,7 @@ accepted history.</li>
 </ol>
 <h3 id="backward-compatibility"><a class="header" href="#backward-compatibility">Backward compatibility</a></h3>
 <ul>
-<li>All new outputs are opt-in via flags. Existing stderr behaviour and <code>--timing-vcd</code> semantics are unchanged.</li>
+<li>All new outputs are opt-in via flags. Existing stderr behaviour and <code>--timed</code> semantics are unchanged.</li>
 <li>Symbolic violation messages (item 1) <strong>do</strong> change existing stderr format. This is intentional: the current state-word-index format is not a stable contract and is not consumed by any known automation. Format change documented in changelog at land time.</li>
 </ul>
 <h3 id="output-stability-contract"><a class="header" href="#output-stability-contract">Output stability contract</a></h3>
@@ -4259,18 +4259,18 @@ tracked in <a href="https://github.com/gpu-eda/Jacquard/issues/92">issue #92</a>
 <tr><td>Per-domain sub-seed <code>hash(master_seed, name)</code> + per-domain <code>ChaCha8Rng</code></td><td><code>RunParams::domain_seed</code>; <code>cosim_metal.rs</code></td></tr>
 <tr><td><code>jitter_ps</code> per <code>ClockConfig</code> (default 0)</td><td><code>src/testbench.rs</code></td></tr>
 <tr><td>Uniform <code>[-jitter_ps, +jitter_ps]</code> draw per domain per tick</td><td><code>cosim_metal.rs</code></td></tr>
-<tr><td>Jitter displacement applied to the <strong>timing-VCD event timestamp</strong></td><td><code>cosim_metal.rs</code> (inside the <code>--timing-vcd</code> block)</td></tr>
+<tr><td>Jitter displacement applied to the <strong>timing-VCD event timestamp</strong></td><td><code>cosim_metal.rs</code> (inside the <code>--output-vcd</code> block)</td></tr>
 <tr><td><code>master_seed</code> logged at INFO</td><td><code>cosim_metal.rs</code></td></tr>
 <tr><td><code>--check-with-cpu</code> + jitter warning</td><td><code>cosim_metal.rs</code></td></tr>
 </tbody></table>
 </div>
 <p><strong>Deferred (issue #92):</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Part</th><th>ADR §</th><th>Gap</th></tr></thead><tbody>
-<tr><td>Setup/hold integration</td><td>§2, §5</td><td>Jitter shifts only the VCD base timestamp; it does not feed the per-signal arrival offsets, so it produces no <code>--timing-report</code> violations. Also: jitter currently has <strong>no effect unless <code>--timing-vcd</code> is set</strong>.</td></tr>
+<tr><td>Setup/hold integration</td><td>§2, §5</td><td>Jitter shifts only the VCD base timestamp; it does not feed the per-signal arrival offsets, so it produces no <code>--timing-report</code> violations. Also: jitter currently has <strong>no effect unless <code>--output-vcd</code> is set</strong>.</td></tr>
 <tr><td>Model-driven clock jitter</td><td>§3</td><td>No <code>--cdc-model-jitter-ps</code> flag or <code>patch_model_clock_edges</code> path; only scheduler domains jitter.</td></tr>
 <tr><td>True coincident-edge perturbation</td><td>§4</td><td>A single global displacement (last firing domain wins) is applied to the shared timestamp rather than independent per-domain displacement.</td></tr>
 <tr><td><code>gcd_ps / 2</code> constraint</td><td>§2</td><td>Not validated.</td></tr>
-<tr><td>Persist seed unconditionally</td><td>§1</td><td>Without <code>--run-params</code> or <code>--timing-vcd</code>, the seed is generated but not written.</td></tr>
+<tr><td>Persist seed unconditionally</td><td>§1</td><td>Without <code>--run-params</code> or <code>--output-vcd</code>, the seed is generated but not written.</td></tr>
 <tr><td><code>master_seed</code> in VCD header comment</td><td>§1, §5</td><td>INFO log only.</td></tr>
 <tr><td><code>--cdc-jitter-seed</code> CI sweep</td><td>Consequences</td><td>The replay mechanism is <code>--run-params</code>; no dedicated CI sweep step yet.</td></tr>
 </tbody></table>
@@ -5054,7 +5054,7 @@ GPU-side state:</p>
 <li><strong>Peripheral ring buffers</strong> — UART channels and Wishbone trace
 channel, drained from local <code>read_head</code> to GPU-written
 <code>write_head</code>. See ADR 0013 for struct conventions.</li>
-<li><strong>VCD snapshot buffer</strong> — when <code>--stimulus-vcd</code> or <code>--timing-vcd</code> is
+<li><strong>VCD snapshot buffer</strong> — when <code>--stimulus-vcd</code> or <code>--output-vcd</code> is
 enabled, a separate ring buffer (<code>2 × state_size</code> words per edge)
 captures per-tick output state on the GPU. The CPU drains it
 after each batch to write VCD transitions. This mechanism is what
@@ -6227,7 +6227,7 @@ plus a new <code>liberty_file</code> field for the OpenSTA invocation. Update
 and the config provides SDF + Liberty paths, call
 <code>setup::load_sdf_via_opensta_to_ir</code>. Match the priority order:
 CLI &gt; config.timing.* &gt; nothing.</li>
-<li><strong>Update <code>--timing-vcd</code> error message</strong> to mention <code>--sdf</code> again.</li>
+<li><strong>Update <code>--output-vcd</code> error message</strong> to mention <code>--sdf</code> again.</li>
 </ol>
 <h3 id="out-of-scope-for-option-a"><a class="header" href="#out-of-scope-for-option-a">Out of scope for Option A</a></h3>
 <ul>
@@ -6873,7 +6873,7 @@ the wire-bundle-scripting / Surfer direction in project memory.</li>
 <h3 id="6-cli--srcbinjacquardrs"><a class="header" href="#6-cli--srcbinjacquardrs">6. CLI — <code>src/bin/jacquard.rs</code></a></h3>
 <ul>
 <li><code>--bus-trace-csv &lt;PATH&gt;</code> (Phase 1)</li>
-<li>bus VCD annotation folded into the output/<code>--timing-vcd</code> when <code>bus_traces</code> is
+<li>bus VCD annotation folded into the output/<code>--output-vcd</code> when <code>bus_traces</code> is
 configured, or a dedicated <code>--bus-trace-vcd</code> flag (Phase 3)</li>
 </ul>
 <h2 id="status"><a class="header" href="#status">Status</a></h2>
@@ -6924,7 +6924,7 @@ Issue: <a href="https://github.com/gpu-eda/Jacquard/issues/92">#92</a>.</p>
 <p>Implemented: the run-parameters file + per-domain seeded PRNG
 (<code>src/sim/run_params.rs</code>), <code>jitter_ps</code> per <code>ClockConfig</code>, the uniform
 per-domain draw, and a jitter displacement applied to the <strong>timing-VCD
-event timestamp</strong> (<code>cosim_metal.rs</code>, inside the <code>--timing-vcd</code> block
+event timestamp</strong> (<code>cosim_metal.rs</code>, inside the <code>--output-vcd</code> block
 only). So today jitter perturbs the <em>waveform timeline</em> but nothing
 else — it does not reach the setup/hold checker, model-driven clocks,
 or coincident-edge ordering.</p>
@@ -6934,12 +6934,12 @@ present-tense design fully matches the code.</p>
 <h2 id="phase-1--jitter-reaches-the-timing-checker-the-core-value"><a class="header" href="#phase-1--jitter-reaches-the-timing-checker-the-core-value">Phase 1 — Jitter reaches the timing checker (the core value)</a></h2>
 <p>Right now <code>jitter_displacement</code> only adjusts the VCD <code>base_timestamp</code>
 (<code>cosim_metal.rs:~3928-3948</code>) and is computed <em>inside</em> the timing-VCD
-emission block, so it has no effect without <code>--timing-vcd</code> and never
+emission block, so it has no effect without <code>--output-vcd</code> and never
 influences violations.</p>
 <ul>
 <li>Hoist the per-tick per-domain displacement draw out of the VCD block
 so it is available whenever <code>jitter_active</code>, independent of
-<code>--timing-vcd</code>.</li>
+<code>--output-vcd</code>.</li>
 <li>Apply each domain's displacement to the <strong>arrival offsets</strong> that
 setup/hold checking consumes (the <code>arrival_state</code> section), not just
 the VCD base timestamp — so a jittered edge can move a margin across
@@ -6972,7 +6972,7 @@ vary by seed.</p>
 a loud warning) if any <code>jitter_ps &gt; scheduler.gcd_ps / 2</code>, since larger
 values would reorder edges across GCD ticks.</li>
 <li><strong>Always persist the seed</strong> (ADR §1): when neither <code>--run-params</code> nor
-<code>--timing-vcd</code> is given, <code>RunParams::generate()</code> currently does not
+<code>--output-vcd</code> is given, <code>RunParams::generate()</code> currently does not
 write the file. Persist to a default path unconditionally so every run
 is replayable.</li>
 <li><strong>master_seed in the VCD header</strong> (ADR §1/§5): emit the master seed as

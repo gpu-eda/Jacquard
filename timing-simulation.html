@@ -373,14 +373,14 @@ __shared__ u8 shared_arrival[256][32];  // Per-bit arrivals
 <li>Arrivals tracked during boomerang reduction at all hierarchy levels</li>
 <li>Per-gate delays injected via script padding slots from SDF data</li>
 <li>DFF timing constraint checking at cycle boundaries (setup/hold)</li>
-<li>Timing-aware VCD output (<code>--timing-vcd</code> flag)</li>
+<li>Timing-aware VCD output (<code>--timed</code> flag)</li>
 <li>Validated against CVC reference simulator (88ps / 7.1% conservative overestimate)</li>
 </ul>
 <h3 id="phase-4-full-integration-partial"><a class="header" href="#phase-4-full-integration-partial">Phase 4: Full Integration (Partial)</a></h3>
 <ul>
 <li>Timing violation events via event buffer (completed)</li>
 <li>Per-cycle timing reports (completed)</li>
-<li>Integration with output VCD (completed via <code>--timing-vcd</code>)</li>
+<li>Integration with output VCD (completed via <code>--timed</code>)</li>
 <li>Timing-aware bit packing for reduced approximation error (future)</li>
 </ul>
 <h2 id="conservative-timing-model-sources-of-overestimation"><a class="header" href="#conservative-timing-model-sources-of-overestimation">Conservative Timing Model: Sources of Overestimation</a></h2>

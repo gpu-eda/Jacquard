@@ -162,7 +162,7 @@ Issue: <a href="https://github.com/gpu-eda/Jacquard/issues/92">#92</a>.</p>
 <p>Implemented: the run-parameters file + per-domain seeded PRNG
 (<code>src/sim/run_params.rs</code>), <code>jitter_ps</code> per <code>ClockConfig</code>, the uniform
 per-domain draw, and a jitter displacement applied to the <strong>timing-VCD
-event timestamp</strong> (<code>cosim_metal.rs</code>, inside the <code>--timing-vcd</code> block
+event timestamp</strong> (<code>cosim_metal.rs</code>, inside the <code>--output-vcd</code> block
 only). So today jitter perturbs the <em>waveform timeline</em> but nothing
 else — it does not reach the setup/hold checker, model-driven clocks,
 or coincident-edge ordering.</p>
@@ -172,12 +172,12 @@ present-tense design fully matches the code.</p>
 <h2 id="phase-1--jitter-reaches-the-timing-checker-the-core-value"><a class="header" href="#phase-1--jitter-reaches-the-timing-checker-the-core-value">Phase 1 — Jitter reaches the timing checker (the core value)</a></h2>
 <p>Right now <code>jitter_displacement</code> only adjusts the VCD <code>base_timestamp</code>
 (<code>cosim_metal.rs:~3928-3948</code>) and is computed <em>inside</em> the timing-VCD
-emission block, so it has no effect without <code>--timing-vcd</code> and never
+emission block, so it has no effect without <code>--output-vcd</code> and never
 influences violations.</p>
 <ul>
 <li>Hoist the per-tick per-domain displacement draw out of the VCD block
 so it is available whenever <code>jitter_active</code>, independent of
-<code>--timing-vcd</code>.</li>
+<code>--output-vcd</code>.</li>
 <li>Apply each domain's displacement to the <strong>arrival offsets</strong> that
 setup/hold checking consumes (the <code>arrival_state</code> section), not just
 the VCD base timestamp — so a jittered edge can move a margin across
@@ -210,7 +210,7 @@ vary by seed.</p>
 a loud warning) if any <code>jitter_ps &gt; scheduler.gcd_ps / 2</code>, since larger
 values would reorder edges across GCD ticks.</li>
 <li><strong>Always persist the seed</strong> (ADR §1): when neither <code>--run-params</code> nor
-<code>--timing-vcd</code> is given, <code>RunParams::generate()</code> currently does not
+<code>--output-vcd</code> is given, <code>RunParams::generate()</code> currently does not
 write the file. Persist to a default path unconditionally so every run
 is replayable.</li>
 <li><strong>master_seed in the VCD header</strong> (ADR §1/§5): emit the master seed as

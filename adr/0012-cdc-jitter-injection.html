@@ -313,18 +313,18 @@ tracked in <a href="https://github.com/gpu-eda/Jacquard/issues/92">issue #92</a>
 <tr><td>Per-domain sub-seed <code>hash(master_seed, name)</code> + per-domain <code>ChaCha8Rng</code></td><td><code>RunParams::domain_seed</code>; <code>cosim_metal.rs</code></td></tr>
 <tr><td><code>jitter_ps</code> per <code>ClockConfig</code> (default 0)</td><td><code>src/testbench.rs</code></td></tr>
 <tr><td>Uniform <code>[-jitter_ps, +jitter_ps]</code> draw per domain per tick</td><td><code>cosim_metal.rs</code></td></tr>
-<tr><td>Jitter displacement applied to the <strong>timing-VCD event timestamp</strong></td><td><code>cosim_metal.rs</code> (inside the <code>--timing-vcd</code> block)</td></tr>
+<tr><td>Jitter displacement applied to the <strong>timing-VCD event timestamp</strong></td><td><code>cosim_metal.rs</code> (inside the <code>--output-vcd</code> block)</td></tr>
 <tr><td><code>master_seed</code> logged at INFO</td><td><code>cosim_metal.rs</code></td></tr>
 <tr><td><code>--check-with-cpu</code> + jitter warning</td><td><code>cosim_metal.rs</code></td></tr>
 </tbody></table>
 </div>
 <p><strong>Deferred (issue #92):</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Part</th><th>ADR §</th><th>Gap</th></tr></thead><tbody>
-<tr><td>Setup/hold integration</td><td>§2, §5</td><td>Jitter shifts only the VCD base timestamp; it does not feed the per-signal arrival offsets, so it produces no <code>--timing-report</code> violations. Also: jitter currently has <strong>no effect unless <code>--timing-vcd</code> is set</strong>.</td></tr>
+<tr><td>Setup/hold integration</td><td>§2, §5</td><td>Jitter shifts only the VCD base timestamp; it does not feed the per-signal arrival offsets, so it produces no <code>--timing-report</code> violations. Also: jitter currently has <strong>no effect unless <code>--output-vcd</code> is set</strong>.</td></tr>
 <tr><td>Model-driven clock jitter</td><td>§3</td><td>No <code>--cdc-model-jitter-ps</code> flag or <code>patch_model_clock_edges</code> path; only scheduler domains jitter.</td></tr>
 <tr><td>True coincident-edge perturbation</td><td>§4</td><td>A single global displacement (last firing domain wins) is applied to the shared timestamp rather than independent per-domain displacement.</td></tr>
 <tr><td><code>gcd_ps / 2</code> constraint</td><td>§2</td><td>Not validated.</td></tr>
-<tr><td>Persist seed unconditionally</td><td>§1</td><td>Without <code>--run-params</code> or <code>--timing-vcd</code>, the seed is generated but not written.</td></tr>
+<tr><td>Persist seed unconditionally</td><td>§1</td><td>Without <code>--run-params</code> or <code>--output-vcd</code>, the seed is generated but not written.</td></tr>
 <tr><td><code>master_seed</code> in VCD header comment</td><td>§1, §5</td><td>INFO log only.</td></tr>
 <tr><td><code>--cdc-jitter-seed</code> CI sweep</td><td>Consequences</td><td>The replay mechanism is <code>--run-params</code>; no dedicated CI sweep step yet.</td></tr>
 </tbody></table>

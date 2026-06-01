@@ -220,22 +220,22 @@ nothing to observe at runtime.</p>
 <p>Traced nets appear in whichever VCD the run already emits:</p>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Flag</th><th>Traced nets appear in</th></tr></thead><tbody>
 <tr><td><code>jacquard sim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the output VCD</td></tr>
-<tr><td><code>jacquard cosim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the <code>--timing-vcd</code> output <strong>only</strong></td></tr>
+<tr><td><code>jacquard cosim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the <code>--output-vcd</code> output <strong>only</strong></td></tr>
 </tbody></table>
 </div>
 <p>They show up as ordinary VCD wires next to the top-level IO, named by the
 string you put in the trace file.</p>
 <blockquote>
-<p><strong>cosim:</strong> traced nets land in <code>--timing-vcd</code> <strong>only</strong>. The
+<p><strong>cosim:</strong> traced nets land in <code>--output-vcd</code> <strong>only</strong>. The
 <code>--stimulus-vcd</code> carries primary inputs and does <em>not</em> include them, so
 if you trace a net and look in the stimulus VCD you'll see nothing.
-<code>--timing-vcd</code> does <strong>not</strong> require timing data — see
+<code>--output-vcd</code> does <strong>not</strong> require timing data — see
 <a href="#pre-pnr-functional-runs">Pre-PnR functional runs</a>.</p>
 </blockquote>
 <h3 id="pre-pnr-functional-runs"><a class="header" href="#pre-pnr-functional-runs">Pre-PnR functional runs</a></h3>
-<p><code>--timing-vcd</code> is the functional output path too — it does <strong>not</strong> require
+<p><code>--output-vcd</code> is the functional output path too — it does <strong>not</strong> require
 <code>--timing-ir</code>/SDF. Run a synthesized (pre-PnR) netlist through <code>cosim</code>
-with <code>--timing-vcd out.vcd</code> and you get chip outputs and traced nets per
+with <code>--output-vcd out.vcd</code> and you get chip outputs and traced nets per
 cycle, with transitions at clock edges (no arrival-time offsets). This is
 the right mode for functional / 4-state X-pessimism debugging, where
 there is no timing data to supply yet. Adding <code>--timing-ir</code> later only
@@ -270,7 +270,7 @@ uv run netlist-graph sram-ports design.v --cell-type SRAM -o sram_trace.txt
 
 # 2. Surface them in the VCD with full per-tick accuracy
 jacquard cosim design.v --config sim.json \
-    --trace-signals sram_trace.txt --timing-vcd out.vcd
+    --trace-signals sram_trace.txt --output-vcd out.vcd
 
 # 3. Post-process the VCD to reconstruct bus values
 </code></pre>
@@ -283,13 +283,13 @@ value <code>0xCAFEBABE</code> lands in <code>data0_obs</code>:</p>
     --config tests/jtag_minimal/sim_config.json \
     --trace-signals tests/jtag_minimal/trace_signals.txt \
     --jtag-replay tests/jtag_minimal/data/bitbang.rec \
-    --timing-vcd out.vcd
+    --output-vcd out.vcd
 </code></pre>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Symptom</th><th>Cause / fix</th></tr></thead><tbody>
 <tr><td><code>not found in netlistdb (tried N candidate(s))</code></td><td>The name doesn't exist post-synthesis under any candidate spelling. Find the real name with <code>netlist-graph search</code>; the net may have been renamed or optimized away.</td></tr>
 <tr><td>Signal registered but flat in the VCD</td><td>It may resolve to a constant after optimization (the startup log notes constants are skipped), or the cone was stripped. Confirm it's a live net with <code>netlist-graph drivers</code>.</td></tr>
-<tr><td>Nothing appears in the VCD</td><td>Check that the run actually emits a VCD (<code>--timing-vcd</code> / <code>--stimulus-vcd</code> for cosim) and that the startup summary line reports a non-zero registered count.</td></tr>
+<tr><td>Nothing appears in the VCD</td><td>Check that the run actually emits a VCD (<code>--output-vcd</code> / <code>--stimulus-vcd</code> for cosim) and that the startup summary line reports a non-zero registered count.</td></tr>
 </tbody></table>
 </div>
 <h2 id="implementation-notes"><a class="header" href="#implementation-notes">Implementation notes</a></h2>
