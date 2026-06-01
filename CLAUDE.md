@@ -185,6 +185,17 @@ The recommended workflow for SRAM observability is wire-level tracing via `--tra
 
 **Open question**: is it worth porting `netlist-graph` to Rust? The Python tool handles large netlists (40K cells in ~1s) but shares no code with the Rust `netlistdb`/`sverilogparse` parsers. A Rust port could reuse `sverilogparse` directly and integrate with `jacquard` as a subcommand.
 
+### Bus Transaction Tracing (`--bus-trace-csv`)
+
+The structured, protocol-aware counterpart to `--trace-signals`: instead
+of raw per-cycle wires, it decodes on-chip bus transfers into
+transaction records (`WR 0x10 <= 0xCAFEBABE`). Buses are declared via
+`bus_traces` in `sim_config.json`; cosim observes the pins on the GPU and
+runs the protocol FSM on the CPU. **APB3** is supported; AHB-Lite/AHB5
+are planned. See `docs/bus-tracing.md` for the full guide,
+`docs/adr/0013-plural-peripheral-configs.md` for the architecture, and
+`tests/apb_trace/` for a worked example.
+
 ### Timing Violation Detection
 
 See `docs/timing-violations.md` for the full guide on enabling GPU-side setup/hold violation checks, interpreting violation reports, and tracing violations back to source signals using `netlist_graph`.
