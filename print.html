@@ -6346,7 +6346,12 @@ regression run; not for one-off interactive sim.</li>
 random X-injection on detected async-source paths. Reuses MC.1's
 boundary metadata and existing X-prop infrastructure. Distinct from
 static CDC checking (Spyglass, Real Intent), which is <strong>explicitly out
-of scope</strong> — that's a different product.</li>
+of scope</strong> — that's a different product. The jitter-injection half is
+designed in <a href="plans/../adr/0012-cdc-jitter-injection.html">ADR 0012</a> and partly
+built; remaining work is tracked in
+<a href="https://github.com/gpu-eda/Jacquard/issues/92">issue #92</a> /
+<a href="plans/cdc-jitter-completion.html"><code>cdc-jitter-completion.md</code></a>. X-injection
+stays deferred until MC.1 lands.</li>
 </ul>
 <h2 id="out-of-scope-explicit-non-goals"><a class="header" href="#out-of-scope-explicit-non-goals">Out of scope (explicit non-goals)</a></h2>
 <p>These come up adjacent and are worth being clear about:</p>
