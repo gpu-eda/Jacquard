@@ -3,11 +3,18 @@ name = "netlist-graph"
 version = "0.1.0"
 description = "Graph-based netlist analysis tool for SKY130 post-synthesis netlists"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.11"
+keywords = ["netlist", "eda", "verilog", "synthesis", "jacquard"]
 dependencies = [
     "networkx>=3.0",
     "click>=8.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/gpu-eda/Jacquard"
+Repository = "https://github.com/gpu-eda/Jacquard"
+Documentation = "https://gpu-eda.github.io/Jacquard/signal-tracing.html"
 
 [project.scripts]
 netlist-graph = "netlist_graph.cli:main"

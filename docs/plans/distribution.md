@@ -66,21 +66,32 @@ Deliverable: tagging `v0.1.0` produces a downloadable Metal binary.
 
 ## Phase 2 — Homebrew tap
 
-- New repo `gpu-eda/homebrew-tap` with `Formula/jacquard.rb`.
-- Formula downloads the macOS-arm64 release tarball, installs `jacquard`
-  + `opensta-to-ir`, verifies the sha256.
+**Formula staged** at `packaging/homebrew/jacquard.rb` (brew-style clean
+apart from homebrew-core-only Sorbet sigils; installs `jacquard` +
+`opensta-to-ir`, tests `--version`). Remaining (needs maintainer action):
+
+- Create repo `gpu-eda/homebrew-tap`; copy the formula to
+  `Formula/jacquard.rb`.
+- Per release, bump `url` / `version` / `sha256` to the released tarball
+  (the release emits a `.sha256`; or `brew bump-formula-pr`).
 - `brew install gpu-eda/tap/jacquard` → both bins on `PATH`.
-- (Stretch) a release-CI step that bumps the formula's url/sha on each
-  tag, so the tap tracks releases automatically.
+- (Stretch) a release-CI step that auto-bumps the formula on each tag.
+
+See [`../../packaging/README.md`](../../packaging/README.md).
 
 ## Phase 3 — netlist-graph → PyPI
 
-- Add a `publish-netlist-graph.yml` workflow (tag-triggered, e.g.
-  `netlist-graph-v*`) that builds the wheel (`hatchling`) and publishes
-  via PyPI **trusted publishing** (OIDC, no stored token).
-- Confirm `scripts/netlist_graph/` ships its `README.md` + `LICENSE` in
-  the wheel.
-- Result: `uvx netlist-graph …` and `pip install netlist-graph` work.
+**Workflow written:** `.github/workflows/publish-netlist-graph.yml`
+builds the wheel (`uv build --package netlist-graph`) and publishes via
+PyPI **trusted publishing** (OIDC) on `netlist-graph-v*` tags;
+`workflow_dispatch` is a build-only dry-run. The wheel + sdist build
+cleanly (verified locally); `license = "Apache-2.0"` + URLs added to the
+package metadata. Remaining (needs maintainer action):
+
+- Create/own the `netlist-graph` PyPI project and configure its trusted
+  publisher (owner `gpu-eda`, repo `Jacquard`, workflow
+  `publish-netlist-graph.yml`, environment `pypi`).
+- Result: `uvx netlist-graph …` / `pip install netlist-graph` work.
 
 ## Phase 4 — CUDA / HIP release binaries (runner-gated)
 
