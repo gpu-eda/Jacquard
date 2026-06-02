@@ -334,10 +334,18 @@ impl MetalSimulator {
         let device = MTLDevice::system_default().expect("No Metal device found");
         clilog::info!("Using Metal device: {}", device.name());
 
-        let metallib_path = env!("METALLIB_PATH");
+        // The Metal kernel library is embedded into the binary at compile
+        // time. The build script compiles `csrc/kernel_v1.metal` to a
+        // `.metallib` and exposes its path via `METALLIB_PATH`; we
+        // `include_bytes!` that at build time and load it from memory.
+        // Embedding (rather than loading the file at runtime) makes the
+        // binary relocatable — a shipped / `cargo binstall`ed binary has
+        // no build-tree path to read from. See ADR 0018 and
+        // docs/plans/distribution.md (Phase 1a).
+        const METALLIB_BYTES: &[u8] = include_bytes!(env!("METALLIB_PATH"));
         let library = device
-            .new_library_with_file(metallib_path)
-            .expect("Failed to load metallib");
+            .new_library_with_data(METALLIB_BYTES)
+            .expect("Failed to load embedded metallib");
 
         let kernel_function = library
             .get_function("simulate_v1_stage", None)
