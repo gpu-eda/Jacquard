@@ -1,6 +1,7 @@
 # Summary
 
 - [Introduction](README.md)
+- [Installation](installation.md)
 - [Getting Started](usage.md)
 - [Why Jacquard](why-jacquard.md)
 - [Simulation Architecture](simulation-architecture.md)

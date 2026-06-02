@@ -54,8 +54,13 @@ Contributors editing only Rust / C++ / kernel sources do not need `flatc` or Ope
 
 ## Quick Start
 
+> **Just want to install Jacquard?** See **[docs/installation.md](docs/installation.md)**
+> for prebuilt binaries, Homebrew (macOS/Metal), and the `netlist-graph`
+> PyPI companion. The from-source build below is the contributor path —
+> and the route for Linux CUDA / HIP.
+
 ```sh
-git clone https://github.com/ChipFlow/Jacquard.git
+git clone https://github.com/gpu-eda/Jacquard.git
 cd Jacquard
 git submodule update --init --recursive
 ```
