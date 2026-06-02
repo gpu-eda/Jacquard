@@ -289,7 +289,7 @@ value <code>0xCAFEBABE</code> lands in <code>data0_obs</code>:</p>
 <div class="table-wrapper"><table><thead><tr><th>Symptom</th><th>Cause / fix</th></tr></thead><tbody>
 <tr><td><code>not found in netlistdb (tried N candidate(s))</code></td><td>The name doesn't exist post-synthesis under any candidate spelling. Find the real name with <code>netlist-graph search</code>; the net may have been renamed or optimized away.</td></tr>
 <tr><td>Signal registered but flat in the VCD</td><td>It may resolve to a constant after optimization (the startup log notes constants are skipped), or the cone was stripped. Confirm it's a live net with <code>netlist-graph drivers</code>.</td></tr>
-<tr><td>Nothing appears in the VCD</td><td>Check that the run actually emits a VCD (<code>--output-vcd</code> / <code>--stimulus-vcd</code> for cosim) and that the startup summary line reports a non-zero registered count.</td></tr>
+<tr><td>Nothing appears in the VCD</td><td>For cosim, traced nets only land in <code>--output-vcd</code> (not <code>--stimulus-vcd</code>) — make sure you passed it. Also check the startup summary reports a non-zero registered count.</td></tr>
 </tbody></table>
 </div>
 <h2 id="implementation-notes"><a class="header" href="#implementation-notes">Implementation notes</a></h2>
