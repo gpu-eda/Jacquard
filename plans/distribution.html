@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>CDC jitter completion - Jacquard Documentation</title>
+        <title>Distribution &amp; easy install - Jacquard Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -155,91 +155,114 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="plan-complete-adr-0012-cdc-jitter-injection"><a class="header" href="#plan-complete-adr-0012-cdc-jitter-injection">Plan: complete ADR 0012 CDC jitter injection</a></h1>
-<p>Tracks the deferred half of <a href="../adr/0012-cdc-jitter-injection.html">ADR 0012</a>.
-Issue: <a href="https://github.com/gpu-eda/Jacquard/issues/92">#92</a>.</p>
-<h2 id="where-it-stands"><a class="header" href="#where-it-stands">Where it stands</a></h2>
-<p>Implemented: the run-parameters file + per-domain seeded PRNG
-(<code>src/sim/run_params.rs</code>), <code>jitter_ps</code> per <code>ClockConfig</code>, the uniform
-per-domain draw, and a jitter displacement applied to the <strong>timing-VCD
-event timestamp</strong> (<code>cosim_metal.rs</code>, inside the <code>--output-vcd</code> block
-only). So today jitter perturbs the <em>waveform timeline</em> but nothing
-else — it does not reach the setup/hold checker, model-driven clocks,
-or coincident-edge ordering.</p>
-<p>The goal of this plan is to make jitter actually stress CDC paths, then
-extend it to model-driven clocks and tidy the loose ends, so ADR 0012's
-present-tense design fully matches the code.</p>
-<h2 id="phase-1--jitter-reaches-the-timing-checker-the-core-value"><a class="header" href="#phase-1--jitter-reaches-the-timing-checker-the-core-value">Phase 1 — Jitter reaches the timing checker (the core value)</a></h2>
-<p>Right now <code>jitter_displacement</code> only adjusts the VCD <code>base_timestamp</code>
-(<code>cosim_metal.rs:~3928-3948</code>) and is computed <em>inside</em> the timing-VCD
-emission block, so it has no effect without <code>--output-vcd</code> and never
-influences violations.</p>
+                        <h1 id="plan-distribution--easy-install"><a class="header" href="#plan-distribution--easy-install">Plan: distribution &amp; easy install</a></h1>
+<p>Implements <a href="../adr/0018-distribution-and-installation.html">ADR 0018</a>. Goal:
+a fresh user (or a docs-dogfooding agent) can install Jacquard in one
+line on macOS/Metal, with CUDA/HIP following as runners land.</p>
+<h2 id="artifacts--channels-from-adr-0018"><a class="header" href="#artifacts--channels-from-adr-0018">Artifacts &amp; channels (from ADR 0018)</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Artifact</th><th>Channel</th><th>Blocked on</th></tr></thead><tbody>
+<tr><td><code>jacquard</code> (Metal)</td><td>GitHub Release + <code>cargo-binstall</code> + Homebrew tap</td><td>— (shippable now)</td></tr>
+<tr><td><code>opensta-to-ir</code></td><td>same release/formula as <code>jacquard</code></td><td>—</td></tr>
+<tr><td><code>jacquard</code> (CUDA / HIP)</td><td>added to the release matrix</td><td>NVIDIA / AMD runners</td></tr>
+<tr><td><code>netlist-graph</code></td><td>PyPI</td><td>—</td></tr>
+</tbody></table>
+</div>
+<h2 id="phase-0--metadata-hygiene-no-new-infra"><a class="header" href="#phase-0--metadata-hygiene-no-new-infra">Phase 0 — Metadata hygiene (no new infra)</a></h2>
 <ul>
-<li>Hoist the per-tick per-domain displacement draw out of the VCD block
-so it is available whenever <code>jitter_active</code>, independent of
-<code>--output-vcd</code>.</li>
-<li>Apply each domain's displacement to the <strong>arrival offsets</strong> that
-setup/hold checking consumes (the <code>arrival_state</code> section), not just
-the VCD base timestamp — so a jittered edge can move a margin across
-the setup/hold boundary and surface in <code>--timing-report</code>.</li>
-<li><strong>True per-domain perturbation</strong> (ADR §4): keep a displacement <em>per
-firing domain</em> this tick rather than the current single global value
-(the loop overwrites <code>jitter_displacement</code> with the last domain's
-draw). Coincident edges from domains A and B then move independently,
-exercising both orderings over a seed sweep.</li>
+<li>Fix <code>repository</code> URL <code>ChipFlow/Jacquard</code> → <code>gpu-eda/Jacquard</code> in
+<code>Cargo.toml</code> and <code>crates/opensta-to-ir/Cargo.toml</code>.</li>
+<li>Decide the release version (this is effectively <code>0.1.0</code>, the first
+numbered release) and confirm <code>CHANGELOG.md</code> exists / is rolled per
+<code>release-process.md</code>.</li>
+<li>Add <code>[package.metadata.binstall]</code> to <code>Cargo.toml</code> describing the
+release asset name template (e.g.
+<code>{ name }-{ version }-{ target }{ archive-suffix }</code>).</li>
 </ul>
-<p>Verify: a small two-domain design with a deliberately marginal CDC path;
-assert that a seed sweep produces both "no violation" and "violation"
-outcomes, and that a fixed seed reproduces exactly.</p>
-<h2 id="phase-2--model-driven-clock-jitter-adr-3"><a class="header" href="#phase-2--model-driven-clock-jitter-adr-3">Phase 2 — Model-driven clock jitter (ADR §3)</a></h2>
-<p>Model-driven clocks (<code>JtagReplayModel</code>, SPI SCK, …) bypass the scheduler
-and currently get no jitter.</p>
+<h2 id="phase-1--metal-release-ci-unblocked"><a class="header" href="#phase-1--metal-release-ci-unblocked">Phase 1 — Metal release CI (unblocked)</a></h2>
+<p>A <code>release.yml</code> workflow triggered on <code>v*</code> tags:</p>
 <ul>
-<li>Add <code>--cdc-model-jitter-ps &lt;N&gt;</code> (and/or per-model <code>jitter_ps</code> in
-config) → a budget + seeded stream via <code>RunParams::domain_seed(model_name)</code>.</li>
-<li>After a model fires its edge, displace the <strong>timing-model arrival</strong>
-for that transition (not the functional edge — the DFF still samples
-on the same tick), mirroring the Phase 1 arrival-offset path.</li>
+<li>On the self-hosted macOS runner: <code>cargo build -r --features metal --bin jacquard</code> and <code>cargo build -r --bin opensta-to-ir</code>.</li>
+<li>Package both binaries into <code>jacquard-&lt;version&gt;-macos-arm64-metal.tar.gz</code>
+(+ a <code>.sha256</code>).</li>
+<li><code>gh release create</code> / upload the asset. Body = the CHANGELOG section.</li>
+<li>Smoke-test the packaged binary (<code>jacquard --version</code>, a tiny
+<code>tests/apb_trace</code> cosim) before publishing.</li>
 </ul>
-<p>Verify: extend <code>tests/jtag_minimal</code> (model-driven TCK) with a model
-jitter budget; confirm reproducibility and that TCK→sys_clk CDC margins
-vary by seed.</p>
-<h2 id="phase-3--hygiene--correctness-guards"><a class="header" href="#phase-3--hygiene--correctness-guards">Phase 3 — Hygiene / correctness guards</a></h2>
+<p>Deliverable: tagging <code>v0.1.0</code> produces a downloadable Metal binary.</p>
+<h2 id="phase-2--homebrew-tap"><a class="header" href="#phase-2--homebrew-tap">Phase 2 — Homebrew tap</a></h2>
 <ul>
-<li><strong><code>gcd_ps / 2</code> constraint</strong> (ADR §2): at startup, error (or clamp with
-a loud warning) if any <code>jitter_ps &gt; scheduler.gcd_ps / 2</code>, since larger
-values would reorder edges across GCD ticks.</li>
-<li><strong>Always persist the seed</strong> (ADR §1): when neither <code>--run-params</code> nor
-<code>--output-vcd</code> is given, <code>RunParams::generate()</code> currently does not
-write the file. Persist to a default path unconditionally so every run
-is replayable.</li>
-<li><strong>master_seed in the VCD header</strong> (ADR §1/§5): emit the master seed as
-a VCD header comment in <code>vcd_io.rs</code>, so the seed is recoverable from an
-output artifact, not just the INFO log.</li>
+<li>New repo <code>gpu-eda/homebrew-tap</code> with <code>Formula/jacquard.rb</code>.</li>
+<li>Formula downloads the macOS-arm64 release tarball, installs <code>jacquard</code>
+<ul>
+<li><code>opensta-to-ir</code>, verifies the sha256.</li>
 </ul>
-<h2 id="phase-4--ci-cdc-stress-sweep-adr-consequences"><a class="header" href="#phase-4--ci-cdc-stress-sweep-adr-consequences">Phase 4 — CI CDC stress sweep (ADR Consequences)</a></h2>
-<p>Once jitter feeds violations (Phase 1), add a lightweight CI step: run
-the marginal-CDC design across a few sequential seeds, upload each run's
-<code>run_params.json</code> as an artifact, fail if an unexpected violation
-appears. Gives every PR a cheap CDC regression.</p>
-<h2 id="out-of-scope-separate-adrs--plans"><a class="header" href="#out-of-scope-separate-adrs--plans">Out of scope (separate ADRs / plans)</a></h2>
+</li>
+<li><code>brew install gpu-eda/tap/jacquard</code> → both bins on <code>PATH</code>.</li>
+<li>(Stretch) a release-CI step that bumps the formula's url/sha on each
+tag, so the tap tracks releases automatically.</li>
+</ul>
+<h2 id="phase-3--netlist-graph--pypi"><a class="header" href="#phase-3--netlist-graph--pypi">Phase 3 — netlist-graph → PyPI</a></h2>
 <ul>
-<li>X-injection on CDC paths (needs MC.1 island partitioner — ADR 0012
-"Deferred").</li>
-<li>Non-uniform jitter distributions (Gaussian period jitter, etc.) — the
-seed+budget interface is distribution-agnostic, add later.</li>
-<li>Frequency sweep / DFS.</li>
+<li>Add a <code>publish-netlist-graph.yml</code> workflow (tag-triggered, e.g.
+<code>netlist-graph-v*</code>) that builds the wheel (<code>hatchling</code>) and publishes
+via PyPI <strong>trusted publishing</strong> (OIDC, no stored token).</li>
+<li>Confirm <code>scripts/netlist_graph/</code> ships its <code>README.md</code> + <code>LICENSE</code> in
+the wheel.</li>
+<li>Result: <code>uvx netlist-graph …</code> and <code>pip install netlist-graph</code> work.</li>
+</ul>
+<h2 id="phase-4--cuda--hip-release-binaries-runner-gated"><a class="header" href="#phase-4--cuda--hip-release-binaries-runner-gated">Phase 4 — CUDA / HIP release binaries (runner-gated)</a></h2>
+<ul>
+<li>Add <code>linux-x64-cuda</code> and <code>linux-x64-hip</code> rows to the <code>release.yml</code>
+matrix once the NVIDIA / AMD self-hosted runners are registered
+(tracks the same work re-enabling CUDA/HIP CI).</li>
+<li>Same package/upload/smoke-test shape as Metal.</li>
+</ul>
+<h2 id="phase-5--install-docs-depends-on-13"><a class="header" href="#phase-5--install-docs-depends-on-13">Phase 5 — Install docs (depends on 1–3)</a></h2>
+<ul>
+<li>New <code>docs/installation.md</code> (in <code>SUMMARY.md</code>) presenting the tiers:
+<code>brew install</code> / <code>cargo binstall</code> for the simulator, <code>uvx netlist-graph</code> for signal analysis, <code>opensta-to-ir</code> + PDK for timing.
+Source-build remains documented as the fallback / contributor path.</li>
+<li>Trim the README "Build" section to point at the install page for users
+while keeping the from-source instructions for contributors.</li>
+</ul>
+<h2 id="phase-6--container-image-optional-deferred"><a class="header" href="#phase-6--container-image-optional-deferred">Phase 6 — Container image (optional, deferred)</a></h2>
+<ul>
+<li><code>ghcr.io/gpu-eda/jacquard:cuda</code> for reproducible Linux/CUDA runs.
+Deferred per ADR 0018; revisit if CUDA release binaries prove awkward.</li>
+</ul>
+<h2 id="verification"><a class="header" href="#verification">Verification</a></h2>
+<ul>
+<li>A clean checkout-free install on a second macOS machine (or a fresh
+shell with no repo): <code>brew install …</code> then run a <code>tests/apb_trace</code>
+cosim end to end.</li>
+<li><code>cargo binstall jacquard</code> fetches and runs without a Rust toolchain
+build.</li>
+<li><code>uvx netlist-graph search &lt;netlist&gt; psel</code> works with no repo clone.</li>
+<li><strong>Then</strong> the docs-dogfood: a Sonnet agent installs via the docs and
+attempts real tasks, reporting friction (the original motivation).</li>
+</ul>
+<h2 id="decisions-confirmed"><a class="header" href="#decisions-confirmed">Decisions (confirmed)</a></h2>
+<ul>
+<li><strong>Versioning:</strong> coordinated version across the two Rust bins
+(<code>jacquard</code> + <code>opensta-to-ir</code>), single tag; <code>netlist-graph</code> versioned
+independently.</li>
+<li><strong>Homebrew scope:</strong> the formula installs the Rust bins only; the docs
+carry the <code>uvx netlist-graph</code> line separately. <code>netlist-graph</code> is not a
+formula dependency.</li>
+<li><strong>Tag scheme:</strong> <code>v&lt;X.Y.Z&gt;</code> triggers the Rust release;
+<code>netlist-graph-v&lt;X.Y.Z&gt;</code> triggers the PyPI publish. The two workflows
+filter on their own tag prefixes so they never collide.</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../plans/bus-transaction-tracing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../plans/cdc-jitter-completion.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../plans/distribution.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../spikes/opentimer-sky130.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -249,11 +272,11 @@ seed+budget interface is distribution-agnostic, add later.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../plans/bus-transaction-tracing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../plans/cdc-jitter-completion.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../plans/distribution.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../spikes/opentimer-sky130.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

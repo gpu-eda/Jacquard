@@ -3168,6 +3168,7 @@ the code before writing it.</p>
 <tr><td><a href="adr/0015-boomerang-execution-model.html">0015</a></td><td>Boomerang execution model and GPU resource mapping</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0016-selective-x-propagation.html">0016</a></td><td>Selective X-propagation</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted</td></tr>
+<tr><td><a href="adr/0018-distribution-and-installation.html">0018</a></td><td>Distribution and installation model</td><td>Proposed</td></tr>
 </tbody></table>
 </div>
 <h2 id="how-the-adrs-relate"><a class="header" href="#how-the-adrs-relate">How the ADRs relate</a></h2>
@@ -5119,6 +5120,126 @@ model patterns and ring buffers).</li>
 <li><a href="adr/../plans/multi-clock-and-stimulus-architecture.html"><code>docs/plans/multi-clock-and-stimulus-architecture.md</code></a>
 — design-space doc for the multi-clock scheduler.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0018--distribution-and-installation-model"><a class="header" href="#adr-0018--distribution-and-installation-model">ADR 0018 — Distribution and installation model</a></h1>
+<p><strong>Status:</strong> Proposed.</p>
+<p><strong>TL;DR.</strong> In the context of shipping Jacquard to users (and to
+docs-dogfooding agents), facing the fact that it is a GPU-compiled Rust
+binary with vendored path-dependency submodules plus two companion
+tools, we chose a <strong>tiered, channel-per-artifact</strong> model — Rust binaries
+via GitHub Releases + <code>cargo-binstall</code> + a Homebrew tap (Metal), and the
+Python <code>netlist-graph</code> companion via PyPI — accepting that we maintain
+per-GPU-target release binaries and three coordinated release cadences,
+rather than forcing everything through one channel.</p>
+<h2 id="context-17"><a class="header" href="#context-17">Context</a></h2>
+<p>"Install Jacquard" is not one artifact. The toolset is three pieces:</p>
+<div class="table-wrapper"><table><thead><tr><th>Tool</th><th>Language</th><th>Role</th><th>GPU?</th></tr></thead><tbody>
+<tr><td><code>jacquard</code></td><td>Rust</td><td>the simulator (<code>sim</code> / <code>cosim</code>)</td><td>yes — Metal / CUDA / HIP, compiled via the <code>ucc</code> build script</td></tr>
+<tr><td><code>opensta-to-ir</code></td><td>Rust</td><td>SDF → timing-IR preprocessing (timing path)</td><td>no (CPU)</td></tr>
+<tr><td><code>netlist-graph</code></td><td>Python</td><td>post-synthesis signal-name discovery; the companion the tracing docs (<code>signal-tracing.md</code>, <code>bus-tracing.md</code>) lean on</td><td>no</td></tr>
+</tbody></table>
+</div>
+<p>Constraints that rule options out:</p>
+<ul>
+<li><strong><code>jacquard</code> is not crates.io-publishable.</strong> Its dependencies are
+vendored <strong>path deps</strong> (<code>vendor/eda-infra-rs/*</code> — a fork carrying
+in-flight patches), and the build needs git submodules, a GPU SDK, and
+a C++/CUDA/Metal compile. <code>cargo install</code> from source works but is slow
+and needs the full toolchain — not "easy."</li>
+<li><strong><code>jacquard</code> is not a natural PyPI package.</strong> It's a GPU binary; a
+maturin wheel would mean per-backend wheels (Metal macOS-arm64 only,
+CUDA huge and driver-coupled, HIP).</li>
+<li><strong><code>netlist-graph</code> <em>is</em> PyPI-ready today</strong> — self-contained
+(<code>networkx</code> + <code>click</code> only), a <code>netlist-graph</code> console script, no
+workspace path deps.</li>
+</ul>
+<p>Today there are <strong>no release artifacts</strong>: install = clone + submodules +
+<code>cargo build -r --features &lt;backend&gt;</code>. That blocks easy adoption and
+makes docs-dogfooding (a fresh agent following the docs) start from a
+heavy source build.</p>
+<h2 id="decision-16"><a class="header" href="#decision-16">Decision</a></h2>
+<p>Distribute each artifact through the channel that fits it:</p>
+<ol>
+<li><strong>Rust binaries (<code>jacquard</code> + <code>opensta-to-ir</code>)</strong> →
+<ul>
+<li><strong>GitHub Releases</strong> prebuilt binaries, one per GPU target
+(<code>macos-arm64-metal</code>, <code>linux-x64-cuda</code>, <code>linux-x64-hip</code>).</li>
+<li><strong><code>cargo-binstall</code></strong> support via <code>[package.metadata.binstall]</code> so
+<code>cargo binstall jacquard</code> fetches the release asset.</li>
+<li><strong>Homebrew tap</strong> (<code>gpu-eda/homebrew-tap</code>) for the macOS/Metal path:
+<code>brew install gpu-eda/tap/jacquard</code>.</li>
+<li><code>opensta-to-ir</code> ships <strong>alongside</strong> <code>jacquard</code> (same release, same
+formula) — it's a sibling CPU bin in the same cargo workspace.</li>
+</ul>
+</li>
+<li><strong><code>netlist-graph</code> (Python)</strong> → <strong>PyPI</strong>: <code>uvx netlist-graph</code> /
+<code>pip install netlist-graph</code>. Versioned <strong>independently</strong> of the Rust
+bins.</li>
+<li><strong>The simulator never ships via PyPI.</strong> PyPI is for the Python
+companion only.</li>
+</ol>
+<p><strong>Versioning:</strong> the two Rust bins share the workspace version and a
+single tag (coordinated); <code>netlist-graph</code> versions independently. This
+is effectively Jacquard's first numbered release — see
+<a href="adr/../release-process.html"><code>release-process.md</code></a>.</p>
+<p><strong>Homebrew scope:</strong> the formula installs the Rust bins only;
+<code>netlist-graph</code> is documented as a separate <code>uvx</code>/pip line rather than a
+formula dependency, keeping the formula simple and the Python tool
+independently installable.</p>
+<p><strong>Rollout is Metal-first:</strong> the macOS-arm64 Metal binary ships now (the
+self-hosted macOS runner exists). CUDA and HIP release binaries are
+gated on the NVIDIA / AMD runners being stood up; until then those
+targets remain source-build.</p>
+<p><strong>Install tiers</strong> (documented where each is first needed):</p>
+<ul>
+<li>pure functional cosim → <code>jacquard</code> only;</li>
+<li>signal-name debugging → add <code>netlist-graph</code>;</li>
+<li>timing / post-PnR → add <code>opensta-to-ir</code> + a PDK (<code>volare</code>/<code>ciel</code>).</li>
+</ul>
+<h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives considered</a></h2>
+<ul>
+<li><strong>PyPI wheel for the simulator (maturin).</strong> Rejected: per-backend
+wheels, CUDA wheel size and driver coupling, Metal macOS-arm64-only.
+PyPI fits the pure-Python companion, not the GPU binary. (This is the
+natural-sounding option; it doesn't survive contact with the GPU
+backends.)</li>
+<li><strong>crates.io publish + <code>cargo install</code>.</strong> Blocked by the vendored
+path-dependency fork, and still requires a GPU SDK + a multi-minute
+compile. Not "easy install."</li>
+<li><strong>Container image as the primary channel.</strong> Good for reproducible
+CUDA/Linux, but a poor fit for the macOS/Metal majority path and heavy
+for a quick <code>jacquard --help</code>. Kept as a possible <em>additional</em> channel
+(deferred), not the primary.</li>
+</ul>
+<h2 id="consequences-16"><a class="header" href="#consequences-16">Consequences</a></h2>
+<ul>
+<li>One-line installs on the platforms that matter; docs-dogfood agents
+can <code>brew install</code> instead of building from source.</li>
+<li>Release CI must build a per-target matrix; the CUDA/HIP rows are
+runner-gated, so the first release is Metal-only and the matrix fills
+in as runners land.</li>
+<li>Three artifacts to release: two Rust bins (coordinated, one tag) and
+<code>netlist-graph</code> (independent). Coordinated Rust versioning keeps this
+to two cadences, not three.</li>
+<li>New cross-repo surface to own: a <code>homebrew-tap</code> repo and a PyPI
+project + publish credentials (trusted publisher).</li>
+<li>The stale <code>repository = "…/ChipFlow/Jacquard"</code> URLs (both
+<code>Cargo.toml</code>s) must be corrected to <code>gpu-eda</code> as part of this work.</li>
+</ul>
+<h2 id="walk-back-options-2"><a class="header" href="#walk-back-options-2">Walk-back options</a></h2>
+<ul>
+<li>If maintaining per-backend release binaries proves too costly, fall
+back to <strong>container images for CUDA/HIP</strong> and keep Releases + Homebrew
+for Metal only — the channels are independent, so this is a per-target
+retreat, not a redesign.</li>
+<li>If the Homebrew tap is more upkeep than it's worth, drop it and keep
+<code>cargo-binstall</code> + the release tarballs; the formula is the thinnest
+layer to remove.</li>
+</ul>
+<h2 id="links-11"><a class="header" href="#links-11">Links</a></h2>
+<ul>
+<li>Implementation phasing: <a href="adr/../plans/distribution.html"><code>../plans/distribution.md</code></a>.</li>
+<li>Release mechanics: <a href="adr/../release-process.html"><code>../release-process.md</code></a>.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="implementation-plans"><a class="header" href="#implementation-plans">Implementation Plans</a></h1>
 <p>Phased implementation plans with entry and exit criteria. Plans live
 here when the work spans multiple commits and needs an explicit
@@ -5583,7 +5704,7 @@ type. Auto-handled by <code>is_gf180mcu_cell</code>.</li>
 <li><strong>Drive-strength suffixes</strong> — GF180MCU uses integer multipliers
 (<code>inv_1</code>, <code>inv_2</code>, <code>inv_4</code>, …) matching the SKY130 convention.</li>
 </ul>
-<h2 id="links-11"><a class="header" href="#links-11">Links</a></h2>
+<h2 id="links-12"><a class="header" href="#links-12">Links</a></h2>
 <ul>
 <li><code>docs/adding-a-pdk.md</code> — canonical PDK integration recipe.</li>
 <li><code>src/sky130.rs</code>, <code>src/sky130_pdk.rs</code> — SKY130 reference
@@ -5771,7 +5892,7 @@ notes below are kept for reference but are no longer "open work".</li>
 <li><strong>WS3 cutover risk.</strong> Deleting the hand-rolled SDF parser risks regressing designs that depend on behaviour it currently provides. Exit criterion 7 requires a clean regression run before WS3 is considered complete. If coverage gaps emerge, walk-back options per ADR 0006 apply: add dialect shims to <code>opensta-to-ir</code>, or (now that Phase 3 is deferred) keep the hand-rolled parser available behind a feature flag until dialect parity is reached.</li>
 <li><strong>OpenSTA dialect coverage.</strong> OpenSTA may not accept every SDF dialect Jacquard's hand-rolled parser has been patched to handle. Such cases are tracked as either <code>opensta-to-ir</code> post-processing fixes or upstream OpenSTA contributions. Under no condition is the fix to reinstate the hand-rolled parser unless walk-back per ADR 0006 is formally triggered.</li>
 </ul>
-<h2 id="links-12"><a class="header" href="#links-12">Links</a></h2>
+<h2 id="links-13"><a class="header" href="#links-13">Links</a></h2>
 <ul>
 <li><code>../project-scope.md</code></li>
 <li><code>../timing-correctness.md</code> — acceptance criteria this plan satisfies.</li>
@@ -7017,6 +7138,104 @@ appears. Gives every PR a cheap CDC regression.</p>
 seed+budget interface is distribution-agnostic, add later.</li>
 <li>Frequency sweep / DFS.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="plan-distribution--easy-install"><a class="header" href="#plan-distribution--easy-install">Plan: distribution &amp; easy install</a></h1>
+<p>Implements <a href="plans/../adr/0018-distribution-and-installation.html">ADR 0018</a>. Goal:
+a fresh user (or a docs-dogfooding agent) can install Jacquard in one
+line on macOS/Metal, with CUDA/HIP following as runners land.</p>
+<h2 id="artifacts--channels-from-adr-0018"><a class="header" href="#artifacts--channels-from-adr-0018">Artifacts &amp; channels (from ADR 0018)</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Artifact</th><th>Channel</th><th>Blocked on</th></tr></thead><tbody>
+<tr><td><code>jacquard</code> (Metal)</td><td>GitHub Release + <code>cargo-binstall</code> + Homebrew tap</td><td>— (shippable now)</td></tr>
+<tr><td><code>opensta-to-ir</code></td><td>same release/formula as <code>jacquard</code></td><td>—</td></tr>
+<tr><td><code>jacquard</code> (CUDA / HIP)</td><td>added to the release matrix</td><td>NVIDIA / AMD runners</td></tr>
+<tr><td><code>netlist-graph</code></td><td>PyPI</td><td>—</td></tr>
+</tbody></table>
+</div>
+<h2 id="phase-0--metadata-hygiene-no-new-infra"><a class="header" href="#phase-0--metadata-hygiene-no-new-infra">Phase 0 — Metadata hygiene (no new infra)</a></h2>
+<ul>
+<li>Fix <code>repository</code> URL <code>ChipFlow/Jacquard</code> → <code>gpu-eda/Jacquard</code> in
+<code>Cargo.toml</code> and <code>crates/opensta-to-ir/Cargo.toml</code>.</li>
+<li>Decide the release version (this is effectively <code>0.1.0</code>, the first
+numbered release) and confirm <code>CHANGELOG.md</code> exists / is rolled per
+<code>release-process.md</code>.</li>
+<li>Add <code>[package.metadata.binstall]</code> to <code>Cargo.toml</code> describing the
+release asset name template (e.g.
+<code>{ name }-{ version }-{ target }{ archive-suffix }</code>).</li>
+</ul>
+<h2 id="phase-1--metal-release-ci-unblocked"><a class="header" href="#phase-1--metal-release-ci-unblocked">Phase 1 — Metal release CI (unblocked)</a></h2>
+<p>A <code>release.yml</code> workflow triggered on <code>v*</code> tags:</p>
+<ul>
+<li>On the self-hosted macOS runner: <code>cargo build -r --features metal --bin jacquard</code> and <code>cargo build -r --bin opensta-to-ir</code>.</li>
+<li>Package both binaries into <code>jacquard-&lt;version&gt;-macos-arm64-metal.tar.gz</code>
+(+ a <code>.sha256</code>).</li>
+<li><code>gh release create</code> / upload the asset. Body = the CHANGELOG section.</li>
+<li>Smoke-test the packaged binary (<code>jacquard --version</code>, a tiny
+<code>tests/apb_trace</code> cosim) before publishing.</li>
+</ul>
+<p>Deliverable: tagging <code>v0.1.0</code> produces a downloadable Metal binary.</p>
+<h2 id="phase-2--homebrew-tap"><a class="header" href="#phase-2--homebrew-tap">Phase 2 — Homebrew tap</a></h2>
+<ul>
+<li>New repo <code>gpu-eda/homebrew-tap</code> with <code>Formula/jacquard.rb</code>.</li>
+<li>Formula downloads the macOS-arm64 release tarball, installs <code>jacquard</code>
+<ul>
+<li><code>opensta-to-ir</code>, verifies the sha256.</li>
+</ul>
+</li>
+<li><code>brew install gpu-eda/tap/jacquard</code> → both bins on <code>PATH</code>.</li>
+<li>(Stretch) a release-CI step that bumps the formula's url/sha on each
+tag, so the tap tracks releases automatically.</li>
+</ul>
+<h2 id="phase-3--netlist-graph--pypi"><a class="header" href="#phase-3--netlist-graph--pypi">Phase 3 — netlist-graph → PyPI</a></h2>
+<ul>
+<li>Add a <code>publish-netlist-graph.yml</code> workflow (tag-triggered, e.g.
+<code>netlist-graph-v*</code>) that builds the wheel (<code>hatchling</code>) and publishes
+via PyPI <strong>trusted publishing</strong> (OIDC, no stored token).</li>
+<li>Confirm <code>scripts/netlist_graph/</code> ships its <code>README.md</code> + <code>LICENSE</code> in
+the wheel.</li>
+<li>Result: <code>uvx netlist-graph …</code> and <code>pip install netlist-graph</code> work.</li>
+</ul>
+<h2 id="phase-4--cuda--hip-release-binaries-runner-gated"><a class="header" href="#phase-4--cuda--hip-release-binaries-runner-gated">Phase 4 — CUDA / HIP release binaries (runner-gated)</a></h2>
+<ul>
+<li>Add <code>linux-x64-cuda</code> and <code>linux-x64-hip</code> rows to the <code>release.yml</code>
+matrix once the NVIDIA / AMD self-hosted runners are registered
+(tracks the same work re-enabling CUDA/HIP CI).</li>
+<li>Same package/upload/smoke-test shape as Metal.</li>
+</ul>
+<h2 id="phase-5--install-docs-depends-on-13"><a class="header" href="#phase-5--install-docs-depends-on-13">Phase 5 — Install docs (depends on 1–3)</a></h2>
+<ul>
+<li>New <code>docs/installation.md</code> (in <code>SUMMARY.md</code>) presenting the tiers:
+<code>brew install</code> / <code>cargo binstall</code> for the simulator, <code>uvx netlist-graph</code> for signal analysis, <code>opensta-to-ir</code> + PDK for timing.
+Source-build remains documented as the fallback / contributor path.</li>
+<li>Trim the README "Build" section to point at the install page for users
+while keeping the from-source instructions for contributors.</li>
+</ul>
+<h2 id="phase-6--container-image-optional-deferred"><a class="header" href="#phase-6--container-image-optional-deferred">Phase 6 — Container image (optional, deferred)</a></h2>
+<ul>
+<li><code>ghcr.io/gpu-eda/jacquard:cuda</code> for reproducible Linux/CUDA runs.
+Deferred per ADR 0018; revisit if CUDA release binaries prove awkward.</li>
+</ul>
+<h2 id="verification-3"><a class="header" href="#verification-3">Verification</a></h2>
+<ul>
+<li>A clean checkout-free install on a second macOS machine (or a fresh
+shell with no repo): <code>brew install …</code> then run a <code>tests/apb_trace</code>
+cosim end to end.</li>
+<li><code>cargo binstall jacquard</code> fetches and runs without a Rust toolchain
+build.</li>
+<li><code>uvx netlist-graph search &lt;netlist&gt; psel</code> works with no repo clone.</li>
+<li><strong>Then</strong> the docs-dogfood: a Sonnet agent installs via the docs and
+attempts real tasks, reporting friction (the original motivation).</li>
+</ul>
+<h2 id="decisions-confirmed"><a class="header" href="#decisions-confirmed">Decisions (confirmed)</a></h2>
+<ul>
+<li><strong>Versioning:</strong> coordinated version across the two Rust bins
+(<code>jacquard</code> + <code>opensta-to-ir</code>), single tag; <code>netlist-graph</code> versioned
+independently.</li>
+<li><strong>Homebrew scope:</strong> the formula installs the Rust bins only; the docs
+carry the <code>uvx netlist-graph</code> line separately. <code>netlist-graph</code> is not a
+formula dependency.</li>
+<li><strong>Tag scheme:</strong> <code>v&lt;X.Y.Z&gt;</code> triggers the Rust release;
+<code>netlist-graph-v&lt;X.Y.Z&gt;</code> triggers the PyPI publish. The two workflows
+filter on their own tag prefixes so they never collide.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="spike--opentimer-on-sky130-and-mcu-soc"><a class="header" href="#spike--opentimer-on-sky130-and-mcu-soc">Spike — OpenTimer on SKY130 and MCU SoC</a></h1>
 <p><strong>Status:</strong> Proposed. Not yet executed.</p>
 <p><strong>Time box:</strong> Half a day. Extend by up to one day if initial signs are positive but hitting specific SKY130 quirks. Abort and fall back if first-four-hours progress is blocked.</p>
@@ -7155,7 +7374,7 @@ it's the surrounding ecosystem that doesn't.</p>
 <p>Q3 (cross-check vs OpenSTA) and Q4 (correlation with Jacquard's
 <code>timing-analysis</code>) both depend on OpenTimer producing arrivals. With Q2
 unable to produce a single path, they're moot for this spike.</p>
-<h3 id="decision-16"><a class="header" href="#decision-16">Decision</a></h3>
+<h3 id="decision-17"><a class="header" href="#decision-17">Decision</a></h3>
 <p><strong>ADR 0003 → Superseded.</strong> Per the spike's decision matrix
 ("Fail on any → ADR 0003 → Superseded. Fall back to OpenSTA-subprocess-only
 validation"), the right move is to retire the in-process-OpenTimer plan
@@ -7187,7 +7406,7 @@ No need to fetch it separately.</li>
 <li>Whether SPEF generation had to be added to the OpenLane2 flow, and what that change was.</li>
 <li>Decision: confirm, scope-limit, or supersede ADR 0003.</li>
 </ul>
-<h2 id="links-13"><a class="header" href="#links-13">Links</a></h2>
+<h2 id="links-14"><a class="header" href="#links-14">Links</a></h2>
 <ul>
 <li>ADR 0003 — OpenTimer as in-process reference STA.</li>
 <li><code>../timing-correctness.md</code> — requirement R2.</li>

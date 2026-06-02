@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>CDC jitter completion - Jacquard Documentation</title>
+        <title>0018 — Distribution and installation model (Proposed) - Jacquard Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -155,91 +155,136 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="plan-complete-adr-0012-cdc-jitter-injection"><a class="header" href="#plan-complete-adr-0012-cdc-jitter-injection">Plan: complete ADR 0012 CDC jitter injection</a></h1>
-<p>Tracks the deferred half of <a href="../adr/0012-cdc-jitter-injection.html">ADR 0012</a>.
-Issue: <a href="https://github.com/gpu-eda/Jacquard/issues/92">#92</a>.</p>
-<h2 id="where-it-stands"><a class="header" href="#where-it-stands">Where it stands</a></h2>
-<p>Implemented: the run-parameters file + per-domain seeded PRNG
-(<code>src/sim/run_params.rs</code>), <code>jitter_ps</code> per <code>ClockConfig</code>, the uniform
-per-domain draw, and a jitter displacement applied to the <strong>timing-VCD
-event timestamp</strong> (<code>cosim_metal.rs</code>, inside the <code>--output-vcd</code> block
-only). So today jitter perturbs the <em>waveform timeline</em> but nothing
-else — it does not reach the setup/hold checker, model-driven clocks,
-or coincident-edge ordering.</p>
-<p>The goal of this plan is to make jitter actually stress CDC paths, then
-extend it to model-driven clocks and tidy the loose ends, so ADR 0012's
-present-tense design fully matches the code.</p>
-<h2 id="phase-1--jitter-reaches-the-timing-checker-the-core-value"><a class="header" href="#phase-1--jitter-reaches-the-timing-checker-the-core-value">Phase 1 — Jitter reaches the timing checker (the core value)</a></h2>
-<p>Right now <code>jitter_displacement</code> only adjusts the VCD <code>base_timestamp</code>
-(<code>cosim_metal.rs:~3928-3948</code>) and is computed <em>inside</em> the timing-VCD
-emission block, so it has no effect without <code>--output-vcd</code> and never
-influences violations.</p>
+                        <h1 id="adr-0018--distribution-and-installation-model"><a class="header" href="#adr-0018--distribution-and-installation-model">ADR 0018 — Distribution and installation model</a></h1>
+<p><strong>Status:</strong> Proposed.</p>
+<p><strong>TL;DR.</strong> In the context of shipping Jacquard to users (and to
+docs-dogfooding agents), facing the fact that it is a GPU-compiled Rust
+binary with vendored path-dependency submodules plus two companion
+tools, we chose a <strong>tiered, channel-per-artifact</strong> model — Rust binaries
+via GitHub Releases + <code>cargo-binstall</code> + a Homebrew tap (Metal), and the
+Python <code>netlist-graph</code> companion via PyPI — accepting that we maintain
+per-GPU-target release binaries and three coordinated release cadences,
+rather than forcing everything through one channel.</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>"Install Jacquard" is not one artifact. The toolset is three pieces:</p>
+<div class="table-wrapper"><table><thead><tr><th>Tool</th><th>Language</th><th>Role</th><th>GPU?</th></tr></thead><tbody>
+<tr><td><code>jacquard</code></td><td>Rust</td><td>the simulator (<code>sim</code> / <code>cosim</code>)</td><td>yes — Metal / CUDA / HIP, compiled via the <code>ucc</code> build script</td></tr>
+<tr><td><code>opensta-to-ir</code></td><td>Rust</td><td>SDF → timing-IR preprocessing (timing path)</td><td>no (CPU)</td></tr>
+<tr><td><code>netlist-graph</code></td><td>Python</td><td>post-synthesis signal-name discovery; the companion the tracing docs (<code>signal-tracing.md</code>, <code>bus-tracing.md</code>) lean on</td><td>no</td></tr>
+</tbody></table>
+</div>
+<p>Constraints that rule options out:</p>
 <ul>
-<li>Hoist the per-tick per-domain displacement draw out of the VCD block
-so it is available whenever <code>jitter_active</code>, independent of
-<code>--output-vcd</code>.</li>
-<li>Apply each domain's displacement to the <strong>arrival offsets</strong> that
-setup/hold checking consumes (the <code>arrival_state</code> section), not just
-the VCD base timestamp — so a jittered edge can move a margin across
-the setup/hold boundary and surface in <code>--timing-report</code>.</li>
-<li><strong>True per-domain perturbation</strong> (ADR §4): keep a displacement <em>per
-firing domain</em> this tick rather than the current single global value
-(the loop overwrites <code>jitter_displacement</code> with the last domain's
-draw). Coincident edges from domains A and B then move independently,
-exercising both orderings over a seed sweep.</li>
+<li><strong><code>jacquard</code> is not crates.io-publishable.</strong> Its dependencies are
+vendored <strong>path deps</strong> (<code>vendor/eda-infra-rs/*</code> — a fork carrying
+in-flight patches), and the build needs git submodules, a GPU SDK, and
+a C++/CUDA/Metal compile. <code>cargo install</code> from source works but is slow
+and needs the full toolchain — not "easy."</li>
+<li><strong><code>jacquard</code> is not a natural PyPI package.</strong> It's a GPU binary; a
+maturin wheel would mean per-backend wheels (Metal macOS-arm64 only,
+CUDA huge and driver-coupled, HIP).</li>
+<li><strong><code>netlist-graph</code> <em>is</em> PyPI-ready today</strong> — self-contained
+(<code>networkx</code> + <code>click</code> only), a <code>netlist-graph</code> console script, no
+workspace path deps.</li>
 </ul>
-<p>Verify: a small two-domain design with a deliberately marginal CDC path;
-assert that a seed sweep produces both "no violation" and "violation"
-outcomes, and that a fixed seed reproduces exactly.</p>
-<h2 id="phase-2--model-driven-clock-jitter-adr-3"><a class="header" href="#phase-2--model-driven-clock-jitter-adr-3">Phase 2 — Model-driven clock jitter (ADR §3)</a></h2>
-<p>Model-driven clocks (<code>JtagReplayModel</code>, SPI SCK, …) bypass the scheduler
-and currently get no jitter.</p>
+<p>Today there are <strong>no release artifacts</strong>: install = clone + submodules +
+<code>cargo build -r --features &lt;backend&gt;</code>. That blocks easy adoption and
+makes docs-dogfooding (a fresh agent following the docs) start from a
+heavy source build.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>Distribute each artifact through the channel that fits it:</p>
+<ol>
+<li><strong>Rust binaries (<code>jacquard</code> + <code>opensta-to-ir</code>)</strong> →
 <ul>
-<li>Add <code>--cdc-model-jitter-ps &lt;N&gt;</code> (and/or per-model <code>jitter_ps</code> in
-config) → a budget + seeded stream via <code>RunParams::domain_seed(model_name)</code>.</li>
-<li>After a model fires its edge, displace the <strong>timing-model arrival</strong>
-for that transition (not the functional edge — the DFF still samples
-on the same tick), mirroring the Phase 1 arrival-offset path.</li>
+<li><strong>GitHub Releases</strong> prebuilt binaries, one per GPU target
+(<code>macos-arm64-metal</code>, <code>linux-x64-cuda</code>, <code>linux-x64-hip</code>).</li>
+<li><strong><code>cargo-binstall</code></strong> support via <code>[package.metadata.binstall]</code> so
+<code>cargo binstall jacquard</code> fetches the release asset.</li>
+<li><strong>Homebrew tap</strong> (<code>gpu-eda/homebrew-tap</code>) for the macOS/Metal path:
+<code>brew install gpu-eda/tap/jacquard</code>.</li>
+<li><code>opensta-to-ir</code> ships <strong>alongside</strong> <code>jacquard</code> (same release, same
+formula) — it's a sibling CPU bin in the same cargo workspace.</li>
 </ul>
-<p>Verify: extend <code>tests/jtag_minimal</code> (model-driven TCK) with a model
-jitter budget; confirm reproducibility and that TCK→sys_clk CDC margins
-vary by seed.</p>
-<h2 id="phase-3--hygiene--correctness-guards"><a class="header" href="#phase-3--hygiene--correctness-guards">Phase 3 — Hygiene / correctness guards</a></h2>
+</li>
+<li><strong><code>netlist-graph</code> (Python)</strong> → <strong>PyPI</strong>: <code>uvx netlist-graph</code> /
+<code>pip install netlist-graph</code>. Versioned <strong>independently</strong> of the Rust
+bins.</li>
+<li><strong>The simulator never ships via PyPI.</strong> PyPI is for the Python
+companion only.</li>
+</ol>
+<p><strong>Versioning:</strong> the two Rust bins share the workspace version and a
+single tag (coordinated); <code>netlist-graph</code> versions independently. This
+is effectively Jacquard's first numbered release — see
+<a href="../release-process.html"><code>release-process.md</code></a>.</p>
+<p><strong>Homebrew scope:</strong> the formula installs the Rust bins only;
+<code>netlist-graph</code> is documented as a separate <code>uvx</code>/pip line rather than a
+formula dependency, keeping the formula simple and the Python tool
+independently installable.</p>
+<p><strong>Rollout is Metal-first:</strong> the macOS-arm64 Metal binary ships now (the
+self-hosted macOS runner exists). CUDA and HIP release binaries are
+gated on the NVIDIA / AMD runners being stood up; until then those
+targets remain source-build.</p>
+<p><strong>Install tiers</strong> (documented where each is first needed):</p>
 <ul>
-<li><strong><code>gcd_ps / 2</code> constraint</strong> (ADR §2): at startup, error (or clamp with
-a loud warning) if any <code>jitter_ps &gt; scheduler.gcd_ps / 2</code>, since larger
-values would reorder edges across GCD ticks.</li>
-<li><strong>Always persist the seed</strong> (ADR §1): when neither <code>--run-params</code> nor
-<code>--output-vcd</code> is given, <code>RunParams::generate()</code> currently does not
-write the file. Persist to a default path unconditionally so every run
-is replayable.</li>
-<li><strong>master_seed in the VCD header</strong> (ADR §1/§5): emit the master seed as
-a VCD header comment in <code>vcd_io.rs</code>, so the seed is recoverable from an
-output artifact, not just the INFO log.</li>
+<li>pure functional cosim → <code>jacquard</code> only;</li>
+<li>signal-name debugging → add <code>netlist-graph</code>;</li>
+<li>timing / post-PnR → add <code>opensta-to-ir</code> + a PDK (<code>volare</code>/<code>ciel</code>).</li>
 </ul>
-<h2 id="phase-4--ci-cdc-stress-sweep-adr-consequences"><a class="header" href="#phase-4--ci-cdc-stress-sweep-adr-consequences">Phase 4 — CI CDC stress sweep (ADR Consequences)</a></h2>
-<p>Once jitter feeds violations (Phase 1), add a lightweight CI step: run
-the marginal-CDC design across a few sequential seeds, upload each run's
-<code>run_params.json</code> as an artifact, fail if an unexpected violation
-appears. Gives every PR a cheap CDC regression.</p>
-<h2 id="out-of-scope-separate-adrs--plans"><a class="header" href="#out-of-scope-separate-adrs--plans">Out of scope (separate ADRs / plans)</a></h2>
+<h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives considered</a></h2>
 <ul>
-<li>X-injection on CDC paths (needs MC.1 island partitioner — ADR 0012
-"Deferred").</li>
-<li>Non-uniform jitter distributions (Gaussian period jitter, etc.) — the
-seed+budget interface is distribution-agnostic, add later.</li>
-<li>Frequency sweep / DFS.</li>
+<li><strong>PyPI wheel for the simulator (maturin).</strong> Rejected: per-backend
+wheels, CUDA wheel size and driver coupling, Metal macOS-arm64-only.
+PyPI fits the pure-Python companion, not the GPU binary. (This is the
+natural-sounding option; it doesn't survive contact with the GPU
+backends.)</li>
+<li><strong>crates.io publish + <code>cargo install</code>.</strong> Blocked by the vendored
+path-dependency fork, and still requires a GPU SDK + a multi-minute
+compile. Not "easy install."</li>
+<li><strong>Container image as the primary channel.</strong> Good for reproducible
+CUDA/Linux, but a poor fit for the macOS/Metal majority path and heavy
+for a quick <code>jacquard --help</code>. Kept as a possible <em>additional</em> channel
+(deferred), not the primary.</li>
+</ul>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li>One-line installs on the platforms that matter; docs-dogfood agents
+can <code>brew install</code> instead of building from source.</li>
+<li>Release CI must build a per-target matrix; the CUDA/HIP rows are
+runner-gated, so the first release is Metal-only and the matrix fills
+in as runners land.</li>
+<li>Three artifacts to release: two Rust bins (coordinated, one tag) and
+<code>netlist-graph</code> (independent). Coordinated Rust versioning keeps this
+to two cadences, not three.</li>
+<li>New cross-repo surface to own: a <code>homebrew-tap</code> repo and a PyPI
+project + publish credentials (trusted publisher).</li>
+<li>The stale <code>repository = "…/ChipFlow/Jacquard"</code> URLs (both
+<code>Cargo.toml</code>s) must be corrected to <code>gpu-eda</code> as part of this work.</li>
+</ul>
+<h2 id="walk-back-options"><a class="header" href="#walk-back-options">Walk-back options</a></h2>
+<ul>
+<li>If maintaining per-backend release binaries proves too costly, fall
+back to <strong>container images for CUDA/HIP</strong> and keep Releases + Homebrew
+for Metal only — the channels are independent, so this is a per-target
+retreat, not a redesign.</li>
+<li>If the Homebrew tap is more upkeep than it's worth, drop it and keep
+<code>cargo-binstall</code> + the release tarballs; the formula is the thinnest
+layer to remove.</li>
+</ul>
+<h2 id="links"><a class="header" href="#links">Links</a></h2>
+<ul>
+<li>Implementation phasing: <a href="../plans/distribution.html"><code>../plans/distribution.md</code></a>.</li>
+<li>Release mechanics: <a href="../release-process.html"><code>../release-process.md</code></a>.</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../plans/bus-transaction-tracing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../adr/0017-cosim-execution-model.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../plans/distribution.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../plans/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -249,11 +294,11 @@ seed+budget interface is distribution-agnostic, add later.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../plans/bus-transaction-tracing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../adr/0017-cosim-execution-model.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../plans/distribution.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../plans/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
