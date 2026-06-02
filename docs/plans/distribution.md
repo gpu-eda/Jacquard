@@ -8,7 +8,7 @@ line on macOS/Metal, with CUDA/HIP following as runners land.
 
 | Artifact | Channel | Blocked on |
 |----------|---------|------------|
-| `jacquard` (Metal) | GitHub Release + `cargo-binstall` + Homebrew tap | Phase 1a (relocatable binary) |
+| `jacquard` (Metal) | GitHub Release + `cargo-binstall` + Homebrew tap | — (Phase 1a done — relocatable) |
 | `opensta-to-ir` | same release/formula as `jacquard` | — |
 | `jacquard` (CUDA / HIP) | added to the release matrix | NVIDIA / AMD runners |
 | `netlist-graph` | PyPI | — |
@@ -24,7 +24,11 @@ line on macOS/Metal, with CUDA/HIP following as runners land.
   release asset name template (e.g.
   `{ name }-{ version }-{ target }{ archive-suffix }`).
 
-## Phase 1a — Relocatable Metal binary (code prerequisite)
+## Phase 1a — Relocatable Metal binary (code prerequisite) ✅ Done
+
+Done in d2afde4: the metallib is embedded via `include_bytes!` +
+`new_library_with_data`, verified by running the release binary copied
+outside `target/`. The original problem, for the record:
 
 **Blocker found while scoping Phase 1.** `MetalSimulator::new`
 (`cosim_metal.rs:337`) loads the GPU kernel via
