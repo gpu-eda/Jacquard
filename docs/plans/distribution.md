@@ -1,0 +1,101 @@
+# Plan: distribution & easy install
+
+Implements [ADR 0018](../adr/0018-distribution-and-installation.md). Goal:
+a fresh user (or a docs-dogfooding agent) can install Jacquard in one
+line on macOS/Metal, with CUDA/HIP following as runners land.
+
+## Artifacts & channels (from ADR 0018)
+
+| Artifact | Channel | Blocked on |
+|----------|---------|------------|
+| `jacquard` (Metal) | GitHub Release + `cargo-binstall` + Homebrew tap | — (shippable now) |
+| `opensta-to-ir` | same release/formula as `jacquard` | — |
+| `jacquard` (CUDA / HIP) | added to the release matrix | NVIDIA / AMD runners |
+| `netlist-graph` | PyPI | — |
+
+## Phase 0 — Metadata hygiene (no new infra)
+
+- Fix `repository` URL `ChipFlow/Jacquard` → `gpu-eda/Jacquard` in
+  `Cargo.toml` and `crates/opensta-to-ir/Cargo.toml`.
+- Decide the release version (this is effectively `0.1.0`, the first
+  numbered release) and confirm `CHANGELOG.md` exists / is rolled per
+  `release-process.md`.
+- Add `[package.metadata.binstall]` to `Cargo.toml` describing the
+  release asset name template (e.g.
+  `{ name }-{ version }-{ target }{ archive-suffix }`).
+
+## Phase 1 — Metal release CI (unblocked)
+
+A `release.yml` workflow triggered on `v*` tags:
+
+- On the self-hosted macOS runner: `cargo build -r --features metal
+  --bin jacquard` and `cargo build -r --bin opensta-to-ir`.
+- Package both binaries into `jacquard-<version>-macos-arm64-metal.tar.gz`
+  (+ a `.sha256`).
+- `gh release create` / upload the asset. Body = the CHANGELOG section.
+- Smoke-test the packaged binary (`jacquard --version`, a tiny
+  `tests/apb_trace` cosim) before publishing.
+
+Deliverable: tagging `v0.1.0` produces a downloadable Metal binary.
+
+## Phase 2 — Homebrew tap
+
+- New repo `gpu-eda/homebrew-tap` with `Formula/jacquard.rb`.
+- Formula downloads the macOS-arm64 release tarball, installs `jacquard`
+  + `opensta-to-ir`, verifies the sha256.
+- `brew install gpu-eda/tap/jacquard` → both bins on `PATH`.
+- (Stretch) a release-CI step that bumps the formula's url/sha on each
+  tag, so the tap tracks releases automatically.
+
+## Phase 3 — netlist-graph → PyPI
+
+- Add a `publish-netlist-graph.yml` workflow (tag-triggered, e.g.
+  `netlist-graph-v*`) that builds the wheel (`hatchling`) and publishes
+  via PyPI **trusted publishing** (OIDC, no stored token).
+- Confirm `scripts/netlist_graph/` ships its `README.md` + `LICENSE` in
+  the wheel.
+- Result: `uvx netlist-graph …` and `pip install netlist-graph` work.
+
+## Phase 4 — CUDA / HIP release binaries (runner-gated)
+
+- Add `linux-x64-cuda` and `linux-x64-hip` rows to the `release.yml`
+  matrix once the NVIDIA / AMD self-hosted runners are registered
+  (tracks the same work re-enabling CUDA/HIP CI).
+- Same package/upload/smoke-test shape as Metal.
+
+## Phase 5 — Install docs (depends on 1–3)
+
+- New `docs/installation.md` (in `SUMMARY.md`) presenting the tiers:
+  `brew install` / `cargo binstall` for the simulator, `uvx
+  netlist-graph` for signal analysis, `opensta-to-ir` + PDK for timing.
+  Source-build remains documented as the fallback / contributor path.
+- Trim the README "Build" section to point at the install page for users
+  while keeping the from-source instructions for contributors.
+
+## Phase 6 — Container image (optional, deferred)
+
+- `ghcr.io/gpu-eda/jacquard:cuda` for reproducible Linux/CUDA runs.
+  Deferred per ADR 0018; revisit if CUDA release binaries prove awkward.
+
+## Verification
+
+- A clean checkout-free install on a second macOS machine (or a fresh
+  shell with no repo): `brew install …` then run a `tests/apb_trace`
+  cosim end to end.
+- `cargo binstall jacquard` fetches and runs without a Rust toolchain
+  build.
+- `uvx netlist-graph search <netlist> psel` works with no repo clone.
+- **Then** the docs-dogfood: a Sonnet agent installs via the docs and
+  attempts real tasks, reporting friction (the original motivation).
+
+## Decisions (confirmed)
+
+- **Versioning:** coordinated version across the two Rust bins
+  (`jacquard` + `opensta-to-ir`), single tag; `netlist-graph` versioned
+  independently.
+- **Homebrew scope:** the formula installs the Rust bins only; the docs
+  carry the `uvx netlist-graph` line separately. `netlist-graph` is not a
+  formula dependency.
+- **Tag scheme:** `v<X.Y.Z>` triggers the Rust release;
+  `netlist-graph-v<X.Y.Z>` triggers the PyPI publish. The two workflows
+  filter on their own tag prefixes so they never collide.

@@ -59,6 +59,7 @@ the code before writing it.
 | [0015](0015-boomerang-execution-model.md) | Boomerang execution model and GPU resource mapping | Accepted |
 | [0016](0016-selective-x-propagation.md) | Selective X-propagation | Accepted |
 | [0017](0017-cosim-execution-model.md) | Cosim execution model | Accepted |
+| [0018](0018-distribution-and-installation.md) | Distribution and installation model | Proposed |
 
 ## How the ADRs relate
 

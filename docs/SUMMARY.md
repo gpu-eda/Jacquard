@@ -33,6 +33,7 @@
   - [0015 — Boomerang execution model and GPU resource mapping](adr/0015-boomerang-execution-model.md)
   - [0016 — Selective X-propagation](adr/0016-selective-x-propagation.md)
   - [0017 — Cosim execution model](adr/0017-cosim-execution-model.md)
+  - [0018 — Distribution and installation model (Proposed)](adr/0018-distribution-and-installation.md)
 - [Implementation Plans](plans/README.md)
   - [Post-Phase-0 Roadmap](plans/post-phase-0-roadmap.md)
   - [GF180MCU PDK enablement](plans/gf180mcu-enablement.md)
@@ -45,4 +46,5 @@
   - [Multi-peripheral cosim](plans/multi-peripheral-cosim.md)
   - [Bus transaction tracing](plans/bus-transaction-tracing.md)
   - [CDC jitter completion](plans/cdc-jitter-completion.md)
+  - [Distribution & easy install](plans/distribution.md)
 - [Spike — OpenTimer on SKY130](spikes/opentimer-sky130.md)
