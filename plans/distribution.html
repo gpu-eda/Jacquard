@@ -210,25 +210,30 @@ Phase 4 lands.)</p>
 </ul>
 <p>Deliverable: tagging <code>v0.1.0</code> produces a downloadable Metal binary.</p>
 <h2 id="phase-2--homebrew-tap"><a class="header" href="#phase-2--homebrew-tap">Phase 2 — Homebrew tap</a></h2>
+<p><strong>Formula staged</strong> at <code>packaging/homebrew/jacquard.rb</code> (brew-style clean
+apart from homebrew-core-only Sorbet sigils; installs <code>jacquard</code> +
+<code>opensta-to-ir</code>, tests <code>--version</code>). Remaining (needs maintainer action):</p>
 <ul>
-<li>New repo <code>gpu-eda/homebrew-tap</code> with <code>Formula/jacquard.rb</code>.</li>
-<li>Formula downloads the macOS-arm64 release tarball, installs <code>jacquard</code>
-<ul>
-<li><code>opensta-to-ir</code>, verifies the sha256.</li>
-</ul>
-</li>
+<li>Create repo <code>gpu-eda/homebrew-tap</code>; copy the formula to
+<code>Formula/jacquard.rb</code>.</li>
+<li>Per release, bump <code>url</code> / <code>version</code> / <code>sha256</code> to the released tarball
+(the release emits a <code>.sha256</code>; or <code>brew bump-formula-pr</code>).</li>
 <li><code>brew install gpu-eda/tap/jacquard</code> → both bins on <code>PATH</code>.</li>
-<li>(Stretch) a release-CI step that bumps the formula's url/sha on each
-tag, so the tap tracks releases automatically.</li>
+<li>(Stretch) a release-CI step that auto-bumps the formula on each tag.</li>
 </ul>
+<p>See <a href="../../packaging/README.html"><code>../../packaging/README.md</code></a>.</p>
 <h2 id="phase-3--netlist-graph--pypi"><a class="header" href="#phase-3--netlist-graph--pypi">Phase 3 — netlist-graph → PyPI</a></h2>
+<p><strong>Workflow written:</strong> <code>.github/workflows/publish-netlist-graph.yml</code>
+builds the wheel (<code>uv build --package netlist-graph</code>) and publishes via
+PyPI <strong>trusted publishing</strong> (OIDC) on <code>netlist-graph-v*</code> tags;
+<code>workflow_dispatch</code> is a build-only dry-run. The wheel + sdist build
+cleanly (verified locally); <code>license = "Apache-2.0"</code> + URLs added to the
+package metadata. Remaining (needs maintainer action):</p>
 <ul>
-<li>Add a <code>publish-netlist-graph.yml</code> workflow (tag-triggered, e.g.
-<code>netlist-graph-v*</code>) that builds the wheel (<code>hatchling</code>) and publishes
-via PyPI <strong>trusted publishing</strong> (OIDC, no stored token).</li>
-<li>Confirm <code>scripts/netlist_graph/</code> ships its <code>README.md</code> + <code>LICENSE</code> in
-the wheel.</li>
-<li>Result: <code>uvx netlist-graph …</code> and <code>pip install netlist-graph</code> work.</li>
+<li>Create/own the <code>netlist-graph</code> PyPI project and configure its trusted
+publisher (owner <code>gpu-eda</code>, repo <code>Jacquard</code>, workflow
+<code>publish-netlist-graph.yml</code>, environment <code>pypi</code>).</li>
+<li>Result: <code>uvx netlist-graph …</code> / <code>pip install netlist-graph</code> work.</li>
 </ul>
 <h2 id="phase-4--cuda--hip-release-binaries-runner-gated"><a class="header" href="#phase-4--cuda--hip-release-binaries-runner-gated">Phase 4 — CUDA / HIP release binaries (runner-gated)</a></h2>
 <ul>
