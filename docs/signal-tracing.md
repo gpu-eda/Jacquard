@@ -162,7 +162,7 @@ jacquard cosim tests/jtag_minimal/data/top.pnl.v \
 |---------|-------------|
 | `not found in netlistdb (tried N candidate(s))` | The name doesn't exist post-synthesis under any candidate spelling. Find the real name with `netlist-graph search`; the net may have been renamed or optimized away. |
 | Signal registered but flat in the VCD | It may resolve to a constant after optimization (the startup log notes constants are skipped), or the cone was stripped. Confirm it's a live net with `netlist-graph drivers`. |
-| Nothing appears in the VCD | Check that the run actually emits a VCD (`--output-vcd` / `--stimulus-vcd` for cosim) and that the startup summary line reports a non-zero registered count. |
+| Nothing appears in the VCD | For cosim, traced nets only land in `--output-vcd` (not `--stimulus-vcd`) — make sure you passed it. Also check the startup summary reports a non-zero registered count. |
 
 ## Implementation notes
 

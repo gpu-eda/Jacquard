@@ -256,7 +256,8 @@ struct CosimArgs {
     timing_ir: Option<PathBuf>,
 
     /// Path to write stimulus VCD (all primary inputs driven by cosim).
-    /// Forces single-tick mode for accurate per-cycle capture.
+    /// Per-cycle values are captured via a GPU ring buffer, so batched
+    /// dispatch is preserved (no single-tick penalty).
     #[clap(long)]
     stimulus_vcd: Option<PathBuf>,
 
@@ -267,8 +268,9 @@ struct CosimArgs {
     ///
     /// `--timing-ir` is OPTIONAL here: with it, transitions are offset
     /// from clock edges by their computed arrival times; without it,
-    /// transitions emit at clock edges (no timing data needed). Forces
-    /// single-tick mode.
+    /// transitions emit at clock edges (no timing data needed).
+    /// Per-cycle values are captured via a GPU ring buffer, so batched
+    /// dispatch is preserved (no single-tick penalty).
     #[clap(long = "output-vcd")]
     output_vcd: Option<PathBuf>,
 
