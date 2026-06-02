@@ -7197,16 +7197,18 @@ Phase 4 lands.)</p>
 </ul>
 <p>Deliverable: tagging <code>v0.1.0</code> produces a downloadable Metal binary.</p>
 <h2 id="phase-2--homebrew-tap"><a class="header" href="#phase-2--homebrew-tap">Phase 2 — Homebrew tap</a></h2>
-<p><strong>Formula staged</strong> at <code>packaging/homebrew/jacquard.rb</code> (brew-style clean
-apart from homebrew-core-only Sorbet sigils; installs <code>jacquard</code> +
-<code>opensta-to-ir</code>, tests <code>--version</code>). Remaining (needs maintainer action):</p>
+<p><strong>Tap repo provisioned:</strong> <a href="https://github.com/gpu-eda/homebrew-tap">gpu-eda/homebrew-tap</a>
+created via <code>brew tap-new</code> (brew <code>test-bot</code> CI + <code>pr-pull</code> bottle
+publishing). <strong>Formula staged</strong> at <code>packaging/homebrew/jacquard.rb</code>
+(brew-style clean apart from homebrew-core-only Sorbet sigils; installs
+<code>jacquard</code> + <code>opensta-to-ir</code>, tests <code>--version</code>). Remaining:</p>
 <ul>
-<li>Create repo <code>gpu-eda/homebrew-tap</code>; copy the formula to
-<code>Formula/jacquard.rb</code>.</li>
-<li>Per release, bump <code>url</code> / <code>version</code> / <code>sha256</code> to the released tarball
-(the release emits a <code>.sha256</code>; or <code>brew bump-formula-pr</code>).</li>
-<li><code>brew install gpu-eda/tap/jacquard</code> → both bins on <code>PATH</code>.</li>
-<li>(Stretch) a release-CI step that auto-bumps the formula on each tag.</li>
+<li>At the first release: open a PR to the tap adding <code>Formula/jacquard.rb</code>
+with the released <code>url</code> / <code>version</code> / <code>sha256</code> (the release emits a
+<code>.sha256</code>). The tap CI installs + tests it on the PR.</li>
+<li>Subsequent releases: <code>brew bump-formula-pr</code>, or a release-CI step that
+opens the PR automatically (stretch).</li>
+<li>Then <code>brew install gpu-eda/tap/jacquard</code> → both bins on <code>PATH</code>.</li>
 </ul>
 <p>See <a href="plans/../../packaging/README.html"><code>../../packaging/README.md</code></a>.</p>
 <h2 id="phase-3--netlist-graph--pypi"><a class="header" href="#phase-3--netlist-graph--pypi">Phase 3 — netlist-graph → PyPI</a></h2>
