@@ -1,0 +1,141 @@
+name: Release
+
+# Builds prebuilt binaries and attaches them to a GitHub Release.
+# See ADR 0018 and docs/plans/distribution.md.
+#
+# - Tagging `v<X.Y.Z>` builds + publishes a DRAFT release (you review the
+#   assets, then click Publish).
+# - `workflow_dispatch` is a dry-run: it builds, packages, smoke-tests,
+#   and uploads the tarball as a workflow artifact — no release created.
+#
+# `netlist-graph` (PyPI) ships from a separate workflow on
+# `netlist-graph-v*` tags, so this `v*` trigger never collides with it.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-metal:
+    name: Release binary (macOS / Metal)
+    runs-on: macos-runner-1
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Init required submodules
+        run: git submodule update --init vendor/eda-infra-rs
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM (OpenMP for the Metal build)
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          brew install llvm
+          LLVM_PREFIX=$(brew --prefix llvm)
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> "$GITHUB_ENV"
+
+      - name: Determine version / mode
+        id: meta
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            ver=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+            echo "version=${ver}-dryrun" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build jacquard (Metal) + opensta-to-ir
+        run: |
+          cargo build --release --features metal --bin jacquard
+          cargo build --release --manifest-path crates/opensta-to-ir/Cargo.toml --bin opensta-to-ir
+
+      - name: Package
+        id: package
+        run: |
+          set -euo pipefail
+          PKG="jacquard-${{ steps.meta.outputs.version }}-macos-arm64-metal"
+          mkdir -p "stage/${PKG}"
+          cp target/release/jacquard "stage/${PKG}/"
+          cp crates/opensta-to-ir/target/release/opensta-to-ir "stage/${PKG}/"
+          cp LICENSE README.md CHANGELOG.md "stage/${PKG}/"
+          # Binaries at the archive root → matches the cargo-binstall
+          # `bin-dir = "{ bin }{ binary-ext }"` in Cargo.toml.
+          tar -czf "${PKG}.tar.gz" -C "stage/${PKG}" \
+            jacquard opensta-to-ir LICENSE README.md CHANGELOG.md
+          shasum -a 256 "${PKG}.tar.gz" | tee "${PKG}.tar.gz.sha256"
+          echo "tarball=${PKG}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "sha=${PKG}.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test the packaged binary (relocated)
+        run: |
+          set -euo pipefail
+          dest="${RUNNER_TEMP}/relocate"
+          rm -rf "$dest" && mkdir -p "$dest"
+          tar -C "$dest" -xzf "${{ steps.package.outputs.tarball }}"
+          "$dest/jacquard" --version
+          "$dest/opensta-to-ir" --help >/dev/null
+          # Run the apb_trace cosim with the *relocated* binary against the
+          # checked-in fixtures — proves the embedded metallib loads.
+          "$dest/jacquard" cosim "${GITHUB_WORKSPACE}/tests/apb_trace/apb_trace_synth.gv" \
+            --config "${GITHUB_WORKSPACE}/tests/apb_trace/sim_config.json" \
+            --top-module apb_trace \
+            --max-clock-edges 200 \
+            --bus-trace-csv "${RUNNER_TEMP}/apb.csv"
+          python3 "${GITHUB_WORKSPACE}/tests/apb_trace/check.py" "${RUNNER_TEMP}/apb.csv"
+
+      - name: Extract release notes from CHANGELOG
+        if: steps.meta.outputs.is_release == 'true'
+        id: notes
+        run: |
+          set -euo pipefail
+          ver="${{ steps.meta.outputs.version }}"
+          awk -v ver="$ver" '
+            $0 ~ "^## \\[" ver "\\]" {flag=1; next}
+            flag && /^## \[/ {flag=0}
+            flag {print}
+          ' CHANGELOG.md > notes.md || true
+          if [ ! -s notes.md ]; then
+            echo "no [$ver] section in CHANGELOG; using auto-generated notes" >&2
+            echo "AUTO=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "AUTO=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish draft release
+        if: steps.meta.outputs.is_release == 'true'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          args=(--draft --title "$tag" --repo "$GITHUB_REPOSITORY")
+          if [ "${{ steps.notes.outputs.AUTO }}" = "true" ]; then
+            args+=(--generate-notes)
+          else
+            args+=(--notes-file notes.md)
+          fi
+          gh release create "$tag" "${args[@]}" \
+            "${{ steps.package.outputs.tarball }}" \
+            "${{ steps.package.outputs.sha }}"
+
+      - name: Upload dry-run artifact
+        if: steps.meta.outputs.is_release == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.tarball }}
+          path: |
+            ${{ steps.package.outputs.tarball }}
+            ${{ steps.package.outputs.sha }}

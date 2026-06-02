@@ -77,6 +77,16 @@ the authoritative record.
   `gf180mcu-project-template` netlist shape. Advances Phase 7 of
   the GF180MCU enablement plan from "synthetic fixtures only" to
   "real wafer.space post-P&R netlists parse end-to-end".
+- **Config-driven AHB/APB bus transaction tracing** for `cosim`
+  (ADR 0013). Declare buses in `sim_config.json` (`bus_traces`) and write
+  decoded transactions to CSV via `--bus-trace-csv`. APB3 is supported
+  (GPU captures raw beats, the CPU runs the protocol FSM); AHB-Lite /
+  AHB5 are planned. Validated by `tests/apb_trace/`. See
+  `docs/bus-tracing.md`.
+- **Prebuilt-binary distribution groundwork** (ADR 0018): the Metal
+  binary now embeds its kernel library so a downloaded binary is
+  relocatable, and `cargo binstall` metadata is in place. GitHub
+  Releases + a Homebrew tap (macOS/Metal) follow.
 
 ### Changed
 
@@ -93,6 +103,23 @@ the authoritative record.
   `--sdf` now subprocesses `opensta-to-ir`, which produces timing IR
   consumed by `load_timing_from_ir`. The IR path (`--timing-ir`) is the
   canonical input.
+- **CLI flag rename (pre-release, no compatibility alias):** cosim
+  `--timing-vcd <PATH>` → `--output-vcd <PATH>` (the output VCD —
+  functional by default, timed when `--timing-ir`/SDF is supplied), and
+  sim `--timing-vcd` → `--timed`. Fixes a misnomer that steered pre-PnR
+  functional users away from the one flag they needed.
+
+### Fixed
+
+- `cosim` warns when the positional netlist argument differs from the
+  config's `netlist_path` (the positional wins; logs no longer silently
+  describe a different netlist than the one running).
+- Progress logging no longer floods single-tick runs — it now fires once
+  per ~100k-edge window regardless of batch mode.
+- Tracing docs corrected: traced nets land in `--output-vcd` only (not
+  `--stimulus-vcd`), and the stale "forces single-tick mode" help text
+  removed (VCD capture uses a GPU ring buffer, preserving batched
+  dispatch).
 
 ### Deprecated / Removed
 
@@ -112,6 +139,9 @@ the authoritative record.
   § Structured JSON Report.
 - Plan files: `docs/plans/post-phase-0-roadmap.md` tracks current
   workstreams; Phase 0 / Phase 1 closed.
+- New: `docs/bus-tracing.md` and `docs/signal-tracing.md` — user guides
+  for the two cosim observability features (decoded transactions vs. raw
+  nets). ADR 0018 + `docs/plans/distribution.md` cover the install model.
 
 ### Known limitations
 
@@ -126,9 +156,9 @@ the authoritative record.
 - `worst_slack` ranking is populated only from observed violation
   events. Closest-to-violation tracking on a run that *passed* timing
   needs GPU-side near-miss instrumentation; deferred.
-- The `--timing-vcd` flag is wired only into the Metal sim path.
+- Timed output (sim `--timed` / cosim `--output-vcd` with timing data)
+  routes violations through `process_events` only on the Metal sim path.
   CUDA / HIP detect violations on the GPU but don't currently route
-  them through `process_events`; the JSON / text outputs only fire on
-  Metal today.
+  them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/ChipFlow/Jacquard/compare/HEAD
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/HEAD
