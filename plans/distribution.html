@@ -161,7 +161,7 @@ a fresh user (or a docs-dogfooding agent) can install Jacquard in one
 line on macOS/Metal, with CUDA/HIP following as runners land.</p>
 <h2 id="artifacts--channels-from-adr-0018"><a class="header" href="#artifacts--channels-from-adr-0018">Artifacts &amp; channels (from ADR 0018)</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Artifact</th><th>Channel</th><th>Blocked on</th></tr></thead><tbody>
-<tr><td><code>jacquard</code> (Metal)</td><td>GitHub Release + <code>cargo-binstall</code> + Homebrew tap</td><td>Phase 1a (relocatable binary)</td></tr>
+<tr><td><code>jacquard</code> (Metal)</td><td>GitHub Release + <code>cargo-binstall</code> + Homebrew tap</td><td>— (Phase 1a done — relocatable)</td></tr>
 <tr><td><code>opensta-to-ir</code></td><td>same release/formula as <code>jacquard</code></td><td>—</td></tr>
 <tr><td><code>jacquard</code> (CUDA / HIP)</td><td>added to the release matrix</td><td>NVIDIA / AMD runners</td></tr>
 <tr><td><code>netlist-graph</code></td><td>PyPI</td><td>—</td></tr>
@@ -178,7 +178,10 @@ numbered release) and confirm <code>CHANGELOG.md</code> exists / is rolled per
 release asset name template (e.g.
 <code>{ name }-{ version }-{ target }{ archive-suffix }</code>).</li>
 </ul>
-<h2 id="phase-1a--relocatable-metal-binary-code-prerequisite"><a class="header" href="#phase-1a--relocatable-metal-binary-code-prerequisite">Phase 1a — Relocatable Metal binary (code prerequisite)</a></h2>
+<h2 id="phase-1a--relocatable-metal-binary-code-prerequisite--done"><a class="header" href="#phase-1a--relocatable-metal-binary-code-prerequisite--done">Phase 1a — Relocatable Metal binary (code prerequisite) ✅ Done</a></h2>
+<p>Done in d2afde4: the metallib is embedded via <code>include_bytes!</code> +
+<code>new_library_with_data</code>, verified by running the release binary copied
+outside <code>target/</code>. The original problem, for the record:</p>
 <p><strong>Blocker found while scoping Phase 1.</strong> <code>MetalSimulator::new</code>
 (<code>cosim_metal.rs:337</code>) loads the GPU kernel via
 <code>new_library_with_file(env!("METALLIB_PATH"))</code> — a <strong>compile-time
