@@ -259,6 +259,10 @@ to two cadences, not three.</li>
 project + publish credentials (trusted publisher).</li>
 <li>The stale <code>repository = "…/ChipFlow/Jacquard"</code> URLs (both
 <code>Cargo.toml</code>s) must be corrected to <code>gpu-eda</code> as part of this work.</li>
+<li><strong>Prebuilt binaries require a relocatable kernel.</strong> The Metal binary
+currently loads its <code>.metallib</code> from a compile-time build-tree path
+(<code>env!("METALLIB_PATH")</code>), so a shipped binary must embed or bundle the
+kernel first. Tracked as Phase 1a in the plan.</li>
 </ul>
 <h2 id="walk-back-options"><a class="header" href="#walk-back-options">Walk-back options</a></h2>
 <ul>

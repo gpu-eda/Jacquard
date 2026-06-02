@@ -5224,6 +5224,10 @@ to two cadences, not three.</li>
 project + publish credentials (trusted publisher).</li>
 <li>The stale <code>repository = "…/ChipFlow/Jacquard"</code> URLs (both
 <code>Cargo.toml</code>s) must be corrected to <code>gpu-eda</code> as part of this work.</li>
+<li><strong>Prebuilt binaries require a relocatable kernel.</strong> The Metal binary
+currently loads its <code>.metallib</code> from a compile-time build-tree path
+(<code>env!("METALLIB_PATH")</code>), so a shipped binary must embed or bundle the
+kernel first. Tracked as Phase 1a in the plan.</li>
 </ul>
 <h2 id="walk-back-options-2"><a class="header" href="#walk-back-options-2">Walk-back options</a></h2>
 <ul>
@@ -7144,7 +7148,7 @@ a fresh user (or a docs-dogfooding agent) can install Jacquard in one
 line on macOS/Metal, with CUDA/HIP following as runners land.</p>
 <h2 id="artifacts--channels-from-adr-0018"><a class="header" href="#artifacts--channels-from-adr-0018">Artifacts &amp; channels (from ADR 0018)</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Artifact</th><th>Channel</th><th>Blocked on</th></tr></thead><tbody>
-<tr><td><code>jacquard</code> (Metal)</td><td>GitHub Release + <code>cargo-binstall</code> + Homebrew tap</td><td>— (shippable now)</td></tr>
+<tr><td><code>jacquard</code> (Metal)</td><td>GitHub Release + <code>cargo-binstall</code> + Homebrew tap</td><td>Phase 1a (relocatable binary)</td></tr>
 <tr><td><code>opensta-to-ir</code></td><td>same release/formula as <code>jacquard</code></td><td>—</td></tr>
 <tr><td><code>jacquard</code> (CUDA / HIP)</td><td>added to the release matrix</td><td>NVIDIA / AMD runners</td></tr>
 <tr><td><code>netlist-graph</code></td><td>PyPI</td><td>—</td></tr>
@@ -7161,7 +7165,24 @@ numbered release) and confirm <code>CHANGELOG.md</code> exists / is rolled per
 release asset name template (e.g.
 <code>{ name }-{ version }-{ target }{ archive-suffix }</code>).</li>
 </ul>
-<h2 id="phase-1--metal-release-ci-unblocked"><a class="header" href="#phase-1--metal-release-ci-unblocked">Phase 1 — Metal release CI (unblocked)</a></h2>
+<h2 id="phase-1a--relocatable-metal-binary-code-prerequisite"><a class="header" href="#phase-1a--relocatable-metal-binary-code-prerequisite">Phase 1a — Relocatable Metal binary (code prerequisite)</a></h2>
+<p><strong>Blocker found while scoping Phase 1.</strong> <code>MetalSimulator::new</code>
+(<code>cosim_metal.rs:337</code>) loads the GPU kernel via
+<code>new_library_with_file(env!("METALLIB_PATH"))</code> — a <strong>compile-time
+absolute path</strong> into the build's <code>target/.../out/ucc_metal/</code>. A prebuilt
+binary moved to another machine panics with <code>Failed to load metallib</code>:
+the <code>.metallib</code> isn't bundled and the path doesn't exist there.</p>
+<p>A distributable binary must locate its kernel without that build-tree
+path. Preferred fix: <strong>embed the metallib in the binary</strong> —
+<code>include_bytes!(env!("METALLIB_PATH"))</code> + <code>new_library_with_data</code>, so the
+binary is self-contained (no sidecar file). Alternative: ship the
+<code>.metallib</code> next to the executable and resolve relative to
+<code>current_exe()</code>, with the <code>env!</code> path as a dev fallback. Embedding is
+cleaner for distribution.</p>
+<p>(CUDA/HIP likely have an analogous kernel-loading assumption; check when
+Phase 4 lands.)</p>
+<p>This must merge before Phase 1 produces a usable artifact.</p>
+<h2 id="phase-1--metal-release-ci-after-1a"><a class="header" href="#phase-1--metal-release-ci-after-1a">Phase 1 — Metal release CI (after 1a)</a></h2>
 <p>A <code>release.yml</code> workflow triggered on <code>v*</code> tags:</p>
 <ul>
 <li>On the self-hosted macOS runner: <code>cargo build -r --features metal --bin jacquard</code> and <code>cargo build -r --bin opensta-to-ir</code>.</li>
