@@ -29,6 +29,7 @@ impl TimingReportConfig<'_> {
 #[derive(Parser)]
 #[command(
     name = "jacquard",
+    version,
     about = "Jacquard — GPU-accelerated RTL logic simulator"
 )]
 struct Cli {
