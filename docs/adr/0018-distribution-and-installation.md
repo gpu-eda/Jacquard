@@ -109,6 +109,10 @@ targets remain source-build.
   project + publish credentials (trusted publisher).
 - The stale `repository = "…/ChipFlow/Jacquard"` URLs (both
   `Cargo.toml`s) must be corrected to `gpu-eda` as part of this work.
+- **Prebuilt binaries require a relocatable kernel.** The Metal binary
+  currently loads its `.metallib` from a compile-time build-tree path
+  (`env!("METALLIB_PATH")`), so a shipped binary must embed or bundle the
+  kernel first. Tracked as Phase 1a in the plan.
 
 ## Walk-back options
 

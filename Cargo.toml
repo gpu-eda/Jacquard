@@ -3,12 +3,23 @@ name = "jacquard"
 version = "0.1.0"
 edition = "2021"
 description = "GPU-accelerated RTL logic simulator with vector-driven setup/hold timing analysis. Maps gate-level netlists to a virtual manycore Boolean processor and runs them on Metal / CUDA / HIP."
-repository = "https://github.com/ChipFlow/Jacquard"
+repository = "https://github.com/gpu-eda/Jacquard"
 homepage = "https://chipflow.io"
 keywords = ["rtl", "simulation", "gpu", "timing", "eda"]
 categories = ["simulation", "hardware-support"]
 license = "Apache-2.0"
 links = "jacquard"
+
+# cargo-binstall: fetch a prebuilt release binary instead of building
+# from source (ADR 0018). Only macOS/Metal is unambiguous by target
+# triple; Linux has two GPU backends (CUDA/HIP) for one triple, so it is
+# NOT binstall-able — use the release tarball or container directly.
+[package.metadata.binstall]
+pkg-fmt = "tgz"
+bin-dir = "{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/jacquard-{ version }-macos-arm64-metal.tar.gz"
 
 [dependencies]
 cachedhash = "0.2.0"

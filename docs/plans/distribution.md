@@ -8,7 +8,7 @@ line on macOS/Metal, with CUDA/HIP following as runners land.
 
 | Artifact | Channel | Blocked on |
 |----------|---------|------------|
-| `jacquard` (Metal) | GitHub Release + `cargo-binstall` + Homebrew tap | — (shippable now) |
+| `jacquard` (Metal) | GitHub Release + `cargo-binstall` + Homebrew tap | Phase 1a (relocatable binary) |
 | `opensta-to-ir` | same release/formula as `jacquard` | — |
 | `jacquard` (CUDA / HIP) | added to the release matrix | NVIDIA / AMD runners |
 | `netlist-graph` | PyPI | — |
@@ -24,7 +24,29 @@ line on macOS/Metal, with CUDA/HIP following as runners land.
   release asset name template (e.g.
   `{ name }-{ version }-{ target }{ archive-suffix }`).
 
-## Phase 1 — Metal release CI (unblocked)
+## Phase 1a — Relocatable Metal binary (code prerequisite)
+
+**Blocker found while scoping Phase 1.** `MetalSimulator::new`
+(`cosim_metal.rs:337`) loads the GPU kernel via
+`new_library_with_file(env!("METALLIB_PATH"))` — a **compile-time
+absolute path** into the build's `target/.../out/ucc_metal/`. A prebuilt
+binary moved to another machine panics with `Failed to load metallib`:
+the `.metallib` isn't bundled and the path doesn't exist there.
+
+A distributable binary must locate its kernel without that build-tree
+path. Preferred fix: **embed the metallib in the binary** —
+`include_bytes!(env!("METALLIB_PATH"))` + `new_library_with_data`, so the
+binary is self-contained (no sidecar file). Alternative: ship the
+`.metallib` next to the executable and resolve relative to
+`current_exe()`, with the `env!` path as a dev fallback. Embedding is
+cleaner for distribution.
+
+(CUDA/HIP likely have an analogous kernel-loading assumption; check when
+Phase 4 lands.)
+
+This must merge before Phase 1 produces a usable artifact.
+
+## Phase 1 — Metal release CI (after 1a)
 
 A `release.yml` workflow triggered on `v*` tags:
 
