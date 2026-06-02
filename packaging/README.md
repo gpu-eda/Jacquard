@@ -21,13 +21,24 @@ or a container).
 
 ## Homebrew tap (macOS/Metal)
 
-The formula lives at [`homebrew/jacquard.rb`](homebrew/jacquard.rb) as
-the source of truth. To stand up the tap:
+The tap repo — **[gpu-eda/homebrew-tap](https://github.com/gpu-eda/homebrew-tap)** —
+is provisioned (scaffolded with `brew tap-new`: `brew test-bot` CI +
+`pr-pull` bottle publishing). It has no formula yet; the formula lands
+with the first release.
 
-1. Create the repo **`gpu-eda/homebrew-tap`**.
-2. Copy `packaging/homebrew/jacquard.rb` → `Formula/jacquard.rb` in it.
-3. Per release, update the formula's `version` + `sha256` to the released
-   tarball (the release emits a `.sha256`; or use `brew bump-formula-pr`).
+The formula lives at [`homebrew/jacquard.rb`](homebrew/jacquard.rb) here
+as the source of truth. To add/update it in the tap (the idiomatic
+Homebrew flow):
+
+1. After tagging `v<X.Y.Z>` and publishing the release, take the
+   `.sha256` the release workflow emitted.
+2. Open a PR to the tap adding/updating `Formula/jacquard.rb` (copy of
+   `packaging/homebrew/jacquard.rb` with the real `url` / `version` /
+   `sha256`). The tap's CI installs + tests it on the PR.
+3. Merge (optionally label `pr-pull` to publish bottles).
+
+`brew bump-formula-pr` automates steps 1–2 for subsequent releases; a
+release-CI step could open the PR automatically (plan Phase 2 stretch).
 
 Users then:
 

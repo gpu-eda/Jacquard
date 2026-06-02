@@ -66,16 +66,18 @@ Deliverable: tagging `v0.1.0` produces a downloadable Metal binary.
 
 ## Phase 2 — Homebrew tap
 
-**Formula staged** at `packaging/homebrew/jacquard.rb` (brew-style clean
-apart from homebrew-core-only Sorbet sigils; installs `jacquard` +
-`opensta-to-ir`, tests `--version`). Remaining (needs maintainer action):
+**Tap repo provisioned:** [gpu-eda/homebrew-tap](https://github.com/gpu-eda/homebrew-tap)
+created via `brew tap-new` (brew `test-bot` CI + `pr-pull` bottle
+publishing). **Formula staged** at `packaging/homebrew/jacquard.rb`
+(brew-style clean apart from homebrew-core-only Sorbet sigils; installs
+`jacquard` + `opensta-to-ir`, tests `--version`). Remaining:
 
-- Create repo `gpu-eda/homebrew-tap`; copy the formula to
-  `Formula/jacquard.rb`.
-- Per release, bump `url` / `version` / `sha256` to the released tarball
-  (the release emits a `.sha256`; or `brew bump-formula-pr`).
-- `brew install gpu-eda/tap/jacquard` → both bins on `PATH`.
-- (Stretch) a release-CI step that auto-bumps the formula on each tag.
+- At the first release: open a PR to the tap adding `Formula/jacquard.rb`
+  with the released `url` / `version` / `sha256` (the release emits a
+  `.sha256`). The tap CI installs + tests it on the PR.
+- Subsequent releases: `brew bump-formula-pr`, or a release-CI step that
+  opens the PR automatically (stretch).
+- Then `brew install gpu-eda/tap/jacquard` → both bins on `PATH`.
 
 See [`../../packaging/README.md`](../../packaging/README.md).
 
