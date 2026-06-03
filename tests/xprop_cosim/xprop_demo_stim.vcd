@@ -1,0 +1,53 @@
+$comment Stimulus for xprop_demo (#95), used by `jacquard sim --xprop`. clk toggles every 20000ps; rst_n (active-low) is asserted for ~3 clocks then released, so q_reset resolves while q_unreset stays X. See check.py. $end
+$timescale 1ps $end
+$scope module xprop_demo $end
+$var wire 1 ! clk $end
+$var wire 1 " rst_n $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+0!
+0"
+$end
+#20000
+1!
+#40000
+0!
+#60000
+1!
+#80000
+0!
+#100000
+1!
+1"
+#120000
+0!
+#140000
+1!
+#160000
+0!
+#180000
+1!
+#200000
+0!
+#220000
+1!
+#240000
+0!
+#260000
+1!
+#280000
+0!
+#300000
+1!
+#320000
+0!
+#340000
+1!
+#360000
+0!
+#380000
+1!
+#400000
+0!

@@ -234,12 +234,37 @@ jobs:
 
       - name: Verify X-propagation output
         run: |
-          # The dff_test has 1 DFF, so Q should start as X then become known
+          # The dff_test has 1 DFF, so Q should start as X then become known.
+          # FATAL: a missing X means the seed/X-aware path silently regressed.
           if grep -q 'x' tests/timing_test/ci_xprop_output.vcd; then
             echo "X-propagation VCD contains X values as expected"
           else
-            echo "WARNING: No X values in xprop output VCD"
+            echo "ERROR: No X values in xprop output VCD (X-propagation broken)"
+            exit 1
           fi
+
+      # End-to-end X-propagation regression guard (#95). Uses the xprop_demo
+      # design: an UNRESET toggle counter (q_unreset, must stay X forever —
+      # X+1=X) and a reset flop (q_reset, must resolve to known after reset).
+      # The unreset counter's Q feeds back through combinational logic, which
+      # is exactly the case the seed-template bug got wrong (DFF Q read as
+      # known 0); dff_test above does NOT exercise that path. check.py is fatal
+      # and also runs in two-state mode to assert no X leaks without --xprop.
+      - name: X-propagation demo — sim (#95)
+        run: |
+          set -e
+          cargo run --release --features metal --bin jacquard -- sim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            tests/xprop_cosim/xprop_demo_stim.vcd \
+            tests/xprop_cosim/ci_sim_xprop.vcd \
+            1 --xprop --check-with-cpu
+          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_sim_xprop.vcd xprop
+          cargo run --release --features metal --bin jacquard -- sim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            tests/xprop_cosim/xprop_demo_stim.vcd \
+            tests/xprop_cosim/ci_sim_2state.vcd \
+            1
+          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_sim_2state.vcd two-state
 
       - name: Run Metal simulation with timing (inv_chain_pnr)
         run: |
@@ -334,6 +359,25 @@ jobs:
       - name: Verify APB3 bus-trace output
         run: python3 tests/apb_trace/check.py apb_trace.csv
 
+      # End-to-end X-propagation in the reactive cosim path (#95). Same
+      # xprop_demo design and checker as the sim guard above: q_unreset must
+      # stay X, q_reset must resolve, and two-state (no --xprop) must show no X.
+      - name: X-propagation demo — cosim (#95)
+        run: |
+          set -e
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            --config tests/xprop_cosim/sim_config.json \
+            --top-module xprop_demo --max-clock-edges 40 \
+            --xprop --output-vcd tests/xprop_cosim/ci_cosim_xprop.vcd
+          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_cosim_xprop.vcd xprop
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            --config tests/xprop_cosim/sim_config.json \
+            --top-module xprop_demo --max-clock-edges 40 \
+            --output-vcd tests/xprop_cosim/ci_cosim_2state.vcd
+          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_cosim_2state.vcd two-state
+
       - name: Upload VCD artifacts
         uses: actions/upload-artifact@v4
         if: always()
@@ -348,6 +392,10 @@ jobs:
             dual_uart_events.json
             apb_trace_cosim.txt
             apb_trace.csv
+            tests/xprop_cosim/ci_sim_xprop.vcd
+            tests/xprop_cosim/ci_sim_2state.vcd
+            tests/xprop_cosim/ci_cosim_xprop.vcd
+            tests/xprop_cosim/ci_cosim_2state.vcd
             metal_timing.txt
             metal_xprop.txt
             metal_timed.txt
