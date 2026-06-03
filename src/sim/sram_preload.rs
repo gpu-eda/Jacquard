@@ -187,10 +187,16 @@ pub fn resolve_single_sram(
 /// `storage_offset_u32` is the start of this SRAM's region in the
 /// shared `sram_storage` buffer (i.e. the value
 /// `FlattenedScriptV1::sram_cell_storage_offsets[cellid]`).
+/// Pack `chunks` into `sram_storage`. When X-propagation is active,
+/// `sram_xmask` is the parallel X-mask shadow (init all-X = `0xFFFFFFFF`):
+/// every byte we preload is known, so we clear that byte's X-mask bits.
+/// Un-preloaded cells keep their X-mask (still uninitialised → read X).
+/// Pass `None` for the two-state path. See ADR 0016 / #95.
 pub fn apply_chunks(
     sram_storage: &mut [u32],
     storage_offset_u32: u32,
     chunks: &[PreloadChunk],
+    mut sram_xmask: Option<&mut [u32]>,
 ) -> Result<(), PreloadError> {
     let sram_start = storage_offset_u32 as usize;
     let sram_capacity_entries = AIGPDK_SRAM_SIZE;
@@ -213,6 +219,10 @@ pub fn apply_chunks(
             // case for the final word of a non-aligned segment.
             sram_storage[entry] &= !(0xFFu32 << bit_shift);
             sram_storage[entry] |= (b as u32) << bit_shift;
+            // Mirror into the X-mask shadow: this byte is now known.
+            if let Some(xmask) = sram_xmask.as_deref_mut() {
+                xmask[entry] &= !(0xFFu32 << bit_shift);
+            }
         }
     }
     Ok(())
@@ -263,7 +273,7 @@ mod tests {
             byte_offset: 0,
             bytes: vec![0x11, 0x22, 0x33, 0x44, 0xAA, 0xBB, 0xCC, 0xDD],
         };
-        apply_chunks(&mut storage, 0, &[chunk]).unwrap();
+        apply_chunks(&mut storage, 0, &[chunk], None).unwrap();
         assert_eq!(storage[0], 0x44332211);
         assert_eq!(storage[1], 0xDDCCBBAA);
     }
@@ -276,7 +286,7 @@ mod tests {
             byte_offset: 0,
             bytes: vec![0xDE, 0xAD, 0xBE, 0xEF],
         };
-        apply_chunks(&mut storage, AIGPDK_SRAM_SIZE as u32, &[chunk]).unwrap();
+        apply_chunks(&mut storage, AIGPDK_SRAM_SIZE as u32, &[chunk], None).unwrap();
         assert_eq!(storage[0], 0); // first SRAM untouched
         assert_eq!(storage[AIGPDK_SRAM_SIZE], 0xEFBEADDE);
     }
@@ -289,7 +299,7 @@ mod tests {
             byte_offset: 0,
             bytes: vec![0xAA, 0xBB, 0xCC],
         };
-        apply_chunks(&mut storage, 0, &[chunk]).unwrap();
+        apply_chunks(&mut storage, 0, &[chunk], None).unwrap();
         assert_eq!(storage[0], 0x00CCBBAA);
     }
 
@@ -302,7 +312,7 @@ mod tests {
             bytes: vec![0; 5],
         };
         assert!(matches!(
-            apply_chunks(&mut storage, 0, &[chunk]),
+            apply_chunks(&mut storage, 0, &[chunk], None),
             Err(PreloadError::ChunkOverflowsSram { .. })
         ));
     }
@@ -314,9 +324,29 @@ mod tests {
             byte_offset: 8, // start at u32 entry 2
             bytes: vec![0x55; 4],
         };
-        apply_chunks(&mut storage, 0, &[chunk]).unwrap();
+        apply_chunks(&mut storage, 0, &[chunk], None).unwrap();
         assert_eq!(storage[0], 0);
         assert_eq!(storage[1], 0);
         assert_eq!(storage[2], 0x55555555);
+    }
+
+    #[test]
+    fn apply_chunks_clears_xmask_for_preloaded_bytes() {
+        // X-mask shadow starts all-unknown; preloading known bytes must clear
+        // exactly those bytes' X-mask and leave everything else X (#95).
+        let mut storage = vec![0u32; 4];
+        let mut xmask = vec![0xFFFF_FFFFu32; 4];
+        // 3 known bytes at byte offset 1 → bytes 1,2,3 of word 0.
+        let chunk = PreloadChunk {
+            byte_offset: 1,
+            bytes: vec![0xAA, 0xBB, 0xCC],
+        };
+        apply_chunks(&mut storage, 0, &[chunk], Some(&mut xmask)).unwrap();
+        assert_eq!(storage[0], 0xCCBB_AA00, "bytes packed little-endian");
+        assert_eq!(
+            xmask[0], 0x0000_00FF,
+            "preloaded bytes 1-3 are known (X-mask cleared); byte 0 still X"
+        );
+        assert_eq!(xmask[1], 0xFFFF_FFFF, "un-preloaded word stays fully X");
     }
 }
