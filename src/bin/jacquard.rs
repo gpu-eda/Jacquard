@@ -446,8 +446,15 @@ fn cmd_sim(args: SimArgs) {
         args.max_clock_edges,
     );
 
-    // Set up output VCD writer
-    let write_buf = std::fs::File::create(&args.output_vcd).unwrap();
+    // Set up output VCD writer. Create the parent dir first so an output
+    // path under a scratch dir like `target/test-out/` doesn't fail.
+    let output_vcd_path = std::path::Path::new(&args.output_vcd);
+    vcd_io::ensure_parent_dir(output_vcd_path).unwrap_or_else(|e| {
+        panic!("Failed to create output VCD dir for {}: {}", args.output_vcd, e)
+    });
+    let write_buf = std::fs::File::create(&args.output_vcd).unwrap_or_else(|e| {
+        panic!("Failed to create output VCD {}: {}", args.output_vcd, e)
+    });
     let write_buf = std::io::BufWriter::new(write_buf);
     let mut writer = vcd_ng::Writer::new(write_buf);
     let output_mapping = vcd_io::setup_output_vcd(
