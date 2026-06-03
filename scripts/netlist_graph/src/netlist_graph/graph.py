@@ -97,6 +97,38 @@ class NetlistGraph:
         """Check if a net exists."""
         return self._graph.has_node(net)
 
+    def is_primary_input(self, net: str) -> bool:
+        """Whether a net is a declared top-level input/inout port.
+
+        Used to distinguish a genuine primary input (driven from outside the
+        module) from an undriven internal net (an X-source). Both have no
+        driver inside the netlist.
+        """
+        ports: dict[str, str] = self._graph.graph.get("ports", {})
+        return ports.get(net) in ("input", "inout")
+
+    def is_driven(self, net: str) -> bool:
+        """Whether a net is driven by some cell output anywhere in the netlist.
+
+        Unlike ``find_drivers`` (which is edge-based and therefore misses
+        zero-input cells), this also reports nets driven by constant/tie
+        cells whose outputs produce no input->output edge.
+        """
+        if self._graph.has_node(net) and any(self._graph.predecessors(net)):
+            return True
+        out_driver: dict = self._graph.graph.get("out_driver", {})
+        return net in out_driver
+
+    def driver_cell_type(self, net: str) -> str | None:
+        """Cell type driving ``net`` via a zero-input (constant/tie) cell.
+
+        Returns None if the net is driven through normal edges (use
+        ``find_drivers``) or is undriven.
+        """
+        out_driver: dict[str, tuple[str, str, str]] = self._graph.graph.get("out_driver", {})
+        entry = out_driver.get(net)
+        return entry[1] if entry else None
+
     def find_drivers(self, net: str) -> list[Driver]:
         """Find all cells that drive a net."""
         if not self._graph.has_node(net):
@@ -133,11 +165,22 @@ class NetlistGraph:
             )
         return loads
 
-    def trace_back(self, net: str, max_depth: int = 10) -> list[tuple[int, str, Driver | None]]:
+    def trace_back(
+        self,
+        net: str,
+        max_depth: int = 10,
+        data_only: bool = False,
+    ) -> list[tuple[int, str, Driver | None]]:
         """
         Trace backwards from a net to find its driver chain.
 
         Returns list of (depth, net, driver) tuples.
+
+        When ``data_only`` is set, the walk does not descend into the
+        clock / set / reset / enable pins of sequential cells — only the
+        data (D) input is followed. This keeps a register trace on the
+        data path instead of diving into the clock and reset distribution
+        trees, which otherwise swamp the output.
         """
         result = []
         visited = set()
@@ -153,6 +196,13 @@ class NetlistGraph:
 
             drivers = self.find_drivers(current_net)
             for d in drivers:
+                if (
+                    data_only
+                    and self._is_register(d.cell_type)
+                    and d.in_pin not in self._DFF_DATA_PINS
+                ):
+                    # Control pin on a sequential cell (CLK/RESET_B/SET_B/...).
+                    continue
                 queue.append((d.from_net, depth + 1, d))
 
         return result
@@ -223,9 +273,19 @@ class NetlistGraph:
 
     @staticmethod
     def _is_register(cell_type: str) -> bool:
-        """Check if a cell type is a register (DFF/latch)."""
-        ct = cell_type.lower()
-        return any(k in ct for k in ("dff", "dfx", "dlat", "dlxtp", "sdff", "sdf"))
+        """Check if a cell type is a register (DFF/latch).
+
+        Matches on the functional cell name (the part after the last ``__``
+        library prefix) so reset/set/scan flop variants are recognised, not
+        just the plain DFF. Covers sky130 (dfxtp/dfrtp/dfstp/dfbbn/edfxtp/
+        sdf*) and gf180mcu (dffq/dffrnq/dffsnq/sdffq, latq/latrnq) naming.
+        """
+        name = cell_type.lower().rsplit("__", 1)[-1]
+        return name.startswith((
+            "df", "sdf", "edf",          # D flip-flops + scan/enable variants
+            "dlxtp", "dlrtp", "dlat",    # sky130 latches
+            "lat",                       # gf180 latches (latq/latnq/latrnq)
+        ))
 
     @staticmethod
     def _short_cell_type(cell_type: str) -> str:
@@ -273,8 +333,17 @@ class NetlistGraph:
 
             drivers = self.find_drivers(net)
             if not drivers:
-                # Primary input — no driver
-                result.append((depth, net, "(primary)", []))
+                # No driver *edge*. Classify the leaf:
+                #   - driven by a zero-input cell (constant/tie) → (const)
+                #   - declared top-level input/inout port        → (primary)
+                #   - otherwise undriven internal net (X-source) → (undriven)
+                const_type = self.driver_cell_type(net)
+                if const_type is not None:
+                    result.append((depth, net, "(const)", []))
+                elif self.is_primary_input(net):
+                    result.append((depth, net, "(primary)", []))
+                else:
+                    result.append((depth, net, "(undriven)", []))
                 return
 
             # Group drivers by cell (a cell may have multiple input edges)
