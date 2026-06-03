@@ -90,6 +90,10 @@ struct StatePrepParams {
     num_ops: u32,      // number of bit set/clear operations
     num_monitors: u32, // number of peripheral monitors to check (0 = skip)
     tick_number: u32,  // current tick number
+    // X-mask word offset within a slot (= reg_io_state_size). 0 disables
+    // X-mask maintenance (xprop off). When nonzero, each driven bit also has
+    // its X-mask cleared (driven ⇒ known) so undriven inputs stay X (#95 ph3).
+    xmask_state_offset: u32,
 }
 
 /// GPU-side flash state (must match Metal FlashState struct exactly).
@@ -120,6 +124,11 @@ struct FlashState {
 struct FlashDinParams {
     d_in_pos: [u32; 4],
     has_flash: u32,
+    // X-mask word offset (= reg_io_state_size); 0 when xprop off. The flash
+    // MISO bits are primary inputs driven here (not via state_prep's edge
+    // ops), so this kernel must clear their X-mask too, else they stay X
+    // (seeded by the cosim template) and the SPI read drowns in X (#95 ph3).
+    xmask_state_offset: u32,
 }
 
 /// Parameters for gpu_flash_model_step kernel (must match Metal FlashModelParams).
@@ -1893,6 +1902,7 @@ fn create_prep_params_buffer(
     num_ops: u32,
     num_monitors: u32,
     tick_number: u32,
+    xmask_state_offset: u32,
 ) -> metal::Buffer {
     let buf = device.new_buffer(
         std::mem::size_of::<StatePrepParams>() as u64,
@@ -1906,6 +1916,7 @@ fn create_prep_params_buffer(
                 num_ops,
                 num_monitors,
                 tick_number,
+                xmask_state_offset,
             },
         );
     }
@@ -2571,7 +2582,12 @@ pub fn run_cosim(
     // sim-path template. See docs/plans/cosim-xprop.md.
     if script.xprop_enabled {
         let rio = script.reg_io_state_size as usize;
-        let xmask = crate::sim::vcd_io::xprop_xmask_template(script);
+        // Cosim template: X at uninitialised DFF/SRAM AND at every primary
+        // input (undriven until a model/clock/reset/constant drives it —
+        // #95 phase 3). `state_prep` clears the X-mask of each bit it drives
+        // every edge, so driven inputs resolve to known and truly-undriven
+        // ones stay X.
+        let xmask = crate::sim::vcd_io::xprop_xmask_template_cosim(script);
         // Seed the X-mask half of BOTH slots. The reactive loop's first GPU op
         // every edge is `state_prep`, which copies output slot → input slot
         // (kernel_v1.metal); the output slot is therefore the initial condition
@@ -3006,8 +3022,17 @@ pub fn run_cosim(
             );
             let len = ops.len();
             let ops_buf = create_ops_buffer(&simulator.device, &ops);
-            let params =
-                create_prep_params_buffer(&simulator.device, state_size as u32, len as u32, 0, 0);
+            // `xprop_state_offset` is reg_io_state_size when xprop is on and 0
+            // otherwise — exactly the sentinel state_prep wants to decide
+            // whether to clear each driven bit's X-mask (driven ⇒ known, #95 ph3).
+            let params = create_prep_params_buffer(
+                &simulator.device,
+                state_size as u32,
+                len as u32,
+                0,
+                0,
+                script.xprop_state_offset,
+            );
             edge_buffers.push((params, ops_buf));
             edge_ops_lens.push(len);
         }
@@ -3081,6 +3106,7 @@ pub fn run_cosim(
     unsafe {
         let p = &mut *(flash_din_params_buffer.contents() as *mut FlashDinParams);
         p.has_flash = if config.flash.is_some() { 1 } else { 0 };
+        p.xmask_state_offset = script.xprop_state_offset;
         for i in 0..4 {
             p.d_in_pos[i] = config
                 .flash

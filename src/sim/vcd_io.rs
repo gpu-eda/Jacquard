@@ -490,6 +490,25 @@ pub fn xprop_xmask_template(script: &FlattenedScriptV1) -> Vec<u32> {
     xmask_template
 }
 
+/// X-mask template for the reactive `cosim` path (#95 phase 3).
+///
+/// Same as [`xprop_xmask_template`] but ALSO marks every primary-input
+/// position as X: in a reactive run an input is undriven until a model /
+/// clock / reset / constant drives it, so it starts unknown. `state_prep`
+/// clears the X-mask of each bit it drives every edge, so genuinely-driven
+/// inputs resolve to known while truly-undriven ones stay X. (The matching
+/// cone-analysis flag is `DesignArgs::xprop_undriven_inputs`, which makes
+/// those input cones X-capable so the kernel actually reads the input X-mask.)
+pub fn xprop_xmask_template_cosim(script: &FlattenedScriptV1) -> Vec<u32> {
+    let mut xmask = xprop_xmask_template(script);
+    for (pos, &net) in script.input_layout.iter().enumerate() {
+        if net != usize::MAX {
+            xmask[pos >> 5] |= 1u32 << (pos as u32 & 31);
+        }
+    }
+    xmask
+}
+
 /// The input `value_states` has `(num_cycles + 1)` snapshots of `reg_io_state_size` words.
 /// The output has `(num_cycles + 1)` snapshots of `2 * reg_io_state_size` words:
 /// `[values | xmask]` where X-mask marks genuine X-sources (uninitialised DFF

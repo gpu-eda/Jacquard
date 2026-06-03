@@ -12,8 +12,13 @@ X-propagation, today `sim`-only) to the reactive `cosim` path. Issue:
 > feedback reads, so uninitialised DFFs read as known `0` and X never
 > surfaced even in `sim`. Fixed via `vcd_io::xprop_xmask_template`
 > (X at genuine X-sources only) plus output-slot seeding in `run_cosim`.
-> See the handoff and ADR-0016 amendment. Phases 1, 2, 5 and the seed fix
-> are done; phases 3, 4, 6 remain.
+> See the handoff and ADR-0016 amendment. Phases 1, 2, 5, the seed fix,
+> **phase 3** (undriven inputs → X: `compute_x_capable_pins(treat_inputs_as_x)`
+> gated by `DesignArgs::xprop_undriven_inputs`; `xprop_xmask_template_cosim`
+> seeds inputs X; `state_prep` + `gpu_apply_flash_din` clear the X-mask of
+> each bit they drive) and **phase 6** (end-to-end `tests/xprop_cosim/`
+> guards in CI, sim + cosim) are done. **Phase 4** (observe-kernel
+> output-offset test under `--xprop`) remains.
 
 X-prop is wired into `sim` only. `cosim` always runs **two-state**, so
 uninitialised DFF/SRAM and undriven inputs silently resolve to `0` —

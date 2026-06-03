@@ -360,7 +360,10 @@ jobs:
         run: python3 tests/apb_trace/check.py apb_trace.csv
 
       # End-to-end X-propagation in the reactive cosim path (#95). Same
-      # xprop_demo design and checker as the sim guard above: q_unreset must
+      # xprop_demo design + checker as the sim guard, in `xprop-cosim` mode
+      # which also asserts the undriven-input outputs (phase 3): q_undriven_comb
+      # stays X (pure-comb of an undriven input) and q_undriven_reg becomes X
+      # after reset (reset flop sampling the undriven input). q_unreset must
       # stay X, q_reset must resolve, and two-state (no --xprop) must show no X.
       - name: X-propagation demo — cosim (#95)
         run: |
@@ -370,7 +373,7 @@ jobs:
             --config tests/xprop_cosim/sim_config.json \
             --top-module xprop_demo --max-clock-edges 40 \
             --xprop --output-vcd tests/xprop_cosim/ci_cosim_xprop.vcd
-          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_cosim_xprop.vcd xprop
+          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_cosim_xprop.vcd xprop-cosim
           cargo run --release --features metal --bin jacquard -- cosim \
             tests/xprop_cosim/xprop_demo_synth.gv \
             --config tests/xprop_cosim/sim_config.json \
@@ -470,10 +473,12 @@ jobs:
 
       - name: Verify CUDA X-propagation output
         run: |
+          # FATAL: a missing X means the seed/X-aware path silently regressed.
           if grep -q 'x' tests/timing_test/ci_cuda_xprop_output.vcd; then
             echo "X-propagation VCD contains X values as expected"
           else
-            echo "WARNING: No X values in CUDA xprop output VCD"
+            echo "ERROR: No X values in CUDA xprop output VCD (X-propagation broken)"
+            exit 1
           fi
 
       - name: Upload CUDA artifacts

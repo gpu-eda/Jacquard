@@ -22,12 +22,26 @@ This is the end-to-end guard that was missing when the seed-template bug
 (uninitialised DFF Q read as known 0) shipped: `--xprop` was silently
 two-state for any sequential design and no test noticed. See ADR-0016.
 
+Modes:
+    xprop        sim/cosim with --xprop: q_unreset stays X, q_reset resolves.
+    xprop-cosim  cosim only — also checks the undriven-input outputs (#95
+                 phase 3): q_undriven_comb stays X (pure-comb of an undriven
+                 input) and q_undriven_reg becomes X after reset (reset flop
+                 that samples the undriven input). sim leaves these known
+                 because sim inputs all come from the VCD.
+    two-state    a run WITHOUT --xprop: no X/Z on any present signal.
+
 Usage:
-    check.py <output.vcd> {xprop|two-state}
+    check.py <output.vcd> {xprop|xprop-cosim|two-state}
 """
 import sys
 
-SIGNALS = ("q_unreset", "q_reset")
+# Power-up DFF X-sources, present in both sim and cosim.
+CORE = ("q_unreset", "q_reset")
+# Undriven-input outputs, only meaningful in cosim (#95 phase 3).
+UNDRIVEN = ("q_undriven_comb", "q_undriven_reg")
+SIGNALS = CORE + UNDRIVEN
+MODES = ("xprop", "xprop-cosim", "two-state")
 
 
 def parse_vcd(path):
@@ -76,49 +90,60 @@ def parse_vcd(path):
 
 
 def main() -> int:
-    if len(sys.argv) != 3 or sys.argv[2] not in ("xprop", "two-state"):
-        print(f"usage: {sys.argv[0]} <output.vcd> {{xprop|two-state}}", file=sys.stderr)
+    if len(sys.argv) != 3 or sys.argv[2] not in MODES:
+        print(f"usage: {sys.argv[0]} <output.vcd> {{{'|'.join(MODES)}}}", file=sys.stderr)
         return 2
     path, mode = sys.argv[1], sys.argv[2]
 
     sig = parse_vcd(path)
-    missing = [n for n in SIGNALS if n not in sig]
+    # Which signals this mode requires present. CORE always; undriven only in
+    # the cosim mode (sim has no undriven-input concept).
+    required = CORE + (UNDRIVEN if mode == "xprop-cosim" else ())
+    missing = [n for n in required if n not in sig]
     if missing:
         print(f"FAIL: signals not found in {path}: {missing}", file=sys.stderr)
         return 1
 
-    for name in SIGNALS:
+    for name in (n for n in SIGNALS if n in sig):
         vals = "".join(sorted(sig[name]["values"])) or "(none)"
         print(f"  {name}: values={{{vals}}} last={sig[name]['last']}")
 
     ok = True
 
-    if mode == "xprop":
-        # q_unreset must be X for the whole run and never resolve.
-        uv = sig["q_unreset"]["values"]
-        if uv != {"x"}:
-            ok = False
-            print(
-                f"FAIL: q_unreset should be x for the entire run, saw {sorted(uv)} "
-                "(uninitialised counter — X+1=X must stay X)",
-                file=sys.stderr,
+    def fail(msg):
+        nonlocal ok
+        ok = False
+        print(f"FAIL: {msg}", file=sys.stderr)
+
+    if mode == "two-state":
+        for name in (n for n in SIGNALS if n in sig):
+            bad = sig[name]["values"] & {"x", "z"}
+            if bad:
+                fail(f"{name} has {sorted(bad)} in a two-state run (no --xprop)")
+    else:  # xprop or xprop-cosim
+        # q_unreset: uninitialised counter, X+1=X, must be X for the whole run.
+        if sig["q_unreset"]["values"] != {"x"}:
+            fail(
+                f"q_unreset should be x for the entire run, saw "
+                f"{sorted(sig['q_unreset']['values'])} (X+1=X must stay X)"
             )
-        # q_reset must resolve to a known value by the end.
-        rl = sig["q_reset"]["last"]
-        if rl not in ("0", "1"):
-            ok = False
-            print(
-                f"FAIL: q_reset should resolve to known 0/1 after reset, last={rl}",
-                file=sys.stderr,
-            )
-    else:  # two-state
-        for name in SIGNALS:
-            if "x" in sig[name]["values"] or "z" in sig[name]["values"]:
-                ok = False
-                print(
-                    f"FAIL: {name} has x/z in two-state run (no --xprop): "
-                    f"{sorted(sig[name]['values'])}",
-                    file=sys.stderr,
+        # q_reset: reset flop, must resolve to a known value by the end.
+        if sig["q_reset"]["last"] not in ("0", "1"):
+            fail(f"q_reset should resolve to known 0/1, last={sig['q_reset']['last']}")
+
+        if mode == "xprop-cosim":
+            # Pure-comb function of the undriven input: X for the whole run.
+            if sig["q_undriven_comb"]["values"] != {"x"}:
+                fail(
+                    f"q_undriven_comb should be x for the entire run, saw "
+                    f"{sorted(sig['q_undriven_comb']['values'])} "
+                    "(undriven primary input → X through comb logic)"
+                )
+            # Reset flop sampling the undriven input: known under reset, then X.
+            if sig["q_undriven_reg"]["last"] != "x":
+                fail(
+                    f"q_undriven_reg should become x after reset (samples an "
+                    f"undriven input), last={sig['q_undriven_reg']['last']}"
                 )
 
     if ok:

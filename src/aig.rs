@@ -3308,13 +3308,30 @@ impl AIG {
     /// Returns `(x_capable, stats)` where `x_capable[i]` is true if aigpin `i`
     /// can carry an X value during simulation.
     ///
+    /// When `treat_inputs_as_x_sources` is set, primary input ports are also
+    /// marked as X sources. This is the cosim case (#95 phase 3): a primary
+    /// input the testbench leaves undriven reads X, and its forward cone must
+    /// be X-capable for that X to propagate. It is OFF for the `sim` path,
+    /// where inputs always come from the VCD (known) — so sim pays no extra
+    /// X-aware cost. Clock-flag inputs are never marked (clocks are driven).
+    ///
     /// Algorithm:
-    /// 1. Mark all X sources (DFF Q, SRAM read data)
+    /// 1. Mark all X sources (DFF Q, SRAM read data, optionally input ports)
     /// 2. Forward pass through AND gates (pins are in topological order)
     /// 3. Fixpoint: if any DFF's D-input is X-capable but its Q is not,
     ///    mark Q and re-run forward pass from newly-marked pins.
-    pub fn compute_x_capable_pins(&self) -> (Vec<bool>, XPropStats) {
+    pub fn compute_x_capable_pins(
+        &self,
+        treat_inputs_as_x_sources: bool,
+    ) -> (Vec<bool>, XPropStats) {
         let mut x_capable = self.compute_x_sources();
+        if treat_inputs_as_x_sources {
+            for aigpin in 1..=self.num_aigpins {
+                if let DriverType::InputPort(_) = self.drivers[aigpin] {
+                    x_capable[aigpin] = true;
+                }
+            }
+        }
         let num_x_sources = x_capable.iter().filter(|&&v| v).count();
 
         let mut fixpoint_iterations = 0;
@@ -3393,7 +3410,7 @@ mod xprop_tests {
     #[test]
     fn test_x_capable_no_dffs() {
         let aig = build_comb_only_aig();
-        let (x_capable, stats) = aig.compute_x_capable_pins();
+        let (x_capable, stats) = aig.compute_x_capable_pins(false);
         // No DFFs, no SRAMs → no X sources, no X-capable pins
         assert_eq!(stats.num_x_sources, 0);
         assert_eq!(stats.num_x_capable_pins, 0);
@@ -3422,7 +3439,7 @@ mod xprop_tests {
             },
         );
 
-        let (x_capable, stats) = aig.compute_x_capable_pins();
+        let (x_capable, stats) = aig.compute_x_capable_pins(false);
 
         assert_eq!(stats.num_x_sources, 1); // Just the DFF Q
                                             // Pin 2 (DFF Q) is X source, pin 3 (AND(1,2)) is X-capable,
@@ -3465,7 +3482,7 @@ mod xprop_tests {
             },
         );
 
-        let (x_capable, stats) = aig.compute_x_capable_pins();
+        let (x_capable, stats) = aig.compute_x_capable_pins(false);
 
         // Both DFFs are initially X sources, their forward cones too
         assert!(x_capable[2]); // DFF0 Q
@@ -3512,7 +3529,7 @@ mod xprop_tests {
             },
         );
 
-        let (x_capable, stats) = aig.compute_x_capable_pins();
+        let (x_capable, stats) = aig.compute_x_capable_pins(false);
         assert!(x_capable[2]); // DFF0 Q — X source
         assert!(x_capable[3]); // AND(2,1) — X via DFF0
         assert!(x_capable[4]); // DFF1 Q — X source
@@ -3555,7 +3572,7 @@ mod xprop_tests {
             );
         }
 
-        let (x_capable, stats) = aig.compute_x_capable_pins();
+        let (x_capable, stats) = aig.compute_x_capable_pins(false);
         assert_eq!(stats.num_x_sources, 32);
         assert_eq!(stats.num_x_capable_pins, 32);
         // Verify forward propagation through AND gate
@@ -3921,7 +3938,7 @@ data_out     = \"Q\"
         }
         // No panic / assert from the unused-slot zeros.
 
-        let (_x_capable, stats) = aig.compute_x_capable_pins();
+        let (_x_capable, stats) = aig.compute_x_capable_pins(false);
         assert_eq!(stats.num_x_sources, 8);
     }
 
@@ -3938,7 +3955,7 @@ data_out     = \"Q\"
             .expect("cannot build netlist");
         let aig = AIG::from_netlistdb(&netlistdb);
 
-        let (x_capable, stats) = aig.compute_x_capable_pins();
+        let (x_capable, stats) = aig.compute_x_capable_pins(false);
 
         // inv_chain has 2 DFFs, so at least 2 X sources
         assert!(

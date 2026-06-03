@@ -671,6 +671,7 @@ struct StatePrepParams {
     u32 num_ops;       // number of bit set/clear operations
     u32 num_monitors;  // number of peripheral monitors to check (0 = skip)
     u32 tick_number;   // current tick number (written to control block on callback)
+    u32 xmask_state_offset; // X-mask word offset in a slot (0 = xprop off)
 };
 
 // ── state_prep: copy output→input and apply bit ops ──────────────────────
@@ -694,6 +695,7 @@ kernel void state_prep(
 
     // Step 2: Apply bit operations to input state (only thread 0)
     if (tid == 0) {
+        u32 xmask_off = params.xmask_state_offset;
         for (uint i = 0; i < params.num_ops; i++) {
             u32 pos = ops[i].position;
             u32 word_idx = pos >> 5;
@@ -702,6 +704,11 @@ kernel void state_prep(
                 states[word_idx] |= bit_mask;
             } else {
                 states[word_idx] &= ~bit_mask;
+            }
+            // Driving a bit makes it known: clear its X-mask (#95 phase 3).
+            // Undriven inputs receive no op, so their seeded X persists.
+            if (xmask_off != 0u) {
+                states[xmask_off + word_idx] &= ~bit_mask;
             }
         }
     }
@@ -751,6 +758,7 @@ struct FlashState {
 struct FlashDinParams {
     u32 d_in_pos[4];     // input state bit positions for d0..d3
     u32 has_flash;       // 0 = skip
+    u32 xmask_state_offset; // X-mask word offset (0 = xprop off)
 };
 
 struct FlashModelParams {
@@ -902,6 +910,7 @@ kernel void gpu_apply_flash_din(
     if (tid != 0 || params.has_flash == 0) return;
 
     uchar d_i = flash_state->d_i;
+    u32 xmask_off = params.xmask_state_offset;
 
     for (uint i = 0; i < 4; i++) {
         u32 pos = params.d_in_pos[i];
@@ -912,6 +921,11 @@ kernel void gpu_apply_flash_din(
             states[word_idx] |= bit_mask;
         } else {
             states[word_idx] &= ~bit_mask;
+        }
+        // These MISO bits are driven (known) here, bypassing state_prep's edge
+        // ops — clear their X-mask so they don't stay X-seeded (#95 phase 3).
+        if (xmask_off != 0u) {
+            states[xmask_off + word_idx] &= ~bit_mask;
         }
     }
 }

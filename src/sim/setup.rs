@@ -33,6 +33,12 @@ pub struct DesignArgs {
     pub clock_period_ps: Option<u64>,
     /// Enable selective X-propagation.
     pub xprop: bool,
+    /// Treat undriven primary inputs as X sources (#95 phase 3). Set by the
+    /// reactive `cosim` path, where a primary input the testbench leaves
+    /// undriven reads X; its forward cone must be X-capable for that X to
+    /// propagate. OFF for `sim` (inputs always come from the VCD = known), so
+    /// the static path pays no extra X-aware cost. Only meaningful with `xprop`.
+    pub xprop_undriven_inputs: bool,
     /// Path to Liberty library file for timing data (pre-layout, no SDF needed).
     pub liberty: Option<PathBuf>,
     /// Path to a Jacquard timing-IR (.jtir) file. Mutually exclusive with `sdf`.
@@ -245,7 +251,7 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
     let parts_refs: Vec<_> = parts_in_stages.iter().map(|ps| ps.as_slice()).collect();
 
     let mut script = if args.xprop {
-        let (x_capable, stats) = aig.compute_x_capable_pins();
+        let (x_capable, stats) = aig.compute_x_capable_pins(args.xprop_undriven_inputs);
         clilog::info!(
             "X-propagation: {}/{} pins ({:.1}%) X-capable, {} fixpoint iterations",
             stats.num_x_capable_pins,

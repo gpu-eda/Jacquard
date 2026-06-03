@@ -112,3 +112,18 @@ path additionally seeds the *output* slot's X-mask, since its per-edge
 corrects design choice #3 above ("all DFFs start as X"): the *intent* was
 always X at DFF positions; the implementation had inverted it for
 DFF-feedback reads.
+
+### Undriven input X-source (cosim, implemented 2026-06-03)
+
+The "undriven input pad → X" rule from this amendment is now implemented
+for `cosim`. `compute_x_capable_pins(treat_inputs_as_x_sources)` (gated by
+`DesignArgs::xprop_undriven_inputs`, set only by the cosim path) marks
+input cones X-capable; `vcd_io::xprop_xmask_template_cosim` seeds every
+primary input as X; and the GPU kernels clear the X-mask of each bit they
+drive each edge — `state_prep` for the `build_edge_ops` driven set
+(clock/reset/constants/model pins) and `gpu_apply_flash_din` for the SPI
+MISO bits it writes directly (they bypass `state_prep`). The complement —
+genuinely undriven inputs — stays X. `sim` keeps inputs known (driven from
+the VCD) and pays no extra X-aware cost. End-to-end guards covering the
+DFF and undriven-input X-sources, in both sim and cosim, live in
+`tests/xprop_cosim/` (CI, fatal).
