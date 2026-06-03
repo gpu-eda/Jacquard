@@ -87,6 +87,10 @@ the authoritative record.
   binary now embeds its kernel library so a downloaded binary is
   relocatable, and `cargo binstall` metadata is in place. GitHub
   Releases + a Homebrew tap (macOS/Metal) follow.
+- **`netlist-graph drivers --data-only`** (#100): on sequential cells,
+  follow the data (`D`) pin only and skip clock/set/reset/enable pins,
+  so tracing a register stays on the data path instead of diving into
+  the clock and reset distribution trees.
 
 ### Changed
 
@@ -120,6 +124,17 @@ the authoritative record.
   `--stimulus-vcd`), and the stale "forces single-tick mode" help text
   removed (VCD capture uses a GPU ring buffer, preserving batched
   dispatch).
+- `netlist-graph cone` no longer stops at driven internal nets and
+  mislabels them `[primary input]` (#99). Inverting/tie output pins
+  (`ZN`, `LO`, `HI`, `QN`, `CO`, …) were misclassified as cell *inputs*,
+  so their output nets had no driver edge and looked undriven. The cone
+  now follows them, and a genuinely undriven internal net is flagged
+  `[undriven — X-source]` distinctly from a real top-level port; constant
+  tie-cell outputs (sky130 `conb_1`) are labeled `[constant: …]`.
+- `netlist-graph` register detection (`_is_register`) now recognises
+  reset/set/scan flop variants (sky130 `dfrtp`/`dfstp`/`dfbbn`/`sdf*`,
+  gf180 `dffrnq`/`latrnq`), not just the plain DFF, by matching the
+  functional cell name after the library prefix.
 
 ### Deprecated / Removed
 

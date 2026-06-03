@@ -33,7 +33,14 @@ def main(ctx, verbose):
 @click.argument("netlist", type=click.Path(exists=True, path_type=Path))
 @click.argument("net", type=str)
 @click.option("-d", "--depth", default=10, help="Maximum trace depth")
-def drivers(netlist: Path, net: str, depth: int):
+@click.option(
+    "--data-only",
+    is_flag=True,
+    help="On sequential cells, follow the data (D) pin only — skip "
+    "clock/set/reset/enable pins so the clock and reset trees don't "
+    "swamp the data path.",
+)
+def drivers(netlist: Path, net: str, depth: int, data_only: bool):
     """Trace backwards to find drivers of a net."""
     graph = NetlistGraph.from_file(netlist)
     click.echo(f"Loaded {graph.num_nodes} nodes, {graph.num_edges} edges")
@@ -52,8 +59,10 @@ def drivers(netlist: Path, net: str, depth: int):
 
     target = matches[0]
     click.echo(f"\nTracing drivers of: {target}")
+    if data_only:
+        click.echo("(data path only — skipping clock/set/reset/enable pins)")
 
-    trace = graph.trace_back(target, max_depth=depth)
+    trace = graph.trace_back(target, max_depth=depth, data_only=data_only)
     for d, n, driver in trace:
         indent = "  " * d
         if driver:
@@ -298,6 +307,12 @@ def cone(netlist: Path, signal: str, depth: int, through_regs: bool):
 
         if cell_type == "(primary)":
             click.echo(f"{indent}{short_net}  [primary input]")
+        elif cell_type == "(const)":
+            ct = graph.driver_cell_type(net)
+            label = graph._short_cell_type(ct) if ct else "const"
+            click.echo(f"{indent}{short_net}  [constant: {label}]")
+        elif cell_type == "(undriven)":
+            click.echo(f"{indent}{short_net}  [undriven — X-source]")
         elif cell_type == "(reg-output)":
             click.echo(f"{indent}{short_net}  [REG output]")
         else:
