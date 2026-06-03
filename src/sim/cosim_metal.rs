@@ -1624,7 +1624,7 @@ fn write_bus_trace_csv(
     use crate::testbench::BusProtocol;
     use std::io::Write;
 
-    ensure_parent_dir(path)?;
+    crate::sim::vcd_io::ensure_parent_dir(path)?;
     let f = std::fs::File::create(path)?;
     let mut w = std::io::BufWriter::new(f);
     writeln!(w, "tick,bus,protocol,dir,addr,data,resp,burst")?;
@@ -1894,19 +1894,6 @@ impl MultiClockScheduler {
 
         ops
     }
-}
-
-/// Create the parent directory of an output path if it has one.
-///
-/// Cosim output files (VCD, bus-trace CSV, UART events) may be configured to
-/// land in a scratch dir like `target/test-out/`; create it so the writers
-/// don't fail. No-op for bare filenames (empty parent).
-fn ensure_parent_dir(path: &std::path::Path) -> std::io::Result<()> {
-    // `parent()` is `Some("")` for a bare filename — skip those (nothing to create).
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent)?;
-    }
-    Ok(())
 }
 
 /// Create a Metal buffer containing a StatePrepParams struct.
@@ -3389,7 +3376,7 @@ pub fn run_cosim(
         crate::sim::vcd_io::StimulusVCDMapping,
         Vec<u8>, // prev_values for change detection
     )> = if let Some(ref stim_path) = opts.stimulus_vcd {
-        ensure_parent_dir(stim_path).unwrap_or_else(|e| {
+        crate::sim::vcd_io::ensure_parent_dir(stim_path).unwrap_or_else(|e| {
             panic!("Failed to create stimulus VCD dir for {}: {}", stim_path.display(), e)
         });
         let file = std::fs::File::create(stim_path).unwrap_or_else(|e| {
@@ -3431,7 +3418,7 @@ pub fn run_cosim(
         crate::sim::vcd_io::OutputVCDMapping,
         Vec<u32>, // prev_values for change detection (0=V0, 1=V1, 2=initial)
     )> = if let Some(ref output_path) = opts.output_vcd {
-        ensure_parent_dir(output_path).unwrap_or_else(|e| {
+        crate::sim::vcd_io::ensure_parent_dir(output_path).unwrap_or_else(|e| {
             panic!("Failed to create output VCD dir for {}: {}", output_path.display(), e)
         });
         let file = std::fs::File::create(output_path).unwrap_or_else(|e| {
@@ -3497,7 +3484,7 @@ pub fn run_cosim(
         usize, // max cycles to dump
     )> = if let Some(ref dump_path) = opts.dump_dff {
         use std::io::Write;
-        ensure_parent_dir(dump_path)
+        crate::sim::vcd_io::ensure_parent_dir(dump_path)
             .unwrap_or_else(|e| panic!("Failed to create DFF dump dir for {}: {}", dump_path.display(), e));
         let file = std::fs::File::create(dump_path)
             .unwrap_or_else(|e| panic!("Failed to create DFF dump {}: {}", dump_path.display(), e));
@@ -4925,7 +4912,7 @@ pub fn run_cosim(
             events: uart_events.clone(),
         };
         let json = serde_json::to_string_pretty(&output).expect("Failed to serialize events");
-        ensure_parent_dir(std::path::Path::new(output_path))
+        crate::sim::vcd_io::ensure_parent_dir(std::path::Path::new(output_path))
             .expect("Failed to create events output dir");
         let mut file = std::fs::File::create(output_path).expect("Failed to create events file");
         use std::io::Write;

@@ -509,6 +509,19 @@ pub fn xprop_xmask_template_cosim(script: &FlattenedScriptV1) -> Vec<u32> {
     xmask
 }
 
+/// Create the parent directory of an output path if it has one.
+///
+/// `sim`/`cosim` output files (VCD, bus-trace CSV, UART events) may be
+/// configured to land in a scratch dir like `target/test-out/`; create it so
+/// the writers don't fail. No-op for bare filenames (empty parent).
+pub fn ensure_parent_dir(path: &std::path::Path) -> std::io::Result<()> {
+    // `parent()` is `Some("")` for a bare filename — skip those (nothing to create).
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
+
 /// The input `value_states` has `(num_cycles + 1)` snapshots of `reg_io_state_size` words.
 /// The output has `(num_cycles + 1)` snapshots of `2 * reg_io_state_size` words:
 /// `[values | xmask]` where X-mask marks genuine X-sources (uninitialised DFF
