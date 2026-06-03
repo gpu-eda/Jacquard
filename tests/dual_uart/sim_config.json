@@ -19,7 +19,7 @@
             "baud_rate": 115200
         }
     ],
-    "output_events": "dual_uart_events.json",
+    "output_events": "target/test-out/dual_uart_events.json",
     "port_mapping": {
         "inputs": {
             "0": "clk",

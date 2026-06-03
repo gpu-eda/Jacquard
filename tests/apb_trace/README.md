@@ -35,10 +35,10 @@ cargo run -r --features metal --bin jacquard -- cosim \
     --config tests/apb_trace/sim_config.json \
     --top-module apb_trace \
     --max-clock-edges 200 \
-    --bus-trace-csv apb_trace.csv
+    --bus-trace-csv target/test-out/apb_trace.csv
 
 # Pass criterion: the four transactions above, by content
-python3 tests/apb_trace/check.py apb_trace.csv
+python3 tests/apb_trace/check.py target/test-out/apb_trace.csv
 ```
 
 The CI step `Run APB3 bus-trace cosim (ADR 0013)` runs exactly this.
