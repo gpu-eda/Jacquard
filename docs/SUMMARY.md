@@ -48,4 +48,5 @@
   - [Bus transaction tracing](plans/bus-transaction-tracing.md)
   - [CDC jitter completion](plans/cdc-jitter-completion.md)
   - [Distribution & easy install](plans/distribution.md)
+  - [Selective X-propagation in cosim](plans/cosim-xprop.md)
 - [Spike — OpenTimer on SKY130](spikes/opentimer-sky130.md)

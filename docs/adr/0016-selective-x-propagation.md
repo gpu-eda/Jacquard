@@ -1,6 +1,7 @@
 # ADR 0016 — Selective X-propagation
 
-**Status:** Accepted
+**Status:** Accepted (2026-05). Extension to cosim proposed 2026-06-03 —
+see [Amendment](#amendment-2026-06-03-cosim-and-io-x-sources).
 
 ## Context
 
@@ -53,3 +54,35 @@ future enhancement.
 - The `--check-with-cpu` reference path includes an X-aware CPU
   kernel for validation.
 - Benchmarks (`benches/xprop.rs`) track the overhead.
+
+## Amendment 2026-06-03: cosim and IO X-sources
+
+The original decision wired `--xprop` into the `sim` (static-input)
+path only. The reactive `cosim` path is two-state, so JTAG-replay /
+peripheral runs silently zero-init uninitialised state
+([#95](https://github.com/gpu-eda/Jacquard/issues/95)). This amendment
+extends selective X-propagation to `cosim`.
+
+Two points the original design did not address, because the static
+`sim` path never had to:
+
+1. **Undriven input pads are X.** In a reactive run, peripheral models
+   drive only *some* input bits each edge (clock, reset, JTAG/UART
+   pins, configured constants). Every primary-input bit *not* in that
+   driven set is unconnected and must be **X**, not `0`.
+2. **Bidir pad input side is X when OE is deasserted.** A `bi_24t`
+   pad's core-read (input) side is unknown whenever its output-enable
+   (`OE`, surfaced as the `__oe` observable) is off and nothing external
+   drives it. The input-side X-mask is refreshed per edge from `OE`.
+
+So the X-source taxonomy is now four-way: uninitialised DFF,
+uninitialised SRAM (both as before), **undriven input pads**, and
+**bidir input-when-OE-off**. The first two are sequential power-up X;
+the latter two are reactive IO X-sources specific to cosim.
+
+The Metal kernel is already X-capable, so this is host-side reactive
+plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
+observe-kernel output-offset fix for the doubled layout). Phasing and
+risks are in [`../plans/cosim-xprop.md`](../plans/cosim-xprop.md). This
+amendment is **proposed**, not yet implemented; the original
+Decision/Consequences above describe the shipped `sim`-path behaviour.
