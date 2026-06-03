@@ -201,27 +201,35 @@ within the primary inputs is X.</p>
 <code>cmd_cosim</code>'s <code>DesignArgs</code>. (<code>setup</code> already turns it into
 <code>script.xprop_enabled</code>.)</li>
 </ul>
-<h3 id="phase-2--x-state-in-the-cosim-loop"><a class="header" href="#phase-2--x-state-in-the-cosim-loop">Phase 2 — X-state in the cosim loop</a></h3>
+<h3 id="phase-2--x-state-in-the-cosim-loop---done-1ba01eb"><a class="header" href="#phase-2--x-state-in-the-cosim-loop---done-1ba01eb">Phase 2 — X-state in the cosim loop  ✅ done (1ba01eb)</a></h3>
 <ul>
-<li>Expand the cosim state buffer with <code>expand_states_for_xprop</code> and
-allocate the <code>sram_xmask</code> shadow (init <code>0xFFFF_FFFF</code>), carried across
-the per-tick loop.</li>
-<li>Pass both into the simulate dispatch (<code>encode_dispatch</code> /
-<code>simulate_v1_stage</code> already accept <code>sram_xmask</code> + the xmask offset).</li>
-<li>Set the kernel's <code>xmask_state_offset</code> metadata for the cosim layout.</li>
+<li>Expanded the cosim state buffer via <code>expand_states_for_xprop</code> and
+allocated the <code>sram_xmask</code> shadow (init <code>0xFFFF_FFFF</code>), bound at
+<code>simulate_v1_stage</code> buffer(7) through the dispatch chain.</li>
+<li>No <code>write_params</code> change needed: <code>is_x_capable</code> / <code>xmask_state_offset</code>
+are baked into the <em>script</em> at flatten time and <code>state_size</code> already
+uses <code>effective_state_size</code> (so the layout scales automatically).</li>
 </ul>
 <h3 id="phase-3--input-x-mask-policy--per-edge-maintenance-the-novel-part"><a class="header" href="#phase-3--input-x-mask-policy--per-edge-maintenance-the-novel-part">Phase 3 — Input X-mask policy + per-edge maintenance (the novel part)</a></h3>
 <ul>
 <li><strong>Init:</strong> every primary-input X-mask bit = X, except the driven set
-(clock/reset/model/constants), which start known.</li>
+(clock/reset/model/constants), which start known. The
+<code>expand_states_for_xprop</code> template clears <em>all</em> inputs to known, so
+Phase 3 re-marks the <em>undriven</em> inputs back to X.</li>
 <li><strong>Per edge:</strong> wherever <code>state_prep</code> / model <code>ModelOverrides</code> drive an
 input bit, also clear that bit's X-mask (driven ⇒ known). Undriven
 bits stay X.</li>
-<li><strong>Bidir:</strong> after each tick, read each <code>bi_24t</code> pad's <code>OE</code> (the <code>__oe</code>
-observable already surfaced by the AIG postprocess) and set the pad's
-input-side X-mask = <code>OE ? known : X</code> for the next edge. This OE→input
-feedback is the trickiest sub-item; isolate it behind a small
-per-edge "bidir X refresh" step.</li>
+<li><strong>Bidir: no special handling in this issue.</strong> A <code>bi_24t</code> pad's
+core-read is modelled <code>Y = PAD</code> (tristate not modelled — <code>aig.rs</code>),
+and the PAD net is an undriven primary input, so bidir reads fall out
+of the generic undriven-input rule above as <strong>X</strong> — conservative and
+safe (an unmodelled bidir read surfaces as unknown, never a false
+0/1). The earlier "per-edge OE→input feedback with one-edge latency"
+idea was <strong>wrong</strong>: the correct read is combinational
+<code>Y = OE ? A : external</code>, which requires modelling the tristate mux in
+the AIG. That is deferred to
+<a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>; until it lands,
+an <code>OE=1</code> loopback reads pessimistic-X (safe).</li>
 </ul>
 <h3 id="phase-4--observe-kernel-offset-fix-intersects-recent-work"><a class="header" href="#phase-4--observe-kernel-offset-fix-intersects-recent-work">Phase 4 — Observe-kernel offset fix (intersects recent work)</a></h3>
 <ul>
@@ -240,19 +248,18 @@ nets and top-level IO emit <code>x</code> (not <code>0</code>) where unknown; th
 </ul>
 <h3 id="phase-6--verification"><a class="header" href="#phase-6--verification">Phase 6 — Verification</a></h3>
 <ul>
-<li>A small reactive test design with (a) an unreset register, (b) an
-unconnected input pad, (c) a bidir pad toggling OE — assert the output
-VCD shows <code>x</code> until each is resolved (clocked write / model drive / OE
-assert), and <code>0</code>/<code>1</code> after. Pairs with the JTAG-replay path.</li>
+<li>A small reactive test design with (a) an unreset register and (b) an
+unconnected input pad — assert the output VCD shows <code>x</code> until each is
+resolved (clocked write / model drive), <code>0</code>/<code>1</code> after. (Bidir
+read-back correctness is deferred to #96.)</li>
 <li>Where feasible, extend the CPU <code>sanity_check_cpu_xprop</code> parity to a
 cosim scenario.</li>
 </ul>
 <h2 id="risks--open-questions"><a class="header" href="#risks--open-questions">Risks / open questions</a></h2>
 <ul>
-<li><strong>Bidir OE feedback</strong> (Phase 3): OE is combinational within a tick;
-the input-side X for edge <em>N+1</em> depends on OE computed at edge <em>N</em>.
-Confirm this one-edge latency is acceptable (it matches how a real
-pad's direction settles) or whether intra-tick resolution is needed.</li>
+<li><strong>Bidir read-back is pessimistic-X</strong> until <a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>
+models the tristate mux (<code>Y = OE ? A : external</code>). Safe (false-X, not
+false-0); resolve by driving the pad's external side with a model.</li>
 <li><strong>Observe-offset regression</strong> (Phase 4): the highest-risk interaction;
 the bus-trace code is days old. Needs an explicit test under <code>--xprop</code>.</li>
 <li><strong>Performance:</strong> the state buffer doubles again on top of any timing

@@ -217,15 +217,21 @@ extends selective X-propagation to <code>cosim</code>.</p>
 drive only <em>some</em> input bits each edge (clock, reset, JTAG/UART
 pins, configured constants). Every primary-input bit <em>not</em> in that
 driven set is unconnected and must be <strong>X</strong>, not <code>0</code>.</li>
-<li><strong>Bidir pad input side is X when OE is deasserted.</strong> A <code>bi_24t</code>
-pad's core-read (input) side is unknown whenever its output-enable
-(<code>OE</code>, surfaced as the <code>__oe</code> observable) is off and nothing external
-drives it. The input-side X-mask is refreshed per edge from <code>OE</code>.</li>
+<li><strong>Bidir pad reads are conservatively X.</strong> A <code>bi_24t</code> pad's core-read
+is modelled <code>Y = PAD</code> (tristate not modelled), and <code>PAD</code> is an
+undriven primary input — so bidir reads fall out of rule (1) as X,
+which is the safe answer (false-X, never false-0). The
+combinationally-correct read <code>Y = OE ? A : external</code> requires
+modelling the tristate mux in the AIG; that is deferred to
+<a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>. (An earlier
+draft of this amendment proposed a per-edge OE→input feedback with
+one-edge latency — that was wrong; the correct read is combinational.)</li>
 </ol>
-<p>So the X-source taxonomy is now four-way: uninitialised DFF,
-uninitialised SRAM (both as before), <strong>undriven input pads</strong>, and
-<strong>bidir input-when-OE-off</strong>. The first two are sequential power-up X;
-the latter two are reactive IO X-sources specific to cosim.</p>
+<p>So the X-source taxonomy is now three-way: uninitialised DFF,
+uninitialised SRAM (both as before), and <strong>undriven input pads</strong> (which
+subsumes bidir reads under the current <code>Y = PAD</code> model). The first two
+are sequential power-up X; the third is the reactive IO X-source
+specific to cosim.</p>
 <p>The Metal kernel is already X-capable, so this is host-side reactive
 plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
 observe-kernel output-offset fix for the doubled layout). Phasing and
