@@ -93,10 +93,13 @@ The *sim* `--check-with-cpu` xprop path IS X-aware and passes.)
   read drowns in X. Bidir reads fall out as X (safe); the correct
   `Y = OE ? A : external` is **#96**. Verified: demo `q_undriven_reg`/`comb`
   read X under cosim `--xprop`; mcu_soc boots (flash `0x03` read decoded).
-- **Phase 4** — believed safe (value-at-front of each slot, so observe
-  kernels' `states[state_size + pos]` reads hit the value half). Add a
-  `--xprop` test that confirms the bus-trace/UART output is still correct.
-  **Still open** — the only remaining phase.
+- **Phase 4 — DONE.** Confirmed safe by construction: `gpu_io_step` reads
+  `states[uart_params.state_size + word]` with `state_size =
+  effective_state_size`, so observe reads (UART/Wishbone/bus-trace) hit the
+  value half (value-at-front of each slot). No code change needed. Guard:
+  CI re-runs the APB3 + dual-UART cosims under `--xprop` and asserts the
+  decoded output matches the two-state runs (verified byte-identical
+  locally). **All #95 phases are now complete.**
 - **Phase 6 — DONE.** `tests/xprop_cosim/` is an end-to-end guard for both
   sim and cosim: `check.py` (modes `xprop` / `xprop-cosim` / `two-state`)
   asserts `q_unreset==x`, `q_reset` resolves, and the phase-3 undriven

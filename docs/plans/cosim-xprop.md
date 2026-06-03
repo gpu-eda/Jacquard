@@ -16,16 +16,20 @@ X-propagation, today `sim`-only) to the reactive `cosim` path. Issue:
 > **phase 3** (undriven inputs → X: `compute_x_capable_pins(treat_inputs_as_x)`
 > gated by `DesignArgs::xprop_undriven_inputs`; `xprop_xmask_template_cosim`
 > seeds inputs X; `state_prep` + `gpu_apply_flash_din` clear the X-mask of
-> each bit they drive) and **phase 6** (end-to-end `tests/xprop_cosim/`
-> guards in CI, sim + cosim) are done. **Phase 4** (observe-kernel
-> output-offset test under `--xprop`) remains.
+> each bit they drive), **phase 6** (end-to-end `tests/xprop_cosim/`
+> guards in CI, sim + cosim) and **phase 4** (observe-kernel output-offset:
+> correct by construction — `gpu_io_step` reads the value half via
+> `uart_params.state_size = effective_state_size`; guarded by re-running the
+> APB3 + dual-UART cosims under `--xprop` and asserting identical decoded
+> output) are done. **All phases of #95 are complete**; the bidir
+> tristate-mux read `Y = OE ? A : external` is separately tracked as #96.
 
-X-prop is wired into `sim` only. `cosim` always runs **two-state**, so
-uninitialised DFF/SRAM and undriven inputs silently resolve to `0` —
-producing false agreement against 4-state RTL and masking init-order
-bugs (the exact failure `--xprop` exists to surface).
+`--xprop` is now wired into **both** `sim` and `cosim`. (Historically it
+was `sim`-only and `cosim` always ran two-state, silently resolving
+uninitialised DFF/SRAM and undriven inputs to `0` — false agreement
+against 4-state RTL; that gap is what this plan closed.)
 
-What already exists and is reusable:
+What the work built on (already existed and was reused):
 
 - The **Metal `simulate_v1_stage` kernel is already X-capable**
   (`sram_xmask` buffer, `xmask_state_offset`, the X-mask read logic in
@@ -95,14 +99,20 @@ within the primary inputs is X.
   [#96](https://github.com/gpu-eda/Jacquard/issues/96); until it lands,
   an `OE=1` loopback reads pessimistic-X (safe).
 
-### Phase 4 — Observe-kernel offset fix (intersects recent work)
-- `gpu_io_step`'s output reads (`READ_OUT_BIT` → `states[state_size +
-  …]`) for UART, Wishbone, **and the new bus-trace** assume the
-  two-state layout. Under xprop the slot doubles `[value | xmask]`, so
-  the output-**value** offset shifts. Thread the correct output-value
-  offset (from the script's xprop metadata) into `gpu_io_step` and the
-  Rust drain/`READ_OUT_BIT` so the observe kernels read the value half,
-  not the X-mask half. Add a guard/test so this can't silently regress.
+### Phase 4 — Observe-kernel offset (DONE — correct by construction)
+- `gpu_io_step`'s output reads (`READ_OUT_BIT` → `states[state_size + …]`)
+  for UART, Wishbone, and bus-trace turned out to be **already correct**
+  under xprop: `state_size` here is `uart_params.state_size`, set to the
+  full `effective_state_size`, so `states[state_size + word]` indexes the
+  output slot and `word < reg_io_state_size` lands in the value half (value
+  is at the front of `[value | xmask | …]`). The earlier worry that "the
+  offset shifts" was unfounded — no Rust/kernel change was needed.
+- **Guard added** so it can't silently regress: CI re-runs the APB3
+  bus-trace and dual-UART cosims under `--xprop` and asserts the decoded
+  transactions/bytes are identical to the two-state runs (both designs are
+  fully reset-driven, so phase-3 undriven-input X never reaches the traced
+  signals). If a future layout change made the observe reads hit the xmask
+  half, the decoded values would corrupt and the checkers would fail.
 
 ### Phase 5 — X-aware VCD output
 - cosim emit path uses a `write_output_vcd_xprop`-equivalent so traced

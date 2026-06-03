@@ -381,6 +381,28 @@ jobs:
             --output-vcd tests/xprop_cosim/ci_cosim_2state.vcd
           python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_cosim_2state.vcd two-state
 
+      # Observe-kernel offset guard (#95 phase 4). The UART/Wishbone/bus-trace
+      # observe reads (gpu_io_step READ_OUT_BIT) index the output slot's VALUE
+      # half; under --xprop the slot doubles to [value|xmask], so reading the
+      # wrong half would corrupt decoded transactions. Re-run the APB3 and
+      # dual-UART cosims under --xprop and assert the SAME decoded output as
+      # the two-state runs above (both designs are fully reset-driven, so
+      # phase-3 undriven-input X never reaches the traced signals).
+      - name: Observe kernels under --xprop (#95)
+        run: |
+          set -e
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/apb_trace/apb_trace_synth.gv \
+            --config tests/apb_trace/sim_config.json \
+            --top-module apb_trace --max-clock-edges 200 \
+            --xprop --bus-trace-csv apb_trace_xprop.csv
+          python3 tests/apb_trace/check.py apb_trace_xprop.csv
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/dual_uart/dual_uart_synth.gv \
+            --config tests/dual_uart/sim_config.json \
+            --top-module dual_uart_top --max-clock-edges 10000 --xprop
+          python3 tests/dual_uart/check_pass.py dual_uart_events.json
+
       - name: Upload VCD artifacts
         uses: actions/upload-artifact@v4
         if: always()
@@ -395,6 +417,7 @@ jobs:
             dual_uart_events.json
             apb_trace_cosim.txt
             apb_trace.csv
+            apb_trace_xprop.csv
             tests/xprop_cosim/ci_sim_xprop.vcd
             tests/xprop_cosim/ci_sim_2state.vcd
             tests/xprop_cosim/ci_cosim_xprop.vcd
