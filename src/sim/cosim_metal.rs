@@ -2571,11 +2571,18 @@ pub fn run_cosim(
     // sim-path template. See docs/plans/cosim-xprop.md.
     if script.xprop_enabled {
         let rio = script.reg_io_state_size as usize;
-        let value_only = vec![0u32; rio];
-        let xpanded = crate::sim::vcd_io::expand_states_for_xprop(&value_only, script);
-        states[0..xpanded.len()].copy_from_slice(&xpanded);
+        let xmask = crate::sim::vcd_io::xprop_xmask_template(script);
+        // Seed the X-mask half of BOTH slots. The reactive loop's first GPU op
+        // every edge is `state_prep`, which copies output slot → input slot
+        // (kernel_v1.metal); the output slot is therefore the initial condition
+        // the first `simulate` reads. Seeding only the input slot lets edge-0
+        // state_prep copy the all-zero output xmask over the seed, wiping
+        // uninitialised-DFF X before it can propagate (the #95 "X never
+        // surfaces" bug). The value halves stay zero (states.fill(0) above).
+        states[rio..2 * rio].copy_from_slice(&xmask);
+        states[state_size + rio..state_size + 2 * rio].copy_from_slice(&xmask);
         clilog::info!(
-            "cosim X-propagation enabled: {} reg/io words, X-mask seeded for uninitialised state",
+            "cosim X-propagation enabled: {} reg/io words, X-mask seeded (both slots) for uninitialised state",
             rio
         );
     }
