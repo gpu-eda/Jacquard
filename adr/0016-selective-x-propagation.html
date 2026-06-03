@@ -156,7 +156,8 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0016--selective-x-propagation"><a class="header" href="#adr-0016--selective-x-propagation">ADR 0016 — Selective X-propagation</a></h1>
-<p><strong>Status:</strong> Accepted</p>
+<p><strong>Status:</strong> Accepted (2026-05). Extension to cosim proposed 2026-06-03 —
+see <a href="#amendment-2026-06-03-cosim-and-io-x-sources">Amendment</a>.</p>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Jacquard's default two-state (0/1) simulation silently resolves
 uninitialised DFF and SRAM outputs to zero. This masks
@@ -203,6 +204,34 @@ compatible with standard four-state VCD tools.</li>
 kernel for validation.</li>
 <li>Benchmarks (<code>benches/xprop.rs</code>) track the overhead.</li>
 </ul>
+<h2 id="amendment-2026-06-03-cosim-and-io-x-sources"><a class="header" href="#amendment-2026-06-03-cosim-and-io-x-sources">Amendment 2026-06-03: cosim and IO X-sources</a></h2>
+<p>The original decision wired <code>--xprop</code> into the <code>sim</code> (static-input)
+path only. The reactive <code>cosim</code> path is two-state, so JTAG-replay /
+peripheral runs silently zero-init uninitialised state
+(<a href="https://github.com/gpu-eda/Jacquard/issues/95">#95</a>). This amendment
+extends selective X-propagation to <code>cosim</code>.</p>
+<p>Two points the original design did not address, because the static
+<code>sim</code> path never had to:</p>
+<ol>
+<li><strong>Undriven input pads are X.</strong> In a reactive run, peripheral models
+drive only <em>some</em> input bits each edge (clock, reset, JTAG/UART
+pins, configured constants). Every primary-input bit <em>not</em> in that
+driven set is unconnected and must be <strong>X</strong>, not <code>0</code>.</li>
+<li><strong>Bidir pad input side is X when OE is deasserted.</strong> A <code>bi_24t</code>
+pad's core-read (input) side is unknown whenever its output-enable
+(<code>OE</code>, surfaced as the <code>__oe</code> observable) is off and nothing external
+drives it. The input-side X-mask is refreshed per edge from <code>OE</code>.</li>
+</ol>
+<p>So the X-source taxonomy is now four-way: uninitialised DFF,
+uninitialised SRAM (both as before), <strong>undriven input pads</strong>, and
+<strong>bidir input-when-OE-off</strong>. The first two are sequential power-up X;
+the latter two are reactive IO X-sources specific to cosim.</p>
+<p>The Metal kernel is already X-capable, so this is host-side reactive
+plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
+observe-kernel output-offset fix for the doubled layout). Phasing and
+risks are in <a href="../plans/cosim-xprop.html"><code>../plans/cosim-xprop.md</code></a>. This
+amendment is <strong>proposed</strong>, not yet implemented; the original
+Decision/Consequences above describe the shipped <code>sim</code>-path behaviour.</p>
 
                     </main>
 

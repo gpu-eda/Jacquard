@@ -5015,7 +5015,8 @@ pressure GPU memory bandwidth for the script reads, though
 double-buffering mitigates this.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0016--selective-x-propagation"><a class="header" href="#adr-0016--selective-x-propagation">ADR 0016 — Selective X-propagation</a></h1>
-<p><strong>Status:</strong> Accepted</p>
+<p><strong>Status:</strong> Accepted (2026-05). Extension to cosim proposed 2026-06-03 —
+see <a href="adr/0016-selective-x-propagation.html#amendment-2026-06-03-cosim-and-io-x-sources">Amendment</a>.</p>
 <h2 id="context-15"><a class="header" href="#context-15">Context</a></h2>
 <p>Jacquard's default two-state (0/1) simulation silently resolves
 uninitialised DFF and SRAM outputs to zero. This masks
@@ -5062,6 +5063,34 @@ compatible with standard four-state VCD tools.</li>
 kernel for validation.</li>
 <li>Benchmarks (<code>benches/xprop.rs</code>) track the overhead.</li>
 </ul>
+<h2 id="amendment-2026-06-03-cosim-and-io-x-sources"><a class="header" href="#amendment-2026-06-03-cosim-and-io-x-sources">Amendment 2026-06-03: cosim and IO X-sources</a></h2>
+<p>The original decision wired <code>--xprop</code> into the <code>sim</code> (static-input)
+path only. The reactive <code>cosim</code> path is two-state, so JTAG-replay /
+peripheral runs silently zero-init uninitialised state
+(<a href="https://github.com/gpu-eda/Jacquard/issues/95">#95</a>). This amendment
+extends selective X-propagation to <code>cosim</code>.</p>
+<p>Two points the original design did not address, because the static
+<code>sim</code> path never had to:</p>
+<ol>
+<li><strong>Undriven input pads are X.</strong> In a reactive run, peripheral models
+drive only <em>some</em> input bits each edge (clock, reset, JTAG/UART
+pins, configured constants). Every primary-input bit <em>not</em> in that
+driven set is unconnected and must be <strong>X</strong>, not <code>0</code>.</li>
+<li><strong>Bidir pad input side is X when OE is deasserted.</strong> A <code>bi_24t</code>
+pad's core-read (input) side is unknown whenever its output-enable
+(<code>OE</code>, surfaced as the <code>__oe</code> observable) is off and nothing external
+drives it. The input-side X-mask is refreshed per edge from <code>OE</code>.</li>
+</ol>
+<p>So the X-source taxonomy is now four-way: uninitialised DFF,
+uninitialised SRAM (both as before), <strong>undriven input pads</strong>, and
+<strong>bidir input-when-OE-off</strong>. The first two are sequential power-up X;
+the latter two are reactive IO X-sources specific to cosim.</p>
+<p>The Metal kernel is already X-capable, so this is host-side reactive
+plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
+observe-kernel output-offset fix for the doubled layout). Phasing and
+risks are in <a href="adr/../plans/cosim-xprop.html"><code>../plans/cosim-xprop.md</code></a>. This
+amendment is <strong>proposed</strong>, not yet implemented; the original
+Decision/Consequences above describe the shipped <code>sim</code>-path behaviour.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0017--cosim-execution-model"><a class="header" href="#adr-0017--cosim-execution-model">ADR 0017 — Cosim execution model</a></h1>
 <p><strong>Status:</strong> Accepted</p>
 <h2 id="context-16"><a class="header" href="#context-16">Context</a></h2>
@@ -7337,6 +7366,120 @@ formula dependency.</li>
 <li><strong>Tag scheme:</strong> <code>v&lt;X.Y.Z&gt;</code> triggers the Rust release;
 <code>netlist-graph-v&lt;X.Y.Z&gt;</code> triggers the PyPI publish. The two workflows
 filter on their own tag prefixes so they never collide.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="plan-selective-x-propagation-in-cosim"><a class="header" href="#plan-selective-x-propagation-in-cosim">Plan: selective X-propagation in cosim</a></h1>
+<p>Extends <a href="plans/../adr/0016-selective-x-propagation.html">ADR 0016</a> (selective
+X-propagation, today <code>sim</code>-only) to the reactive <code>cosim</code> path. Issue:
+<a href="https://github.com/gpu-eda/Jacquard/issues/95">#95</a>.</p>
+<h2 id="where-it-stands-1"><a class="header" href="#where-it-stands-1">Where it stands</a></h2>
+<p>X-prop is wired into <code>sim</code> only. <code>cosim</code> always runs <strong>two-state</strong>, so
+uninitialised DFF/SRAM and undriven inputs silently resolve to <code>0</code> —
+producing false agreement against 4-state RTL and masking init-order
+bugs (the exact failure <code>--xprop</code> exists to surface).</p>
+<p>What already exists and is reusable:</p>
+<ul>
+<li>The <strong>Metal <code>simulate_v1_stage</code> kernel is already X-capable</strong>
+(<code>sram_xmask</code> buffer, <code>xmask_state_offset</code>, the X-mask read logic in
+<code>kernel_v1.metal</code>). cosim dispatches the same kernel — no GPU core
+change.</li>
+<li><code>DesignArgs.xprop</code> already threads into <code>script.xprop_enabled</code> (via
+<code>setup</code>); <code>cmd_cosim</code> just hardcodes <code>xprop: false</code>.</li>
+<li>Host machinery on the sim side: <code>expand_states_for_xprop</code>, the
+<code>sram_xmask</code> shadow (init <code>0xFFFF_FFFF</code>), <code>split_xprop_states</code>,
+<code>write_output_vcd_xprop</code>.</li>
+</ul>
+<p>So this is <strong>host-side reactive plumbing</strong>, not new kernel work.</p>
+<h2 id="x-source-taxonomy-the-semantic-to-get-right"><a class="header" href="#x-source-taxonomy-the-semantic-to-get-right">X-source taxonomy (the semantic to get right)</a></h2>
+<p>X originates from four places; cosim must model all four:</p>
+<div class="table-wrapper"><table><thead><tr><th>Source</th><th>X when…</th><th>Mechanism</th></tr></thead><tbody>
+<tr><td>Uninitialised <strong>DFF</strong></td><td>power-up, before first clocked write</td><td><code>expand_states_for_xprop</code> seeds the X-mask half (as in <code>sim</code>)</td></tr>
+<tr><td>Uninitialised <strong>SRAM</strong></td><td>before first write to a cell</td><td><code>sram_xmask</code> shadow init <code>0xFFFF_FFFF</code>, carried across ticks</td></tr>
+<tr><td><strong>Undriven input pad</strong></td><td>no model / constant / clock / reset drives it</td><td>input X-mask = X for every primary-input bit <em>not</em> in the driven set</td></tr>
+<tr><td><strong>Bidir pad input side</strong></td><td><code>OE</code> deasserted and nothing external drives it</td><td>per-edge: input X-mask = <code>OE ? known : X</code>, reading <code>OE</code> (the <code>__oe</code> observable)</td></tr>
+</tbody></table>
+</div>
+<p>The first two are sequential power-up X (ADR 0016's original scope). The
+<strong>last two are new</strong> — input/IO X-sources the <code>sim</code> static-VCD path never
+had to model, and the reason this is more than "carry the sim machinery
+over."</p>
+<p><strong>Driven set</strong> (bits that are <em>known</em>, X-mask cleared): scheduler-driven
+clock(s) + reset, each peripheral model's <code>driven_positions()</code>, and
+<code>constant_inputs</code> / <code>constant_ports</code>. The complement of the driven set
+within the primary inputs is X.</p>
+<h2 id="phases"><a class="header" href="#phases">Phases</a></h2>
+<h3 id="phase-1--flag-plumbing"><a class="header" href="#phase-1--flag-plumbing">Phase 1 — Flag plumbing</a></h3>
+<ul>
+<li>Add <code>xprop: bool</code> to <code>CosimArgs</code>; stop hardcoding <code>xprop: false</code> in
+<code>cmd_cosim</code>'s <code>DesignArgs</code>. (<code>setup</code> already turns it into
+<code>script.xprop_enabled</code>.)</li>
+</ul>
+<h3 id="phase-2--x-state-in-the-cosim-loop"><a class="header" href="#phase-2--x-state-in-the-cosim-loop">Phase 2 — X-state in the cosim loop</a></h3>
+<ul>
+<li>Expand the cosim state buffer with <code>expand_states_for_xprop</code> and
+allocate the <code>sram_xmask</code> shadow (init <code>0xFFFF_FFFF</code>), carried across
+the per-tick loop.</li>
+<li>Pass both into the simulate dispatch (<code>encode_dispatch</code> /
+<code>simulate_v1_stage</code> already accept <code>sram_xmask</code> + the xmask offset).</li>
+<li>Set the kernel's <code>xmask_state_offset</code> metadata for the cosim layout.</li>
+</ul>
+<h3 id="phase-3--input-x-mask-policy--per-edge-maintenance-the-novel-part"><a class="header" href="#phase-3--input-x-mask-policy--per-edge-maintenance-the-novel-part">Phase 3 — Input X-mask policy + per-edge maintenance (the novel part)</a></h3>
+<ul>
+<li><strong>Init:</strong> every primary-input X-mask bit = X, except the driven set
+(clock/reset/model/constants), which start known.</li>
+<li><strong>Per edge:</strong> wherever <code>state_prep</code> / model <code>ModelOverrides</code> drive an
+input bit, also clear that bit's X-mask (driven ⇒ known). Undriven
+bits stay X.</li>
+<li><strong>Bidir:</strong> after each tick, read each <code>bi_24t</code> pad's <code>OE</code> (the <code>__oe</code>
+observable already surfaced by the AIG postprocess) and set the pad's
+input-side X-mask = <code>OE ? known : X</code> for the next edge. This OE→input
+feedback is the trickiest sub-item; isolate it behind a small
+per-edge "bidir X refresh" step.</li>
+</ul>
+<h3 id="phase-4--observe-kernel-offset-fix-intersects-recent-work"><a class="header" href="#phase-4--observe-kernel-offset-fix-intersects-recent-work">Phase 4 — Observe-kernel offset fix (intersects recent work)</a></h3>
+<ul>
+<li><code>gpu_io_step</code>'s output reads (<code>READ_OUT_BIT</code> → <code>states[state_size + …]</code>) for UART, Wishbone, <strong>and the new bus-trace</strong> assume the
+two-state layout. Under xprop the slot doubles <code>[value | xmask]</code>, so
+the output-<strong>value</strong> offset shifts. Thread the correct output-value
+offset (from the script's xprop metadata) into <code>gpu_io_step</code> and the
+Rust drain/<code>READ_OUT_BIT</code> so the observe kernels read the value half,
+not the X-mask half. Add a guard/test so this can't silently regress.</li>
+</ul>
+<h3 id="phase-5--x-aware-vcd-output"><a class="header" href="#phase-5--x-aware-vcd-output">Phase 5 — X-aware VCD output</a></h3>
+<ul>
+<li>cosim emit path uses a <code>write_output_vcd_xprop</code>-equivalent so traced
+nets and top-level IO emit <code>x</code> (not <code>0</code>) where unknown; the bidir
+<code>__out</code>/<code>__oe</code> split already exists and should reflect X correctly.</li>
+</ul>
+<h3 id="phase-6--verification"><a class="header" href="#phase-6--verification">Phase 6 — Verification</a></h3>
+<ul>
+<li>A small reactive test design with (a) an unreset register, (b) an
+unconnected input pad, (c) a bidir pad toggling OE — assert the output
+VCD shows <code>x</code> until each is resolved (clocked write / model drive / OE
+assert), and <code>0</code>/<code>1</code> after. Pairs with the JTAG-replay path.</li>
+<li>Where feasible, extend the CPU <code>sanity_check_cpu_xprop</code> parity to a
+cosim scenario.</li>
+</ul>
+<h2 id="risks--open-questions"><a class="header" href="#risks--open-questions">Risks / open questions</a></h2>
+<ul>
+<li><strong>Bidir OE feedback</strong> (Phase 3): OE is combinational within a tick;
+the input-side X for edge <em>N+1</em> depends on OE computed at edge <em>N</em>.
+Confirm this one-edge latency is acceptable (it matches how a real
+pad's direction settles) or whether intra-tick resolution is needed.</li>
+<li><strong>Observe-offset regression</strong> (Phase 4): the highest-risk interaction;
+the bus-trace code is days old. Needs an explicit test under <code>--xprop</code>.</li>
+<li><strong>Performance:</strong> the state buffer doubles again on top of any timing
+expansion; the VCD ring-buffer snapshot grows. Measure on a real
+JTAG-replay run.</li>
+<li><strong>SRAM xmask carry:</strong> confirm the shadow persists correctly across the
+batched/single-tick dispatch modes the cosim loop uses.</li>
+</ul>
+<h2 id="adr--docs-impact"><a class="header" href="#adr--docs-impact">ADR / docs impact</a></h2>
+<ul>
+<li><strong>Amend ADR 0016</strong>: record the cosim extension and broaden the
+X-source taxonomy to include undriven input pads + bidir-OE (the
+original ADR covered only sequential power-up X).</li>
+<li>Fold the IO X-source rules into <code>docs/selective-x-propagation.md</code>.</li>
+<li>Update the cosim <code>--xprop</code> help + <code>docs/installation.md</code> once shipped.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="spike--opentimer-on-sky130-and-mcu-soc"><a class="header" href="#spike--opentimer-on-sky130-and-mcu-soc">Spike — OpenTimer on SKY130 and MCU SoC</a></h1>
 <p><strong>Status:</strong> Proposed. Not yet executed.</p>
