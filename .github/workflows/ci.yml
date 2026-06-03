@@ -256,15 +256,15 @@ jobs:
           cargo run --release --features metal --bin jacquard -- sim \
             tests/xprop_cosim/xprop_demo_synth.gv \
             tests/xprop_cosim/xprop_demo_stim.vcd \
-            tests/xprop_cosim/ci_sim_xprop.vcd \
+            target/test-out/ci_sim_xprop.vcd \
             1 --xprop --check-with-cpu
-          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_sim_xprop.vcd xprop
+          python3 tests/xprop_cosim/check.py target/test-out/ci_sim_xprop.vcd xprop
           cargo run --release --features metal --bin jacquard -- sim \
             tests/xprop_cosim/xprop_demo_synth.gv \
             tests/xprop_cosim/xprop_demo_stim.vcd \
-            tests/xprop_cosim/ci_sim_2state.vcd \
+            target/test-out/ci_sim_2state.vcd \
             1
-          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_sim_2state.vcd two-state
+          python3 tests/xprop_cosim/check.py target/test-out/ci_sim_2state.vcd two-state
 
       - name: Run Metal simulation with timing (inv_chain_pnr)
         run: |
@@ -343,7 +343,7 @@ jobs:
             2>&1 | tee dual_uart_cosim.txt
 
       - name: Verify dual-UART output
-        run: python3 tests/dual_uart/check_pass.py dual_uart_events.json
+        run: python3 tests/dual_uart/check_pass.py target/test-out/dual_uart_events.json
 
       - name: Run APB3 bus-trace cosim (ADR 0013)
         run: |
@@ -353,11 +353,11 @@ jobs:
             --config tests/apb_trace/sim_config.json \
             --top-module apb_trace \
             --max-clock-edges 200 \
-            --bus-trace-csv apb_trace.csv \
+            --bus-trace-csv target/test-out/apb_trace.csv \
             2>&1 | tee apb_trace_cosim.txt
 
       - name: Verify APB3 bus-trace output
-        run: python3 tests/apb_trace/check.py apb_trace.csv
+        run: python3 tests/apb_trace/check.py target/test-out/apb_trace.csv
 
       # End-to-end X-propagation in the reactive cosim path (#95). Same
       # xprop_demo design + checker as the sim guard, in `xprop-cosim` mode
@@ -372,14 +372,14 @@ jobs:
             tests/xprop_cosim/xprop_demo_synth.gv \
             --config tests/xprop_cosim/sim_config.json \
             --top-module xprop_demo --max-clock-edges 40 \
-            --xprop --output-vcd tests/xprop_cosim/ci_cosim_xprop.vcd
-          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_cosim_xprop.vcd xprop-cosim
+            --xprop --output-vcd target/test-out/ci_cosim_xprop.vcd
+          python3 tests/xprop_cosim/check.py target/test-out/ci_cosim_xprop.vcd xprop-cosim
           cargo run --release --features metal --bin jacquard -- cosim \
             tests/xprop_cosim/xprop_demo_synth.gv \
             --config tests/xprop_cosim/sim_config.json \
             --top-module xprop_demo --max-clock-edges 40 \
-            --output-vcd tests/xprop_cosim/ci_cosim_2state.vcd
-          python3 tests/xprop_cosim/check.py tests/xprop_cosim/ci_cosim_2state.vcd two-state
+            --output-vcd target/test-out/ci_cosim_2state.vcd
+          python3 tests/xprop_cosim/check.py target/test-out/ci_cosim_2state.vcd two-state
 
       # Observe-kernel offset guard (#95 phase 4). The UART/Wishbone/bus-trace
       # observe reads (gpu_io_step READ_OUT_BIT) index the output slot's VALUE
@@ -395,13 +395,13 @@ jobs:
             tests/apb_trace/apb_trace_synth.gv \
             --config tests/apb_trace/sim_config.json \
             --top-module apb_trace --max-clock-edges 200 \
-            --xprop --bus-trace-csv apb_trace_xprop.csv
-          python3 tests/apb_trace/check.py apb_trace_xprop.csv
+            --xprop --bus-trace-csv target/test-out/apb_trace_xprop.csv
+          python3 tests/apb_trace/check.py target/test-out/apb_trace_xprop.csv
           cargo run --release --features metal --bin jacquard -- cosim \
             tests/dual_uart/dual_uart_synth.gv \
             --config tests/dual_uart/sim_config.json \
             --top-module dual_uart_top --max-clock-edges 10000 --xprop
-          python3 tests/dual_uart/check_pass.py dual_uart_events.json
+          python3 tests/dual_uart/check_pass.py target/test-out/dual_uart_events.json
 
       - name: Upload VCD artifacts
         uses: actions/upload-artifact@v4
@@ -414,14 +414,14 @@ jobs:
             tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd
             tests/timing_test/inv_chain_pnr/timing_report.json
             dual_uart_cosim.txt
-            dual_uart_events.json
+            target/test-out/dual_uart_events.json
             apb_trace_cosim.txt
-            apb_trace.csv
-            apb_trace_xprop.csv
-            tests/xprop_cosim/ci_sim_xprop.vcd
-            tests/xprop_cosim/ci_sim_2state.vcd
-            tests/xprop_cosim/ci_cosim_xprop.vcd
-            tests/xprop_cosim/ci_cosim_2state.vcd
+            target/test-out/apb_trace.csv
+            target/test-out/apb_trace_xprop.csv
+            target/test-out/ci_sim_xprop.vcd
+            target/test-out/ci_sim_2state.vcd
+            target/test-out/ci_cosim_xprop.vcd
+            target/test-out/ci_cosim_2state.vcd
             metal_timing.txt
             metal_xprop.txt
             metal_timed.txt
