@@ -2661,8 +2661,25 @@ pub fn run_cosim(
             crate::sim::sram_preload::resolve_single_sram(&script.sram_cell_storage_offsets)
                 .unwrap_or_else(|e| panic!("sram_init: {e}"));
         let total_bytes: usize = chunks.iter().map(|c| c.bytes.len()).sum();
-        crate::sim::sram_preload::apply_chunks(sram_data, storage_offset, &chunks)
-            .unwrap_or_else(|e| panic!("sram_init: {e}"));
+        // Under xprop, clear the X-mask shadow for preloaded (known) cells so
+        // they don't read X forever (#95). The shadow is parallel to sram_data.
+        let mut xmask_slice = if script.xprop_enabled {
+            Some(unsafe {
+                std::slice::from_raw_parts_mut(
+                    sram_xmask_buffer.contents() as *mut u32,
+                    sram_xmask_len,
+                )
+            })
+        } else {
+            None
+        };
+        crate::sim::sram_preload::apply_chunks(
+            sram_data,
+            storage_offset,
+            &chunks,
+            xmask_slice.as_deref_mut(),
+        )
+        .unwrap_or_else(|e| panic!("sram_init: {e}"));
         clilog::info!(
             "SRAM preload: {} bytes from {} → cell {} at storage offset {}",
             total_bytes,
