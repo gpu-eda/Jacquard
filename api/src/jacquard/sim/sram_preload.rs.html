@@ -187,137 +187,167 @@
 <a href=#187 id=187 data-nosnippet>187</a>/// `storage_offset_u32` is the start of this SRAM's region in the
 <a href=#188 id=188 data-nosnippet>188</a>/// shared `sram_storage` buffer (i.e. the value
 <a href=#189 id=189 data-nosnippet>189</a>/// `FlattenedScriptV1::sram_cell_storage_offsets[cellid]`).
-<a href=#190 id=190 data-nosnippet>190</a></span><span class="kw">pub fn </span>apply_chunks(
-<a href=#191 id=191 data-nosnippet>191</a>    sram_storage: <span class="kw-2">&amp;mut </span>[u32],
-<a href=#192 id=192 data-nosnippet>192</a>    storage_offset_u32: u32,
-<a href=#193 id=193 data-nosnippet>193</a>    chunks: <span class="kw-2">&amp;</span>[PreloadChunk],
-<a href=#194 id=194 data-nosnippet>194</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), PreloadError&gt; {
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>sram_start = storage_offset_u32 <span class="kw">as </span>usize;
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span>sram_capacity_entries = AIGPDK_SRAM_SIZE;
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span>sram_capacity_bytes = sram_capacity_entries * <span class="number">4</span>;
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">for </span>chunk <span class="kw">in </span>chunks {
-<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">let </span>chunk_end = chunk.byte_offset + chunk.bytes.len();
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">if </span>chunk_end &gt; sram_capacity_bytes {
-<a href=#201 id=201 data-nosnippet>201</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(PreloadError::ChunkOverflowsSram {
-<a href=#202 id=202 data-nosnippet>202</a>                byte_offset: chunk.byte_offset,
-<a href=#203 id=203 data-nosnippet>203</a>                chunk_size: chunk.bytes.len(),
-<a href=#204 id=204 data-nosnippet>204</a>                sram_capacity_bytes,
-<a href=#205 id=205 data-nosnippet>205</a>            });
-<a href=#206 id=206 data-nosnippet>206</a>        }
-<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">for </span>(byte_idx, <span class="kw-2">&amp;</span>b) <span class="kw">in </span>chunk.bytes.iter().enumerate() {
-<a href=#208 id=208 data-nosnippet>208</a>            <span class="kw">let </span>abs_byte = chunk.byte_offset + byte_idx;
-<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">let </span>entry = sram_start + (abs_byte / <span class="number">4</span>);
-<a href=#210 id=210 data-nosnippet>210</a>            <span class="kw">let </span>bit_shift = (abs_byte % <span class="number">4</span>) * <span class="number">8</span>;
-<a href=#211 id=211 data-nosnippet>211</a>            <span class="comment">// Clear the target byte slot then OR in the new value
-<a href=#212 id=212 data-nosnippet>212</a>            // — handles overlapping segments + the unused-high-bits
-<a href=#213 id=213 data-nosnippet>213</a>            // case for the final word of a non-aligned segment.
-<a href=#214 id=214 data-nosnippet>214</a>            </span>sram_storage[entry] &amp;= !(<span class="number">0xFFu32 </span>&lt;&lt; bit_shift);
-<a href=#215 id=215 data-nosnippet>215</a>            sram_storage[entry] |= (b <span class="kw">as </span>u32) &lt;&lt; bit_shift;
-<a href=#216 id=216 data-nosnippet>216</a>        }
-<a href=#217 id=217 data-nosnippet>217</a>    }
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="prelude-val">Ok</span>(())
-<a href=#219 id=219 data-nosnippet>219</a>}
-<a href=#220 id=220 data-nosnippet>220</a>
-<a href=#221 id=221 data-nosnippet>221</a><span class="attr">#[cfg(test)]
-<a href=#222 id=222 data-nosnippet>222</a></span><span class="kw">mod </span>tests {
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#224 id=224 data-nosnippet>224</a>
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">fn </span>map_with_one(cellid: usize, offset: u32) -&gt; IndexMap&lt;usize, u32&gt; {
-<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span><span class="kw-2">mut </span>m = IndexMap::new();
-<a href=#227 id=227 data-nosnippet>227</a>        m.insert(cellid, offset);
-<a href=#228 id=228 data-nosnippet>228</a>        m
-<a href=#229 id=229 data-nosnippet>229</a>    }
+<a href=#190 id=190 data-nosnippet>190</a>/// Pack `chunks` into `sram_storage`. When X-propagation is active,
+<a href=#191 id=191 data-nosnippet>191</a>/// `sram_xmask` is the parallel X-mask shadow (init all-X = `0xFFFFFFFF`):
+<a href=#192 id=192 data-nosnippet>192</a>/// every byte we preload is known, so we clear that byte's X-mask bits.
+<a href=#193 id=193 data-nosnippet>193</a>/// Un-preloaded cells keep their X-mask (still uninitialised → read X).
+<a href=#194 id=194 data-nosnippet>194</a>/// Pass `None` for the two-state path. See ADR 0016 / #95.
+<a href=#195 id=195 data-nosnippet>195</a></span><span class="kw">pub fn </span>apply_chunks(
+<a href=#196 id=196 data-nosnippet>196</a>    sram_storage: <span class="kw-2">&amp;mut </span>[u32],
+<a href=#197 id=197 data-nosnippet>197</a>    storage_offset_u32: u32,
+<a href=#198 id=198 data-nosnippet>198</a>    chunks: <span class="kw-2">&amp;</span>[PreloadChunk],
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw-2">mut </span>sram_xmask: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span>[u32]&gt;,
+<a href=#200 id=200 data-nosnippet>200</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), PreloadError&gt; {
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">let </span>sram_start = storage_offset_u32 <span class="kw">as </span>usize;
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">let </span>sram_capacity_entries = AIGPDK_SRAM_SIZE;
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">let </span>sram_capacity_bytes = sram_capacity_entries * <span class="number">4</span>;
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">for </span>chunk <span class="kw">in </span>chunks {
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>chunk_end = chunk.byte_offset + chunk.bytes.len();
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">if </span>chunk_end &gt; sram_capacity_bytes {
+<a href=#207 id=207 data-nosnippet>207</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(PreloadError::ChunkOverflowsSram {
+<a href=#208 id=208 data-nosnippet>208</a>                byte_offset: chunk.byte_offset,
+<a href=#209 id=209 data-nosnippet>209</a>                chunk_size: chunk.bytes.len(),
+<a href=#210 id=210 data-nosnippet>210</a>                sram_capacity_bytes,
+<a href=#211 id=211 data-nosnippet>211</a>            });
+<a href=#212 id=212 data-nosnippet>212</a>        }
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">for </span>(byte_idx, <span class="kw-2">&amp;</span>b) <span class="kw">in </span>chunk.bytes.iter().enumerate() {
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">let </span>abs_byte = chunk.byte_offset + byte_idx;
+<a href=#215 id=215 data-nosnippet>215</a>            <span class="kw">let </span>entry = sram_start + (abs_byte / <span class="number">4</span>);
+<a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">let </span>bit_shift = (abs_byte % <span class="number">4</span>) * <span class="number">8</span>;
+<a href=#217 id=217 data-nosnippet>217</a>            <span class="comment">// Clear the target byte slot then OR in the new value
+<a href=#218 id=218 data-nosnippet>218</a>            // — handles overlapping segments + the unused-high-bits
+<a href=#219 id=219 data-nosnippet>219</a>            // case for the final word of a non-aligned segment.
+<a href=#220 id=220 data-nosnippet>220</a>            </span>sram_storage[entry] &amp;= !(<span class="number">0xFFu32 </span>&lt;&lt; bit_shift);
+<a href=#221 id=221 data-nosnippet>221</a>            sram_storage[entry] |= (b <span class="kw">as </span>u32) &lt;&lt; bit_shift;
+<a href=#222 id=222 data-nosnippet>222</a>            <span class="comment">// Mirror into the X-mask shadow: this byte is now known.
+<a href=#223 id=223 data-nosnippet>223</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(xmask) = sram_xmask.as_deref_mut() {
+<a href=#224 id=224 data-nosnippet>224</a>                xmask[entry] &amp;= !(<span class="number">0xFFu32 </span>&lt;&lt; bit_shift);
+<a href=#225 id=225 data-nosnippet>225</a>            }
+<a href=#226 id=226 data-nosnippet>226</a>        }
+<a href=#227 id=227 data-nosnippet>227</a>    }
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="prelude-val">Ok</span>(())
+<a href=#229 id=229 data-nosnippet>229</a>}
 <a href=#230 id=230 data-nosnippet>230</a>
-<a href=#231 id=231 data-nosnippet>231</a>    <span class="attr">#[test]
-<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">fn </span>resolve_single_sram_picks_the_only_entry() {
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">let </span>map = map_with_one(<span class="number">42</span>, <span class="number">100</span>);
-<a href=#234 id=234 data-nosnippet>234</a>        <span class="macro">assert_eq!</span>(resolve_single_sram(<span class="kw-2">&amp;</span>map).unwrap(), (<span class="number">42</span>, <span class="number">100</span>));
-<a href=#235 id=235 data-nosnippet>235</a>    }
-<a href=#236 id=236 data-nosnippet>236</a>
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="attr">#[test]
-<a href=#238 id=238 data-nosnippet>238</a>    </span><span class="kw">fn </span>resolve_single_sram_errors_on_empty() {
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">let </span>empty = IndexMap::new();
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#241 id=241 data-nosnippet>241</a>            resolve_single_sram(<span class="kw-2">&amp;</span>empty),
-<a href=#242 id=242 data-nosnippet>242</a>            <span class="prelude-val">Err</span>(PreloadError::NoSramInDesign)
-<a href=#243 id=243 data-nosnippet>243</a>        ));
-<a href=#244 id=244 data-nosnippet>244</a>    }
-<a href=#245 id=245 data-nosnippet>245</a>
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="attr">#[test]
-<a href=#247 id=247 data-nosnippet>247</a>    </span><span class="kw">fn </span>resolve_single_sram_errors_on_multi() {
-<a href=#248 id=248 data-nosnippet>248</a>        <span class="kw">let </span><span class="kw-2">mut </span>m = IndexMap::new();
-<a href=#249 id=249 data-nosnippet>249</a>        m.insert(<span class="number">1</span>, <span class="number">0</span>);
-<a href=#250 id=250 data-nosnippet>250</a>        m.insert(<span class="number">2</span>, <span class="number">8192</span>);
-<a href=#251 id=251 data-nosnippet>251</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#252 id=252 data-nosnippet>252</a>            resolve_single_sram(<span class="kw-2">&amp;</span>m),
-<a href=#253 id=253 data-nosnippet>253</a>            <span class="prelude-val">Err</span>(PreloadError::MultiSramAmbiguous { sram_count: <span class="number">2 </span>})
-<a href=#254 id=254 data-nosnippet>254</a>        ));
-<a href=#255 id=255 data-nosnippet>255</a>    }
-<a href=#256 id=256 data-nosnippet>256</a>
-<a href=#257 id=257 data-nosnippet>257</a>    <span class="attr">#[test]
-<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">fn </span>apply_chunks_packs_bytes_little_endian_into_words() {
-<a href=#259 id=259 data-nosnippet>259</a>        <span class="comment">// 8 bytes (0x11 0x22 0x33 0x44 ; 0xAA 0xBB 0xCC 0xDD) starting at
-<a href=#260 id=260 data-nosnippet>260</a>        // chunk byte_offset 0 → two u32 entries.
-<a href=#261 id=261 data-nosnippet>261</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE * <span class="number">2</span>]; <span class="comment">// two-SRAM-sized buffer
-<a href=#262 id=262 data-nosnippet>262</a>        </span><span class="kw">let </span>chunk = PreloadChunk {
-<a href=#263 id=263 data-nosnippet>263</a>            byte_offset: <span class="number">0</span>,
-<a href=#264 id=264 data-nosnippet>264</a>            bytes: <span class="macro">vec!</span>[<span class="number">0x11</span>, <span class="number">0x22</span>, <span class="number">0x33</span>, <span class="number">0x44</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>, <span class="number">0xDD</span>],
-<a href=#265 id=265 data-nosnippet>265</a>        };
-<a href=#266 id=266 data-nosnippet>266</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk]).unwrap();
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0x44332211</span>);
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">1</span>], <span class="number">0xDDCCBBAA</span>);
-<a href=#269 id=269 data-nosnippet>269</a>    }
-<a href=#270 id=270 data-nosnippet>270</a>
-<a href=#271 id=271 data-nosnippet>271</a>    <span class="attr">#[test]
-<a href=#272 id=272 data-nosnippet>272</a>    </span><span class="kw">fn </span>apply_chunks_respects_storage_offset() {
-<a href=#273 id=273 data-nosnippet>273</a>        <span class="comment">// Write to the second SRAM's region (offset AIGPDK_SRAM_SIZE u32).
-<a href=#274 id=274 data-nosnippet>274</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE * <span class="number">2</span>];
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">let </span>chunk = PreloadChunk {
-<a href=#276 id=276 data-nosnippet>276</a>            byte_offset: <span class="number">0</span>,
-<a href=#277 id=277 data-nosnippet>277</a>            bytes: <span class="macro">vec!</span>[<span class="number">0xDE</span>, <span class="number">0xAD</span>, <span class="number">0xBE</span>, <span class="number">0xEF</span>],
-<a href=#278 id=278 data-nosnippet>278</a>        };
-<a href=#279 id=279 data-nosnippet>279</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, AIGPDK_SRAM_SIZE <span class="kw">as </span>u32, <span class="kw-2">&amp;</span>[chunk]).unwrap();
-<a href=#280 id=280 data-nosnippet>280</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0</span>); <span class="comment">// first SRAM untouched
-<a href=#281 id=281 data-nosnippet>281</a>        </span><span class="macro">assert_eq!</span>(storage[AIGPDK_SRAM_SIZE], <span class="number">0xEFBEADDE</span>);
-<a href=#282 id=282 data-nosnippet>282</a>    }
-<a href=#283 id=283 data-nosnippet>283</a>
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="attr">#[test]
-<a href=#285 id=285 data-nosnippet>285</a>    </span><span class="kw">fn </span>apply_chunks_handles_subword_tail() {
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="comment">// 3 bytes → only low 24 bits of entry 0 populated.
-<a href=#287 id=287 data-nosnippet>287</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE];
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="kw">let </span>chunk = PreloadChunk {
-<a href=#289 id=289 data-nosnippet>289</a>            byte_offset: <span class="number">0</span>,
-<a href=#290 id=290 data-nosnippet>290</a>            bytes: <span class="macro">vec!</span>[<span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>],
-<a href=#291 id=291 data-nosnippet>291</a>        };
-<a href=#292 id=292 data-nosnippet>292</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk]).unwrap();
-<a href=#293 id=293 data-nosnippet>293</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0x00CCBBAA</span>);
-<a href=#294 id=294 data-nosnippet>294</a>    }
-<a href=#295 id=295 data-nosnippet>295</a>
-<a href=#296 id=296 data-nosnippet>296</a>    <span class="attr">#[test]
-<a href=#297 id=297 data-nosnippet>297</a>    </span><span class="kw">fn </span>apply_chunks_errors_on_overflow() {
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE];
-<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">let </span>chunk = PreloadChunk {
-<a href=#300 id=300 data-nosnippet>300</a>            byte_offset: (AIGPDK_SRAM_SIZE - <span class="number">1</span>) * <span class="number">4</span>,
-<a href=#301 id=301 data-nosnippet>301</a>            <span class="comment">// 5 bytes starting at the very last u32 entry → spills past end.
-<a href=#302 id=302 data-nosnippet>302</a>            </span>bytes: <span class="macro">vec!</span>[<span class="number">0</span>; <span class="number">5</span>],
-<a href=#303 id=303 data-nosnippet>303</a>        };
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#305 id=305 data-nosnippet>305</a>            apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk]),
-<a href=#306 id=306 data-nosnippet>306</a>            <span class="prelude-val">Err</span>(PreloadError::ChunkOverflowsSram { .. })
-<a href=#307 id=307 data-nosnippet>307</a>        ));
-<a href=#308 id=308 data-nosnippet>308</a>    }
-<a href=#309 id=309 data-nosnippet>309</a>
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="attr">#[test]
-<a href=#311 id=311 data-nosnippet>311</a>    </span><span class="kw">fn </span>apply_chunks_writes_at_chunk_byte_offset() {
-<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE];
-<a href=#313 id=313 data-nosnippet>313</a>        <span class="kw">let </span>chunk = PreloadChunk {
-<a href=#314 id=314 data-nosnippet>314</a>            byte_offset: <span class="number">8</span>, <span class="comment">// start at u32 entry 2
-<a href=#315 id=315 data-nosnippet>315</a>            </span>bytes: <span class="macro">vec!</span>[<span class="number">0x55</span>; <span class="number">4</span>],
-<a href=#316 id=316 data-nosnippet>316</a>        };
-<a href=#317 id=317 data-nosnippet>317</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk]).unwrap();
-<a href=#318 id=318 data-nosnippet>318</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0</span>);
-<a href=#319 id=319 data-nosnippet>319</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">1</span>], <span class="number">0</span>);
-<a href=#320 id=320 data-nosnippet>320</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">2</span>], <span class="number">0x55555555</span>);
-<a href=#321 id=321 data-nosnippet>321</a>    }
-<a href=#322 id=322 data-nosnippet>322</a>}
+<a href=#231 id=231 data-nosnippet>231</a><span class="attr">#[cfg(test)]
+<a href=#232 id=232 data-nosnippet>232</a></span><span class="kw">mod </span>tests {
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#234 id=234 data-nosnippet>234</a>
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">fn </span>map_with_one(cellid: usize, offset: u32) -&gt; IndexMap&lt;usize, u32&gt; {
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="kw">let </span><span class="kw-2">mut </span>m = IndexMap::new();
+<a href=#237 id=237 data-nosnippet>237</a>        m.insert(cellid, offset);
+<a href=#238 id=238 data-nosnippet>238</a>        m
+<a href=#239 id=239 data-nosnippet>239</a>    }
+<a href=#240 id=240 data-nosnippet>240</a>
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="attr">#[test]
+<a href=#242 id=242 data-nosnippet>242</a>    </span><span class="kw">fn </span>resolve_single_sram_picks_the_only_entry() {
+<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span>map = map_with_one(<span class="number">42</span>, <span class="number">100</span>);
+<a href=#244 id=244 data-nosnippet>244</a>        <span class="macro">assert_eq!</span>(resolve_single_sram(<span class="kw-2">&amp;</span>map).unwrap(), (<span class="number">42</span>, <span class="number">100</span>));
+<a href=#245 id=245 data-nosnippet>245</a>    }
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="attr">#[test]
+<a href=#248 id=248 data-nosnippet>248</a>    </span><span class="kw">fn </span>resolve_single_sram_errors_on_empty() {
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">let </span>empty = IndexMap::new();
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#251 id=251 data-nosnippet>251</a>            resolve_single_sram(<span class="kw-2">&amp;</span>empty),
+<a href=#252 id=252 data-nosnippet>252</a>            <span class="prelude-val">Err</span>(PreloadError::NoSramInDesign)
+<a href=#253 id=253 data-nosnippet>253</a>        ));
+<a href=#254 id=254 data-nosnippet>254</a>    }
+<a href=#255 id=255 data-nosnippet>255</a>
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="attr">#[test]
+<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">fn </span>resolve_single_sram_errors_on_multi() {
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">let </span><span class="kw-2">mut </span>m = IndexMap::new();
+<a href=#259 id=259 data-nosnippet>259</a>        m.insert(<span class="number">1</span>, <span class="number">0</span>);
+<a href=#260 id=260 data-nosnippet>260</a>        m.insert(<span class="number">2</span>, <span class="number">8192</span>);
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#262 id=262 data-nosnippet>262</a>            resolve_single_sram(<span class="kw-2">&amp;</span>m),
+<a href=#263 id=263 data-nosnippet>263</a>            <span class="prelude-val">Err</span>(PreloadError::MultiSramAmbiguous { sram_count: <span class="number">2 </span>})
+<a href=#264 id=264 data-nosnippet>264</a>        ));
+<a href=#265 id=265 data-nosnippet>265</a>    }
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a>    <span class="attr">#[test]
+<a href=#268 id=268 data-nosnippet>268</a>    </span><span class="kw">fn </span>apply_chunks_packs_bytes_little_endian_into_words() {
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="comment">// 8 bytes (0x11 0x22 0x33 0x44 ; 0xAA 0xBB 0xCC 0xDD) starting at
+<a href=#270 id=270 data-nosnippet>270</a>        // chunk byte_offset 0 → two u32 entries.
+<a href=#271 id=271 data-nosnippet>271</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE * <span class="number">2</span>]; <span class="comment">// two-SRAM-sized buffer
+<a href=#272 id=272 data-nosnippet>272</a>        </span><span class="kw">let </span>chunk = PreloadChunk {
+<a href=#273 id=273 data-nosnippet>273</a>            byte_offset: <span class="number">0</span>,
+<a href=#274 id=274 data-nosnippet>274</a>            bytes: <span class="macro">vec!</span>[<span class="number">0x11</span>, <span class="number">0x22</span>, <span class="number">0x33</span>, <span class="number">0x44</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>, <span class="number">0xDD</span>],
+<a href=#275 id=275 data-nosnippet>275</a>        };
+<a href=#276 id=276 data-nosnippet>276</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk], <span class="prelude-val">None</span>).unwrap();
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0x44332211</span>);
+<a href=#278 id=278 data-nosnippet>278</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">1</span>], <span class="number">0xDDCCBBAA</span>);
+<a href=#279 id=279 data-nosnippet>279</a>    }
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a>    <span class="attr">#[test]
+<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">fn </span>apply_chunks_respects_storage_offset() {
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="comment">// Write to the second SRAM's region (offset AIGPDK_SRAM_SIZE u32).
+<a href=#284 id=284 data-nosnippet>284</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE * <span class="number">2</span>];
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">let </span>chunk = PreloadChunk {
+<a href=#286 id=286 data-nosnippet>286</a>            byte_offset: <span class="number">0</span>,
+<a href=#287 id=287 data-nosnippet>287</a>            bytes: <span class="macro">vec!</span>[<span class="number">0xDE</span>, <span class="number">0xAD</span>, <span class="number">0xBE</span>, <span class="number">0xEF</span>],
+<a href=#288 id=288 data-nosnippet>288</a>        };
+<a href=#289 id=289 data-nosnippet>289</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, AIGPDK_SRAM_SIZE <span class="kw">as </span>u32, <span class="kw-2">&amp;</span>[chunk], <span class="prelude-val">None</span>).unwrap();
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0</span>); <span class="comment">// first SRAM untouched
+<a href=#291 id=291 data-nosnippet>291</a>        </span><span class="macro">assert_eq!</span>(storage[AIGPDK_SRAM_SIZE], <span class="number">0xEFBEADDE</span>);
+<a href=#292 id=292 data-nosnippet>292</a>    }
+<a href=#293 id=293 data-nosnippet>293</a>
+<a href=#294 id=294 data-nosnippet>294</a>    <span class="attr">#[test]
+<a href=#295 id=295 data-nosnippet>295</a>    </span><span class="kw">fn </span>apply_chunks_handles_subword_tail() {
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="comment">// 3 bytes → only low 24 bits of entry 0 populated.
+<a href=#297 id=297 data-nosnippet>297</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE];
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">let </span>chunk = PreloadChunk {
+<a href=#299 id=299 data-nosnippet>299</a>            byte_offset: <span class="number">0</span>,
+<a href=#300 id=300 data-nosnippet>300</a>            bytes: <span class="macro">vec!</span>[<span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>],
+<a href=#301 id=301 data-nosnippet>301</a>        };
+<a href=#302 id=302 data-nosnippet>302</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk], <span class="prelude-val">None</span>).unwrap();
+<a href=#303 id=303 data-nosnippet>303</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0x00CCBBAA</span>);
+<a href=#304 id=304 data-nosnippet>304</a>    }
+<a href=#305 id=305 data-nosnippet>305</a>
+<a href=#306 id=306 data-nosnippet>306</a>    <span class="attr">#[test]
+<a href=#307 id=307 data-nosnippet>307</a>    </span><span class="kw">fn </span>apply_chunks_errors_on_overflow() {
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE];
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span>chunk = PreloadChunk {
+<a href=#310 id=310 data-nosnippet>310</a>            byte_offset: (AIGPDK_SRAM_SIZE - <span class="number">1</span>) * <span class="number">4</span>,
+<a href=#311 id=311 data-nosnippet>311</a>            <span class="comment">// 5 bytes starting at the very last u32 entry → spills past end.
+<a href=#312 id=312 data-nosnippet>312</a>            </span>bytes: <span class="macro">vec!</span>[<span class="number">0</span>; <span class="number">5</span>],
+<a href=#313 id=313 data-nosnippet>313</a>        };
+<a href=#314 id=314 data-nosnippet>314</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#315 id=315 data-nosnippet>315</a>            apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk], <span class="prelude-val">None</span>),
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="prelude-val">Err</span>(PreloadError::ChunkOverflowsSram { .. })
+<a href=#317 id=317 data-nosnippet>317</a>        ));
+<a href=#318 id=318 data-nosnippet>318</a>    }
+<a href=#319 id=319 data-nosnippet>319</a>
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="attr">#[test]
+<a href=#321 id=321 data-nosnippet>321</a>    </span><span class="kw">fn </span>apply_chunks_writes_at_chunk_byte_offset() {
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; AIGPDK_SRAM_SIZE];
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">let </span>chunk = PreloadChunk {
+<a href=#324 id=324 data-nosnippet>324</a>            byte_offset: <span class="number">8</span>, <span class="comment">// start at u32 entry 2
+<a href=#325 id=325 data-nosnippet>325</a>            </span>bytes: <span class="macro">vec!</span>[<span class="number">0x55</span>; <span class="number">4</span>],
+<a href=#326 id=326 data-nosnippet>326</a>        };
+<a href=#327 id=327 data-nosnippet>327</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk], <span class="prelude-val">None</span>).unwrap();
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0</span>);
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">1</span>], <span class="number">0</span>);
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">2</span>], <span class="number">0x55555555</span>);
+<a href=#331 id=331 data-nosnippet>331</a>    }
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="attr">#[test]
+<a href=#334 id=334 data-nosnippet>334</a>    </span><span class="kw">fn </span>apply_chunks_clears_xmask_for_preloaded_bytes() {
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="comment">// X-mask shadow starts all-unknown; preloading known bytes must clear
+<a href=#336 id=336 data-nosnippet>336</a>        // exactly those bytes' X-mask and leave everything else X (#95).
+<a href=#337 id=337 data-nosnippet>337</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>storage = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">4</span>];
+<a href=#338 id=338 data-nosnippet>338</a>        <span class="kw">let </span><span class="kw-2">mut </span>xmask = <span class="macro">vec!</span>[<span class="number">0xFFFF_FFFFu32</span>; <span class="number">4</span>];
+<a href=#339 id=339 data-nosnippet>339</a>        <span class="comment">// 3 known bytes at byte offset 1 → bytes 1,2,3 of word 0.
+<a href=#340 id=340 data-nosnippet>340</a>        </span><span class="kw">let </span>chunk = PreloadChunk {
+<a href=#341 id=341 data-nosnippet>341</a>            byte_offset: <span class="number">1</span>,
+<a href=#342 id=342 data-nosnippet>342</a>            bytes: <span class="macro">vec!</span>[<span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>],
+<a href=#343 id=343 data-nosnippet>343</a>        };
+<a href=#344 id=344 data-nosnippet>344</a>        apply_chunks(<span class="kw-2">&amp;mut </span>storage, <span class="number">0</span>, <span class="kw-2">&amp;</span>[chunk], <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span>xmask)).unwrap();
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="macro">assert_eq!</span>(storage[<span class="number">0</span>], <span class="number">0xCCBB_AA00</span>, <span class="string">"bytes packed little-endian"</span>);
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="macro">assert_eq!</span>(
+<a href=#347 id=347 data-nosnippet>347</a>            xmask[<span class="number">0</span>], <span class="number">0x0000_00FF</span>,
+<a href=#348 id=348 data-nosnippet>348</a>            <span class="string">"preloaded bytes 1-3 are known (X-mask cleared); byte 0 still X"
+<a href=#349 id=349 data-nosnippet>349</a>        </span>);
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="macro">assert_eq!</span>(xmask[<span class="number">1</span>], <span class="number">0xFFFF_FFFF</span>, <span class="string">"un-preloaded word stays fully X"</span>);
+<a href=#351 id=351 data-nosnippet>351</a>    }
+<a href=#352 id=352 data-nosnippet>352</a>}
 </code></pre></div></section></main></body></html>

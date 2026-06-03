@@ -124,16 +124,25 @@ slacks for all DFFs. Must call <code>load_timing_library</code> first.</p>
 <li>Gate delays from the Liberty library</li>
 <li>Cumulative arrival times</li>
 </ul>
-</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-AIG-1" class="impl"><a class="src rightside" href="../../src/jacquard/aig.rs.html#3272-3366">Source</a><a href="#impl-AIG-1" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.AIG.html" title="struct jacquard::aig::AIG">AIG</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.compute_x_sources" class="method"><a class="src rightside" href="../../src/jacquard/aig.rs.html#3277-3303">Source</a><h4 class="code-header">pub fn <a href="#method.compute_x_sources" class="fn">compute_x_sources</a>(&amp;self) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.96.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.96.0/std/primitive.bool.html">bool</a>&gt;</h4></section></summary><div class="docblock"><p>Identify DFF Q outputs and SRAM read data ports as X sources.</p>
+</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-AIG-1" class="impl"><a class="src rightside" href="../../src/jacquard/aig.rs.html#3272-3383">Source</a><a href="#impl-AIG-1" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.AIG.html" title="struct jacquard::aig::AIG">AIG</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.compute_x_sources" class="method"><a class="src rightside" href="../../src/jacquard/aig.rs.html#3277-3303">Source</a><h4 class="code-header">pub fn <a href="#method.compute_x_sources" class="fn">compute_x_sources</a>(&amp;self) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.96.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.96.0/std/primitive.bool.html">bool</a>&gt;</h4></section></summary><div class="docblock"><p>Identify DFF Q outputs and SRAM read data ports as X sources.</p>
 <p>Returns a boolean vector indexed by aigpin (0..=num_aigpins).
 <code>x_sources[i] == true</code> means aigpin <code>i</code> is an X source at cycle 0.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.compute_x_capable_pins" class="method"><a class="src rightside" href="../../src/jacquard/aig.rs.html#3316-3365">Source</a><h4 class="code-header">pub fn <a href="#method.compute_x_capable_pins" class="fn">compute_x_capable_pins</a>(&amp;self) -&gt; (<a class="struct" href="https://doc.rust-lang.org/1.96.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.96.0/std/primitive.bool.html">bool</a>&gt;, <a class="struct" href="struct.XPropStats.html" title="struct jacquard::aig::XPropStats">XPropStats</a>)</h4></section></summary><div class="docblock"><p>Compute the full set of X-capable AIG pins via forward cone propagation
+</div></details><details class="toggle method-toggle" open><summary><section id="method.compute_x_capable_pins" class="method"><a class="src rightside" href="../../src/jacquard/aig.rs.html#3323-3382">Source</a><h4 class="code-header">pub fn <a href="#method.compute_x_capable_pins" class="fn">compute_x_capable_pins</a>(
+    &amp;self,
+    treat_inputs_as_x_sources: <a class="primitive" href="https://doc.rust-lang.org/1.96.0/std/primitive.bool.html">bool</a>,
+) -&gt; (<a class="struct" href="https://doc.rust-lang.org/1.96.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.96.0/std/primitive.bool.html">bool</a>&gt;, <a class="struct" href="struct.XPropStats.html" title="struct jacquard::aig::XPropStats">XPropStats</a>)</h4></section></summary><div class="docblock"><p>Compute the full set of X-capable AIG pins via forward cone propagation
 and DFF fixpoint iteration.</p>
 <p>Returns <code>(x_capable, stats)</code> where <code>x_capable[i]</code> is true if aigpin <code>i</code>
 can carry an X value during simulation.</p>
+<p>When <code>treat_inputs_as_x_sources</code> is set, primary input ports are also
+marked as X sources. This is the cosim case (#95 phase 3): a primary
+input the testbench leaves undriven reads X, and its forward cone must
+be X-capable for that X to propagate. It is OFF for the <code>sim</code> path,
+where inputs always come from the VCD (known) — so sim pays no extra
+X-aware cost. Clock-flag inputs are never marked (clocks are driven).</p>
 <p>Algorithm:</p>
 <ol>
-<li>Mark all X sources (DFF Q, SRAM read data)</li>
+<li>Mark all X sources (DFF Q, SRAM read data, optionally input ports)</li>
 <li>Forward pass through AND gates (pins are in topological order)</li>
 <li>Fixpoint: if any DFF’s D-input is X-capable but its Q is not,
 mark Q and re-run forward pass from newly-marked pins.</li>

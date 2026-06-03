@@ -235,9 +235,39 @@ specific to cosim.</p>
 <p>The Metal kernel is already X-capable, so this is host-side reactive
 plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
 observe-kernel output-offset fix for the doubled layout). Phasing and
-risks are in <a href="../plans/cosim-xprop.html"><code>../plans/cosim-xprop.md</code></a>. This
-amendment is <strong>proposed</strong>, not yet implemented; the original
-Decision/Consequences above describe the shipped <code>sim</code>-path behaviour.</p>
+risks are in <a href="../plans/cosim-xprop.html"><code>../plans/cosim-xprop.md</code></a>.</p>
+<h3 id="seed-template-correction-2026-06-03"><a class="header" href="#seed-template-correction-2026-06-03">Seed-template correction (2026-06-03)</a></h3>
+<p>Implementing the cosim extension surfaced a latent bug in the <strong>shipped
+<code>sim</code> path</strong> too: the power-up X-mask seed
+(<code>expand_states_for_xprop</code>) was built as "all-X, then clear every
+<code>input_map</code> position." But <code>input_map</code> contains the DFF-Q
+<em>combinational-read</em> positions, not just primary input ports — so
+uninitialised DFFs were read as known <code>0</code> and X never originated. <code>--xprop</code>
+was therefore silently two-state for <strong>any</strong> sequential design (the
+gate-level X math was unit-tested, but no end-to-end test asserted X
+surfacing from an uninitialised DFF).</p>
+<p>The seed is now built by <code>vcd_io::xprop_xmask_template</code>: <strong>all-known, set
+X only at genuine X-source positions</strong> (uninitialised DFF Q reads + SRAM
+reads), excluding primary inputs (nets present in <code>input_layout</code>) and
+constant-pinned DFFs (<code>const_zero_pos = input_layout.len()</code>). The cosim
+path additionally seeds the <em>output</em> slot's X-mask, since its per-edge
+<code>state_prep</code> copies output→input before the first <code>simulate</code>. This
+corrects design choice #3 above ("all DFFs start as X"): the <em>intent</em> was
+always X at DFF positions; the implementation had inverted it for
+DFF-feedback reads.</p>
+<h3 id="undriven-input-x-source-cosim-implemented-2026-06-03"><a class="header" href="#undriven-input-x-source-cosim-implemented-2026-06-03">Undriven input X-source (cosim, implemented 2026-06-03)</a></h3>
+<p>The "undriven input pad → X" rule from this amendment is now implemented
+for <code>cosim</code>. <code>compute_x_capable_pins(treat_inputs_as_x_sources)</code> (gated by
+<code>DesignArgs::xprop_undriven_inputs</code>, set only by the cosim path) marks
+input cones X-capable; <code>vcd_io::xprop_xmask_template_cosim</code> seeds every
+primary input as X; and the GPU kernels clear the X-mask of each bit they
+drive each edge — <code>state_prep</code> for the <code>build_edge_ops</code> driven set
+(clock/reset/constants/model pins) and <code>gpu_apply_flash_din</code> for the SPI
+MISO bits it writes directly (they bypass <code>state_prep</code>). The complement —
+genuinely undriven inputs — stays X. <code>sim</code> keeps inputs known (driven from
+the VCD) and pays no extra X-aware cost. End-to-end guards covering the
+DFF and undriven-input X-sources, in both sim and cosim, live in
+<code>tests/xprop_cosim/</code> (CI, fatal).</p>
 
                     </main>
 

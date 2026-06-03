@@ -5094,9 +5094,39 @@ specific to cosim.</p>
 <p>The Metal kernel is already X-capable, so this is host-side reactive
 plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
 observe-kernel output-offset fix for the doubled layout). Phasing and
-risks are in <a href="adr/../plans/cosim-xprop.html"><code>../plans/cosim-xprop.md</code></a>. This
-amendment is <strong>proposed</strong>, not yet implemented; the original
-Decision/Consequences above describe the shipped <code>sim</code>-path behaviour.</p>
+risks are in <a href="adr/../plans/cosim-xprop.html"><code>../plans/cosim-xprop.md</code></a>.</p>
+<h3 id="seed-template-correction-2026-06-03"><a class="header" href="#seed-template-correction-2026-06-03">Seed-template correction (2026-06-03)</a></h3>
+<p>Implementing the cosim extension surfaced a latent bug in the <strong>shipped
+<code>sim</code> path</strong> too: the power-up X-mask seed
+(<code>expand_states_for_xprop</code>) was built as "all-X, then clear every
+<code>input_map</code> position." But <code>input_map</code> contains the DFF-Q
+<em>combinational-read</em> positions, not just primary input ports — so
+uninitialised DFFs were read as known <code>0</code> and X never originated. <code>--xprop</code>
+was therefore silently two-state for <strong>any</strong> sequential design (the
+gate-level X math was unit-tested, but no end-to-end test asserted X
+surfacing from an uninitialised DFF).</p>
+<p>The seed is now built by <code>vcd_io::xprop_xmask_template</code>: <strong>all-known, set
+X only at genuine X-source positions</strong> (uninitialised DFF Q reads + SRAM
+reads), excluding primary inputs (nets present in <code>input_layout</code>) and
+constant-pinned DFFs (<code>const_zero_pos = input_layout.len()</code>). The cosim
+path additionally seeds the <em>output</em> slot's X-mask, since its per-edge
+<code>state_prep</code> copies output→input before the first <code>simulate</code>. This
+corrects design choice #3 above ("all DFFs start as X"): the <em>intent</em> was
+always X at DFF positions; the implementation had inverted it for
+DFF-feedback reads.</p>
+<h3 id="undriven-input-x-source-cosim-implemented-2026-06-03"><a class="header" href="#undriven-input-x-source-cosim-implemented-2026-06-03">Undriven input X-source (cosim, implemented 2026-06-03)</a></h3>
+<p>The "undriven input pad → X" rule from this amendment is now implemented
+for <code>cosim</code>. <code>compute_x_capable_pins(treat_inputs_as_x_sources)</code> (gated by
+<code>DesignArgs::xprop_undriven_inputs</code>, set only by the cosim path) marks
+input cones X-capable; <code>vcd_io::xprop_xmask_template_cosim</code> seeds every
+primary input as X; and the GPU kernels clear the X-mask of each bit they
+drive each edge — <code>state_prep</code> for the <code>build_edge_ops</code> driven set
+(clock/reset/constants/model pins) and <code>gpu_apply_flash_din</code> for the SPI
+MISO bits it writes directly (they bypass <code>state_prep</code>). The complement —
+genuinely undriven inputs — stays X. <code>sim</code> keeps inputs known (driven from
+the VCD) and pays no extra X-aware cost. End-to-end guards covering the
+DFF and undriven-input X-sources, in both sim and cosim, live in
+<code>tests/xprop_cosim/</code> (CI, fatal).</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0017--cosim-execution-model"><a class="header" href="#adr-0017--cosim-execution-model">ADR 0017 — Cosim execution model</a></h1>
 <p><strong>Status:</strong> Accepted</p>
 <h2 id="context-16"><a class="header" href="#context-16">Context</a></h2>
@@ -7378,11 +7408,30 @@ filter on their own tag prefixes so they never collide.</li>
 X-propagation, today <code>sim</code>-only) to the reactive <code>cosim</code> path. Issue:
 <a href="https://github.com/gpu-eda/Jacquard/issues/95">#95</a>.</p>
 <h2 id="where-it-stands-1"><a class="header" href="#where-it-stands-1">Where it stands</a></h2>
-<p>X-prop is wired into <code>sim</code> only. <code>cosim</code> always runs <strong>two-state</strong>, so
-uninitialised DFF/SRAM and undriven inputs silently resolve to <code>0</code> —
-producing false agreement against 4-state RTL and masking init-order
-bugs (the exact failure <code>--xprop</code> exists to surface).</p>
-<p>What already exists and is reusable:</p>
+<blockquote>
+<p><strong>Update 2026-06-03:</strong> while extending to cosim we found the seed
+template was broken for <strong>both</strong> paths — <code>expand_states_for_xprop</code>
+cleared the X-mask for all <code>input_map</code> positions, which includes DFF-Q
+feedback reads, so uninitialised DFFs read as known <code>0</code> and X never
+surfaced even in <code>sim</code>. Fixed via <code>vcd_io::xprop_xmask_template</code>
+(X at genuine X-sources only) plus output-slot seeding in <code>run_cosim</code>.
+See the handoff and ADR-0016 amendment. Phases 1, 2, 5, the seed fix,
+<strong>phase 3</strong> (undriven inputs → X: <code>compute_x_capable_pins(treat_inputs_as_x)</code>
+gated by <code>DesignArgs::xprop_undriven_inputs</code>; <code>xprop_xmask_template_cosim</code>
+seeds inputs X; <code>state_prep</code> + <code>gpu_apply_flash_din</code> clear the X-mask of
+each bit they drive), <strong>phase 6</strong> (end-to-end <code>tests/xprop_cosim/</code>
+guards in CI, sim + cosim) and <strong>phase 4</strong> (observe-kernel output-offset:
+correct by construction — <code>gpu_io_step</code> reads the value half via
+<code>uart_params.state_size = effective_state_size</code>; guarded by re-running the
+APB3 + dual-UART cosims under <code>--xprop</code> and asserting identical decoded
+output) are done. <strong>All phases of #95 are complete</strong>; the bidir
+tristate-mux read <code>Y = OE ? A : external</code> is separately tracked as #96.</p>
+</blockquote>
+<p><code>--xprop</code> is now wired into <strong>both</strong> <code>sim</code> and <code>cosim</code>. (Historically it
+was <code>sim</code>-only and <code>cosim</code> always ran two-state, silently resolving
+uninitialised DFF/SRAM and undriven inputs to <code>0</code> — false agreement
+against 4-state RTL; that gap is what this plan closed.)</p>
+<p>What the work built on (already existed and was reused):</p>
 <ul>
 <li>The <strong>Metal <code>simulate_v1_stage</code> kernel is already X-capable</strong>
 (<code>sram_xmask</code> buffer, <code>xmask_state_offset</code>, the X-mask read logic in
@@ -7449,14 +7498,21 @@ the AIG. That is deferred to
 <a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>; until it lands,
 an <code>OE=1</code> loopback reads pessimistic-X (safe).</li>
 </ul>
-<h3 id="phase-4--observe-kernel-offset-fix-intersects-recent-work"><a class="header" href="#phase-4--observe-kernel-offset-fix-intersects-recent-work">Phase 4 — Observe-kernel offset fix (intersects recent work)</a></h3>
+<h3 id="phase-4--observe-kernel-offset-done--correct-by-construction"><a class="header" href="#phase-4--observe-kernel-offset-done--correct-by-construction">Phase 4 — Observe-kernel offset (DONE — correct by construction)</a></h3>
 <ul>
-<li><code>gpu_io_step</code>'s output reads (<code>READ_OUT_BIT</code> → <code>states[state_size + …]</code>) for UART, Wishbone, <strong>and the new bus-trace</strong> assume the
-two-state layout. Under xprop the slot doubles <code>[value | xmask]</code>, so
-the output-<strong>value</strong> offset shifts. Thread the correct output-value
-offset (from the script's xprop metadata) into <code>gpu_io_step</code> and the
-Rust drain/<code>READ_OUT_BIT</code> so the observe kernels read the value half,
-not the X-mask half. Add a guard/test so this can't silently regress.</li>
+<li><code>gpu_io_step</code>'s output reads (<code>READ_OUT_BIT</code> → <code>states[state_size + …]</code>)
+for UART, Wishbone, and bus-trace turned out to be <strong>already correct</strong>
+under xprop: <code>state_size</code> here is <code>uart_params.state_size</code>, set to the
+full <code>effective_state_size</code>, so <code>states[state_size + word]</code> indexes the
+output slot and <code>word &lt; reg_io_state_size</code> lands in the value half (value
+is at the front of <code>[value | xmask | …]</code>). The earlier worry that "the
+offset shifts" was unfounded — no Rust/kernel change was needed.</li>
+<li><strong>Guard added</strong> so it can't silently regress: CI re-runs the APB3
+bus-trace and dual-UART cosims under <code>--xprop</code> and asserts the decoded
+transactions/bytes are identical to the two-state runs (both designs are
+fully reset-driven, so phase-3 undriven-input X never reaches the traced
+signals). If a future layout change made the observe reads hit the xmask
+half, the decoded values would corrupt and the checkers would fail.</li>
 </ul>
 <h3 id="phase-5--x-aware-vcd-output"><a class="header" href="#phase-5--x-aware-vcd-output">Phase 5 — X-aware VCD output</a></h3>
 <ul>
