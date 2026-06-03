@@ -89,6 +89,26 @@ specific to cosim.
 The Metal kernel is already X-capable, so this is host-side reactive
 plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
 observe-kernel output-offset fix for the doubled layout). Phasing and
-risks are in [`../plans/cosim-xprop.md`](../plans/cosim-xprop.md). This
-amendment is **proposed**, not yet implemented; the original
-Decision/Consequences above describe the shipped `sim`-path behaviour.
+risks are in [`../plans/cosim-xprop.md`](../plans/cosim-xprop.md).
+
+### Seed-template correction (2026-06-03)
+
+Implementing the cosim extension surfaced a latent bug in the **shipped
+`sim` path** too: the power-up X-mask seed
+(`expand_states_for_xprop`) was built as "all-X, then clear every
+`input_map` position." But `input_map` contains the DFF-Q
+*combinational-read* positions, not just primary input ports — so
+uninitialised DFFs were read as known `0` and X never originated. `--xprop`
+was therefore silently two-state for **any** sequential design (the
+gate-level X math was unit-tested, but no end-to-end test asserted X
+surfacing from an uninitialised DFF).
+
+The seed is now built by `vcd_io::xprop_xmask_template`: **all-known, set
+X only at genuine X-source positions** (uninitialised DFF Q reads + SRAM
+reads), excluding primary inputs (nets present in `input_layout`) and
+constant-pinned DFFs (`const_zero_pos = input_layout.len()`). The cosim
+path additionally seeds the *output* slot's X-mask, since its per-edge
+`state_prep` copies output→input before the first `simulate`. This
+corrects design choice #3 above ("all DFFs start as X"): the *intent* was
+always X at DFF positions; the implementation had inverted it for
+DFF-feedback reads.

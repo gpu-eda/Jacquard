@@ -10,8 +10,9 @@
 reactive `cosim` path so uninitialised DFF/SRAM and undriven input pads
 read as `x` instead of silently `0`. Plan: [`../plans/cosim-xprop.md`](../plans/cosim-xprop.md).
 
-**Next session picks up at the BUG below** — X is wired but not yet
-surfacing. Isolate it, then finish phases 3/4/6.
+**The "X never surfaces" bug is now FIXED** (root cause was *not* any of
+the three suspects below — see "Resolved" section). Remaining work is
+phases 3/4/6.
 
 ## Done
 
@@ -20,51 +21,64 @@ surfacing. Isolate it, then finish phases 3/4/6.
 | `1ba01eb` | **Phases 1–2** (verified green): `--xprop` on `CosimArgs` → design build; X-mask seeded via `expand_states_for_xprop`; SRAM X-mask shadow (`0xFFFF_FFFF`) bound at `simulate_v1_stage` buffer(7) through the dispatch chain. Two-state path unchanged. Kernel needed **no** change (X-capable already; `xmask_state_offset` baked into the script at flatten time; `state_size` already uses `effective_state_size`). |
 | `5255f1c` | Plan + ADR-0016 amendment; bidir read-back deferred to **#96** (folds into the generic undriven-input→X rule; conservative-safe). |
 | `e95f7c2` | **Phase 5 WIP** (X NOT yet surfacing — see bug): cosim output-VCD emits `Value::X` from the X-mask half; `tests/xprop_cosim/` unreset-counter demo. Safe (behind `--xprop`, two-state green). |
+| *(uncommitted)* | **Core seed fix** (see "Resolved" below): `vcd_io::xprop_xmask_template` seeds X at genuine X-sources only (not all `input_map`); `run_cosim` seeds the output-slot X-mask too. X now surfaces in **both** sim and cosim. Tests updated; 291/291 green. |
 
 Also: **#90 closed** (multi-UART, done earlier); **#96 filed** (bidir tristate-mux modelling, the proper `Y = OE ? A : external`).
 
-## THE BUG (start here)
+## Resolved: the real root cause (2026-06-03)
 
-`tests/xprop_cosim/` has an **unreset 4-bit counter** (`count <= count + 1`;
-`X + 1 = X`, so it must stay X forever) plus a reset toggling FF. Under
-`--xprop`, `q_unreset` (count[0]) should show `x`; instead it toggles
-`0/1` and **no `x` appears anywhere in the VCD** — even though the log
-says the partition is **X-capable AND X-aware** and the X-mask is seeded.
+The "X never surfaces" symptom was **not** cosim-specific and **not** any
+of the three suspects originally listed (carry-across-feedback / VCD read
+offset / edge-0 clobber were all investigated and ruled out — the kernel,
+the `state_prep` copy of the full `effective_state_size`, and the VCD read
+at `output_state[rio + w]` are all correct).
 
-Repro:
+**Actual bug — a core seed-template error affecting BOTH `sim` and
+`cosim`:** `expand_states_for_xprop` built the power-up X-mask as *"all-X,
+then clear every `input_map` position."* But `input_map` includes the
+**DFF-Q feedback-read positions**, not just primary input ports. So every
+uninitialised DFF was read by combinational logic as **known 0**, and X
+never originated. `--xprop` was silently two-state for any sequential
+design. It went unnoticed because the only xprop tests were gate-level AND
+unit tests plus a fixture that (wrongly) modelled DFF Q outside
+`input_map`.
+
+Isolation path (kept for the record): seeded input slot had the X (verified
+`IN xmask=1` at the DFF Q), but the kernel wrote known `0` — because the
+*global read* never loaded any X into `shared_state_x`: every bit it
+consumed had been cleared in the template (the DFF-Q read positions). The
+CPU reference (`simulate_block_v1_xprop`) agreed bit-for-bit with the GPU,
+proving the bug was algorithmic, not GPU-specific.
+
+**Fix:**
+- `vcd_io::xprop_xmask_template(script)` — new shared helper. Builds the
+  template as *"all-known, set X only at genuine X-source positions"*
+  (uninitialised DFF Q reads + SRAM reads), excluding primary inputs (nets
+  in `input_layout`) and constant-pinned DFFs (`const_zero_pos =
+  input_layout.len()`). Used by `expand_states_for_xprop` and the sim
+  `--check-with-cpu` path.
+- `run_cosim` also seeds the **output** slot's X-mask half (not just the
+  input slot): cosim's per-edge `state_prep` copies output→input first, so
+  the seed must be in the output slot to survive edge 0.
+
+**Verified:** sim `--xprop --check-with-cpu` → `q_unreset=x` (persists),
+`q_reset` resolves, CPU↔GPU agree; cosim `--xprop` → same; two-state
+unchanged; mcu_soc cosim `--xprop` runs clean (X resolves through reset,
+28 X-transitions, not drowning); 291/291 lib tests pass.
+
+Repro (now shows `x` on `q_unreset`):
 ```sh
-( cd tests/xprop_cosim && yosys -q -s synth.tcl )   # if regenerating
 cargo run -r --features metal --bin jacquard -- cosim \
   tests/xprop_cosim/xprop_demo_synth.gv \
   --config tests/xprop_cosim/sim_config.json \
   --top-module xprop_demo --max-clock-edges 40 \
   --xprop --output-vcd /tmp/xdemo.vcd
-grep -E '^x' /tmp/xdemo.vcd   # currently empty; should have x on q_unreset (!)
+grep -E '^x' /tmp/xdemo.vcd   # now non-empty
 ```
 
-**Three suspects, not yet isolated:**
-1. **X-mask not carried across the cosim output→input feedback** — the
-   per-tick double-buffer may move only the value half, so computed
-   X-masks are dropped between edges. Most likely; specific to the
-   reactive loop (the `sim` path has no such feedback). Check how the
-   output slot becomes the next input slot in `run_cosim` and whether the
-   xmask half (`[rio..2*rio)` of each slot) is included.
-2. **Phase-5 VCD xmask read offset** — `run_cosim` reads
-   `output_state[rio + (pos>>5)]` for the xmask bit; verify `rio`
-   (= `reg_io_state_size`) is the right per-slot offset and that the
-   output slot's xmask half is where expected.
-3. **Seed not consumed on edge 0** — confirm `state_prep` doesn't clobber
-   the seeded input-slot xmask before the first `simulate`.
-
-**Decisive next step:** after one edge, dump the output-slot xmask words
-(`states[state_size + rio .. state_size + 2*rio]`) and check whether the
-GPU produced any X bit at all. Non-zero ⇒ suspect 2 (VCD read). All-zero
-⇒ suspect 1/3 (GPU not propagating/seeding). That one check splits the
-tree.
-
-(Aside: cosim `--check-with-cpu` under `--xprop` shows mismatches, but the
-cosim CPU reference is not X-aware — see plan; don't trust it as a
-parity oracle yet.)
+(Aside: cosim `--check-with-cpu` under `--xprop` still shows mismatches —
+the cosim CPU reference is not X-aware; don't trust it as a parity oracle.
+The *sim* `--check-with-cpu` xprop path IS X-aware and passes.)
 
 ## Remaining phases (after the bug)
 

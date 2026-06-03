@@ -456,22 +456,51 @@ pub fn parse_input_vcd(
 
 // ── X-propagation state buffer helpers ───────────────────────────────────────
 
-/// Expand value-only state buffer into a doubled buffer with X-mask for GPU dispatch.
+/// Build the per-snapshot X-mask template for the power-up state.
 ///
+/// A bit is X (`1`) iff its state position is a genuine X-source read by
+/// combinational logic — i.e. an uninitialised DFF Q or an SRAM read-data
+/// position in `input_map`. Primary input ports (driven externally) and
+/// constant-mapped DFFs (whose Q is pinned to `const_zero_pos`) are known
+/// (`0`). Positions not read as combinational inputs are left `0` (they are
+/// never consumed at cycle 0, so their seed value is irrelevant).
+///
+/// This is *not* "all-X except `input_map`": `input_map` includes the DFF-Q
+/// feedback positions, so clearing all of it would mark uninitialised DFFs as
+/// known and X would never originate (#95 — the bug that made `--xprop`
+/// silently two-state for any sequential design).
+pub fn xprop_xmask_template(script: &FlattenedScriptV1) -> Vec<u32> {
+    let rio = script.reg_io_state_size as usize;
+    // const_zero_pos is the guaranteed-zero padding bit at input_layout.len()
+    // (flatten.rs); constant-0/1 DFFs pin their Q there and must stay known.
+    let const_zero_pos = script.input_layout.len() as u32;
+
+    let mut xmask_template = vec![0u32; rio];
+    for (&net, &pos) in &script.input_map {
+        // Primary inputs are the only nets `input_layout` maps to their own
+        // position (flatten.rs co-assigns `input_layout[pos] = net` with
+        // `input_map[net] = pos`); DFF-Q / SRAM nets have no such entry. So an
+        // O(1) layout probe distinguishes them without a net-set allocation.
+        let is_primary_input = script.input_layout.get(pos as usize) == Some(&net);
+        if pos == const_zero_pos || is_primary_input {
+            continue;
+        }
+        xmask_template[(pos >> 5) as usize] |= 1u32 << (pos & 31);
+    }
+    xmask_template
+}
+
 /// The input `value_states` has `(num_cycles + 1)` snapshots of `reg_io_state_size` words.
 /// The output has `(num_cycles + 1)` snapshots of `2 * reg_io_state_size` words:
-/// `[values | xmask]` where X-mask is 0xFFFFFFFF for DFF output positions (unknown)
-/// and 0 for primary input positions (known from VCD).
+/// `[values | xmask]` where X-mask marks genuine X-sources (uninitialised DFF
+/// Q / SRAM reads) as unknown and primary inputs as known. See
+/// [`xprop_xmask_template`].
 pub fn expand_states_for_xprop(value_states: &[u32], script: &FlattenedScriptV1) -> Vec<u32> {
     let rio = script.reg_io_state_size as usize;
     let num_snapshots = value_states.len() / rio;
     assert_eq!(value_states.len(), num_snapshots * rio);
 
-    // Build X-mask template: 0xFFFFFFFF for DFF positions, 0 for inputs
-    let mut xmask_template = vec![0xFFFF_FFFFu32; rio];
-    for &pos in script.input_map.values() {
-        xmask_template[(pos >> 5) as usize] &= !(1u32 << (pos & 31));
-    }
+    let xmask_template = xprop_xmask_template(script);
 
     let mut expanded = Vec::with_capacity(num_snapshots * rio * 2);
     for snap_i in 0..num_snapshots {
@@ -1028,22 +1057,41 @@ mod xprop_tests {
 
     /// Build a minimal FlattenedScriptV1 for xprop buffer tests.
     ///
-    /// `input_positions`: bit positions in the state that are primary inputs
-    /// `output_positions`: bit positions in the state that are DFF outputs
+    /// Models the real flatten layout: primary inputs occupy `input_layout`
+    /// (and `input_map`) at their bit positions; uninitialised DFF Q nets are
+    /// also in `input_map` (they are read by combinational logic) at their
+    /// storage positions — these are the X-sources. `const_zero_pos` is
+    /// `input_layout.len()` (flatten.rs).
+    ///
+    /// `input_positions`: bit positions of primary input ports (kept known)
+    /// `output_positions`: bit positions of uninitialised DFF Q (X-sources)
     /// `rio`: reg_io_state_size in u32 words
     fn make_xprop_test_script(
         rio: u32,
         input_positions: &[u32],
         output_positions: &[u32],
     ) -> FlattenedScriptV1 {
+        // input_layout maps position → net for primary inputs (MAX elsewhere).
+        let layout_len = input_positions
+            .iter()
+            .copied()
+            .max()
+            .map(|m| m as usize + 1)
+            .unwrap_or(0);
+        let mut input_layout = vec![usize::MAX; layout_len];
         let mut input_map = IndexMap::new();
         for (i, &pos) in input_positions.iter().enumerate() {
             // Use distinct AIG pin IDs (even numbers for non-inverted)
-            input_map.insert(i * 2 + 100, pos);
+            let net = i * 2 + 100;
+            input_layout[pos as usize] = net;
+            input_map.insert(net, pos);
         }
         let mut output_map = IndexMap::new();
         for (i, &pos) in output_positions.iter().enumerate() {
-            output_map.insert(i * 2 + 200, pos);
+            // DFF Q is read by combinational logic → in input_map (X-source);
+            // DFF D writeout net → output_map.
+            input_map.insert(i * 2 + 200, pos);
+            output_map.insert(i * 2 + 300, pos);
         }
         FlattenedScriptV1 {
             num_blocks: 0,
@@ -1053,7 +1101,7 @@ mod xprop_tests {
             reg_io_state_size: rio,
             sram_storage_size: 0,
             sram_cell_storage_offsets: indexmap::IndexMap::new(),
-            input_layout: Vec::new(),
+            input_layout,
             output_map,
             input_map,
             stages_blocks_parts: Vec::new(),
@@ -1096,20 +1144,21 @@ mod xprop_tests {
         assert_eq!(values.len(), value_states.len());
         assert_eq!(values, value_states, "values should match original");
 
-        // X-mask template: bit 0 = input → cleared (0), bit 32 = DFF → set (1)
-        // Word 0 of xmask: bit 0 cleared → 0xFFFF_FFFE
-        // Word 1 of xmask: all bits set → 0xFFFF_FFFF (DFF output at bit 0 of word 1)
+        // X-mask template: all-known except X-sources. bit 0 = primary input
+        // → known; bit 32 = uninitialised DFF Q (word 1 bit 0) → X.
+        // Word 0 of xmask: no X-source → 0x0000_0000
+        // Word 1 of xmask: DFF Q at bit 0 → 0x0000_0001
         for snap in 0..3 {
             let xm_word0 = xmasks[snap * rio as usize];
             let xm_word1 = xmasks[snap * rio as usize + 1];
             assert_eq!(
-                xm_word0, 0xFFFF_FFFE,
-                "snap {}: word 0 should have bit 0 cleared (input)",
+                xm_word0, 0x0000_0000,
+                "snap {}: word 0 has no X-source (bit 0 is a primary input)",
                 snap
             );
             assert_eq!(
-                xm_word1, 0xFFFF_FFFF,
-                "snap {}: word 1 should be all-X (DFF output)",
+                xm_word1, 0x0000_0001,
+                "snap {}: word 1 bit 0 is the uninitialised DFF Q → X",
                 snap
             );
         }
@@ -1171,28 +1220,25 @@ mod xprop_tests {
 
         assert_eq!(expanded.len(), 2 * rio as usize);
 
-        // Check xmask template (second half of expanded)
+        // Check xmask template (second half of expanded). All-known except
+        // X-sources: primary inputs (bits 0,5,64) known; DFF Q (bits 32,33,96) X.
         let xmask = &expanded[rio as usize..];
 
-        // Word 0: bits 0 and 5 are inputs → should be cleared
-        let expected_word0 = 0xFFFF_FFFF & !(1u32 << 0) & !(1u32 << 5);
+        // Word 0: primary inputs at bits 0,5 → known; no X-source → 0
+        assert_eq!(xmask[0], 0, "word 0: bits 0,5 are primary inputs (known)");
+
+        // Word 1: DFF Q at bits 32,33 → word 1 bits 0,1 are X
         assert_eq!(
-            xmask[0], expected_word0,
-            "word 0: input bits 0,5 should be cleared"
+            xmask[1],
+            (1u32 << 0) | (1u32 << 1),
+            "word 1: DFF Q bits 0,1 → X"
         );
 
-        // Word 1: no inputs → all 0xFFFFFFFF
-        assert_eq!(xmask[1], 0xFFFF_FFFF, "word 1: no inputs, all X");
+        // Word 2: primary input at bit 64 → known; no X-source → 0
+        assert_eq!(xmask[2], 0, "word 2: bit 0 (=bit 64) is a primary input");
 
-        // Word 2: bit 0 is input → cleared
-        let expected_word2 = 0xFFFF_FFFF & !(1u32 << 0);
-        assert_eq!(
-            xmask[2], expected_word2,
-            "word 2: input bit 0 should be cleared"
-        );
-
-        // Word 3: no inputs → all 0xFFFFFFFF
-        assert_eq!(xmask[3], 0xFFFF_FFFF, "word 3: no inputs, all X");
+        // Word 3: DFF Q at bit 96 → word 3 bit 0 is X
+        assert_eq!(xmask[3], 1u32 << 0, "word 3: DFF Q bit 0 → X");
     }
 }
 

@@ -558,10 +558,7 @@ fn cmd_sim(args: SimArgs) {
             let (gpu_values, gpu_xmasks) = (gpu_values_vec, gpu_xmasks_vec);
             // Build input X-masks: same initial template as expand_states_for_xprop
             let num_input_snaps = input_states.len() / rio;
-            let mut xmask_template = vec![0xFFFF_FFFFu32; rio];
-            for &pos in design.script.input_map.values() {
-                xmask_template[(pos >> 5) as usize] &= !(1u32 << (pos & 31));
-            }
+            let xmask_template = vcd_io::xprop_xmask_template(&design.script);
             let mut input_xmasks = Vec::with_capacity(num_input_snaps * rio);
             for _ in 0..num_input_snaps {
                 input_xmasks.extend_from_slice(&xmask_template);
