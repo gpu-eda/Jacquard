@@ -53,25 +53,33 @@ within the primary inputs is X.
   `cmd_cosim`'s `DesignArgs`. (`setup` already turns it into
   `script.xprop_enabled`.)
 
-### Phase 2 — X-state in the cosim loop
-- Expand the cosim state buffer with `expand_states_for_xprop` and
-  allocate the `sram_xmask` shadow (init `0xFFFF_FFFF`), carried across
-  the per-tick loop.
-- Pass both into the simulate dispatch (`encode_dispatch` /
-  `simulate_v1_stage` already accept `sram_xmask` + the xmask offset).
-- Set the kernel's `xmask_state_offset` metadata for the cosim layout.
+### Phase 2 — X-state in the cosim loop  ✅ done (1ba01eb)
+- Expanded the cosim state buffer via `expand_states_for_xprop` and
+  allocated the `sram_xmask` shadow (init `0xFFFF_FFFF`), bound at
+  `simulate_v1_stage` buffer(7) through the dispatch chain.
+- No `write_params` change needed: `is_x_capable` / `xmask_state_offset`
+  are baked into the *script* at flatten time and `state_size` already
+  uses `effective_state_size` (so the layout scales automatically).
 
 ### Phase 3 — Input X-mask policy + per-edge maintenance (the novel part)
 - **Init:** every primary-input X-mask bit = X, except the driven set
-  (clock/reset/model/constants), which start known.
+  (clock/reset/model/constants), which start known. The
+  `expand_states_for_xprop` template clears *all* inputs to known, so
+  Phase 3 re-marks the *undriven* inputs back to X.
 - **Per edge:** wherever `state_prep` / model `ModelOverrides` drive an
   input bit, also clear that bit's X-mask (driven ⇒ known). Undriven
   bits stay X.
-- **Bidir:** after each tick, read each `bi_24t` pad's `OE` (the `__oe`
-  observable already surfaced by the AIG postprocess) and set the pad's
-  input-side X-mask = `OE ? known : X` for the next edge. This OE→input
-  feedback is the trickiest sub-item; isolate it behind a small
-  per-edge "bidir X refresh" step.
+- **Bidir: no special handling in this issue.** A `bi_24t` pad's
+  core-read is modelled `Y = PAD` (tristate not modelled — `aig.rs`),
+  and the PAD net is an undriven primary input, so bidir reads fall out
+  of the generic undriven-input rule above as **X** — conservative and
+  safe (an unmodelled bidir read surfaces as unknown, never a false
+  0/1). The earlier "per-edge OE→input feedback with one-edge latency"
+  idea was **wrong**: the correct read is combinational
+  `Y = OE ? A : external`, which requires modelling the tristate mux in
+  the AIG. That is deferred to
+  [#96](https://github.com/gpu-eda/Jacquard/issues/96); until it lands,
+  an `OE=1` loopback reads pessimistic-X (safe).
 
 ### Phase 4 — Observe-kernel offset fix (intersects recent work)
 - `gpu_io_step`'s output reads (`READ_OUT_BIT` → `states[state_size +
@@ -88,19 +96,18 @@ within the primary inputs is X.
   `__out`/`__oe` split already exists and should reflect X correctly.
 
 ### Phase 6 — Verification
-- A small reactive test design with (a) an unreset register, (b) an
-  unconnected input pad, (c) a bidir pad toggling OE — assert the output
-  VCD shows `x` until each is resolved (clocked write / model drive / OE
-  assert), and `0`/`1` after. Pairs with the JTAG-replay path.
+- A small reactive test design with (a) an unreset register and (b) an
+  unconnected input pad — assert the output VCD shows `x` until each is
+  resolved (clocked write / model drive), `0`/`1` after. (Bidir
+  read-back correctness is deferred to #96.)
 - Where feasible, extend the CPU `sanity_check_cpu_xprop` parity to a
   cosim scenario.
 
 ## Risks / open questions
 
-- **Bidir OE feedback** (Phase 3): OE is combinational within a tick;
-  the input-side X for edge *N+1* depends on OE computed at edge *N*.
-  Confirm this one-edge latency is acceptable (it matches how a real
-  pad's direction settles) or whether intra-tick resolution is needed.
+- **Bidir read-back is pessimistic-X** until [#96](https://github.com/gpu-eda/Jacquard/issues/96)
+  models the tristate mux (`Y = OE ? A : external`). Safe (false-X, not
+  false-0); resolve by driving the pad's external side with a model.
 - **Observe-offset regression** (Phase 4): the highest-risk interaction;
   the bus-trace code is days old. Needs an explicit test under `--xprop`.
 - **Performance:** the state buffer doubles again on top of any timing

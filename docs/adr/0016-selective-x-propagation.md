@@ -70,15 +70,21 @@ Two points the original design did not address, because the static
    drive only *some* input bits each edge (clock, reset, JTAG/UART
    pins, configured constants). Every primary-input bit *not* in that
    driven set is unconnected and must be **X**, not `0`.
-2. **Bidir pad input side is X when OE is deasserted.** A `bi_24t`
-   pad's core-read (input) side is unknown whenever its output-enable
-   (`OE`, surfaced as the `__oe` observable) is off and nothing external
-   drives it. The input-side X-mask is refreshed per edge from `OE`.
+2. **Bidir pad reads are conservatively X.** A `bi_24t` pad's core-read
+   is modelled `Y = PAD` (tristate not modelled), and `PAD` is an
+   undriven primary input — so bidir reads fall out of rule (1) as X,
+   which is the safe answer (false-X, never false-0). The
+   combinationally-correct read `Y = OE ? A : external` requires
+   modelling the tristate mux in the AIG; that is deferred to
+   [#96](https://github.com/gpu-eda/Jacquard/issues/96). (An earlier
+   draft of this amendment proposed a per-edge OE→input feedback with
+   one-edge latency — that was wrong; the correct read is combinational.)
 
-So the X-source taxonomy is now four-way: uninitialised DFF,
-uninitialised SRAM (both as before), **undriven input pads**, and
-**bidir input-when-OE-off**. The first two are sequential power-up X;
-the latter two are reactive IO X-sources specific to cosim.
+So the X-source taxonomy is now three-way: uninitialised DFF,
+uninitialised SRAM (both as before), and **undriven input pads** (which
+subsumes bidir reads under the current `Y = PAD` model). The first two
+are sequential power-up X; the third is the reactive IO X-source
+specific to cosim.
 
 The Metal kernel is already X-capable, so this is host-side reactive
 plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
