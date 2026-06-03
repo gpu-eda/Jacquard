@@ -428,6 +428,7 @@ impl MetalSimulator {
         states_buffer: &metal::Buffer,
         event_buffer_metal: &metal::Buffer,
         timing_constraints_buffer: Option<&metal::Buffer>,
+        sram_xmask_buffer: &metal::Buffer,
     ) {
         self.write_params(
             stage_i,
@@ -449,6 +450,7 @@ impl MetalSimulator {
             states_buffer,
             event_buffer_metal,
             timing_constraints_buffer,
+            sram_xmask_buffer,
         );
         command_buffer.commit();
         command_buffer.wait_until_completed();
@@ -495,6 +497,7 @@ impl MetalSimulator {
         states_buffer: &metal::Buffer,
         event_buffer_metal: &metal::Buffer,
         timing_constraints_buffer: Option<&metal::Buffer>,
+        sram_xmask_buffer: &metal::Buffer,
     ) {
         let encoder = command_buffer.new_compute_command_encoder();
         encoder.set_compute_pipeline_state(&self.pipeline_state);
@@ -505,6 +508,9 @@ impl MetalSimulator {
         encoder.set_buffer(4, Some(&self.params_buffers[stage_i]), 0);
         encoder.set_buffer(5, Some(event_buffer_metal), 0);
         encoder.set_buffer(6, timing_constraints_buffer.map(|v| &**v), 0);
+        // buffer(7) = SRAM X-mask shadow (ADR 0016); the kernel only reads
+        // it when the partition is X-capable, so a dummy is fine off-xprop.
+        encoder.set_buffer(7, Some(sram_xmask_buffer), 0);
 
         let threads_per_threadgroup = MTLSize::new(256, 1, 1);
         let threadgroups = MTLSize::new(num_blocks as u64, 1, 1);
@@ -663,6 +669,7 @@ impl MetalSimulator {
         wb_trace_params_buffer: &metal::Buffer,
         bus_trace_channel_buffer: &metal::Buffer,
         bus_trace_params_buffer: &metal::Buffer,
+        sram_xmask_buffer: &metal::Buffer,
         timing_constraints_buffer: Option<&metal::Buffer>,
         arrival_state_offset: u32,
         vcd_ring_buffer: Option<&metal::Buffer>,
@@ -703,6 +710,7 @@ impl MetalSimulator {
                     states_buffer,
                     event_buffer_metal,
                     timing_constraints_buffer,
+                    sram_xmask_buffer,
                 );
             }
 
@@ -773,6 +781,7 @@ impl MetalSimulator {
         wb_trace_params_buffer: &metal::Buffer,
         bus_trace_channel_buffer: &metal::Buffer,
         bus_trace_params_buffer: &metal::Buffer,
+        sram_xmask_buffer: &metal::Buffer,
         timing_constraints_buffer: Option<&metal::Buffer>,
     ) {
         // Use schedule position 0 for profiling (all patterns have same kernel cost).
@@ -810,6 +819,7 @@ impl MetalSimulator {
                     states_buffer,
                     event_buffer_metal,
                     timing_constraints_buffer,
+                    sram_xmask_buffer,
                 );
             }
             self.encode_flash_model_step(
@@ -885,6 +895,7 @@ impl MetalSimulator {
                     states_buffer,
                     event_buffer_metal,
                     timing_constraints_buffer,
+                    sram_xmask_buffer,
                 );
                 cb2.commit();
                 cb2.wait_until_completed();
@@ -2551,6 +2562,24 @@ pub fn run_cosim(
     };
     states.fill(0);
 
+    // Selective X-propagation (ADR 0016): seed the input slot's X-mask
+    // half so uninitialised DFF/SRAM start as X. `expand_states_for_xprop`
+    // builds the template (0xFFFF…=X for everything, cleared for primary
+    // inputs); we copy its [value|xmask] block into the input slot. The
+    // arrivals region (if timing is enabled) stays 0. Phase 3 will refine
+    // undriven inputs back to X; here inputs start known, matching the
+    // sim-path template. See docs/plans/cosim-xprop.md.
+    if script.xprop_enabled {
+        let rio = script.reg_io_state_size as usize;
+        let value_only = vec![0u32; rio];
+        let xpanded = crate::sim::vcd_io::expand_states_for_xprop(&value_only, script);
+        states[0..xpanded.len()].copy_from_slice(&xpanded);
+        clilog::info!(
+            "cosim X-propagation enabled: {} reg/io words, X-mask seeded for uninitialised state",
+            rio
+        );
+    }
+
     // SRAM storage
     let sram_data_buffer = simulator.device.new_buffer(
         (script.sram_storage_size as usize * std::mem::size_of::<u32>()) as u64,
@@ -2563,6 +2592,29 @@ pub fn run_cosim(
         )
     };
     sram_data.fill(0);
+
+    // SRAM X-mask shadow (ADR 0016): one word per SRAM cell, all X
+    // (0xFFFF_FFFF) initially so unread/unwritten cells read as X.
+    // Bound at buffer(7) of simulate_v1_stage; sized 1 (dummy) when
+    // xprop is off — the kernel guards on is_x_capable before reading.
+    let sram_xmask_len = if script.xprop_enabled {
+        (script.sram_storage_size as usize).max(1)
+    } else {
+        1
+    };
+    let sram_xmask_buffer = simulator.device.new_buffer(
+        (sram_xmask_len * std::mem::size_of::<u32>()) as u64,
+        MTLResourceOptions::StorageModeShared,
+    );
+    {
+        let m: &mut [u32] = unsafe {
+            std::slice::from_raw_parts_mut(
+                sram_xmask_buffer.contents() as *mut u32,
+                sram_xmask_len,
+            )
+        };
+        m.fill(if script.xprop_enabled { 0xFFFF_FFFF } else { 0 });
+    }
 
     // SRAM write dumper (JACQUARD_SRAM_DUMP=<path>). Opt-in
     // diagnostic that snapshots `sram_storage` per batch and emits
@@ -3265,6 +3317,7 @@ pub fn run_cosim(
             &wb_trace_params_buffer,
             &bus_trace_channel_buffer,
             &bus_trace_params_buffer,
+            &sram_xmask_buffer,
             timing_constraints_buffer.as_ref(),
         );
 
@@ -3874,6 +3927,7 @@ pub fn run_cosim(
             &wb_trace_params_buffer,
             &bus_trace_channel_buffer,
             &bus_trace_params_buffer,
+            &sram_xmask_buffer,
             timing_constraints_buffer.as_ref(),
             arrival_state_offset,
             vcd_ring_buffer.as_ref(),

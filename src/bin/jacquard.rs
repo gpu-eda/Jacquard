@@ -313,6 +313,13 @@ struct CosimArgs {
     #[clap(long = "jtag-hold-cycles", value_name = "N", default_value = "4")]
     jtag_hold_cycles: u32,
 
+    /// Enable selective X-propagation (ADR 0016): uninitialised DFF/SRAM,
+    /// undriven input pads, and bidir pads with OE deasserted resolve to
+    /// X rather than silently to 0. Emits `x` in the output VCD. See
+    /// `docs/plans/cosim-xprop.md`.
+    #[clap(long)]
+    xprop: bool,
+
     /// Path to a run-parameters file for reproducible jitter injection.
     /// If the file exists, parameters are loaded from it. If not, fresh
     /// parameters are generated and written before simulation starts.
@@ -1648,7 +1655,7 @@ fn cmd_cosim(args: CosimArgs) {
             sdf_corner: "typ".to_string(),
             sdf_debug: false,
             clock_period_ps,
-            xprop: false, // cosim doesn't support xprop yet
+            xprop: args.xprop,
             liberty: None,
             timing_ir: args.timing_ir.clone(),
             timing_corner: None,
