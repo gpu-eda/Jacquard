@@ -3392,7 +3392,8 @@ pub fn run_cosim(
         let mut writer = vcd_ng::Writer::new(bufwriter);
         let mapping =
             crate::sim::vcd_io::setup_cosim_output_vcd(&mut writer, netlistdb, aig, script);
-        let prev_values = vec![2u32; mapping.out2vcd.len()]; // 2 = initial sentinel
+        // Sentinel forces the first write; must differ from 0/1/2(=X).
+        let prev_values = vec![u32::MAX; mapping.out2vcd.len()];
         clilog::info!(
             "Output VCD enabled: {} output signals → {}",
             mapping.out2vcd.len(),
@@ -4016,12 +4017,25 @@ pub fn run_cosim(
                     for (i, &(output_aigpin, output_pos, _vid)) in
                         mapping.out2vcd.iter().enumerate()
                     {
+                        // value_new encodes the VCD level: 0, 1, or 2 = X.
+                        // Under xprop the output slot is [value | xmask | …];
+                        // the xmask bit sits `rio` words after the value bit.
                         let value_new = match output_pos {
                             u32::MAX => {
                                 assert!(output_aigpin <= 1);
                                 output_aigpin as u32
                             }
-                            pos => (output_state[(pos >> 5) as usize] >> (pos & 31)) & 1,
+                            pos => {
+                                let w = (pos >> 5) as usize;
+                                let v = (output_state[w] >> (pos & 31)) & 1;
+                                if script.xprop_enabled
+                                    && (output_state[rio + w] >> (pos & 31)) & 1 != 0
+                                {
+                                    2 // X
+                                } else {
+                                    v
+                                }
+                            }
                         };
 
                         if value_new == prev_values[i] {
@@ -4053,9 +4067,12 @@ pub fn run_cosim(
                             current_timestamp = ts;
                         }
                         let (_, _, vid) = mapping.out2vcd[i];
-                        writer
-                            .change_scalar(vid, bit_to_vcd_value(value_new as u8))
-                            .unwrap();
+                        let vcd_val = match value_new {
+                            0 => vcd_ng::Value::V0,
+                            1 => vcd_ng::Value::V1,
+                            _ => vcd_ng::Value::X, // 2 = X (xprop)
+                        };
+                        writer.change_scalar(vid, vcd_val).unwrap();
                     }
                 }
                 prof_output_vcd += t_timing.elapsed().as_nanos() as u64;

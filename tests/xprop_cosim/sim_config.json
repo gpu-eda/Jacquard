@@ -1,0 +1,20 @@
+{
+    "_comment": "Cosim X-propagation demo (#95). Run with --xprop --output-vcd: q_unreset stays 'x' (unreset self-holding reg), q_reset resolves to 0/1 after reset. See tests/xprop_cosim/check.py.",
+    "netlist_path": "tests/xprop_cosim/xprop_demo_synth.gv",
+    "clock_gpio": 0,
+    "reset_gpio": 1,
+    "reset_active_high": false,
+    "reset_cycles": 10,
+    "num_cycles": 2000,
+    "clock_period_ps": 40000,
+    "port_mapping": {
+        "inputs": {
+            "0": "clk",
+            "1": "rst_n"
+        },
+        "outputs": {
+            "2": "q_unreset",
+            "3": "q_reset"
+        }
+    }
+}
