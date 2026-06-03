@@ -82,16 +82,26 @@ The *sim* `--check-with-cpu` xprop path IS X-aware and passes.)
 
 ## Remaining phases (after the bug)
 
-- **Phase 3** — re-mark *undriven* primary inputs as X (driven set =
-  clock/reset/model `driven_positions()`/constants stays known), with
-  per-edge maintenance (likely teach `state_prep` to clear the X-mask for
-  bits it drives). Bidir reads fall out of this rule as X (safe); the
-  correct `Y = OE ? A : external` is **#96**.
+- **Phase 3 — DONE.** Undriven primary inputs read X:
+  `compute_x_capable_pins(treat_inputs_as_x_sources)` (gated by
+  `DesignArgs::xprop_undriven_inputs`, true for cosim only) makes input
+  cones X-capable; `xprop_xmask_template_cosim` seeds all primary inputs X;
+  the driven set is exactly what `build_edge_ops` emits, and `state_prep`
+  clears the X-mask of each bit it drives (driven ⇒ known) so undriven ones
+  stay X. **`gpu_apply_flash_din` also clears the X-mask** of the flash
+  MISO bits it drives (they bypass `state_prep`) — without this the SPI
+  read drowns in X. Bidir reads fall out as X (safe); the correct
+  `Y = OE ? A : external` is **#96**. Verified: demo `q_undriven_reg`/`comb`
+  read X under cosim `--xprop`; mcu_soc boots (flash `0x03` read decoded).
 - **Phase 4** — believed safe (value-at-front of each slot, so observe
   kernels' `states[state_size + pos]` reads hit the value half). Add a
   `--xprop` test that confirms the bus-trace/UART output is still correct.
-- **Phase 6** — once X surfaces, assert the demo's `q_unreset == x`,
-  `q_reset` resolves; wire into CI.
+  **Still open** — the only remaining phase.
+- **Phase 6 — DONE.** `tests/xprop_cosim/` is an end-to-end guard for both
+  sim and cosim: `check.py` (modes `xprop` / `xprop-cosim` / `two-state`)
+  asserts `q_unreset==x`, `q_reset` resolves, and the phase-3 undriven
+  outputs; wired into the Metal CI job (fatal). The existing dff_test
+  xprop check was also made fatal.
 
 ## Other open threads (from the prior release-prep handoff)
 
