@@ -626,10 +626,10 @@ impl AIG {
 
             // `bi_24t` on the clock path: only PAD is the clock input.
             // The cell also exposes `A` and `OE` as Direction::I (the
-            // core-side tristate driver inputs), but those are
-            // discarded by `gf180mcu_postprocess`'s `Y = PAD`
-            // simplification, so they're not part of the clock cone.
-            // Without this guard, both PAD and A match the
+            // core-side tristate driver inputs); those feed the read-back
+            // mux `Y = OE ? A : PAD` (#96), not the clock — the clock
+            // enters through PAD only, so A/OE are not part of the clock
+            // cone. Without this guard, both PAD and A match the
             // "A | I | PAD" arm below and whichever is enumerated
             // last wins — wrong if A wins. See #75.
             let is_gf180mcu_bi_24t = matches!(variant, Some(PdkVariant::Gf180Mcu))
@@ -1661,16 +1661,15 @@ impl AIG {
         //   external `PAD`. PU / PD pull controls have no logic effect.
         // * `bi_24t`: bidirectional pad. The real cell is
         //   `Y = PAD & IE` (input side) and `PAD = A when OE=1`
-        //   (output side, tristate). Jacquard does not model tristate,
-        //   so we adopt `Y = PAD` always (IE=1 implied) for the input
-        //   direction. To make the *output* direction observable, we
-        //   also promote the bidir pad's `A` (core drive) and `OE`
-        //   (output-enable) AIG pins to primary outputs with synthetic
-        //   names `<top-port>__out` / `<top-port>__oe`. Downstream
-        //   consumers can then reconstruct the pad's external value as
-        //   `OE ? A : external_stim`. The wider tristate caveat (lack
-        //   of in-AIG tristate) is unchanged — see
-        //   docs/plans/gf180mcu-enablement.md.
+        //   (output side, tristate). We model the core read-back
+        //   combinationally as `Y = OE ? A : external` (IE=1 implied;
+        //   see the mux built below, #96): on `OE=1` the core reads its
+        //   own drive `A`, on `OE=0` it reads the external PAD net. We
+        //   also promote the pad's `A` (core drive) and `OE` (output-
+        //   enable) AIG pins to primary outputs with synthetic names
+        //   `<top-port>__out` / `<top-port>__oe`, so the output VCD can
+        //   capture the pad's drive-out direction. (`in_c`/`in_s` stay
+        //   `Y = PAD`.) See docs/plans/gf180mcu-enablement.md.
         if crate::gf180mcu_pdk::is_io_pad_cell(cell_type) {
             let output_pin_name = netlistdb.pinnames[pinid].1.as_str();
             assert_eq!(
@@ -1706,25 +1705,50 @@ impl AIG {
             // observable still has a stable, traceable label.
             if cell_type == "bi_24t" {
                 let base = self.resolve_bi_24t_observable_base(netlistdb, cellid, pad_pinid);
-                if a_pinid != usize::MAX {
-                    let a_iv = self.pin2aigpin_iv[a_pinid];
-                    if a_iv != usize::MAX {
-                        self.primary_outputs.insert(a_iv);
-                        self.extra_observable_names
-                            .entry(a_iv)
-                            .or_default()
-                            .push(format!("{}__out", base));
-                    }
+                // Resolve A (core drive) and OE (output-enable) once; `None`
+                // if the pin is absent or unmapped (malformed/partial
+                // instantiation — real netlists always wire both).
+                let a_iv = (a_pinid != usize::MAX)
+                    .then(|| self.pin2aigpin_iv[a_pinid])
+                    .filter(|&iv| iv != usize::MAX);
+                let oe_iv = (oe_pinid != usize::MAX)
+                    .then(|| self.pin2aigpin_iv[oe_pinid])
+                    .filter(|&iv| iv != usize::MAX);
+
+                // #96: model the tristate read-back combinationally as
+                // `Y = OE ? A : external`, replacing the conservative
+                // `Y = PAD` set above. When OE=1 the core reads its own
+                // drive `A` (known whenever `A` is — no false-X under
+                // --xprop, and the two-state loopback reads `A`, not the
+                // external stim); when OE=0 it reads the external PAD net
+                // (an undriven primary input → X under --xprop, or a
+                // peripheral model's drive). `pad_iv` is that external
+                // primary input; `Y` becomes a distinct mux node. Built as
+                // OR(AND(OE, A), AND(!OE, ext)) via De Morgan — same idiom
+                // as `wire_dff_reset_set_overlay`. Without both A and OE we
+                // can't form the mux, so the conservative `Y = PAD` stands.
+                if let (Some(a_iv), Some(oe_iv)) = (a_iv, oe_iv) {
+                    let drive = self.add_and_gate(oe_iv, a_iv); // OE & A
+                    let ext = self.add_and_gate(oe_iv ^ 1, pad_iv); // !OE & ext
+                    // Y = drive | ext = !(!drive & !ext)
+                    self.pin2aigpin_iv[pinid] = self.add_and_gate(drive ^ 1, ext ^ 1) ^ 1;
                 }
-                if oe_pinid != usize::MAX {
-                    let oe_iv = self.pin2aigpin_iv[oe_pinid];
-                    if oe_iv != usize::MAX {
-                        self.primary_outputs.insert(oe_iv);
-                        self.extra_observable_names
-                            .entry(oe_iv)
-                            .or_default()
-                            .push(format!("{}__oe", base));
-                    }
+
+                // Surface A/OE as named primary outputs so the output VCD
+                // can capture the pad's drive-out direction.
+                if let Some(a_iv) = a_iv {
+                    self.primary_outputs.insert(a_iv);
+                    self.extra_observable_names
+                        .entry(a_iv)
+                        .or_default()
+                        .push(format!("{}__out", base));
+                }
+                if let Some(oe_iv) = oe_iv {
+                    self.primary_outputs.insert(oe_iv);
+                    self.extra_observable_names
+                        .entry(oe_iv)
+                        .or_default()
+                        .push(format!("{}__oe", base));
                 }
             }
             return;
@@ -4421,6 +4445,103 @@ endmodule
                 names,
                 aigpin
             );
+        }
+    }
+
+    /// `bi_24t` models the core read-back combinationally as
+    /// `Y = OE ? A : external` (#96), not the old conservative `Y = PAD`.
+    /// With `A`, `OE`, and the external PAD net as three distinct primary
+    /// inputs, the `Y` cone must evaluate to that mux across all 8 input
+    /// combinations — proving `OE=1` reads the core drive `A` (no false-X /
+    /// no two-state loopback bug) and `OE=0` reads the external stim.
+    #[test]
+    fn bi_24t_models_tristate_readback() {
+        const VERILOG: &str = r#"
+module top(a, oe, p, y);
+  input a;
+  input oe;
+  inout p;
+  output y;
+  gf180mcu_fd_io__bi_24t bidir_pad (
+      .PAD(p), .A(a), .OE(oe),
+      .IE(1'b1), .CS(1'b0), .SL(1'b0), .PU(1'b0), .PD(1'b0),
+      .Y(y)
+  );
+endmodule
+"#;
+        let nl = netlistdb::NetlistDB::from_sverilog_source(
+            VERILOG,
+            Some("top"),
+            &GF180MCULeafPins,
+        )
+        .expect("netlist parse");
+        let aig = AIG::from_netlistdb(&nl);
+
+        // Find the bi_24t's A / OE / PAD inputs and Y output by pin name.
+        let (mut a_pinid, mut oe_pinid, mut pad_pinid, mut y_pinid) =
+            (usize::MAX, usize::MAX, usize::MAX, usize::MAX);
+        for pin in 0..nl.num_pins {
+            match nl.pinnames[pin].1.as_str() {
+                "A" => a_pinid = pin,
+                "OE" => oe_pinid = pin,
+                "PAD" => pad_pinid = pin,
+                "Y" => y_pinid = pin,
+                _ => {}
+            }
+        }
+        assert!(
+            a_pinid != usize::MAX
+                && oe_pinid != usize::MAX
+                && pad_pinid != usize::MAX
+                && y_pinid != usize::MAX,
+            "bi_24t pins not all found"
+        );
+
+        // Bare aigpins of the three primary inputs, and the iv `Y` resolves to.
+        let a_pin = aig.pin2aigpin_iv[a_pinid] >> 1;
+        let oe_pin = aig.pin2aigpin_iv[oe_pinid] >> 1;
+        let pad_pin = aig.pin2aigpin_iv[pad_pinid] >> 1;
+        let y_iv = aig.pin2aigpin_iv[y_pinid];
+
+        // The specific bug this fixes: `Y` must be a distinct mux node, not
+        // aliased to the external PAD primary input. (The truth-table loop
+        // below is the full semantic proof; this is the explicit bug marker.)
+        assert_ne!(
+            y_iv >> 1,
+            pad_pin,
+            "Y is still aliased to the external PAD input (mux not built)"
+        );
+
+        // Recursive AIG evaluator: `env` maps each named primary input's bare
+        // aigpin to its assigned value; everything else folds through Tie0 /
+        // AndGate (the only driver kinds in this combinational cone).
+        fn eval(aig: &AIG, iv: usize, env: &[(usize, bool)]) -> bool {
+            let pin = iv >> 1;
+            let inv = (iv & 1) == 1;
+            let v = if let Some(&(_, val)) = env.iter().find(|&&(p, _)| p == pin) {
+                val
+            } else {
+                match aig.drivers[pin] {
+                    DriverType::Tie0 => false,
+                    DriverType::AndGate(x, z) => eval(aig, x, env) && eval(aig, z, env),
+                    ref other => panic!("unexpected leaf driver {other:?} for aigpin {pin}"),
+                }
+            };
+            v ^ inv
+        }
+
+        for a in [false, true] {
+            for oe in [false, true] {
+                for pad in [false, true] {
+                    let env = [(a_pin, a), (oe_pin, oe), (pad_pin, pad)];
+                    let got = eval(&aig, y_iv, &env);
+                    let want = if oe { a } else { pad };
+                    assert_eq!(
+                        got, want,
+                        "Y mismatch at A={a} OE={oe} PAD={pad}: got {got}, want OE?A:PAD={want}"
+                    );
+                }
+            }
         }
     }
 

@@ -31,6 +31,16 @@ the public contracts in `docs/release-process.md` follow stricter rules).
   produced a nil `MTLBuffer` (`new_buffer(0)`) whose `.contents()` is null;
   the SRAM data buffer is now sized to `max(1)` word (matching the X-mask
   shadow buffer), so pure-logic designs run under `jacquard cosim`.
+- **`bi_24t` bidirectional pad core read-back** (#96). The AIG modelled a
+  bidir pad's core read as `Y = PAD` always, so a design that drives a pad
+  and reads it back in the same path read the *external* PAD net instead of
+  its own drive `A` — wrong in two-state (reads the external stim/0) and
+  conservatively-X under `--xprop` (the external pad is an undriven input).
+  `AIG::from_netlistdb` now builds the tristate read-back combinationally as
+  `Y = OE ? A : external`: on `OE=1` the core reads its own drive `A`
+  (X-exact — known whenever `A` is), on `OE=0` it reads the external net.
+  `in_c`/`in_s` input pads are unchanged. See ADR 0016. Unit test:
+  `aig::gf180mcu_chip_top_tests::bi_24t_models_tristate_readback`.
 
 ## [0.1.0] - 2026-06-04
 

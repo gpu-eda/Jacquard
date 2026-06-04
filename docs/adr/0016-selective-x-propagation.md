@@ -70,15 +70,15 @@ Two points the original design did not address, because the static
    drive only *some* input bits each edge (clock, reset, JTAG/UART
    pins, configured constants). Every primary-input bit *not* in that
    driven set is unconnected and must be **X**, not `0`.
-2. **Bidir pad reads are conservatively X.** A `bi_24t` pad's core-read
-   is modelled `Y = PAD` (tristate not modelled), and `PAD` is an
-   undriven primary input — so bidir reads fall out of rule (1) as X,
-   which is the safe answer (false-X, never false-0). The
-   combinationally-correct read `Y = OE ? A : external` requires
-   modelling the tristate mux in the AIG; that is deferred to
-   [#96](https://github.com/gpu-eda/Jacquard/issues/96). (An earlier
-   draft of this amendment proposed a per-edge OE→input feedback with
-   one-edge latency — that was wrong; the correct read is combinational.)
+2. **Bidir pad reads.** A `bi_24t` pad's core-read was originally
+   modelled `Y = PAD` (tristate not modelled); since `PAD` is an undriven
+   primary input, bidir reads fell out of rule (1) as X — safe (false-X,
+   never false-0) but pessimistic for the `OE=1` loopback. The
+   combinationally-correct read `Y = OE ? A : external` is now modelled as
+   a mux in the AIG ([#96](https://github.com/gpu-eda/Jacquard/issues/96),
+   implemented — see the dated subsection below). (An earlier draft of this
+   amendment proposed a per-edge OE→input feedback with one-edge latency —
+   that was wrong; the correct read is combinational.)
 
 So the X-source taxonomy is now three-way: uninitialised DFF,
 uninitialised SRAM (both as before), and **undriven input pads** (which
@@ -127,3 +127,20 @@ genuinely undriven inputs — stays X. `sim` keeps inputs known (driven from
 the VCD) and pays no extra X-aware cost. End-to-end guards covering the
 DFF and undriven-input X-sources, in both sim and cosim, live in
 `tests/xprop_cosim/` (CI, fatal).
+
+### Bidir tristate read-back mux (implemented 2026-06-04)
+
+Point #2 above is now implemented (#96). `AIG::from_netlistdb`'s `bi_24t`
+branch builds `Y = OE ? A : external` combinationally in the AIG —
+`OR(AND(OE, A), AND(!OE, PAD))` via the De Morgan idiom already used by
+`wire_dff_reset_set_overlay` — instead of the conservative `Y = PAD`. The
+external arm is the same undriven PAD primary input (X under rule (1) until
+a peripheral model drives it); the `OE=1` arm reads the core's own drive
+`A`, so the loopback is **X-exact** (known whenever `A` is) and the
+two-state read returns `A`, not the external stim. This removes bidir reads
+from the "undriven input → X" subsumption for the `OE=1` case; they are now
+exact rather than conservatively-X. `in_c`/`in_s` stay `Y = PAD`. Without
+both `A` and `OE` pins the conservative `Y = PAD` still stands. Unit test:
+`aig::gf180mcu_chip_top_tests::bi_24t_models_tristate_readback` evaluates
+the full `Y` truth table. (#107's `$isunknown` x-assert work can now assert
+bidir read-backs go definite when `OE` is asserted.)
