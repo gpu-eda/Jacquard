@@ -21,3 +21,4 @@ pub mod sram_preload;
 pub mod trace_signals;
 pub mod timing_ir_loader;
 pub mod vcd_io;
+pub mod x_sources;

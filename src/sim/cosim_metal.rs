@@ -10,6 +10,9 @@ use std::collections::HashMap;
 use crate::aig::{DriverType, AIG};
 use crate::flatten::FlattenedScriptV1;
 use crate::sim::setup::LoadedDesign;
+// Shared with the `xsources` driven-input computation so cosim's GPIO
+// mapping and the static X-source query stay consistent (issue #98).
+use crate::sim::x_sources::parse_gpio_index;
 use crate::testbench::{CppSpiFlash, PortMapping, TestbenchConfig, UartEvent};
 use metal::{
     CommandQueue, ComputePipelineState, Device as MTLDevice, MTLResourceOptions, MTLSize,
@@ -1333,24 +1336,6 @@ pub(crate) fn build_gpio_mapping(
         clock_domains,
         named_input_bits,
     }
-}
-
-/// Parse a GPIO index from a pin name like "gpio_in[38]" or "gpio_in:38".
-fn parse_gpio_index(pin_name: &str, prefix: &str) -> Option<usize> {
-    // Try "gpio_in[N]" format
-    if let Some(start) = pin_name.find(&format!("{}[", prefix)) {
-        let after = &pin_name[start + prefix.len() + 1..];
-        if let Some(end) = after.find(']') {
-            return after[..end].parse().ok();
-        }
-    }
-    // Try "gpio_in:N" format
-    if let Some(start) = pin_name.find(&format!("{}:", prefix)) {
-        let after = &pin_name[start + prefix.len() + 1..];
-        let num_str: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
-        return num_str.parse().ok();
-    }
-    None
 }
 
 /// Resolve an internal signal name to its output state bit position.

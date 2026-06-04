@@ -200,6 +200,16 @@ are planned. See `docs/bus-tracing.md` for the full guide,
 
 See `docs/timing-violations.md` for the full guide on enabling GPU-side setup/hold violation checks, interpreting violation reports, and tracing violations back to source signals using `netlist_graph`.
 
+### X-value Debugging (`xsources` + `xroots`)
+
+When `cosim --xprop` produces an `x` on a signal, find *why* statically
+instead of trace→guess→re-run. `jacquard xsources <netlist> --config
+sim.json -o xsources.json` enumerates the design's X-sources (unreset DFFs,
+SRAM reads, undriven inputs) as JSON; `netlist-graph xroots <netlist>
+<signal> --xsources xsources.json` reverse-walks the signal's cone and reports
+the nearest X-source frontier, with `--emit-trace` writing a `--trace-signals`
+list for a confirming run. Full guide: `docs/x-debugging.md`.
+
 ## Python tooling
 
 Python tools (PDK fetchers, build scripts, harness utilities) belong in

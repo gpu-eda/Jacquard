@@ -17,6 +17,23 @@ runners land (ADR 0018).
 
 ### Added
 
+- **X-source debugging: `jacquard xsources` + `netlist-graph xroots`**
+  (#98). A two-command workflow to answer "why does signal S read X under
+  `cosim --xprop`?" as a static query instead of a trace→guess→re-run loop.
+  `jacquard xsources <netlist> --config c.json -o xsources.json` statically
+  enumerates every X-source — unreset/reset DFF Q outputs, SRAM read ports,
+  and (with `--config`) undriven primary inputs — as a schema-versioned JSON
+  manifest, names resolved through netlistdb (no GPU required).
+  `netlist-graph xroots <netlist> <signal> --xsources xsources.json` then
+  reverse-reachability-walks the signal's cone (through DFF data pins,
+  skipping clock/reset), intersects with the manifest, and reports the nearest
+  X-source frontier classified by kind; `--emit-trace` writes a
+  `--trace-signals` list for a confirming `--xprop` run. DFF/SRAM sources
+  resolve by driving-cell instance, so jacquard's net-name canonicalisation
+  doesn't break the round-trip. Full guide: `docs/x-debugging.md`. The cosim
+  GPIO-index parser (`parse_gpio_index`) is now shared with the `xsources`
+  driven-set computation so the two stay consistent.
+
 - **Multi-corner support** (WS2.4, commits `5822343` / `530bb36` /
   `59fde04`). `opensta-to-ir` accepts `--liberty NAME=PATH` to attach
   Liberty files to named PVT corners (bare paths still go to a

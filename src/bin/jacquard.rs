@@ -59,6 +59,15 @@ enum Commands {
     /// Analyzes the AIG timing and shows the critical paths from source to sink,
     /// including cell origins (synthesis cells), gate delays, and cumulative arrivals.
     DumpPaths(DumpPathsArgs),
+
+    /// Emit the design's X-source set as JSON (for `cosim --xprop` debugging).
+    ///
+    /// Statically enumerates where X originates: unreset DFF Q outputs, SRAM
+    /// read ports, and — with `--config` — primary inputs the testbench leaves
+    /// undriven. Feed the output to `netlist-graph xroots` to answer "which
+    /// X-sources make signal S read X?". No GPU required. See
+    /// `docs/x-debugging.md` and issue #98.
+    Xsources(XsourcesArgs),
 }
 
 #[derive(Parser)]
@@ -372,6 +381,30 @@ struct DumpPathsArgs {
     /// Number of critical paths to dump (default: 5).
     #[clap(long, default_value = "5")]
     limit: usize,
+}
+
+#[derive(Parser)]
+struct XsourcesArgs {
+    /// Gate-level Verilog path synthesized with AIGPDK, SKY130, or GF180MCU.
+    netlist_verilog: PathBuf,
+
+    /// Testbench configuration JSON. Required to classify undriven primary
+    /// inputs (the cosim driven-set complement); without it only DFF and SRAM
+    /// X-sources are emitted.
+    #[clap(long)]
+    config: Option<PathBuf>,
+
+    /// Output JSON path. Writes to stdout when omitted.
+    #[clap(long, short = 'o')]
+    output: Option<PathBuf>,
+
+    /// Top module name in the netlist.
+    #[clap(long)]
+    top_module: Option<String>,
+
+    /// User-supplied Verilog cell-library files (same as `sim`/`cosim`).
+    #[clap(long = "cell-library", value_name = "PATH")]
+    cell_library: Vec<PathBuf>,
 }
 
 #[allow(unused_variables)]
@@ -1579,6 +1612,60 @@ fn cmd_dump_paths(args: DumpPathsArgs) {
     println!("{}", output);
 }
 
+/// Emit the design's X-source set as JSON. No GPU — builds only the static
+/// NetlistDB + AIG, then enumerates DFF/SRAM/undriven-input X-sources.
+fn cmd_xsources(args: XsourcesArgs) {
+    use jacquard::sim::setup::build_netlist_and_aig;
+    use jacquard::sim::x_sources::{compute_x_source_manifest, XSourceKind};
+    use jacquard::testbench::TestbenchConfig;
+
+    let (netlistdb, aig) = build_netlist_and_aig(
+        &args.netlist_verilog,
+        args.top_module.as_deref(),
+        &args.cell_library,
+    );
+
+    let config: Option<TestbenchConfig> = args.config.as_ref().map(|path| {
+        let file = std::fs::File::open(path)
+            .unwrap_or_else(|e| panic!("opening config {}: {e}", path.display()));
+        serde_json::from_reader(std::io::BufReader::new(file))
+            .unwrap_or_else(|e| panic!("parsing config {}: {e}", path.display()))
+    });
+
+    let manifest = compute_x_source_manifest(
+        &netlistdb,
+        &aig,
+        config.as_ref(),
+        &args.netlist_verilog.to_string_lossy(),
+    );
+
+    // Per-kind summary on stderr (stdout stays clean JSON when piped).
+    let count = |k: XSourceKind| manifest.x_sources.iter().filter(|s| s.kind == k).count();
+    clilog::info!(
+        "X-sources: {} total — {} unreset-dff, {} reset-dff, {} sram-read, {} undriven-input{}",
+        manifest.x_sources.len(),
+        count(XSourceKind::UnresetDff),
+        count(XSourceKind::ResetDff),
+        count(XSourceKind::SramRead),
+        count(XSourceKind::UndrivenInput),
+        if manifest.undriven_inputs_classified {
+            ""
+        } else {
+            " (pass --config to classify undriven inputs)"
+        }
+    );
+
+    let json = serde_json::to_string_pretty(&manifest).expect("serialize X-source manifest");
+    match args.output.as_ref() {
+        Some(path) => {
+            std::fs::write(path, format!("{json}\n"))
+                .unwrap_or_else(|e| panic!("writing {}: {e}", path.display()));
+            clilog::info!("Wrote {} X-source(s) to {}", manifest.x_sources.len(), path.display());
+        }
+        None => println!("{json}"),
+    }
+}
+
 fn main() {
     clilog::init_stderr_color_debug();
     clilog::set_max_print_count(clilog::Level::Warn, "NL_SV_LIT", 1);
@@ -1588,6 +1675,7 @@ fn main() {
         Commands::Sim(args) => cmd_sim(args),
         Commands::Cosim(args) => cmd_cosim(args),
         Commands::DumpPaths(args) => cmd_dump_paths(args),
+        Commands::Xsources(args) => cmd_xsources(args),
     }
 }
 

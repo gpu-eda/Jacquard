@@ -1,6 +1,7 @@
 """Graph wrapper with query methods for netlist analysis."""
 
 import fnmatch
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -408,3 +409,112 @@ class NetlistGraph:
             depth += 1
 
         return cone
+
+    # ── X-source frontier query (`xroots`, issue #98) ──────────────────────
+
+    # DFF reset/set pin leaves (lower-cased), mirroring the Rust
+    # `x_sources::RESET_SET_PIN_LEAVES`. Used to split unreset vs reset DFFs
+    # in native (no-manifest) mode.
+    _RESET_SET_PINS = {
+        "reset_b", "set_b", "resetn", "setn", "reset", "set", "clrz", "clr",
+        "clrn", "pre", "pren", "rn", "sn", "rb", "sb", "r", "s",
+    }
+
+    def x_source_frontier(
+        self,
+        net: str,
+        stop_nets: set[str],
+        max_depth: int = 100_000,
+    ) -> list[tuple[int, str]]:
+        """Nearest X-source nets in the backward cone of ``net``.
+
+        Walks backward through drivers, continuing **through** DFF data (``D``)
+        pins — the reverse of the forward X-prop fixpoint — and skipping
+        clock/set/reset/enable pins on sequential cells. When a reached net is
+        in ``stop_nets`` it is recorded as a frontier root and not expanded
+        past; other nets (combinational, and reset-defined DFFs that are *not*
+        in ``stop_nets``) keep expanding.
+
+        Returns ``(depth, net)`` for each frontier X-source, nearest first,
+        deduplicated. The start net is always expanded (the query is over its
+        cone, not the point itself).
+        """
+        frontier: list[tuple[int, str]] = []
+        visited: set[str] = set()
+        queue: deque[tuple[str, int]] = deque([(net, 0)])
+
+        while queue:
+            cur, depth = queue.popleft()
+            if cur in visited or depth > max_depth:
+                continue
+            visited.add(cur)  # dequeued once, so each root is recorded once
+
+            if cur != net and cur in stop_nets:
+                frontier.append((depth, cur))
+                continue  # a root — do not expand past it
+
+            for d in self.find_drivers(cur):
+                if (
+                    self._is_register(d.cell_type)
+                    and d.in_pin not in self._DFF_DATA_PINS
+                ):
+                    continue  # clock/set/reset/enable on a sequential cell
+                queue.append((d.from_net, depth + 1))
+
+        frontier.sort()
+        return frontier
+
+    def inst_to_nets(self) -> dict[str, list[str]]:
+        """Map each driving cell instance to the nets it drives.
+
+        Instance names are normalised (leading escape backslash and trailing
+        space stripped) so a manifest's cell name matches regardless of Verilog
+        escaping. Used to resolve X-source manifest entries by stable cell
+        instance rather than by net name (which differs between jacquard's
+        canonicalised and the raw cell-connection naming).
+        """
+        idx: dict[str, list[str]] = {}
+        out_driver: dict[str, tuple[str, str, str]] = self._graph.graph.get("out_driver", {})
+        for net, (inst, _ct, _pin) in out_driver.items():
+            idx.setdefault(inst.lstrip("\\").rstrip(" "), []).append(net)
+        return idx
+
+    def native_x_sources(self) -> dict[str, str]:
+        """Best-effort X-source classification from the netlist alone.
+
+        The fallback when no ``jacquard xsources`` manifest is supplied. Maps
+        each X-source net to its kind:
+
+          - DFF Q nets → ``unreset-dff`` (no reset/set pin) or ``reset-dff``
+          - SRAM read-output nets → ``sram-read``
+          - genuinely undriven internal nets → ``undriven-input``
+
+        Less precise than the manifest: the cosim *driven set* is unknown here,
+        so an undriven primary input cannot be distinguished from one the
+        testbench drives. Use ``jacquard xsources --config`` for authoritative
+        classification.
+        """
+        out_driver: dict[str, tuple[str, str, str]] = self._graph.graph.get("out_driver", {})
+
+        # One pass: index each cell instance's connected input-pin names, so
+        # reset detection is O(E) total rather than O(E) per DFF.
+        cell_in_pins: dict[str, set[str]] = {}
+        for _u, _v, data in self._graph.edges(data=True):
+            cell = data.get("cell")
+            if cell is not None:
+                cell_in_pins.setdefault(cell, set()).add(data.get("in_pin", "").lower())
+
+        sources: dict[str, str] = {}
+        for net, (inst, cell_type, _pin) in out_driver.items():
+            if self._is_register(cell_type):
+                has_reset = bool(cell_in_pins.get(inst, set()) & self._RESET_SET_PINS)
+                sources[net] = "reset-dff" if has_reset else "unreset-dff"
+            elif "ram" in cell_type.lower():
+                sources[net] = "sram-read"
+
+        # Genuinely undriven internal nets (not a top-level port) are X-sources.
+        for n in self._graph.nodes():
+            if n not in sources and not self.is_driven(n) and not self.is_primary_input(n):
+                sources[n] = "undriven-input"
+
+        return sources
