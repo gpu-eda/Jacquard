@@ -1,5 +1,6 @@
 """Command-line interface for netlist-graph."""
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -322,6 +323,158 @@ def cone(netlist: Path, signal: str, depth: int, through_regs: bool):
             )
             reg_marker = " [REG]" if is_reg else ""
             click.echo(f"{indent}{short_net} = {short_type}({pin_str}){reg_marker}")
+
+
+# Persistent X-source kinds — roots the frontier stops at. `reset-dff` is
+# traversed *through* (reset defines it), so it is not persistent.
+_PERSISTENT_X_KINDS = {"unreset-dff", "sram-read", "undriven-input"}
+
+
+def _load_xsource_kinds(
+    graph: NetlistGraph, xsources_path: Path | None
+) -> tuple[dict[str, str], str]:
+    """Return (net→kind, summary message) for the X-source set.
+
+    Without a manifest, falls back to native netlist classification.
+
+    With a manifest, resolves each entry to a graph node. DFF/SRAM sources are
+    resolved by **driving cell instance** rather than net name: jacquard's
+    netlistdb canonicalises assign-merged nets (e.g. `unreset_count[1]` →
+    `_10_[1]`), so the manifest's net name need not match the raw cell-
+    connection name the Python parser uses — but the cell instance (`_30_`)
+    is identical in both. Inputs (no cell) resolve by net name.
+    """
+    if xsources_path is None:
+        kinds = graph.native_x_sources()
+        msg = (
+            f"No --xsources manifest; using native classification "
+            f"({len(kinds)} X-source net(s)). For authoritative undriven-input "
+            f"classification, pass `jacquard xsources --config ...` output."
+        )
+        return kinds, msg
+
+    data = json.loads(xsources_path.read_text())
+
+    # Cell instance → nets it drives, for resolving DFF/SRAM sources by stable
+    # cell name rather than canonicalised net name.
+    inst_to_nets = graph.inst_to_nets()
+
+    kinds: dict[str, str] = {}
+    unresolved = 0
+    for entry in data.get("x_sources", []):
+        node: str | None = None
+        cell = entry.get("cell")
+        if cell is not None:
+            nets = inst_to_nets.get(cell.lstrip("\\").rstrip(" "))
+            # Unambiguous only when the cell drives exactly one net (DFF Q);
+            # multi-output cells (SRAM) fall through to net-name resolution.
+            if nets is not None and len(nets) == 1:
+                node = nets[0]
+        if node is None:
+            raw_net = entry["net"]
+            node = raw_net if graph.has_net(raw_net) else graph.resolve_name(raw_net)
+        if node is None:
+            unresolved += 1
+            continue
+        kinds[node] = entry["kind"]
+
+    msg = (
+        f"Loaded {len(kinds)} X-source(s) from {xsources_path.name}"
+        + (f" ({unresolved} not found in this netlist)" if unresolved else "")
+    )
+    return kinds, msg
+
+
+@main.command()
+@click.argument("netlist", type=click.Path(exists=True, path_type=Path))
+@click.argument("signal", type=str)
+@click.option(
+    "--xsources",
+    "xsources_path",
+    type=click.Path(exists=True, path_type=Path),
+    help="X-source manifest from `jacquard xsources` (authoritative). Without "
+    "it, X-sources are classified from the netlist alone (no undriven-input).",
+)
+@click.option(
+    "--emit-trace",
+    "emit_trace",
+    type=click.Path(path_type=Path),
+    help="Write the frontier as a --trace-signals file for a confirming "
+    "`cosim --xprop` run.",
+)
+@click.option("-d", "--depth", default=100_000, help="Maximum backward walk depth")
+def xroots(
+    netlist: Path,
+    signal: str,
+    xsources_path: Path | None,
+    emit_trace: Path | None,
+    depth: int,
+):
+    """Find the X-sources that make SIGNAL read X under `cosim --xprop`.
+
+    Reverse-reachability from SIGNAL through the driver cone (and through DFF
+    data pins) intersected with the design's X-source set, reporting the
+    nearest frontier roots — unreset DFFs, SRAM reads, undriven inputs. This
+    answers "why is S X?" as a static query, replacing a trace→guess→re-run
+    loop. See `docs/x-debugging.md` and issue #98.
+
+    Examples:
+        jacquard xsources design.v --config sim.json -o xsrc.json
+        netlist-graph xroots design.v top.cpu.stall --xsources xsrc.json
+        netlist-graph xroots design.v some_net --xsources xsrc.json --emit-trace t.txt
+    """
+    graph = NetlistGraph.from_file(netlist)
+    click.echo(f"Loaded {graph.num_nodes} nodes, {graph.num_edges} edges")
+
+    resolved = graph.resolve_name(signal)
+    if not resolved:
+        matches = graph.search(signal, limit=10)
+        if matches:
+            click.echo(f"No unique match for '{signal}'. Candidates:")
+            for m in matches:
+                click.echo(f"  {graph._short_net(m)}")
+        else:
+            click.echo(f"No nets matching '{signal}'")
+        sys.exit(1)
+
+    kinds, msg = _load_xsource_kinds(graph, xsources_path)
+    click.echo(msg)
+
+    stop_nets = {net for net, kind in kinds.items() if kind in _PERSISTENT_X_KINDS}
+
+    if resolved in stop_nets:
+        click.echo(
+            f"\n{graph._short_net(resolved)} is itself an X-source "
+            f"({kinds[resolved]})."
+        )
+
+    frontier = graph.x_source_frontier(resolved, stop_nets, max_depth=depth)
+
+    if not frontier:
+        click.echo(
+            f"\nNo X-sources reach {graph._short_net(resolved)} — under --xprop "
+            f"it should be X-free (every path traces back to driven inputs / "
+            f"reset-defined state)."
+        )
+        return
+
+    click.echo(
+        f"\nX-source frontier of {graph._short_net(resolved)} "
+        f"({len(frontier)} root(s), nearest first):"
+    )
+    for d, net in frontier:
+        click.echo(f"  [{kinds.get(net, '?')}] {graph._short_net(net)}  (depth {d})")
+
+    if emit_trace:
+        lines: list[str] = [
+            f"# X-source frontier of {graph._short_net(resolved)} "
+            f"(from netlist-graph xroots)",
+        ]
+        for d, net in frontier:
+            lines.append(f"# {kinds.get(net, '?')} (depth {d})")
+            lines.append(graph._short_net(net))
+        emit_trace.write_text("\n".join(lines) + "\n")
+        click.echo(f"\nWrote {len(frontier)} frontier net(s) to {emit_trace}")
 
 
 @main.command("interactive")

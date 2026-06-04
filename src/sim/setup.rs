@@ -80,14 +80,18 @@ pub struct LoadedDesign {
     pub json_path: PathBuf,
 }
 
-/// Load a design through the full pipeline: netlist → AIG → staged → script.
-///
-/// Detects cell library (AIGPDK, SKY130, or GF180MCU), loads display info
-/// from JSON, builds the flattened script, and optionally loads SDF timing
-/// data.
-pub fn load_design(args: &DesignArgs) -> LoadedDesign {
+/// Build just the `NetlistDB` and `AIG` from a netlist — the feature-
+/// independent front half of [`load_design`], without staging, partitioning,
+/// or GPU script generation. Used by `load_design` and by the `jacquard
+/// xsources` subcommand, which needs only the static AIG to enumerate
+/// X-sources (issue #98).
+pub fn build_netlist_and_aig(
+    netlist_verilog: &Path,
+    top_module: Option<&str>,
+    cell_library: &[PathBuf],
+) -> (NetlistDB, AIG) {
     // Detect cell library
-    let lib = detect_library_from_file(&args.netlist_verilog).expect("Failed to read netlist file");
+    let lib = detect_library_from_file(netlist_verilog).expect("Failed to read netlist file");
     clilog::info!("Detected cell library: {}", lib);
 
     if lib == CellLibrary::Mixed {
@@ -97,10 +101,10 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
     // Load any user-supplied runtime cell libraries (`--cell-library`).
     // Empty when no flags were passed; in that case the chained
     // provider degenerates to its built-in fallback.
-    let runtime_lib = if args.cell_library.is_empty() {
+    let runtime_lib = if cell_library.is_empty() {
         RuntimeCellLibrary::default()
     } else {
-        let loaded = RuntimeCellLibrary::from_files(&args.cell_library)
+        let loaded = RuntimeCellLibrary::from_files(cell_library)
             .unwrap_or_else(|e| panic!("loading --cell-library: {e}"));
         clilog::info!(
             "Loaded {} cell-library pin entries, {} kind annotations from --cell-library",
@@ -116,12 +120,8 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
                 runtime: &runtime_lib,
                 fallback: &SKY130LeafPins,
             };
-            NetlistDB::from_sverilog_file(
-                &args.netlist_verilog,
-                args.top_module.as_deref(),
-                &provider,
-            )
-            .expect("cannot build netlist")
+            NetlistDB::from_sverilog_file(netlist_verilog, top_module, &provider)
+                .expect("cannot build netlist")
         }
         // GF180MCU (7t5v0 + 9t5v0). Combinational + sequential paths
         // (DFFs, latches, scan, clock-gating) are all wired through
@@ -131,24 +131,16 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
                 runtime: &runtime_lib,
                 fallback: &crate::gf180mcu::GF180MCULeafPins,
             };
-            NetlistDB::from_sverilog_file(
-                &args.netlist_verilog,
-                args.top_module.as_deref(),
-                &provider,
-            )
-            .expect("cannot build netlist")
+            NetlistDB::from_sverilog_file(netlist_verilog, top_module, &provider)
+                .expect("cannot build netlist")
         }
         CellLibrary::AIGPDK | CellLibrary::Mixed => {
             let provider = ChainedPinProvider {
                 runtime: &runtime_lib,
                 fallback: &AIGPDKLeafPins(),
             };
-            NetlistDB::from_sverilog_file(
-                &args.netlist_verilog,
-                args.top_module.as_deref(),
-                &provider,
-            )
-            .expect("cannot build netlist")
+            NetlistDB::from_sverilog_file(netlist_verilog, top_module, &provider)
+                .expect("cannot build netlist")
         }
     };
 
@@ -162,7 +154,21 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
     } else {
         Some(&runtime_lib)
     };
-    let mut aig = AIG::from_netlistdb_with_cells(&netlistdb, cell_lib_ref);
+    let aig = AIG::from_netlistdb_with_cells(&netlistdb, cell_lib_ref);
+    (netlistdb, aig)
+}
+
+/// Load a design through the full pipeline: netlist → AIG → staged → script.
+///
+/// Detects cell library (AIGPDK, SKY130, or GF180MCU), loads display info
+/// from JSON, builds the flattened script, and optionally loads SDF timing
+/// data.
+pub fn load_design(args: &DesignArgs) -> LoadedDesign {
+    let (netlistdb, mut aig) = build_netlist_and_aig(
+        &args.netlist_verilog,
+        args.top_module.as_deref(),
+        &args.cell_library,
+    );
 
     // Register user-supplied trace signals (--trace-signals). Must
     // run before staging/partitioning so the resolved aigpins land
