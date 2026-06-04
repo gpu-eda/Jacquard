@@ -1,8 +1,8 @@
 # Handoff — release prep / open threads
 
-**Created:** 2026-06-04 (updated 2026-06-04 — release prep committed + backend-parity audit)
-**Branch:** main (`7fed695` — **local, unpushed/untagged**)
-**Working tree:** clean
+**Created:** 2026-06-04 (updated 2026-06-04 — release prep committed + backend-parity audit; release pushed to origin/main untagged; #108 reg_init filed from maintainer #102/#106 input)
+**Branch:** main (release `7fed695` on origin/main — **pushed, untagged**)
+**Working tree:** clean (after committing this handoff)
 
 ## Goal & next-up
 
@@ -87,6 +87,31 @@ no temporal SVA (`##`, `|->`, `$past`).
   lowers to A's spec. **Depends on #106.** Weeks (new SVA parser surface;
   net-identity-through-synthesis is fragile). Deferrable.
 
+## X value-injection (maintainer input on #102/#106) → issue #108
+
+Maintainer root-caused **#102** (JTAG-DM firmware load writes no SRAM under
+`--xprop`): the X is NOT the SRAM read-mask. It originates at the **unreset CDC
+launch registers** `hazard3_apb_async_bridge.src_paddr_pwdata_pwrite` (write) /
+`dst_prdata_pslverr` (read) — unreset *by design* (req/ack handshake guarantees
+data-stable-before-capture). Conservative X-prop poisons them; two-state + real
+silicon load fine. Same X-source class as `tests/xprop_cosim/xprop_demo.v`'s
+`q_unreset`.
+
+The fix is a primitive that didn't exist → filed **#108**: register
+value-injection (`reg_init` map in `TestbenchConfig`, applied at t0; the
+register sibling of `sram_preload` #80/#81). **`$deposit` semantics, NOT `force`**
+— force pins CDC crossing-data to 0 for the whole run (loads zeros); deposit
+clears only power-up X, then the protocol drives real values.
+
+- **#108 is the injection half; #106 (`--x-assert`) is the detection half** —
+  they compose (inject at source, assert `!$isunknown` at sink = closed-loop
+  barrier confirmation). Shared repro: minimal `hazard3_jtag_dtm` + `hazard3_dm`
+  bench (no CPU).
+- **#108 vs #103**: complementary, not duplicate. #103 preloads firmware into
+  SRAM to skip the debug load entirely; #108 fixes the debug-load path itself.
+  Either unblocks X-aware verification of debug-loaded firmware.
+- Cosim-side `reg_init` inherits the Metal-only constraint until #105.
+
 ## Open threads (carried; re-verify before acting)
 
 - **`release-process.md` doc inconsistency** — step 1 + the pre-release
@@ -116,6 +141,7 @@ no temporal SVA (`##`, `|->`, `$past`).
 - Release: ADR 0018, `packaging/README.md`, `docs/release-process.md`,
   `docs/plans/distribution.md`
 - X-prop: ADR 0016, `docs/plans/cosim-xprop.md`, merged PR #97 → `296cc12`
-- Issues filed this session: #104 (CUDA/HIP sim timing), #105 (cosim
-  portability), #106 (x-assert spec), #107 (x-assert SVA frontend)
+- Issues filed: #104 (CUDA/HIP sim timing), #105 (cosim portability),
+  #106 (x-assert spec), #107 (x-assert SVA frontend), #108 (reg_init
+  value-injection — fixes #102, pairs with #106)
 - Related open: #95 (done), #96, #98 (xroots), #102, #103
