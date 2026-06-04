@@ -3,12 +3,17 @@
 All notable changes to Jacquard are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and the project will switch to [Semantic Versioning](https://semver.org/)
-once the first numbered release ships. Until then, the `Unreleased`
-section accumulates work in progress and the per-PR commit history is
-the authoritative record.
+and the project follows [Semantic Versioning](https://semver.org/) from
+`v0.1.0` onward (pre-1.0 caveat: minor bumps may carry breaking changes;
+the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-06-04
+
+First numbered release. Metal (macOS/Apple Silicon) is the shipped
+distribution target; CUDA and HIP remain source-build until their CI
+runners land (ADR 0018).
 
 ### Added
 
@@ -91,6 +96,16 @@ the authoritative record.
   follow the data (`D`) pin only and skip clock/set/reset/enable pins,
   so tracing a register stays on the data path instead of diving into
   the clock and reset distribution trees.
+- **Selective X-propagation** (`--xprop`, #95) for both `sim` and
+  `cosim` (ADR 0016). Uninitialised state — power-up DFFs, undriven
+  primary input pads, and uninitialised SRAM — propagates as `x` through
+  the design and into the output VCD instead of silently reading as `0`.
+  X is seeded only at genuine X-sources: a prior seed-template bug
+  cleared the X-mask over DFF-Q feedback reads, so X never originated and
+  any sequential design ran two-state. Undriven primary inputs read X in
+  cosim; SRAM writes and preloads clear the per-cell X-mask shadow.
+  End-to-end CI guards live in `tests/xprop_cosim/`. See ADR 0016 and
+  `docs/plans/cosim-xprop.md`.
 
 ### Changed
 
@@ -171,9 +186,13 @@ the authoritative record.
 - `worst_slack` ranking is populated only from observed violation
   events. Closest-to-violation tracking on a run that *passed* timing
   needs GPU-side near-miss instrumentation; deferred.
+- Bidirectional pads under `--xprop` resolve to conservative X when the
+  output enable is deasserted; the precise tristate-mux read
+  (`Y = OE ? A : external`) is deferred (#96).
 - Timed output (sim `--timed` / cosim `--output-vcd` with timing data)
   routes violations through `process_events` only on the Metal sim path.
   CUDA / HIP detect violations on the GPU but don't currently route
   them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/HEAD
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/gpu-eda/Jacquard/releases/tag/v0.1.0
