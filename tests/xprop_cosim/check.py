@@ -30,9 +30,14 @@ Modes:
                  that samples the undriven input). sim leaves these known
                  because sim inputs all come from the VCD.
     two-state    a run WITHOUT --xprop: no X/Z on any present signal.
+    reg-init     cosim with --xprop AND a `reg_init` deposit on the unreset
+                 counter (issue #108): q_unreset must now be KNOWN 0/1 for the
+                 whole run — the $deposit cleared the power-up X that mode
+                 `xprop` requires to persist. The inverse assertion of `xprop`,
+                 proving register value-injection works end to end.
 
 Usage:
-    check.py <output.vcd> {xprop|xprop-cosim|two-state}
+    check.py <output.vcd> {xprop|xprop-cosim|two-state|reg-init}
 """
 import sys
 
@@ -41,7 +46,7 @@ CORE = ("q_unreset", "q_reset")
 # Undriven-input outputs, only meaningful in cosim (#95 phase 3).
 UNDRIVEN = ("q_undriven_comb", "q_undriven_reg")
 SIGNALS = CORE + UNDRIVEN
-MODES = ("xprop", "xprop-cosim", "two-state")
+MODES = ("xprop", "xprop-cosim", "two-state", "reg-init")
 
 
 def parse_vcd(path):
@@ -120,6 +125,22 @@ def main() -> int:
             bad = sig[name]["values"] & {"x", "z"}
             if bad:
                 fail(f"{name} has {sorted(bad)} in a two-state run (no --xprop)")
+    elif mode == "reg-init":
+        # q_unreset: the unreset counter was seeded via `reg_init` ($deposit),
+        # so its power-up X is cleared — it must be a KNOWN 0/1 for the whole
+        # run (the LSB toggles each cycle from a definite seed). This is the
+        # exact inverse of the `xprop` mode and proves value-injection works.
+        bad = sig["q_unreset"]["values"] & {"x", "z"}
+        if bad:
+            fail(
+                f"q_unreset still has {sorted(bad)} after a reg_init deposit "
+                "(value-injection did not clear the power-up X)"
+            )
+        if sig["q_unreset"]["last"] not in ("0", "1"):
+            fail(f"q_unreset should end known, last={sig['q_unreset']['last']}")
+        # q_reset is unaffected by reg_init; it must still resolve.
+        if sig["q_reset"]["last"] not in ("0", "1"):
+            fail(f"q_reset should resolve to known 0/1, last={sig['q_reset']['last']}")
     else:  # xprop or xprop-cosim
         # q_unreset: uninitialised counter, X+1=X, must be X for the whole run.
         if sig["q_unreset"]["values"] != {"x"}:

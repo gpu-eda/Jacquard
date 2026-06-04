@@ -1065,7 +1065,6 @@ fn set_bit(state: &mut [u32], pos: u32, val: u8) {
 }
 
 /// Clear a single bit in a packed u32 state buffer.
-#[allow(dead_code)]
 #[inline]
 fn clear_bit(state: &mut [u32], pos: u32) {
     state[(pos >> 5) as usize] &= !(1u32 << (pos & 31));
@@ -2589,9 +2588,14 @@ pub fn run_cosim(
         );
     }
 
-    // SRAM storage
+    // SRAM storage. Allocate at least one word: a SRAM-less design has
+    // `sram_storage_size == 0`, and `new_buffer(0)` returns a nil MTLBuffer
+    // whose `.contents()` is null (foreign-types asserts non-null). Sizing to
+    // `max(1)` while slicing to the real length keeps SRAM-free designs (e.g.
+    // pure-logic cosim) working; the kernel guards SRAM reads on the cell map.
+    let sram_data_len = (script.sram_storage_size as usize).max(1);
     let sram_data_buffer = simulator.device.new_buffer(
-        (script.sram_storage_size as usize * std::mem::size_of::<u32>()) as u64,
+        (sram_data_len * std::mem::size_of::<u32>()) as u64,
         MTLResourceOptions::StorageModeShared,
     );
     let sram_data: &mut [u32] = unsafe {
@@ -2674,6 +2678,62 @@ pub fn run_cosim(
         );
     }
     let _ = sram_data;
+
+    // Register value-injection (issue #108, ADR 0016). `reg_init` deposits a
+    // definite value into chosen registers at tick 0 with `$deposit`
+    // semantics — the seed clears the power-up X-mask, then the design drives
+    // the register normally. The register sibling of `sram_init` above; the
+    // fix path for X-poisoned unreset CDC launch registers (#102). NOT
+    // `force`: applied once here, not re-driven each edge.
+    //
+    // A DFF Q is sequential state, not a primary input in the per-edge BitOp
+    // schedule, so a deposit must survive `state_prep`'s output→input copy
+    // (kernel_v1.metal): write the value AND clear the X-mask in BOTH slots,
+    // mirroring the xprop seed above. The output slot is the source of truth
+    // the first `simulate` reads; the input slot covers any pre-copy read.
+    if !config.reg_init.is_empty() {
+        let rio = script.reg_io_state_size as usize;
+        let mut deposited_bits = 0usize;
+        for entry in &config.reg_init {
+            let width = entry.width.unwrap_or(1);
+            for b in 0..width {
+                // A scalar register (width 1, however spelled) resolves by its
+                // bare name; a wider one resolves each bit `name[b]` (a
+                // register's bits need not be contiguous after synthesis).
+                let bit_name = if width == 1 {
+                    entry.name.clone()
+                } else {
+                    format!("{}[{}]", entry.name, b)
+                };
+                let pos = crate::sim::trace_signals::resolve_to_input_state_pos(
+                    aig, netlistdb, script, &bit_name,
+                )
+                .unwrap_or_else(|| {
+                    panic!(
+                        "reg_init: cannot resolve register '{}' to a DFF state slot \
+                         (not a register, or name not found in netlist)",
+                        bit_name
+                    )
+                });
+                let val = if b < 64 { ((entry.value >> b) & 1) as u8 } else { 0 };
+                // Deposit the value into both slots' value sections.
+                set_bit(&mut states[..state_size], pos, val);
+                set_bit(&mut states[state_size..2 * state_size], pos, val);
+                // Clear the X-mask in both slots so the deposit reads known.
+                // The X-mask section starts `rio` words into each slot.
+                if script.xprop_enabled {
+                    clear_bit(&mut states[rio..state_size], pos);
+                    clear_bit(&mut states[state_size + rio..2 * state_size], pos);
+                }
+                deposited_bits += 1;
+            }
+        }
+        clilog::info!(
+            "reg_init: deposited {} register bit(s) from {} config entries (cleared power-up X)",
+            deposited_bits,
+            config.reg_init.len()
+        );
+    }
 
     // Initialize: set reset active
     let reset_val = if config.reset_active_high { 1u8 } else { 0u8 };

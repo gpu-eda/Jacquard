@@ -9,6 +9,29 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+### Added
+
+- **`reg_init` register value-injection for cosim** (#108). A new
+  `reg_init` array in the testbench JSON deposits a definite value into
+  chosen registers at tick 0 with `$deposit` semantics — the seed clears
+  the power-up X-mask, then the design's own logic drives the register
+  normally (NOT `force`, which would pin a CDC crossing register and write
+  zeros across the handshake). Each entry is `{ "name", "value", "width" }`;
+  a multi-bit register resolves `name[0]`..`name[width-1]` independently.
+  This is the register sibling of `sram_init` and the fix path for
+  X-poisoned unreset CDC launch registers (#102): depositing on the launch
+  flops lets X-aware cosim of debug-loaded firmware proceed. Composes with
+  the x-assert detection work (#106). Regression: `tests/xprop_cosim/`
+  `reg-init` mode (cosim A/B — deposit clears the X that `xprop` mode
+  requires to persist).
+
+### Fixed
+
+- **cosim on SRAM-less designs** no longer panics. A design with zero SRAM
+  produced a nil `MTLBuffer` (`new_buffer(0)`) whose `.contents()` is null;
+  the SRAM data buffer is now sized to `max(1)` word (matching the X-mask
+  shadow buffer), so pure-logic designs run under `jacquard cosim`.
+
 ## [0.1.0] - 2026-06-04
 
 First numbered release. Metal (macOS/Apple Silicon) is the shipped

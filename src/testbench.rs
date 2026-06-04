@@ -211,6 +211,12 @@ pub struct TestbenchConfig {
     #[serde(default)]
     pub jtag: Option<JtagConfig>,
     pub sram_init: Option<SramInitConfig>,
+    /// Register value-injection (`$deposit` at tick 0). See [`RegInitEntry`]
+    /// and issue #108. The register sibling of `sram_init`: clears power-up X
+    /// on chosen registers (e.g. unreset CDC launch flops) so X-aware cosim of
+    /// debug-loaded firmware can proceed (#102). Empty when absent.
+    #[serde(default)]
+    pub reg_init: Vec<RegInitEntry>,
     pub output_events: Option<String>,
     pub events_reference: Option<String>,
     /// Path to an `input.json` file containing a list of stimulus
@@ -425,6 +431,33 @@ fn default_bus_data_bits() -> usize {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SramInitConfig {
     pub elf_path: String,
+}
+
+/// One register value-injection entry for cosim (`reg_init` in the testbench
+/// JSON). Deposits a definite value into a register at tick 0 with `$deposit`
+/// semantics — the seed clears the power-up X-mask, then the design's own
+/// logic drives the register normally. The register sibling of `sram_init`
+/// (issue #108) and the fix path for X-poisoned unreset CDC launch registers
+/// (#102).
+///
+/// NOT `force`: the value is applied once at t0, not re-driven every edge, so
+/// a CDC crossing register carries real protocol data after t0 rather than
+/// being pinned to the seed (which would write zeros across the handshake).
+#[derive(Debug, Clone, Deserialize)]
+pub struct RegInitEntry {
+    /// Hierarchical register (DFF Q) name. For a scalar register, the bare
+    /// name; for a multi-bit register, the bus base — each bit `name[b]` for
+    /// `b` in `0..width` is resolved independently (synthesis need not keep a
+    /// register's bits at contiguous state positions).
+    pub name: String,
+    /// Value deposited LSB-first across the register's bits. Defaults to 0,
+    /// which alone suffices to clear power-up X (the protocol then drives real
+    /// values). Bits at index ≥ 64 are treated as 0.
+    #[serde(default)]
+    pub value: u64,
+    /// Register bit width. Omit (or 1) for a scalar resolved by the bare name;
+    /// `> 1` resolves `name[0]`..`name[width-1]`.
+    pub width: Option<u32>,
 }
 
 // ── UART TX decoder ─────────────────────────────────────────────────────────
