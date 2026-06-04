@@ -1,0 +1,23 @@
+{
+    "_comment": "reg_init value-injection demo (#108). Same design/ports as sim_config.json, plus a reg_init that deposits a definite value into the otherwise-unreset `unreset_count` counter at tick 0 ($deposit semantics). Under --xprop this clears the power-up X, so q_unreset (= unreset_count[0]) now reads KNOWN 0/1 for the whole run instead of X. See tests/xprop_cosim/check.py mode reg-init.",
+    "netlist_path": "tests/xprop_cosim/xprop_demo_synth.gv",
+    "clock_gpio": 0,
+    "reset_gpio": 1,
+    "reset_active_high": false,
+    "reset_cycles": 10,
+    "num_cycles": 2000,
+    "clock_period_ps": 40000,
+    "port_mapping": {
+        "inputs": {
+            "0": "clk",
+            "1": "rst_n"
+        },
+        "outputs": {
+            "2": "q_unreset",
+            "3": "q_reset"
+        }
+    },
+    "reg_init": [
+        { "name": "unreset_count", "value": 5, "width": 4 }
+    ]
+}

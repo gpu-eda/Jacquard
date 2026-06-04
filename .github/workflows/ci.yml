@@ -266,6 +266,29 @@ jobs:
             1
           python3 tests/xprop_cosim/check.py target/test-out/ci_sim_2state.vcd two-state
 
+      # Register value-injection regression (#108). A/B on the same SRAM-less
+      # design: cosim --xprop with NO reg_init leaves the unreset counter X
+      # (q_unreset stays x); cosim --xprop WITH a reg_init $deposit on
+      # `unreset_count` clears the power-up X so q_unreset reads known 0/1.
+      # This is the maintainer's #102 fix-pattern in miniature (deposit on an
+      # unreset register → downstream definite) and the first cosim run of a
+      # zero-SRAM design (guards the nil-MTLBuffer fix).
+      - name: Register value-injection demo — cosim (#108)
+        run: |
+          set -e
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            --config tests/xprop_cosim/sim_config.json \
+            --output-vcd target/test-out/ci_cosim_noreginit.vcd \
+            --max-clock-edges 200 --xprop
+          python3 tests/xprop_cosim/check.py target/test-out/ci_cosim_noreginit.vcd xprop
+          cargo run --release --features metal --bin jacquard -- cosim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            --config tests/xprop_cosim/sim_config_reginit.json \
+            --output-vcd target/test-out/ci_cosim_reginit.vcd \
+            --max-clock-edges 200 --xprop
+          python3 tests/xprop_cosim/check.py target/test-out/ci_cosim_reginit.vcd reg-init
+
       - name: Run Metal simulation with timing (inv_chain_pnr)
         run: |
           set -o pipefail

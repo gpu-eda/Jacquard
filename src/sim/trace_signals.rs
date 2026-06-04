@@ -301,17 +301,25 @@ pub fn register_trace_signals(
 ///
 /// Used by the cosim bus-trace param builder to bind each protocol pin
 /// to a state position the GPU kernel can read.
+/// Parse `name` and resolve it to a netlistdb net id, scanning the
+/// multi-candidate interpretations (`parse_signal_name`) until one hits
+/// `netname2id`. Shared by the state-position resolvers below. Returns `None`
+/// if the name can't be parsed or matches no net.
+fn resolve_net_id(netlistdb: &NetlistDB, name: &str) -> Option<usize> {
+    let candidates = parse_signal_name(name).ok()?;
+    candidates.iter().find_map(|c| {
+        let key = (c.hier.clone(), c.leaf.clone(), c.bit);
+        netlistdb.netname2id.get(&key).copied()
+    })
+}
+
 pub fn resolve_to_state_pos(
     aig: &AIG,
     netlistdb: &NetlistDB,
     script: &FlattenedScriptV1,
     name: &str,
 ) -> Option<u32> {
-    let candidates = parse_signal_name(name).ok()?;
-    let netid = candidates.iter().find_map(|c| {
-        let key = (c.hier.clone(), c.leaf.clone(), c.bit);
-        netlistdb.netname2id.get(&key).copied()
-    })?;
+    let netid = resolve_net_id(netlistdb, name)?;
     let pinid = netlistdb.net2pin.iter_set(netid).next()?;
     let iv = aig.pin2aigpin_iv[pinid];
     if iv == usize::MAX {
@@ -324,6 +332,41 @@ pub fn resolve_to_state_pos(
     }
     if let Some(&pos) = script.output_map.get(&(iv ^ 1)) {
         return Some(pos);
+    }
+    None
+}
+
+/// Resolve a hierarchical register (DFF) name to its bit position in the
+/// **input** state slot — the DFF Q slot a power-up value must be deposited
+/// into for `reg_init` value-injection (issue #108).
+///
+/// Distinct from [`resolve_to_state_pos`], which reads `output_map` (keyed by
+/// DFF *D* inputs) for bus-trace pin binding. A register *name* resolves to
+/// the net driven by the DFF's *Q*, whose aigpin lives in `input_map`.
+/// Returns `None` if the name doesn't resolve to a DFF Q present in the
+/// flattened script (a pure-comb net, a constant, or an unknown name).
+pub fn resolve_to_input_state_pos(
+    aig: &AIG,
+    netlistdb: &NetlistDB,
+    script: &FlattenedScriptV1,
+    name: &str,
+) -> Option<u32> {
+    let netid = resolve_net_id(netlistdb, name)?;
+    // Scan every pin on the net, not just the first: the DFF Q *driver* pin
+    // is the one keyed in `input_map`, but it need not be the net's first pin
+    // — load pins (e.g. adder inputs consuming the register) share the net.
+    // `input_map` is keyed by the **bare** aigpin (`dff.q`, from
+    // `add_aigpin`), whereas `pin2aigpin_iv` is iv-encoded
+    // (`aigpin << 1 | invert`); recover the bare aigpin with `>> 1`, which
+    // also drops the per-pin invert so both polarities collapse to one key.
+    for pinid in netlistdb.net2pin.iter_set(netid) {
+        let iv = aig.pin2aigpin_iv[pinid];
+        if iv == usize::MAX {
+            continue;
+        }
+        if let Some(&pos) = script.input_map.get(&(iv >> 1)) {
+            return Some(pos);
+        }
     }
     None
 }
