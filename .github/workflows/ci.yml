@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main, staged-aig-release]
+  # No base-branch filter: run CI on every PR regardless of its base, so
+  # stacked PRs (based on other feature branches) get CI automatically.
   pull_request:
-    branches: [main, staged-aig-release]
   workflow_dispatch:
 
 permissions:
