@@ -10,6 +10,12 @@ on:
 permissions:
   contents: write
 
+# Cancel superseded in-progress runs for the same ref (PR branch or main) so
+# rapid pushes don't pile up on the self-hosted / billed GPU + macOS runners.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -144,9 +150,14 @@ jobs:
   # Build and run Metal simulation on macOS
   metal:
     name: Metal Tests (macOS)
-    # Re-enabled 2026-05-12 against the self-hosted chipflow org runner
-    # macos-runner-1 (Apple Silicon + Metal GPU).
-    runs-on: macos-runner-1
+    # Routine PR pushes run on the free self-hosted macos-runner-1
+    # (Apple Silicon + Metal GPU). On `main` — or any PR carrying the
+    # `ci:metal-xl` label — this light job offloads to the GitHub-hosted
+    # macos-latest-xlarge (M2 Pro) so it runs in parallel with the
+    # disk-heavy MCU SoC Metal job (which stays pinned to macos-runner-1,
+    # since xlarge has only 14 GB storage). This is the billed runner, so
+    # it's gated to main/label rather than every push.
+    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -453,10 +464,11 @@ jobs:
   # Build and run CUDA simulation on NVIDIA GPU
   cuda:
     name: CUDA Tests
-    # TODO(infra): re-enable once self-hosted nvidia-runner-1 is back online.
-    # Disabled 2026-05-01: GPU runner offline; jobs queue indefinitely.
-    if: ${{ false }}
-    runs-on: nvidia-runner-1
+    # Re-enabled 2026-06-05 on the GitHub-hosted T4 GPU runner
+    # (`tesla4-runner`, 4 vCPU + 1 NVIDIA T4). Runs on every push — CUDA
+    # had no CI coverage from 2026-05-01 (when self-hosted nvidia-runner-1
+    # went offline) until this runner landed.
+    runs-on: tesla4-runner
     steps:
       - uses: actions/checkout@v6
         with:
@@ -544,10 +556,11 @@ jobs:
   # When an AMD GPU runner becomes available, a native AMD job can be added.
   hip-on-nvidia:
     name: HIP Tests (NVIDIA backend)
-    # TODO(infra): re-enable once self-hosted nvidia-runner-1 is back online.
-    # Disabled 2026-05-01: GPU runner offline; jobs queue indefinitely.
-    if: ${{ false }}
-    runs-on: nvidia-runner-1
+    # Re-enabled 2026-06-05 on the GitHub-hosted T4 runner (`tesla4-runner`).
+    # This job builds the HIP code path with hipcc + HIP_PLATFORM=nvidia, so
+    # it validates the HIP backend on the same T4. A native AMD GPU job is
+    # still future work (needs an AMD/ROCm runner).
+    runs-on: tesla4-runner
     steps:
       - uses: actions/checkout@v6
         with:
@@ -1026,7 +1039,10 @@ jobs:
   # See tests/jtag_minimal/README.md for full design + regen flow.
   jtag-minimal-cosim:
     name: JTAG Minimal Cosim (Hazard3 DTM+DM)
-    runs-on: macos-runner-1
+    # Light Metal cosim: free self-hosted macos-runner-1 on PR pushes;
+    # offloads to the billed macos-latest-xlarge on main / `ci:metal-xl`
+    # label (see the `metal` job for the rationale).
+    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
     timeout-minutes: 20
     # Regression gate for #84 (model-driven clock edge flags).
     continue-on-error: false
