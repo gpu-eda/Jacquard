@@ -255,6 +255,16 @@ jobs:
             exit 1
           fi
 
+      # Upload Metal's dff_test outputs so the backend-equivalence job can
+      # diff them against the CUDA/HIP outputs (which already upload theirs).
+      - name: Upload Metal artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: metal-outputs
+          path: |
+            tests/timing_test/ci_output.vcd
+            tests/timing_test/ci_xprop_output.vcd
+
       # End-to-end X-propagation regression guard (#95). Uses the xprop_demo
       # design: an UNRESET toggle counter (q_unreset, must stay X forever —
       # X+1=X) and a reset flop (q_reset, must resolve to known after reset).
@@ -1512,3 +1522,47 @@ jobs:
         with:
           name: mcu-soc-comparison-results
           path: mcu_comparison.txt
+
+  # Cross-backend equivalence guard. The CUDA, HIP, and Metal kernels are
+  # the same boolean-processor algorithm; a `jacquard sim` of one design
+  # must yield a byte-identical output VCD on all three. Each backend job
+  # runs the dff_test design and uploads its output; this job diffs them.
+  # A mismatch means a kernel has drifted between backends — the failure
+  # mode hand-maintained twin kernels (kernel_v1_impl.cuh vs kernel_v1.metal)
+  # invite, and the safety net that makes a future single-source compute
+  # kernel safe to attempt.
+  backend-equivalence:
+    name: Backend Equivalence (CUDA/HIP/Metal)
+    runs-on: ubuntu-latest
+    needs: [cuda, hip-on-nvidia, metal]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Download CUDA outputs
+        uses: actions/download-artifact@v7
+        with:
+          name: cuda-outputs
+          path: out/cuda
+      - name: Download HIP outputs
+        uses: actions/download-artifact@v7
+        with:
+          name: hip-outputs
+          path: out/hip
+      - name: Download Metal outputs
+        uses: actions/download-artifact@v7
+        with:
+          name: metal-outputs
+          path: out/metal
+      - name: Compare functional output VCDs
+        run: |
+          python3 scripts/ci/compare_backend_vcds.py --label functional \
+            out/cuda/ci_cuda_output.vcd \
+            out/hip/ci_hip_output.vcd \
+            out/metal/ci_output.vcd
+      - name: Compare X-propagation output VCDs
+        run: |
+          python3 scripts/ci/compare_backend_vcds.py --label xprop \
+            out/cuda/ci_cuda_xprop_output.vcd \
+            out/hip/ci_hip_xprop_output.vcd \
+            out/metal/ci_xprop_output.vcd
