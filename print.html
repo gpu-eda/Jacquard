@@ -5076,15 +5076,15 @@ extends selective X-propagation to <code>cosim</code>.</p>
 drive only <em>some</em> input bits each edge (clock, reset, JTAG/UART
 pins, configured constants). Every primary-input bit <em>not</em> in that
 driven set is unconnected and must be <strong>X</strong>, not <code>0</code>.</li>
-<li><strong>Bidir pad reads are conservatively X.</strong> A <code>bi_24t</code> pad's core-read
-is modelled <code>Y = PAD</code> (tristate not modelled), and <code>PAD</code> is an
-undriven primary input — so bidir reads fall out of rule (1) as X,
-which is the safe answer (false-X, never false-0). The
-combinationally-correct read <code>Y = OE ? A : external</code> requires
-modelling the tristate mux in the AIG; that is deferred to
-<a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>. (An earlier
-draft of this amendment proposed a per-edge OE→input feedback with
-one-edge latency — that was wrong; the correct read is combinational.)</li>
+<li><strong>Bidir pad reads.</strong> A <code>bi_24t</code> pad's core-read was originally
+modelled <code>Y = PAD</code> (tristate not modelled); since <code>PAD</code> is an undriven
+primary input, bidir reads fell out of rule (1) as X — safe (false-X,
+never false-0) but pessimistic for the <code>OE=1</code> loopback. The
+combinationally-correct read <code>Y = OE ? A : external</code> is now modelled as
+a mux in the AIG (<a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>,
+implemented — see the dated subsection below). (An earlier draft of this
+amendment proposed a per-edge OE→input feedback with one-edge latency —
+that was wrong; the correct read is combinational.)</li>
 </ol>
 <p>So the X-source taxonomy is now three-way: uninitialised DFF,
 uninitialised SRAM (both as before), and <strong>undriven input pads</strong> (which
@@ -5127,6 +5127,21 @@ genuinely undriven inputs — stays X. <code>sim</code> keeps inputs known (driv
 the VCD) and pays no extra X-aware cost. End-to-end guards covering the
 DFF and undriven-input X-sources, in both sim and cosim, live in
 <code>tests/xprop_cosim/</code> (CI, fatal).</p>
+<h3 id="bidir-tristate-read-back-mux-implemented-2026-06-04"><a class="header" href="#bidir-tristate-read-back-mux-implemented-2026-06-04">Bidir tristate read-back mux (implemented 2026-06-04)</a></h3>
+<p>Point #2 above is now implemented (#96). <code>AIG::from_netlistdb</code>'s <code>bi_24t</code>
+branch builds <code>Y = OE ? A : external</code> combinationally in the AIG —
+<code>OR(AND(OE, A), AND(!OE, PAD))</code> via the De Morgan idiom already used by
+<code>wire_dff_reset_set_overlay</code> — instead of the conservative <code>Y = PAD</code>. The
+external arm is the same undriven PAD primary input (X under rule (1) until
+a peripheral model drives it); the <code>OE=1</code> arm reads the core's own drive
+<code>A</code>, so the loopback is <strong>X-exact</strong> (known whenever <code>A</code> is) and the
+two-state read returns <code>A</code>, not the external stim. This removes bidir reads
+from the "undriven input → X" subsumption for the <code>OE=1</code> case; they are now
+exact rather than conservatively-X. <code>in_c</code>/<code>in_s</code> stay <code>Y = PAD</code>. Without
+both <code>A</code> and <code>OE</code> pins the conservative <code>Y = PAD</code> still stands. Unit test:
+<code>aig::gf180mcu_chip_top_tests::bi_24t_models_tristate_readback</code> evaluates
+the full <code>Y</code> truth table. (#107's <code>$isunknown</code> x-assert work can now assert
+bidir read-backs go definite when <code>OE</code> is asserted.)</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0017--cosim-execution-model"><a class="header" href="#adr-0017--cosim-execution-model">ADR 0017 — Cosim execution model</a></h1>
 <p><strong>Status:</strong> Accepted</p>
 <h2 id="context-16"><a class="header" href="#context-16">Context</a></h2>
