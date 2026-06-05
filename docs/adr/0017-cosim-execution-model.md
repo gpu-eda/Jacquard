@@ -141,6 +141,84 @@ needed — all drains happen after `waitUntilCompleted`.
   designs it can reach thousands of entries, but each buffer is
   small (tens of bytes).
 
+## Amendment 2026-06-05: backend portability (#105)
+
+The execution model above is **Metal-only** — `run_cosim` lives in
+`cosim_metal.rs` (gated `#[cfg(feature = "metal")]`) and `cmd_cosim`
+hard-errors on other backends. This amendment records the decision to make
+cosim **backend-portable** (CPU reference + CUDA/HIP), tracked as
+[#105](https://github.com/gpu-eda/Jacquard/issues/105). It does **not**
+change the batch/scheduler model above; it factors *where* each part runs.
+
+### The seam: backend-agnostic orchestration vs a `CosimBackend` trait
+
+`run_cosim` is split along a seam that already exists in spirit:
+
+- **Above the seam (backend-agnostic, moves to a shared `cosim` driver):**
+  the `MultiClockScheduler`, `build_edge_ops`, batch-size logic, peripheral
+  models (`PeripheralModel::step_edge` → `ModelOverrides`), the input
+  dispatcher, reset/constant init, VCD writing, and event/ring-buffer
+  draining. None of this is GPU-specific; it operates on `&[u32]` state and
+  `Vec<BitOp>` edge ops.
+- **Below the seam (a `CosimBackend` trait, one impl per backend):** owning
+  the `[2 × state_size]` state buffer and performing, per edge —
+  `state_prep` (output→input copy + apply BitOps + clear driven X-mask),
+  the design step (`simulate_v1_stage` / the boolean processor), and
+  exposing `input_state()` / `output_state()` as `&[u32]`/`&mut [u32]` to
+  the orchestration. `MetalSimulator` becomes one implementation.
+
+Two structural facts make this tractable rather than a rewrite:
+
+1. **cosim is inherently per-edge dispatch on every backend.** Inputs
+   depend on outputs each cycle, so the reactive loop dispatches the design
+   one edge at a time — it does **not** use the single cooperative-launch +
+   `grid.sync` model that the `sim` command uses on CUDA/HIP. CUDA/HIP cosim
+   therefore dispatches the design kernel per-edge exactly as Metal already
+   does, sidestepping the one CUDA feature (`cooperative_groups` grid sync)
+   that is hardest to port. cosim's structure is *closer* across backends
+   than `sim`'s.
+2. **The peripheral protocol models are already backend-agnostic CPU Rust**
+   (`src/sim/models/*.rs` implement `PeripheralModel`, no GPU deps). The
+   on-GPU IO kernels (`gpu_flash_model_step`, `gpu_io_step`,
+   `gpu_apply_flash_din`) are a Metal **performance optimization** that
+   eliminates per-tick CPU↔GPU round-trips — they are *not* required for
+   correctness. A new backend can run peripherals on the CPU and only
+   dispatch the design step on the GPU; porting the IO kernels is a later
+   optimization, not a prerequisite.
+
+### Two implementations
+
+- **Path A — `CpuBackend` (reference, no GPU).** Design step =
+  `cpu_reference::simulate_block_v1` per block (the existing
+  `--check-with-cpu` loop is already a prototype of exactly this). Not for
+  throughput (won't beat Verilator); its value is a portable reference, an
+  oracle, contributor access on non-Apple hardware, and — decisively —
+  **running cosim regression tests on free Linux CI** (today they are
+  Metal-only). Builds and validates the seam.
+- **Path B — `Cuda`/`HipBackend` (the Linux perf story).** Design step =
+  the existing CUDA/HIP `simulate` kernel dispatched per-edge, reusing
+  Path A's seam and the CPU peripheral models. Was "runner-gated"; the
+  GitHub-hosted T4 runner (`tesla4-runner`) now makes it CI-testable.
+
+### Consequences
+
+- The `sim` cooperative-launch model and the cosim per-edge model remain
+  distinct *per backend*; this amendment unifies the cosim *driver*, not the
+  two execution models.
+- `ScheduleBuffers` currently stores `metal::Buffer` pairs and
+  `update_model_driven_in_ops` writes into Metal shared memory directly;
+  these must become backend-neutral (`Vec<BitOp>`) with the backend
+  materializing its native form. This is the main refactor friction.
+- `cosim_metal.rs` carries private copies of `simulate_block_v1`; these
+  consolidate onto `cpu_reference` as part of the seam extraction.
+- Correctness is guarded by extending the cross-backend equivalence test
+  ([#113](https://github.com/gpu-eda/Jacquard/pull/113), today sim-only) to
+  cosim once a second backend exists — a CPU/Metal output-VCD diff on the
+  same reactive design.
+
+Full phasing, the trait signature, and file-by-file steps are in
+[`docs/plans/cosim-backend-portability.md`](../plans/cosim-backend-portability.md).
+
 ## Cross-references
 
 - ADR 0012 — CDC jitter injection (uses the scheduler's edge
@@ -149,3 +227,5 @@ needed — all drains happen after `waitUntilCompleted`.
   model patterns and ring buffers).
 - [`docs/plans/multi-clock-and-stimulus-architecture.md`](../plans/multi-clock-and-stimulus-architecture.md)
   — design-space doc for the multi-clock scheduler.
+- [`docs/plans/cosim-backend-portability.md`](../plans/cosim-backend-portability.md)
+  — implementation plan for backend portability (#105).

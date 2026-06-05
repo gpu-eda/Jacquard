@@ -29,6 +29,7 @@ persistent plans here.
 | [WS3: delete SDF parser + interim runtime hook](ws3-delete-sdf-parser.md) | Implemented — historical record (see ADR 0006 Amendment) |
 | [WS3 follow-up: re-add cosim `--sdf` via `opensta-to-ir`](ws3-cosim-sdf-followup.md) | Deferred |
 | [Multi-clock and stimulus architecture](multi-clock-and-stimulus-architecture.md) | Exploratory — demand-driven |
+| [Cosim backend portability](cosim-backend-portability.md) | Active — design captured (#105); see ADR 0017 amendment |
 
 ## Reading order for new contributors
 
