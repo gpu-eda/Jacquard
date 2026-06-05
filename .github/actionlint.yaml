@@ -2,3 +2,8 @@ self-hosted-runner:
   labels:
     - nvidia-runner-1
     - macos-runner-1
+    # GitHub-hosted GPU larger runner (gpu-eda team plan), added 2026-06-05.
+    # A custom-named larger runner, so actionlint needs it listed.
+    # (macos-latest-xlarge is a standard GitHub label — actionlint already
+    # knows it, so it doesn't go here.)
+    - tesla4-runner
