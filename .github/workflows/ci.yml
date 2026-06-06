@@ -1554,15 +1554,23 @@ jobs:
         with:
           name: metal-outputs
           path: out/metal
+      # Locate each VCD by basename: artifacts nest differently depending on
+      # whether the producing job bundled root-level log files (which shifts
+      # upload-artifact's common-ancestor to the repo root, keeping the
+      # tests/timing_test/ prefix). `find` makes the comparison independent
+      # of that. `set -e` + the script's own missing-input check catch a
+      # genuinely absent file.
       - name: Compare functional output VCDs
         run: |
-          python3 scripts/ci/compare_backend_vcds.py --label functional \
-            out/cuda/ci_cuda_output.vcd \
-            out/hip/ci_hip_output.vcd \
-            out/metal/ci_output.vcd
+          set -euo pipefail
+          cuda=$(find out/cuda -name ci_cuda_output.vcd | head -1)
+          hip=$(find out/hip -name ci_hip_output.vcd | head -1)
+          metal=$(find out/metal -name ci_output.vcd | head -1)
+          python3 scripts/ci/compare_backend_vcds.py --label functional "$cuda" "$hip" "$metal"
       - name: Compare X-propagation output VCDs
         run: |
-          python3 scripts/ci/compare_backend_vcds.py --label xprop \
-            out/cuda/ci_cuda_xprop_output.vcd \
-            out/hip/ci_hip_xprop_output.vcd \
-            out/metal/ci_xprop_output.vcd
+          set -euo pipefail
+          cuda=$(find out/cuda -name ci_cuda_xprop_output.vcd | head -1)
+          hip=$(find out/hip -name ci_hip_xprop_output.vcd | head -1)
+          metal=$(find out/metal -name ci_xprop_output.vcd | head -1)
+          python3 scripts/ci/compare_backend_vcds.py --label xprop "$cuda" "$hip" "$metal"
