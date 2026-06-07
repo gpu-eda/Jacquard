@@ -2600,6 +2600,199 @@ impl MetalBackend {
         )
     }
 
+    /// Allocate + initialise the design-state, SRAM, blocks-program, and event
+    /// buffers (Phase 1 step 2c: relocated from `run_cosim`). This covers the
+    /// buffer-intrinsic init only — the xprop X-mask seed (both slots), the
+    /// SRAM data/X-mask fills, the SRAM ELF preload, the no-copy wrappers over
+    /// the `script` blocks UVecs, and the leaked-`Box` event buffer. The
+    /// backend-agnostic stimulus deposits (reg_init / reset / constant_ports /
+    /// set_flash_din) stay in `run_cosim`, operating on a `states` slice
+    /// re-derived over the returned `states_buffer`.
+    ///
+    /// Returns the four GPU buffers, the blocks no-copy buffers, the event
+    /// buffer, **and `event_buffer_ptr`** — the `*mut EventBuffer` from
+    /// `Box::into_raw`. The caller keeps ownership of the leaked box and is
+    /// responsible for the matching `drop(Box::from_raw(event_buffer_ptr))`
+    /// (two existing sites in `run_cosim`); no Drop impl is added here.
+    #[allow(clippy::type_complexity)]
+    fn build_state_buffers(
+        device: &metal::Device,
+        script: &FlattenedScriptV1,
+        config: &TestbenchConfig,
+        state_size: usize,
+    ) -> (
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        *mut crate::event_buffer::EventBuffer,
+    ) {
+        // States: [input state (state_size)] [output state (state_size)]
+        let states_buffer = device.new_buffer(
+            (2 * state_size * std::mem::size_of::<u32>()) as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        let states: &mut [u32] = unsafe {
+            std::slice::from_raw_parts_mut(states_buffer.contents() as *mut u32, 2 * state_size)
+        };
+        states.fill(0);
+
+        // Selective X-propagation (ADR 0016): seed the input slot's X-mask
+        // half so uninitialised DFF/SRAM start as X. `expand_states_for_xprop`
+        // builds the template (0xFFFF…=X for everything, cleared for primary
+        // inputs); we copy its [value|xmask] block into the input slot. The
+        // arrivals region (if timing is enabled) stays 0. Phase 3 will refine
+        // undriven inputs back to X; here inputs start known, matching the
+        // sim-path template. See docs/plans/cosim-xprop.md.
+        if script.xprop_enabled {
+            let rio = script.reg_io_state_size as usize;
+            // Cosim template: X at uninitialised DFF/SRAM AND at every primary
+            // input (undriven until a model/clock/reset/constant drives it —
+            // #95 phase 3). `state_prep` clears the X-mask of each bit it drives
+            // every edge, so driven inputs resolve to known and truly-undriven
+            // ones stay X.
+            let xmask = crate::sim::vcd_io::xprop_xmask_template_cosim(script);
+            // Seed the X-mask half of BOTH slots. The reactive loop's first GPU op
+            // every edge is `state_prep`, which copies output slot → input slot
+            // (kernel_v1.metal); the output slot is therefore the initial condition
+            // the first `simulate` reads. Seeding only the input slot lets edge-0
+            // state_prep copy the all-zero output xmask over the seed, wiping
+            // uninitialised-DFF X before it can propagate (the #95 "X never
+            // surfaces" bug). The value halves stay zero (states.fill(0) above).
+            states[rio..2 * rio].copy_from_slice(&xmask);
+            states[state_size + rio..state_size + 2 * rio].copy_from_slice(&xmask);
+            clilog::info!(
+                "cosim X-propagation enabled: {} reg/io words, X-mask seeded (both slots) for uninitialised state",
+                rio
+            );
+        }
+
+        // SRAM storage. Allocate at least one word: a SRAM-less design has
+        // `sram_storage_size == 0`, and `new_buffer(0)` returns a nil MTLBuffer
+        // whose `.contents()` is null (foreign-types asserts non-null). Sizing to
+        // `max(1)` while slicing to the real length keeps SRAM-free designs (e.g.
+        // pure-logic cosim) working; the kernel guards SRAM reads on the cell map.
+        let sram_data_len = (script.sram_storage_size as usize).max(1);
+        let sram_data_buffer = device.new_buffer(
+            (sram_data_len * std::mem::size_of::<u32>()) as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        let sram_data: &mut [u32] = unsafe {
+            std::slice::from_raw_parts_mut(
+                sram_data_buffer.contents() as *mut u32,
+                script.sram_storage_size as usize,
+            )
+        };
+        sram_data.fill(0);
+
+        // SRAM X-mask shadow (ADR 0016): one word per SRAM cell, all X
+        // (0xFFFF_FFFF) initially so unread/unwritten cells read as X.
+        // Bound at buffer(7) of simulate_v1_stage; sized 1 (dummy) when
+        // xprop is off — the kernel guards on is_x_capable before reading.
+        let sram_xmask_len = if script.xprop_enabled {
+            (script.sram_storage_size as usize).max(1)
+        } else {
+            1
+        };
+        let sram_xmask_buffer = device.new_buffer(
+            (sram_xmask_len * std::mem::size_of::<u32>()) as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        {
+            let m: &mut [u32] = unsafe {
+                std::slice::from_raw_parts_mut(
+                    sram_xmask_buffer.contents() as *mut u32,
+                    sram_xmask_len,
+                )
+            };
+            m.fill(if script.xprop_enabled { 0xFFFF_FFFF } else { 0 });
+        }
+
+        // SRAM preload (issue #80, ADR 0011 § "SRAM preload"). When
+        // `sim_config.json` declares `sram_init`, parse the named ELF
+        // file's PT_LOAD segments and pack them into the design's
+        // single SRAM's backing region before the kernel launches.
+        // Multi-SRAM preload is gated on a future schema extension —
+        // errors cleanly today.
+        if let Some(sram_init) = config.sram_init.as_ref() {
+            let elf_path = std::path::Path::new(&sram_init.elf_path);
+            let chunks = crate::sim::sram_preload::parse_elf_chunks(elf_path)
+                .unwrap_or_else(|e| panic!("sram_init: {e}"));
+            let (cellid, storage_offset) =
+                crate::sim::sram_preload::resolve_single_sram(&script.sram_cell_storage_offsets)
+                    .unwrap_or_else(|e| panic!("sram_init: {e}"));
+            let total_bytes: usize = chunks.iter().map(|c| c.bytes.len()).sum();
+            // Under xprop, clear the X-mask shadow for preloaded (known) cells so
+            // they don't read X forever (#95). The shadow is parallel to sram_data.
+            let mut xmask_slice = if script.xprop_enabled {
+                Some(unsafe {
+                    std::slice::from_raw_parts_mut(
+                        sram_xmask_buffer.contents() as *mut u32,
+                        sram_xmask_len,
+                    )
+                })
+            } else {
+                None
+            };
+            crate::sim::sram_preload::apply_chunks(
+                sram_data,
+                storage_offset,
+                &chunks,
+                xmask_slice.as_deref_mut(),
+            )
+            .unwrap_or_else(|e| panic!("sram_init: {e}"));
+            clilog::info!(
+                "SRAM preload: {} bytes from {} → cell {} at storage offset {}",
+                total_bytes,
+                elf_path.display(),
+                cellid,
+                storage_offset
+            );
+        }
+        let _ = sram_data;
+
+        // Create Metal buffers for script data (read-only, use UVec's Metal path)
+        let uvec_device = Device::Metal(0);
+        let blocks_start_ptr = script.blocks_start.as_uptr(uvec_device);
+        let blocks_data_ptr = script.blocks_data.as_uptr(uvec_device);
+
+        let blocks_start_buffer = device.new_buffer_with_bytes_no_copy(
+            blocks_start_ptr as *const _,
+            (script.blocks_start.len() * std::mem::size_of::<usize>()) as u64,
+            MTLResourceOptions::StorageModeShared,
+            None,
+        );
+        let blocks_data_buffer = device.new_buffer_with_bytes_no_copy(
+            blocks_data_ptr as *const _,
+            (script.blocks_data.len() * std::mem::size_of::<u32>()) as u64,
+            MTLResourceOptions::StorageModeShared,
+            None,
+        );
+
+        // Event buffer (for $stop/$finish/assertions). Leaked via
+        // `Box::into_raw`; the caller owns the raw pointer and frees it.
+        let event_buffer = Box::new(crate::event_buffer::EventBuffer::new());
+        let event_buffer_ptr = Box::into_raw(event_buffer);
+        let event_buffer_metal = device.new_buffer_with_bytes_no_copy(
+            event_buffer_ptr as *const _,
+            std::mem::size_of::<crate::event_buffer::EventBuffer>() as u64,
+            MTLResourceOptions::StorageModeShared,
+            None,
+        );
+
+        (
+            states_buffer,
+            sram_data_buffer,
+            sram_xmask_buffer,
+            blocks_start_buffer,
+            blocks_data_buffer,
+            event_buffer_metal,
+            event_buffer_ptr,
+        )
+    }
+
     /// Metal-only GPU kernel profiling (forwards to the simulator). Not part
     /// of `CosimBackend` — a CPU backend has no GPU kernels to profile.
     fn profile_kernels(&self, num_ticks: usize) {
@@ -2988,86 +3181,27 @@ pub fn run_cosim(
     let timer_init = clilog::stimer!("init_gpu");
     let simulator = MetalSimulator::new(num_major_stages);
 
-    // States: [input state (state_size)] [output state (state_size)]
-    let states_buffer = simulator.device.new_buffer(
-        (2 * state_size * std::mem::size_of::<u32>()) as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
+    // ── Design-state, SRAM, blocks-program, and event buffers ────────────
+    // (built in MetalBackend — Phase 1 step 2c). The builder owns the
+    // buffer-intrinsic init (states.fill + xprop X-mask seed, SRAM data/X-mask
+    // fills + ELF preload, blocks no-copy wrappers, leaked-Box event buffer)
+    // and returns `event_buffer_ptr` so the caller keeps ownership of the
+    // leaked box (two `drop(Box::from_raw(..))` sites below). The
+    // backend-agnostic stimulus deposits (reg_init / reset / constant_ports /
+    // set_flash_din) stay here, operating on a `states` slice re-derived over
+    // the returned `states_buffer`.
+    let (
+        states_buffer,
+        sram_data_buffer,
+        sram_xmask_buffer,
+        blocks_start_buffer,
+        blocks_data_buffer,
+        event_buffer_metal,
+        event_buffer_ptr,
+    ) = MetalBackend::build_state_buffers(&simulator.device, script, config, state_size);
     let states: &mut [u32] = unsafe {
         std::slice::from_raw_parts_mut(states_buffer.contents() as *mut u32, 2 * state_size)
     };
-    states.fill(0);
-
-    // Selective X-propagation (ADR 0016): seed the input slot's X-mask
-    // half so uninitialised DFF/SRAM start as X. `expand_states_for_xprop`
-    // builds the template (0xFFFF…=X for everything, cleared for primary
-    // inputs); we copy its [value|xmask] block into the input slot. The
-    // arrivals region (if timing is enabled) stays 0. Phase 3 will refine
-    // undriven inputs back to X; here inputs start known, matching the
-    // sim-path template. See docs/plans/cosim-xprop.md.
-    if script.xprop_enabled {
-        let rio = script.reg_io_state_size as usize;
-        // Cosim template: X at uninitialised DFF/SRAM AND at every primary
-        // input (undriven until a model/clock/reset/constant drives it —
-        // #95 phase 3). `state_prep` clears the X-mask of each bit it drives
-        // every edge, so driven inputs resolve to known and truly-undriven
-        // ones stay X.
-        let xmask = crate::sim::vcd_io::xprop_xmask_template_cosim(script);
-        // Seed the X-mask half of BOTH slots. The reactive loop's first GPU op
-        // every edge is `state_prep`, which copies output slot → input slot
-        // (kernel_v1.metal); the output slot is therefore the initial condition
-        // the first `simulate` reads. Seeding only the input slot lets edge-0
-        // state_prep copy the all-zero output xmask over the seed, wiping
-        // uninitialised-DFF X before it can propagate (the #95 "X never
-        // surfaces" bug). The value halves stay zero (states.fill(0) above).
-        states[rio..2 * rio].copy_from_slice(&xmask);
-        states[state_size + rio..state_size + 2 * rio].copy_from_slice(&xmask);
-        clilog::info!(
-            "cosim X-propagation enabled: {} reg/io words, X-mask seeded (both slots) for uninitialised state",
-            rio
-        );
-    }
-
-    // SRAM storage. Allocate at least one word: a SRAM-less design has
-    // `sram_storage_size == 0`, and `new_buffer(0)` returns a nil MTLBuffer
-    // whose `.contents()` is null (foreign-types asserts non-null). Sizing to
-    // `max(1)` while slicing to the real length keeps SRAM-free designs (e.g.
-    // pure-logic cosim) working; the kernel guards SRAM reads on the cell map.
-    let sram_data_len = (script.sram_storage_size as usize).max(1);
-    let sram_data_buffer = simulator.device.new_buffer(
-        (sram_data_len * std::mem::size_of::<u32>()) as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    let sram_data: &mut [u32] = unsafe {
-        std::slice::from_raw_parts_mut(
-            sram_data_buffer.contents() as *mut u32,
-            script.sram_storage_size as usize,
-        )
-    };
-    sram_data.fill(0);
-
-    // SRAM X-mask shadow (ADR 0016): one word per SRAM cell, all X
-    // (0xFFFF_FFFF) initially so unread/unwritten cells read as X.
-    // Bound at buffer(7) of simulate_v1_stage; sized 1 (dummy) when
-    // xprop is off — the kernel guards on is_x_capable before reading.
-    let sram_xmask_len = if script.xprop_enabled {
-        (script.sram_storage_size as usize).max(1)
-    } else {
-        1
-    };
-    let sram_xmask_buffer = simulator.device.new_buffer(
-        (sram_xmask_len * std::mem::size_of::<u32>()) as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    {
-        let m: &mut [u32] = unsafe {
-            std::slice::from_raw_parts_mut(
-                sram_xmask_buffer.contents() as *mut u32,
-                sram_xmask_len,
-            )
-        };
-        m.fill(if script.xprop_enabled { 0xFFFF_FFFF } else { 0 });
-    }
 
     // SRAM write dumper (JACQUARD_SRAM_DUMP=<path>). Opt-in
     // diagnostic that snapshots `sram_storage` per batch and emits
@@ -3076,48 +3210,9 @@ pub fn run_cosim(
     let mut sram_dumper =
         crate::sim::sram_dump::SramDumper::from_env(aig, netlistdb, script);
 
-    // SRAM preload (issue #80, ADR 0011 § "SRAM preload"). When
-    // `sim_config.json` declares `sram_init`, parse the named ELF
-    // file's PT_LOAD segments and pack them into the design's
-    // single SRAM's backing region before the kernel launches.
-    // Multi-SRAM preload is gated on a future schema extension —
-    // errors cleanly today.
-    if let Some(sram_init) = config.sram_init.as_ref() {
-        let elf_path = std::path::Path::new(&sram_init.elf_path);
-        let chunks = crate::sim::sram_preload::parse_elf_chunks(elf_path)
-            .unwrap_or_else(|e| panic!("sram_init: {e}"));
-        let (cellid, storage_offset) =
-            crate::sim::sram_preload::resolve_single_sram(&script.sram_cell_storage_offsets)
-                .unwrap_or_else(|e| panic!("sram_init: {e}"));
-        let total_bytes: usize = chunks.iter().map(|c| c.bytes.len()).sum();
-        // Under xprop, clear the X-mask shadow for preloaded (known) cells so
-        // they don't read X forever (#95). The shadow is parallel to sram_data.
-        let mut xmask_slice = if script.xprop_enabled {
-            Some(unsafe {
-                std::slice::from_raw_parts_mut(
-                    sram_xmask_buffer.contents() as *mut u32,
-                    sram_xmask_len,
-                )
-            })
-        } else {
-            None
-        };
-        crate::sim::sram_preload::apply_chunks(
-            sram_data,
-            storage_offset,
-            &chunks,
-            xmask_slice.as_deref_mut(),
-        )
-        .unwrap_or_else(|e| panic!("sram_init: {e}"));
-        clilog::info!(
-            "SRAM preload: {} bytes from {} → cell {} at storage offset {}",
-            total_bytes,
-            elf_path.display(),
-            cellid,
-            storage_offset
-        );
-    }
-    let _ = sram_data;
+    // (SRAM preload moved into MetalBackend::build_state_buffers — Phase 1
+    // step 2c. The states/sram/xmask buffers are now allocated + initialised by
+    // the builder above; only the agnostic stimulus deposits remain inline.)
 
     // Register value-injection (issue #108, ADR 0016). `reg_init` deposits a
     // definite value into chosen registers at tick 0 with `$deposit`
@@ -3213,33 +3308,11 @@ pub fn run_cosim(
         );
     }
 
-    // Create Metal buffers for script data (read-only, use UVec's Metal path)
-    let device = Device::Metal(0);
-    let blocks_start_ptr = script.blocks_start.as_uptr(device);
-    let blocks_data_ptr = script.blocks_data.as_uptr(device);
-
-    let blocks_start_buffer = simulator.device.new_buffer_with_bytes_no_copy(
-        blocks_start_ptr as *const _,
-        (script.blocks_start.len() * std::mem::size_of::<usize>()) as u64,
-        MTLResourceOptions::StorageModeShared,
-        None,
-    );
-    let blocks_data_buffer = simulator.device.new_buffer_with_bytes_no_copy(
-        blocks_data_ptr as *const _,
-        (script.blocks_data.len() * std::mem::size_of::<u32>()) as u64,
-        MTLResourceOptions::StorageModeShared,
-        None,
-    );
-
-    // Event buffer (for $stop/$finish/assertions)
-    let event_buffer = Box::new(crate::event_buffer::EventBuffer::new());
-    let event_buffer_ptr = Box::into_raw(event_buffer);
-    let event_buffer_metal = simulator.device.new_buffer_with_bytes_no_copy(
-        event_buffer_ptr as *const _,
-        std::mem::size_of::<crate::event_buffer::EventBuffer>() as u64,
-        MTLResourceOptions::StorageModeShared,
-        None,
-    );
+    // (blocks no-copy + event buffer moved into
+    // MetalBackend::build_state_buffers — Phase 1 step 2c. `blocks_start_buffer`,
+    // `blocks_data_buffer`, `event_buffer_metal`, and `event_buffer_ptr` come
+    // from the builder call above; the two `drop(Box::from_raw(event_buffer_ptr))`
+    // sites below free the leaked box.)
 
     // Timing constraint buffer for GPU-side setup/hold checking.
     let timing_constraints_buffer = timing_constraints.as_ref().map(|buf| {
