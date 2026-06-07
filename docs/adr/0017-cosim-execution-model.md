@@ -219,6 +219,55 @@ Two structural facts make this tractable rather than a rewrite:
 Full phasing, the trait signature, and file-by-file steps are in
 [`docs/plans/cosim-backend-portability.md`](../plans/cosim-backend-portability.md).
 
+### Measured batch utilisation (2026-06-07) and a seam refinement
+
+Before extracting the seam, the cosim loop was instrumented to measure how
+often the GPU-only batched fast path (`batch > 1`) is exercised versus
+forced single-edge dispatch (`force_single_edge = any_model_active`, plus
+the diagnostic modes). Per-edge handover is the only mode that needs a true
+per-edge CPU↔GPU round-trip; the telemetry prints in the run summary
+(`single_edge_batches`, mean/max batch).
+
+| Fixture | Edges | Batched (edges) | Single-edge commits | Commits |
+|---|---|---|---|---|
+| `dual_uart` | 10,000 | 100% | 0 | 11 |
+| `apb_trace` | 200 | 100% | 0 | 2 |
+| `xprop_cosim` | 40 | 100% | 0 | 2 |
+| `jtag_minimal` | 4,000,000 | 97.4% | 102,310 | 106,117 |
+
+Two conclusions:
+
+1. **Batching is the dominant path.** Designs whose peripherals have
+   GPU-side halves (UART, APB bus-trace, SPI flash — the `gpu_io_step` /
+   `gpu_flash_model_step` kernels) run **100% batched**: handover happens at
+   `BATCH_SIZE`-edge boundaries, not per clock edge. Even `jtag_minimal`
+   (CPU-side JTAG replay, the most per-edge-heavy fixture) batches 97% of
+   *edges* — though its 102k single-edge commits are 96% of all
+   command-buffer submits and dominate its wall-clock.
+
+2. **The `CosimBackend` trait must be batch-capable, not naive
+   per-edge.** The "cosim is inherently per-edge dispatch" framing above is
+   true of the *reactive* path, but Metal's production path encodes up to
+   `BATCH_SIZE` edges — with the GPU peripheral kernels and the VCD
+   ring-buffer drain — into a single command buffer. A literal
+   `simulate_edge`-per-edge trait would collapse this to one submit per edge
+   and regress Metal ~1000× on the 100%-batched designs. The seam therefore
+   exposes a **batch-granular** backend method ("run N consecutive edges,
+   snapshotting each to the ring") rather than a single-edge one: Metal
+   implements it with its GPU-peripheral batched loop; `CpuBackend` /
+   `Cuda`/`HipBackend` implement it as a per-edge loop with CPU-side
+   peripherals (N effectively 1 until their IO kernels land, Phase 3). The
+   batch-size decision (`force_single_edge`) stays *above* the seam,
+   unchanged — this is a refinement of the trait shape, not of the batch
+   model (still a non-goal to change).
+
+The 102k JTAG single-edge round-trips are precisely the
+"cosim CPU↔GPU round-trip measured as the bottleneck" trigger for **MC.3**
+(streaming stimulus buffer) and the motivation for **MC.4** (per-island
+multi-rate batching) in the multi-clock plan — both *orthogonal to* and
+larger than the #105 seam (MC.4 needs the MC.1 island partitioner). They are
+the right long-term fix for the per-edge tail, not a Phase 0 prerequisite.
+
 ## Cross-references
 
 - ADR 0012 — CDC jitter injection (uses the scheduler's edge
