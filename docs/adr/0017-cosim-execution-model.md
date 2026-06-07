@@ -88,8 +88,11 @@ resolution.
 
 A **scheduler edge** is one tick of the scheduler (duration =
 `gcd_ps`). A **clock cycle** is two half-periods of a given domain
-(= rising + falling edge). The ratio `edges_per_sys_clk_cycle =
-clock_period_ps / gcd_ps` converts between them.
+(= rising + falling edge). The ratio `sched_ticks_per_sys_clk_cycle =
+clock_period_ps / gcd_ps` converts between them. Note this ratio is the
+number of scheduler ticks per sys_clk *period*, which is 2 only when
+`gcd_ps` equals the half-period (single-clock or harmonic multi-clock);
+non-commensurate periods or phase offsets make it larger.
 
 This distinction is load-bearing for peripheral timing:
 - UART baud rate dividers count **edges**, not clock cycles.
@@ -98,7 +101,7 @@ This distinction is load-bearing for peripheral timing:
 
 Confusing edges with clock cycles was the root cause of the UART
 baud rate bug fixed in commit `a263e47` — `edges_per_period` (the
-LCM schedule length) was used where `edges_per_sys_clk_cycle` was
+LCM schedule length) was used where `sched_ticks_per_sys_clk_cycle` was
 needed, doubling the bit time in multi-clock designs.
 
 ### GPU→CPU ring buffer drain
@@ -133,7 +136,7 @@ needed — all drains happen after `waitUntilCompleted`.
   would remove this limit.
 - The edges-vs-cycles distinction must be maintained carefully in
   any code that converts user-facing "cycles" to internal "ticks".
-  The `edges_per_sys_clk_cycle` helper exists for this purpose.
+  The `sched_ticks_per_sys_clk_cycle` helper exists for this purpose.
 - Pre-allocated schedule buffers consume `O(schedule_len)` Metal
   buffer pairs at startup. Each schedule entry creates two Metal
   buffer objects (params + ops). For typical single-clock designs
@@ -141,92 +144,27 @@ needed — all drains happen after `waitUntilCompleted`.
   designs it can reach thousands of entries, but each buffer is
   small (tens of bytes).
 
-## Amendment 2026-06-05: backend portability (#105)
+## Amendment 2026-06-07: backend-portable cosim — target architecture (#105)
 
 The execution model above is **Metal-only** — `run_cosim` lives in
 `cosim_metal.rs` (gated `#[cfg(feature = "metal")]`) and `cmd_cosim`
-hard-errors on other backends. This amendment records the decision to make
-cosim **backend-portable** (CPU reference + CUDA/HIP), tracked as
-[#105](https://github.com/gpu-eda/Jacquard/issues/105). It does **not**
-change the batch/scheduler model above; it factors *where* each part runs.
-
-### The seam: backend-agnostic orchestration vs a `CosimBackend` trait
-
-`run_cosim` is split along a seam that already exists in spirit:
-
-- **Above the seam (backend-agnostic, moves to a shared `cosim` driver):**
-  the `MultiClockScheduler`, `build_edge_ops`, batch-size logic, peripheral
-  models (`PeripheralModel::step_edge` → `ModelOverrides`), the input
-  dispatcher, reset/constant init, VCD writing, and event/ring-buffer
-  draining. None of this is GPU-specific; it operates on `&[u32]` state and
-  `Vec<BitOp>` edge ops.
-- **Below the seam (a `CosimBackend` trait, one impl per backend):** owning
-  the `[2 × state_size]` state buffer and performing, per edge —
-  `state_prep` (output→input copy + apply BitOps + clear driven X-mask),
-  the design step (`simulate_v1_stage` / the boolean processor), and
-  exposing `input_state()` / `output_state()` as `&[u32]`/`&mut [u32]` to
-  the orchestration. `MetalSimulator` becomes one implementation.
-
-Two structural facts make this tractable rather than a rewrite:
-
-1. **cosim is inherently per-edge dispatch on every backend.** Inputs
-   depend on outputs each cycle, so the reactive loop dispatches the design
-   one edge at a time — it does **not** use the single cooperative-launch +
-   `grid.sync` model that the `sim` command uses on CUDA/HIP. CUDA/HIP cosim
-   therefore dispatches the design kernel per-edge exactly as Metal already
-   does, sidestepping the one CUDA feature (`cooperative_groups` grid sync)
-   that is hardest to port. cosim's structure is *closer* across backends
-   than `sim`'s.
-2. **The peripheral protocol models are already backend-agnostic CPU Rust**
-   (`src/sim/models/*.rs` implement `PeripheralModel`, no GPU deps). The
-   on-GPU IO kernels (`gpu_flash_model_step`, `gpu_io_step`,
-   `gpu_apply_flash_din`) are a Metal **performance optimization** that
-   eliminates per-tick CPU↔GPU round-trips — they are *not* required for
-   correctness. A new backend can run peripherals on the CPU and only
-   dispatch the design step on the GPU; porting the IO kernels is a later
-   optimization, not a prerequisite.
-
-### Two implementations
-
-- **Path A — `CpuBackend` (reference, no GPU).** Design step =
-  `cpu_reference::simulate_block_v1` per block (the existing
-  `--check-with-cpu` loop is already a prototype of exactly this). Not for
-  throughput (won't beat Verilator); its value is a portable reference, an
-  oracle, contributor access on non-Apple hardware, and — decisively —
-  **running cosim regression tests on free Linux CI** (today they are
-  Metal-only). Builds and validates the seam.
-- **Path B — `Cuda`/`HipBackend` (the Linux perf story).** Design step =
-  the existing CUDA/HIP `simulate` kernel dispatched per-edge, reusing
-  Path A's seam and the CPU peripheral models. Was "runner-gated"; the
-  GitHub-hosted T4 runner (`tesla4-runner`) now makes it CI-testable.
-
-### Consequences
-
-- The `sim` cooperative-launch model and the cosim per-edge model remain
-  distinct *per backend*; this amendment unifies the cosim *driver*, not the
-  two execution models.
-- `ScheduleBuffers` currently stores `metal::Buffer` pairs and
-  `update_model_driven_in_ops` writes into Metal shared memory directly;
-  these must become backend-neutral (`Vec<BitOp>`) with the backend
-  materializing its native form. This is the main refactor friction.
-- `cosim_metal.rs` carries private copies of `simulate_block_v1`; these
-  consolidate onto `cpu_reference` as part of the seam extraction.
-- Correctness is guarded by extending the cross-backend equivalence test
-  ([#113](https://github.com/gpu-eda/Jacquard/pull/113), today sim-only) to
-  cosim once a second backend exists — a CPU/Metal output-VCD diff on the
-  same reactive design.
-
-Full phasing, the trait signature, and file-by-file steps are in
+hard-errors on other backends. This amendment records the **target
+architecture** for making cosim backend-portable (CPU reference + CUDA/HIP),
+tracked as [#105](https://github.com/gpu-eda/Jacquard/issues/105). It
+supersedes the incremental 2026-06-05 note (whose "per-edge on every
+backend" framing the measurements below correct). It describes the
+steady-state design; the staging to reach it lives in
 [`docs/plans/cosim-backend-portability.md`](../plans/cosim-backend-portability.md).
+It does **not** change the batch/scheduler model above — it factors *where*
+each part runs and along what seam.
 
-### Measured batch utilisation (2026-06-07) and a seam refinement
+### The evidence: measured batch utilisation (2026-06-07)
 
-Before extracting the seam, the cosim loop was instrumented to measure how
-often the GPU-only batched fast path (`batch > 1`) is exercised versus
-forced single-edge dispatch (`force_single_edge = any_model_active`, plus
-the diagnostic modes). Per-edge handover is the only mode that needs a true
-per-edge CPU↔GPU round-trip; the telemetry prints in the run summary
-(`single_edge_batches`, mean/max batch).
+The cosim loop was instrumented (telemetry in the run summary:
+`single_edge_batches`, mean/max batch) to measure how often the batched
+fast path (`batch > 1`) runs versus forced single-edge dispatch
+(`force_single_edge = any_model_active`, plus diagnostic modes). Per-edge
+handover is the only mode needing a true per-edge CPU↔GPU round-trip.
 
 | Fixture | Edges | Batched (edges) | Single-edge commits | Commits |
 |---|---|---|---|---|
@@ -235,38 +173,119 @@ per-edge CPU↔GPU round-trip; the telemetry prints in the run summary
 | `xprop_cosim` | 40 | 100% | 0 | 2 |
 | `jtag_minimal` | 4,000,000 | 97.4% | 102,310 | 106,117 |
 
-Two conclusions:
+Designs whose peripherals have GPU-side halves (UART, APB bus-trace, SPI
+flash — the `gpu_io_step` / `gpu_flash_model_step` kernels) run **100%
+batched**: CPU↔GPU handover is at `BATCH_SIZE`-edge boundaries, not per
+clock edge. Even `jtag_minimal` (CPU-side JTAG replay, the most
+per-edge-heavy fixture) batches 97% of *edges* — but its 102k single-edge
+commits are 96% of all submits and dominate its wall-clock. **Batching is
+the dominant path; per-edge is the exception (CPU-side models + diagnostic
+modes).** This drives every decision below.
 
-1. **Batching is the dominant path.** Designs whose peripherals have
-   GPU-side halves (UART, APB bus-trace, SPI flash — the `gpu_io_step` /
-   `gpu_flash_model_step` kernels) run **100% batched**: handover happens at
-   `BATCH_SIZE`-edge boundaries, not per clock edge. Even `jtag_minimal`
-   (CPU-side JTAG replay, the most per-edge-heavy fixture) batches 97% of
-   *edges* — though its 102k single-edge commits are 96% of all
-   command-buffer submits and dominate its wall-clock.
+### Layer 1 — backend-agnostic orchestration (the shared `cosim` driver)
 
-2. **The `CosimBackend` trait must be batch-capable, not naive
-   per-edge.** The "cosim is inherently per-edge dispatch" framing above is
-   true of the *reactive* path, but Metal's production path encodes up to
-   `BATCH_SIZE` edges — with the GPU peripheral kernels and the VCD
-   ring-buffer drain — into a single command buffer. A literal
-   `simulate_edge`-per-edge trait would collapse this to one submit per edge
-   and regress Metal ~1000× on the 100%-batched designs. The seam therefore
-   exposes a **batch-granular** backend method ("run N consecutive edges,
-   snapshotting each to the ring") rather than a single-edge one: Metal
-   implements it with its GPU-peripheral batched loop; `CpuBackend` /
-   `Cuda`/`HipBackend` implement it as a per-edge loop with CPU-side
-   peripherals (N effectively 1 until their IO kernels land, Phase 3). The
-   batch-size decision (`force_single_edge`) stays *above* the seam,
-   unchanged — this is a refinement of the trait shape, not of the batch
-   model (still a non-goal to change).
+Everything that is not GPU-specific moves above the seam and operates on
+`&[u32]` state + `Vec<BitOp>` edge ops: the `MultiClockScheduler`,
+`build_edge_ops`, the **batch-size policy** (`force_single_edge`), peripheral
+*coordination*, the input dispatcher, reset/constant init, VCD writing, and
+event/ring-buffer draining. The batch-size decision stays here, unchanged.
 
-The 102k JTAG single-edge round-trips are precisely the
-"cosim CPU↔GPU round-trip measured as the bottleneck" trigger for **MC.3**
-(streaming stimulus buffer) and the motivation for **MC.4** (per-island
-multi-rate batching) in the multi-clock plan — both *orthogonal to* and
-larger than the #105 seam (MC.4 needs the MC.1 island partitioner). They are
-the right long-term fix for the per-edge tail, not a Phase 0 prerequisite.
+### Layer 2 — the `CosimBackend` trait (one impl per backend)
+
+Owns the `[2 × state_size]` design state and runs the design. Crucially it
+is **batch-granular, not single-edge** — the measurements show a literal
+`simulate_edge`-per-edge trait would collapse Metal's 100%-batched designs
+to one command-buffer submit per edge (~1000× regression). The trait method
+is therefore *"run N consecutive scheduler edges, applying each edge's ops
+and snapshotting each output slot to the ring"*, plus `state_prep`
+(output→input copy + apply `BitOp`s + clear driven X-mask) and
+`input_state()/output_state()` accessors. `MetalSimulator` becomes
+`MetalBackend`; `CpuBackend` and `Cuda`/`HipBackend` are added.
+
+- **`MetalBackend`** runs N edges in one command buffer with GPU peripherals
+  inside (today's `encode_and_commit_gpu_batch`).
+- **`CpuBackend`** runs the per-edge loop via `cpu_reference::simulate_block_v1`
+  — the reference/oracle, and the unlock for **cosim regression on free
+  Linux CI** (today Metal-only). N is effectively 1; throughput is not the
+  point.
+- **`Cuda`/`HipBackend`** run the existing `simulate` kernel **per-edge** —
+  sidestepping the `cooperative_groups` grid-sync that only the `sim`
+  command needs (the hardest CUDA feature to port). They reach true batching
+  only once GPU peripherals exist (Layer 3, Tier 2).
+
+### Layer 3 — the `GpuPeripheral` abstraction (3-tier, GPU peripherals primary)
+
+Batching a *reactive* design requires the peripheral to run **inside** the
+batch — i.e. on the GPU — because the peripheral consumes each edge's output
+to drive the next edge's input. On Metal this is hidden by unified memory;
+on a discrete GPU, per-edge means a **PCIe round-trip every edge** (~1–2 µs
+each way), which over millions of edges is likely *slower than the CPU
+backend*. **Therefore GPU-side peripherals are architecturally required for
+the CUDA/HIP perf story — not an optional optimization.** The decision
+(2026-06-07) is to make GPU peripherals the **primary** path, with a 3-tier
+model mirroring the `CosimBackend` seam:
+
+- **Tier 1 — CPU reference model** (`PeripheralModel`, `src/sim/models/*.rs`,
+  exists). The semantic ground truth, the cross-backend equivalence oracle,
+  and the fallback for any (backend, peripheral) lacking a GPU kernel. Always
+  present.
+- **Tier 2 — hand-written GPU kernels for core peripherals** (now). Because
+  CUDA and HIP already share `kernel_v1_impl.cuh`, a core peripheral is **two
+  implementations, not three**: one shared `*_impl.cuh` (CUDA + HIP) and one
+  `.metal`. Tractable for the small in-core set (flash, UART, bus-trace) and
+  matching the existing `simulate`-kernel precedent.
+- **Tier 3 — single-source peripheral compilation** (later; the
+  user-extensible peripheral API). Hand-written kernels don't scale to
+  user-defined peripherals; the endgame is a user writing a peripheral *once*
+  (restricted-Rust subset or a small peripheral-FSM IR) that compiles to CPU
+  + every GPU backend. This domain (peripheral FSMs) is far narrower than the
+  general cross-shader-tool port previously rejected, so an in-house IR is
+  the tractable route.
+
+The `GpuPeripheral` seam is defined at Tier 2 so Tier 3 slots in without
+reworking the orchestration.
+
+### Correctness contract
+
+The CPU `PeripheralModel` (Tier 1) is ground truth. The cross-backend
+equivalence harness ([#113](https://github.com/gpu-eda/Jacquard/pull/113),
+today sim-only) extends to cosim: every backend's output VCD must be
+byte-identical on the same reactive design, and every GPU-peripheral kernel
+(Tier 2) must match its CPU model. This is the backstop for the whole effort.
+
+### Considered alternative (not adopted as primary)
+
+**Speculative batching** — keep peripherals on the CPU, batch optimistically,
+and roll back on divergence (the multi-clock plan's MC.4 island run-ahead /
+MC.5 record-and-replay). It avoids writing GPU kernels but is
+non-deterministic in throughput and substantially more complex. Rejected as
+the primary path; retained as the natural fallback for *user* CPU
+peripherals that are not GPU-portable. Cross-shader tools (Slang, Ferrox)
+remain rejected for the design kernel; Tier 3's narrow peripheral-FSM IR is
+the cross-GPU answer for peripherals.
+
+### Relationship to the multi-clock plan
+
+The 102k JTAG single-edge round-trips are exactly the "cosim CPU↔GPU
+round-trip measured as the bottleneck" trigger for **MC.3** (streaming
+stimulus) and the motivation for **MC.4** (per-island multi-rate batching).
+Both are *orthogonal to and larger than* this seam (MC.4 needs the MC.1
+island partitioner) — the long-term fix for the per-edge tail, not a
+prerequisite here.
+
+### Consequences
+
+- The `sim` cooperative-launch model and the cosim per-edge/batch model
+  remain distinct *per backend*; this unifies the cosim *driver*, not the two
+  execution models.
+- `ScheduleBuffers` currently stores `metal::Buffer` pairs and the ops-update
+  helpers write Metal shared memory in place; these become backend-neutral
+  (`Vec<(StatePrepParams, Vec<BitOp>)>`) with each backend materializing its
+  native form. The in-place shared-memory mutation is the main refactor
+  friction — the trait's explicit ops-upload point is what removes it.
+- CUDA/HIP cosim is **per-edge (correctness/CI only) until Tier-2 GPU
+  peripherals land**; its real perf path depends on them. This is an
+  expected, documented throughput gap, not a regression.
 
 ## Cross-references
 
