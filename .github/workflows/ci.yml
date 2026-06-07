@@ -1050,10 +1050,15 @@ jobs:
   # See tests/jtag_minimal/README.md for full design + regen flow.
   jtag-minimal-cosim:
     name: JTAG Minimal Cosim (Hazard3 DTM+DM)
-    # Light Metal cosim: free self-hosted macos-runner-1 on PR pushes;
-    # offloads to the billed macos-latest-xlarge on main / `ci:metal-xl`
-    # label (see the `metal` job for the rationale).
-    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
+    # HEAVY Metal cosim (4M edges). Pinned to the self-hosted macos-runner-1
+    # (fast Apple Silicon) on every ref — it is NOT a light job. The
+    # GitHub-hosted macos-latest-xlarge is ~3x slower for this per-edge
+    # JTAG-replay workload (model-driven TCK forces single-edge dispatch,
+    # ~500µs/tick vs ~150µs self-hosted), which blew the 15-min step timeout
+    # on a main push (run 27088699240). The xlarge offload only suits the
+    # light `metal` job. Re-evaluate once multi-clock/island batching cuts
+    # the per-edge tail (multi-clock plan MC.3/MC.4).
+    runs-on: macos-runner-1
     timeout-minutes: 20
     # Regression gate for #84 (model-driven clock edge flags).
     continue-on-error: false
