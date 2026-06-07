@@ -1,10 +1,12 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
 **Created:** 2026-06-07 (updated 2026-06-07, fourth session)
-**Branch:** `cosim-backend-seam-phase0` @ `bc18f79` = **PR #118** (pushed, CI
-green on Phase 0; re-running after P1.1). Holds Phase 0 + the Phase 1 plan +
-ADR amendment + Phase 1 step 1. **#118 is being grown to Phase 0 + Phase 1**
-(maintainer's call: one PR, not stacked). Working tree clean.
+**Branch:** `cosim-backend-seam-phase0` @ `9b7b105` = **PR #118** (pushed, **CI
+fully green** across Phase 0 + P1.1 + P1.2a + P1.2b). Holds Phase 0 + the Phase
+1 plan + ADR amendment + Phase 1 steps 1/2a/2b. **#118 is being grown to Phase 0
++ Phase 1** (maintainer's call: one PR, not stacked). Working tree clean.
+Consider refreshing the PR #118 title/description (still "Phase 0" framed) to
+reflect the broadened Phase 0 + Phase 1 scope before the next push.
 
 ## Goal & next-up
 
