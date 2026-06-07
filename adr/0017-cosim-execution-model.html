@@ -275,6 +275,80 @@ this is 2 entries = 4 buffer objects; for complex multi-clock
 designs it can reach thousands of entries, but each buffer is
 small (tens of bytes).</li>
 </ul>
+<h2 id="amendment-2026-06-05-backend-portability-105"><a class="header" href="#amendment-2026-06-05-backend-portability-105">Amendment 2026-06-05: backend portability (#105)</a></h2>
+<p>The execution model above is <strong>Metal-only</strong> — <code>run_cosim</code> lives in
+<code>cosim_metal.rs</code> (gated <code>#[cfg(feature = "metal")]</code>) and <code>cmd_cosim</code>
+hard-errors on other backends. This amendment records the decision to make
+cosim <strong>backend-portable</strong> (CPU reference + CUDA/HIP), tracked as
+<a href="https://github.com/gpu-eda/Jacquard/issues/105">#105</a>. It does <strong>not</strong>
+change the batch/scheduler model above; it factors <em>where</em> each part runs.</p>
+<h3 id="the-seam-backend-agnostic-orchestration-vs-a-cosimbackend-trait"><a class="header" href="#the-seam-backend-agnostic-orchestration-vs-a-cosimbackend-trait">The seam: backend-agnostic orchestration vs a <code>CosimBackend</code> trait</a></h3>
+<p><code>run_cosim</code> is split along a seam that already exists in spirit:</p>
+<ul>
+<li><strong>Above the seam (backend-agnostic, moves to a shared <code>cosim</code> driver):</strong>
+the <code>MultiClockScheduler</code>, <code>build_edge_ops</code>, batch-size logic, peripheral
+models (<code>PeripheralModel::step_edge</code> → <code>ModelOverrides</code>), the input
+dispatcher, reset/constant init, VCD writing, and event/ring-buffer
+draining. None of this is GPU-specific; it operates on <code>&amp;[u32]</code> state and
+<code>Vec&lt;BitOp&gt;</code> edge ops.</li>
+<li><strong>Below the seam (a <code>CosimBackend</code> trait, one impl per backend):</strong> owning
+the <code>[2 × state_size]</code> state buffer and performing, per edge —
+<code>state_prep</code> (output→input copy + apply BitOps + clear driven X-mask),
+the design step (<code>simulate_v1_stage</code> / the boolean processor), and
+exposing <code>input_state()</code> / <code>output_state()</code> as <code>&amp;[u32]</code>/<code>&amp;mut [u32]</code> to
+the orchestration. <code>MetalSimulator</code> becomes one implementation.</li>
+</ul>
+<p>Two structural facts make this tractable rather than a rewrite:</p>
+<ol>
+<li><strong>cosim is inherently per-edge dispatch on every backend.</strong> Inputs
+depend on outputs each cycle, so the reactive loop dispatches the design
+one edge at a time — it does <strong>not</strong> use the single cooperative-launch +
+<code>grid.sync</code> model that the <code>sim</code> command uses on CUDA/HIP. CUDA/HIP cosim
+therefore dispatches the design kernel per-edge exactly as Metal already
+does, sidestepping the one CUDA feature (<code>cooperative_groups</code> grid sync)
+that is hardest to port. cosim's structure is <em>closer</em> across backends
+than <code>sim</code>'s.</li>
+<li><strong>The peripheral protocol models are already backend-agnostic CPU Rust</strong>
+(<code>src/sim/models/*.rs</code> implement <code>PeripheralModel</code>, no GPU deps). The
+on-GPU IO kernels (<code>gpu_flash_model_step</code>, <code>gpu_io_step</code>,
+<code>gpu_apply_flash_din</code>) are a Metal <strong>performance optimization</strong> that
+eliminates per-tick CPU↔GPU round-trips — they are <em>not</em> required for
+correctness. A new backend can run peripherals on the CPU and only
+dispatch the design step on the GPU; porting the IO kernels is a later
+optimization, not a prerequisite.</li>
+</ol>
+<h3 id="two-implementations"><a class="header" href="#two-implementations">Two implementations</a></h3>
+<ul>
+<li><strong>Path A — <code>CpuBackend</code> (reference, no GPU).</strong> Design step =
+<code>cpu_reference::simulate_block_v1</code> per block (the existing
+<code>--check-with-cpu</code> loop is already a prototype of exactly this). Not for
+throughput (won't beat Verilator); its value is a portable reference, an
+oracle, contributor access on non-Apple hardware, and — decisively —
+<strong>running cosim regression tests on free Linux CI</strong> (today they are
+Metal-only). Builds and validates the seam.</li>
+<li><strong>Path B — <code>Cuda</code>/<code>HipBackend</code> (the Linux perf story).</strong> Design step =
+the existing CUDA/HIP <code>simulate</code> kernel dispatched per-edge, reusing
+Path A's seam and the CPU peripheral models. Was "runner-gated"; the
+GitHub-hosted T4 runner (<code>tesla4-runner</code>) now makes it CI-testable.</li>
+</ul>
+<h3 id="consequences-1"><a class="header" href="#consequences-1">Consequences</a></h3>
+<ul>
+<li>The <code>sim</code> cooperative-launch model and the cosim per-edge model remain
+distinct <em>per backend</em>; this amendment unifies the cosim <em>driver</em>, not the
+two execution models.</li>
+<li><code>ScheduleBuffers</code> currently stores <code>metal::Buffer</code> pairs and
+<code>update_model_driven_in_ops</code> writes into Metal shared memory directly;
+these must become backend-neutral (<code>Vec&lt;BitOp&gt;</code>) with the backend
+materializing its native form. This is the main refactor friction.</li>
+<li><code>cosim_metal.rs</code> carries private copies of <code>simulate_block_v1</code>; these
+consolidate onto <code>cpu_reference</code> as part of the seam extraction.</li>
+<li>Correctness is guarded by extending the cross-backend equivalence test
+(<a href="https://github.com/gpu-eda/Jacquard/pull/113">#113</a>, today sim-only) to
+cosim once a second backend exists — a CPU/Metal output-VCD diff on the
+same reactive design.</li>
+</ul>
+<p>Full phasing, the trait signature, and file-by-file steps are in
+<a href="../plans/cosim-backend-portability.html"><code>docs/plans/cosim-backend-portability.md</code></a>.</p>
 <h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
 <ul>
 <li>ADR 0012 — CDC jitter injection (uses the scheduler's edge
@@ -283,6 +357,8 @@ timestamps as the injection point).</li>
 model patterns and ring buffers).</li>
 <li><a href="../plans/multi-clock-and-stimulus-architecture.html"><code>docs/plans/multi-clock-and-stimulus-architecture.md</code></a>
 — design-space doc for the multi-clock scheduler.</li>
+<li><a href="../plans/cosim-backend-portability.html"><code>docs/plans/cosim-backend-portability.md</code></a>
+— implementation plan for backend portability (#105).</li>
 </ul>
 
                     </main>
