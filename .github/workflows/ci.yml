@@ -1050,16 +1050,18 @@ jobs:
   # See tests/jtag_minimal/README.md for full design + regen flow.
   jtag-minimal-cosim:
     name: JTAG Minimal Cosim (Hazard3 DTM+DM)
-    # HEAVY Metal cosim (4M edges). Pinned to the self-hosted macos-runner-1
-    # (fast Apple Silicon) on every ref — it is NOT a light job. The
-    # GitHub-hosted macos-latest-xlarge is ~3x slower for this per-edge
+    # HEAVY Metal cosim (4M edges, ~10min self-hosted). On `main` / `ci:metal-xl`
+    # it offloads to the GitHub-hosted macos-latest-xlarge so it runs in
+    # PARALLEL with the other Metal jobs (which stay on the single self-hosted
+    # macos-runner-1) — pinning it self-hosted instead serialised all the Metal
+    # jobs and was slower wall-clock. xlarge is ~3x slower for this per-edge
     # JTAG-replay workload (model-driven TCK forces single-edge dispatch,
-    # ~500µs/tick vs ~150µs self-hosted), which blew the 15-min step timeout
-    # on a main push (run 27088699240). The xlarge offload only suits the
-    # light `metal` job. Re-evaluate once multi-clock/island batching cuts
-    # the per-edge tail (multi-clock plan MC.3/MC.4).
-    runs-on: macos-runner-1
-    timeout-minutes: 20
+    # ~500µs/tick vs ~150µs self-hosted) → ~32min for 4M edges, so the step
+    # timeout below is generous. Re-evaluate once multi-clock/island batching
+    # cuts the per-edge tail (multi-clock plan MC.3/MC.4) — then the run is fast
+    # enough that the runner choice stops mattering.
+    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
+    timeout-minutes: 45
     # Regression gate for #84 (model-driven clock edge flags).
     continue-on-error: false
     steps:
@@ -1096,7 +1098,9 @@ jobs:
             ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-
 
       - name: Run JTAG-replay cosim against post-PnR netlist
-        timeout-minutes: 15
+        # 40min: xlarge runs this ~3x slower than self-hosted (~32min for 4M
+        # edges); self-hosted finishes in ~10min well under this ceiling.
+        timeout-minutes: 40
         run: |
           set -o pipefail
           cargo run --release --features metal --bin jacquard -- cosim \
