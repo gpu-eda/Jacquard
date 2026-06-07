@@ -268,6 +268,86 @@ model mirroring the `CosimBackend` seam:
 The `GpuPeripheral` seam is defined at Tier 2 so Tier 3 slots in without
 reworking the orchestration.
 
+#### The peripheral contract — one shape, input *and* output, every model
+
+The seam above only sketched Tier 2 as `encode_step(encoder)`. This fills in
+*what* a peripheral is, so the CPU model (Tier 1), the GPU kernel (Tier 2), and
+the eventual single source (Tier 3) all express the **same** contract rather
+than two parallel ones.
+
+Every peripheral — on either substrate, input-driving or output-observing — is
+the same shape:
+
+> **observe** some design-output bits → **advance an FSM** (over persistent
+> state + const params) → **drive** some design-input bits and/or **emit**
+> decoded records.
+
+The CPU `PeripheralModel` trait (`src/sim/models/mod.rs:56`) is *already* this
+contract and *already* bidirectional:
+
+```rust
+fn step_edge(&mut self,
+    output_state: &[u32],              // OBSERVE design outputs
+    overrides: &mut ModelOverrides,    // DRIVE design inputs (position → value)
+    emitted: &mut Vec<EmittedEvent>);  // EMIT decoded records
+fn driven_positions(&self) -> &[u32]; // the input bits it may drive
+fn is_active(&self) -> bool;           // forces batch=1 mid-transmission
+```
+
+One trait already covers the whole spectrum via *optional halves*: GPIO is
+input-only (default `step_edge` just contributes overrides), UART-TX decode /
+bus-trace are output-only (empty `driven_positions`), SPI flash is
+bidirectional. So a single interface genuinely covers input and output — the
+doubt about "enough commonality" is unfounded: the commonality is the
+FSM-over-IO-bits shape, and six models already share it.
+
+The GPU half is **not** yet unified — it is three bespoke kernels with the same
+skeleton but no common trait:
+
+| Kernel | reads | FSM state | writes | role |
+|---|---|---|---|---|
+| `gpu_apply_flash_din` | `states`, `FlashState` | — | `states` (MISO) | **input** inject |
+| `gpu_flash_model_step` | `states`, `flash_data` | `FlashState` | `FlashState` | **output** observe + FSM |
+| `gpu_io_step` | `states` | `UartDecoderState` | `UartChannel`/`BusTraceChannel` rings | **output** decode → ring |
+
+Every kernel is `kernel(device u32* states, device FsmState* state, constant
+Params& params, [device Ring* out], [const Data* in])`.
+
+**Target shape — one logical contract, two substrates:**
+
+- **CPU substrate** = today's `step_edge` (Rust over `&[u32]`; drives via
+  `ModelOverrides`).
+- **GPU substrate** (`GpuPeripheral`) = `encode_step(encoder, states_buf,
+  fsm_buf, params_buf, ring_buf)` running the *same FSM* over `device u32*
+  states`.
+- **Consistency anchor = the shared `#[repr(C)]` FSM-state + params structs.**
+  These already exist on both sides but are **hand-synced** ("`must match Metal
+  UartChannel`", `cosim_metal.rs:178`); that duplication is the tax Tier 3
+  removes by generating the Rust `step`, the GPU kernel, **and** the one struct
+  from a single FSM definition.
+
+**The decision that makes it consistent: all input drives are `(position,
+value)` pairs applied through the one `state_prep`/ops path.** Today this is the
+*inconsistent* part — CPU models drive indirectly (`overrides → BitOps →
+state_prep`, so drives land clock-edge-aligned), but `gpu_apply_flash_din`
+writes `states` directly. They are the same logical operation done two ways.
+Normalising flash's direct-write into FSM-produced ops applied by `state_prep`
+makes input application uniform across every peripheral and both substrates, and
+removes flash's special case. (Flash writes directly today only because its MISO
+depends on the FSM computed that same edge — expressible as ops the FSM emits.)
+
+**What deliberately does *not* unify** (substrate detail below the contract):
+output draining (GPU needs ring buffers because the CPU cannot observe
+intra-batch state; CPU models emit immediately — same `events out` contract,
+different plumbing), and the FSM body itself (Rust vs kernel, single-sourced
+only by Tier 3's IR). These divergences are expected and bounded.
+
+**Phase-1 implication:** the CPU UART-TX decoder added in Phase 1 (no GPU
+equivalent exists today — `models/uart.rs` only has an RX-line *receiver*
+decode) must be written to this contract, with its FSM state mirroring
+`UartDecoderState`'s fields, so the Phase-2 `GpuPeripheral` kernel and the
+Tier-3 single source fold into one definition rather than a third parallel one.
+
 ### Correctness contract
 
 The CPU `PeripheralModel` (Tier 1) is ground truth. The cross-backend
