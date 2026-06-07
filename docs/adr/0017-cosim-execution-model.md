@@ -202,16 +202,39 @@ and snapshotting each output slot to the ring"*, plus `state_prep`
 `input_state()/output_state()` accessors. `MetalSimulator` becomes
 `MetalBackend`; `CpuBackend` and `Cuda`/`HipBackend` are added.
 
+**The backend owns the schedule storage (opaque to the orchestration).** The
+edge ops are a tiny, fixed, repeating set (`edges_per_period` entries, =2 for
+single-clock) built *once*; the orchestration must not hold a parallel copy
+that the backend re-materialises each dispatch (that would add a per-dispatch
+copy and, on Metal, *regress* today's zero-copy unified-memory path). Instead:
+
+- `init_schedule(edges: Vec<(StatePrepParams, Vec<BitOp>)>)` hands the
+  backend-agnostic description to the backend *once*; the backend materialises
+  its native buffers and retains them. The orchestration keeps only scalars
+  (`edges_per_period`, `gcd_ps`).
+- `edge_ops_mut(edge_idx) -> &mut [BitOp]` is how reset / model-driven /
+  clock-edge patching mutates ops. **Metal** returns a slice straight over the
+  shared `MTLBuffer` — zero-copy, the write *is* the upload (exactly today's
+  behaviour). **CUDA/HIP** return a slice over a host mirror and mark the edge
+  dirty; `run_edges` uploads only dirty edges before launch. Ops change rarely
+  (reset transitions; only while a CPU-side model is active), so this is near
+  zero in practice — and the buffers are KB-scale regardless.
+
+This replaces the earlier "neutral `Vec` + backend re-materialises" sketch,
+which risked needless CPU↔GPU traffic and double bookkeeping.
+
 - **`MetalBackend`** runs N edges in one command buffer with GPU peripherals
   inside (today's `encode_and_commit_gpu_batch`).
 - **`CpuBackend`** runs the per-edge loop via `cpu_reference::simulate_block_v1`
   — the reference/oracle, and the unlock for **cosim regression on free
   Linux CI** (today Metal-only). N is effectively 1; throughput is not the
-  point.
-- **`Cuda`/`HipBackend`** run the existing `simulate` kernel **per-edge** —
-  sidestepping the `cooperative_groups` grid-sync that only the `sim`
-  command needs (the hardest CUDA feature to port). They reach true batching
-  only once GPU peripherals exist (Layer 3, Tier 2).
+  point. It also validates the per-edge orchestration path that the CUDA/HIP
+  fallback reuses.
+- **`Cuda`/`HipBackend`** run the existing `simulate` kernel, sidestepping the
+  `cooperative_groups` grid-sync that only the `sim` command needs (the
+  hardest CUDA feature to port). They ship **with** their Tier-2 GPU
+  peripherals (Layer 3) so reactive designs batch from the start; the per-edge
+  path is the permanent fallback for CPU-side models (e.g. JTAG replay).
 
 ### Layer 3 — the `GpuPeripheral` abstraction (3-tier, GPU peripherals primary)
 
@@ -279,13 +302,18 @@ prerequisite here.
   remain distinct *per backend*; this unifies the cosim *driver*, not the two
   execution models.
 - `ScheduleBuffers` currently stores `metal::Buffer` pairs and the ops-update
-  helpers write Metal shared memory in place; these become backend-neutral
-  (`Vec<(StatePrepParams, Vec<BitOp>)>`) with each backend materializing its
-  native form. The in-place shared-memory mutation is the main refactor
-  friction — the trait's explicit ops-upload point is what removes it.
-- CUDA/HIP cosim is **per-edge (correctness/CI only) until Tier-2 GPU
-  peripherals land**; its real perf path depends on them. This is an
-  expected, documented throughput gap, not a regression.
+  helpers write Metal shared memory in place. These move *into the backend*
+  (built once via `init_schedule`, mutated via `edge_ops_mut`) rather than
+  becoming an orchestration-owned `Vec` the backend re-materialises — which
+  keeps Metal zero-copy and lets CUDA/HIP upload only dirty edges. Converting
+  the in-place `*mut BitOp` shared-memory mutation to `edge_ops_mut` is the
+  main refactor friction (and resolves the closure-borrow issue too).
+- CUDA/HIP cosim ships **with Tier-2 GPU peripherals** so reactive designs
+  batch from the start (Phase 2 lands the backend + GPU peripherals together,
+  rather than a per-edge-only intermediate that would be unusably slow). The
+  per-edge path remains as the fallback for CPU-side models (e.g. JTAG
+  replay), where the per-edge tail is addressed later by the multi-clock
+  plan's MC.3/MC.4, not by this seam.
 
 ## Cross-references
 

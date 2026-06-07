@@ -24,8 +24,8 @@ peripheral models, and VCD machinery.
 - Matching Metal cosim throughput on the **CPU** path (it's a
   reference/oracle).
 - The user-extensible single-source peripheral API (Tier 3) up front — core
-  peripherals get hand-written GPU kernels first (Phase 3); the portable
-  authoring path is Phase 4.
+  peripherals get hand-written GPU kernels first (Phase 2); the portable
+  authoring path is Phase 3.
 
 ## What's already portable (no work needed)
 
@@ -52,12 +52,20 @@ peripheral models, and VCD machinery.
 /// regress it ~1000×. The orchestration decides N (`force_single_edge`);
 /// the backend runs N edges however it likes.
 trait CosimBackend {
+    /// Build native schedule storage ONCE from the backend-agnostic
+    /// description; the backend retains+owns it (opaque to orchestration).
+    fn init_schedule(&mut self, edges: Vec<(StatePrepParams, Vec<BitOp>)>);
+    /// Mutable view of one edge's ops (reset/model/clock-edge patching).
+    /// Metal: slice over the shared MTLBuffer (zero-copy; write IS upload).
+    /// CUDA/HIP: slice over host mirror, marks edge dirty (uploaded lazily).
+    fn edge_ops_mut(&mut self, edge_idx: usize) -> &mut [BitOp];
     /// output→input copy + apply that edge's BitOps + clear driven X-mask.
-    fn state_prep(&mut self, ops: &[BitOp], xmask_state_offset: u32);
-    /// Run `edges` consecutive scheduler edges, applying each edge's ops and
-    /// snapshotting each output slot into the ring. Metal: one command buffer
-    /// with GPU peripherals inside. CPU/CUDA(pre-Phase-3): per-edge loop.
-    fn run_edges(&mut self, edges: &[EdgeOps], ring: &mut Ring);
+    fn state_prep(&mut self, edge_idx: usize, xmask_state_offset: u32);
+    /// Run N consecutive scheduler edges from `start_edge`, snapshotting each
+    /// output slot into the ring. Flushes dirty edges first (no-op on Metal).
+    /// Metal: one command buffer w/ GPU peripherals inside. CPU/CUDA-fallback:
+    /// per-edge loop with CPU peripherals.
+    fn run_edges(&mut self, start_edge: usize, n: usize, ring: &mut Ring);
     /// Read-only view of the current output slot (VCD, model step_edge, drains).
     fn output_state(&self) -> &[u32];
     /// Mutable input slot (reset/constant init, flash MISO injection).
@@ -73,10 +81,15 @@ trait GpuPeripheral {
 ```
 
 `MetalSimulator` becomes the `MetalBackend` impl; `CpuBackend` and
-`Cuda`/`HipBackend` are added. The orchestration owns the neutral schedule
-(`Vec<(StatePrepParams, Vec<BitOp>)>`), the batch-size policy, and the CPU
-peripheral models; it delegates the design step + state ownership to the
-backend, and (Phase 3+) the GPU peripheral steps to `GpuPeripheral` impls.
+`Cuda`/`HipBackend` are added. **The backend owns the schedule storage** —
+the orchestration hands it the description once via `init_schedule` and keeps
+only scalars (`edges_per_period`, `gcd_ps`); it does *not* hold a parallel
+`Vec` the backend re-materialises (that would add a per-dispatch copy and
+regress Metal's zero-copy path). Mutation goes through `edge_ops_mut`
+(zero-copy on Metal; host-mirror + dirty-flag + lazy upload on CUDA/HIP). The
+orchestration owns the batch-size policy and the CPU peripheral models; it
+delegates the design step, state, and (Phase 2+) GPU peripheral steps to the
+backend.
 
 ### Why batching must be a backend concern
 
@@ -87,8 +100,9 @@ single-launch + `grid.sync` — the hardest CUDA feature to port. But
 `BATCH_SIZE` reactive edges into one command buffer because its peripherals
 run on the GPU inside the batch. On a discrete GPU, going per-command-buffer
 means a PCIe round-trip every edge, which is why batching (hence GPU
-peripherals, Phase 3) is *required* for CUDA/HIP perf, not optional. See ADR
-0017, *Layer 3* and *Consequences*.
+peripherals) is *required* for CUDA/HIP perf, not optional — so the CUDA/HIP
+backend ships *with* its GPU peripherals (Phase 2), not as a later add-on.
+See ADR 0017, *Layer 3* and *Consequences*.
 
 ## Phases
 
@@ -100,14 +114,15 @@ module split (`cosim/mod.rs` orchestration + `cosim/metal.rs`) is separable
 — the trait can land in-place in `cosim_metal.rs` first, split later. Must
 leave Metal cosim bit-identical.
 
-- Make `ScheduleBuffers` backend-neutral: store
-  `Vec<(StatePrepParams, Vec<BitOp>)>`; the backend materialises native
-  buffers (Metal buffers today). Currently holds `metal::Buffer` pairs.
-- The ops-update helpers (`update_model_driven_in_ops`,
-  `update_reset_in_ops`, `patch_model_clock_edges`) mutate the neutral
-  `Vec<BitOp>`, not Metal shared memory; the backend re-uploads. **This
-  in-place shared-memory mutation is the main refactor friction** — the
-  trait's explicit ops path is what removes it.
+- Move the schedule storage *into* `MetalBackend` (built once via
+  `init_schedule`); the orchestration keeps only `edges_per_period` + `gcd_ps`.
+  Currently `ScheduleBuffers` holds `metal::Buffer` pairs at the call site.
+- Convert the ops-update helpers (`update_model_driven_in_ops`,
+  `update_reset_in_ops`, `patch_model_clock_edges`) from in-place `*mut BitOp`
+  writes over `contents()` to `backend.edge_ops_mut(edge_idx)`. On Metal this
+  returns a slice over the same shared buffer (zero-copy, identical
+  behaviour). **This conversion is the main refactor friction** (and resolves
+  the closure-borrow issue) — but it stays zero-copy on Metal.
 - ~~Consolidate the private `simulate_block_v1` copies onto
   `cpu_reference`.~~ **Done — #115.**
 - Move the ~20 ad-hoc `simulator.device.new_buffer(...)` allocations in
@@ -137,46 +152,43 @@ leave Metal cosim bit-identical.
 **Exit:** `cargo run --bin jacquard -- cosim …` (no GPU features) runs the
 existing cosim fixtures on Linux CI and passes their checkers.
 
-### Phase 2 — Path B: `Cuda`/`HipBackend` — correctness (per-edge, CI gate)
+### Phase 2 — Path B: `Cuda`/`HipBackend` with GPU peripherals (the perf path)
 
-- Implement the backend over the existing CUDA/HIP `simulate` kernel,
-  dispatched **per-edge** (not the cooperative single launch). State lives
-  in device memory, read back per edge for `output_state()`.
-- Peripherals remain on the CPU (Tier 1, per-edge CPU↔GPU sync).
-- Gate GPU-backed cosim CI on `tesla4-runner` (now available).
+Lands the CUDA/HIP backend **and** its Tier-2 GPU peripherals together —
+*not* a per-edge-only intermediate first. Per-edge-only CUDA would be an
+unusably-slow artifact (PCIe round-trip per edge, potentially slower than
+`CpuBackend`), and Phase 1 already proves the per-edge orchestration path, so
+a separate per-edge milestone would re-validate known-good code and then
+rework the same `run_edges`/dispatch path to add batching. One phase, with an
+internal checkpoint:
 
-**This phase is a correctness/CI gate, NOT the perf path** — per-edge PCIe
-round-trips make it slow (potentially slower than `CpuBackend`); even the
-100%-batched-on-Metal fixtures run per-edge here because their peripherals
-are on the CPU. Real CUDA/HIP perf arrives in Phase 3.
+- **Checkpoint 2a — design step on GPU (per-edge correctness).** Implement the
+  backend over the existing CUDA/HIP `simulate` kernel + `init_schedule` /
+  `edge_ops_mut` (device buffers, dirty-edge upload) + device state with
+  per-edge read-back. Peripherals on the CPU (Tier 1), reusing Phase 1's
+  per-edge orchestration. Validate via cross-backend equivalence on the T4.
+  *This is the permanent fallback path*, not a throwaway — CPU-side models
+  (e.g. JTAG replay) always run here.
+- **Checkpoint 2b — Tier-2 GPU peripherals → batched.** Port the GPU
+  peripheral kernels (`gpu_apply_flash_din`, `gpu_flash_model_step`,
+  `gpu_io_step`) to CUDA/HIP so peripherals run *inside* the batch. Because
+  CUDA and HIP share `kernel_v1_impl.cuh`, each is **two impls** (shared
+  `*_impl.cuh` + the existing `.metal`). Define the `GpuPeripheral` seam here;
+  equivalence-test each kernel against its Tier-1 CPU model.
 
-**Entry:** Phase 1 merged (seam + CPU reference proven).
-**Exit:** `cosim --features cuda` runs a fixture on the T4 and its output
-VCD matches the CPU/Metal backends (cross-backend equivalence, below).
+Gate GPU-backed cosim CI on `tesla4-runner` (now available).
 
-### Phase 3 — GPU peripherals on CUDA/HIP (Tier 2) → the perf path
+**Entry:** Phase 1 merged (seam + CPU reference + per-edge orchestration proven).
+**Exit:** `cosim --features cuda` on a GPU-peripheral fixture runs **batched**
+(telemetry shows `batch > 1`), output VCD matching all backends; the per-edge
+fallback (CPU-side-model fixture, e.g. JTAG) also matches.
 
-Port the GPU peripheral kernels (`gpu_apply_flash_din`,
-`gpu_flash_model_step`, `gpu_io_step`) to CUDA/HIP so peripherals run
-*inside* the batch — unlocking batched CUDA/HIP cosim and eliminating the
-per-edge PCIe round-trip. **Required for the CUDA/HIP perf story, not an
-optional optimization** (ADR 0017, Layer 3).
-
-- Because CUDA and HIP already share `kernel_v1_impl.cuh`, each peripheral is
-  **two implementations**: a shared `*_impl.cuh` (CUDA + HIP) + the existing
-  `.metal`. Define the `GpuPeripheral` seam here.
-- Equivalence-test each Tier-2 kernel against its Tier-1 CPU model.
-
-**Entry:** Phase 2 merged.
-**Exit:** `cosim --features cuda` on a GPU-peripheral fixture runs batched
-(telemetry shows `batch > 1`) with output VCD matching all backends.
-
-### Phase 4 — (Future) single-source peripherals (Tier 3, user-extensible API)
+### Phase 3 — (Future) single-source peripherals (Tier 3, user-extensible API)
 
 A user authors a peripheral *once* (restricted-Rust subset or a small
 peripheral-FSM IR) that compiles to the CPU model + each GPU backend's
 kernel — the user-extensible peripheral API. Slots into the `GpuPeripheral`
-seam defined in Phase 3 without reworking orchestration. Big effort; demand-
+seam defined in Phase 2 without reworking orchestration. Big effort; demand-
 driven (first external/user-defined peripheral type).
 
 ## Testing strategy
@@ -203,12 +215,17 @@ driven (first external/user-defined peripheral type).
   the fix.
 - **Flash FSM (Phase 1):** the GPU flash kernel and the `CppSpiFlash` FFI
   must agree. Prefer reusing `CppSpiFlash` to avoid a third copy.
-- **Per-edge device read (Phase 2):** slow by design; the motivation for
-  Phase 3, not a correctness risk. Don't mistake Phase 2's throughput for
-  the CUDA/HIP perf story.
-- **Tier-2 kernel divergence (Phase 3):** three kernel families (CUDA+HIP
-  shared, Metal) per peripheral; equivalence tests against the CPU model are
-  the guard, and Tier 3 eventually removes the hand-maintenance.
+- **Per-edge device read (Phase 2 fallback path):** the CPU-peripheral
+  fallback reads device state every edge — slow by design, used only for
+  CPU-side models; checkpoint 2b (GPU peripherals) is what keeps the common
+  case batched. Not a correctness risk.
+- **Tier-2 kernel divergence (Phase 2 checkpoint 2b):** two kernel families
+  (CUDA+HIP shared `*_impl.cuh`, Metal `.metal`) per peripheral; equivalence
+  tests against the CPU model are the guard, and Tier 3 eventually removes the
+  hand-maintenance.
+- **Phase 2 size:** merging the backend bring-up with the GPU-peripheral
+  ports makes Phase 2 large; the internal 2a/2b checkpoint keeps it
+  incrementally verifiable (per-edge equivalence before adding batching).
 
 ## Sequencing relative to other backend-alignment work
 
