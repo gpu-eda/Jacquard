@@ -2237,24 +2237,33 @@ trait CosimBackend {
     fn edges_per_period(&self) -> usize;
     /// Picoseconds per scheduler edge (= `MultiClockScheduler::gcd_ps`).
     fn gcd_ps(&self) -> u64;
-    // NOTE: design-state accessors (the plan's `output_state`/`input_state_mut`)
-    // land in Phase 1 with `CpuBackend`, which needs CPU-side state_prep. The
-    // Metal driver reads state via the VCD ring + direct buffer access, so they
-    // are omitted here to keep the Phase 0 trait to exactly what is used.
+
+    // NOTE: design-state / SRAM read accessors (`state()`, `sram()`) and the
+    // mutable `state_mut()` land in step 3/5 alongside the diagnostic-read
+    // routing and `CpuBackend` — kept off the trait here to match exactly what
+    // the Metal driver calls today.
+
+    /// Set the SPI-flash reset line for the upcoming batch. Both the GPU flash
+    /// kernel and the CPU `CppSpiFlash` model honour it. Called before
+    /// `run_edges`; `d_i` (MISO) never crosses the seam — each backend injects
+    /// it internally (ADR 0017, Layer 3: input drives are backend-internal).
+    fn flash_set_in_reset(&mut self, in_reset: bool);
+
+    /// Enable per-edge output snapshotting for VCD: subsequent `run_edges`
+    /// calls record each edge's `[input | output]` state into a backend-owned
+    /// ring, drained via [`CosimBackend::vcd_snapshot`]. No-op if already on.
+    fn enable_vcd_ring(&mut self);
+    /// Read one edge's snapshot from the VCD ring: `[input_state |
+    /// output_state]`, `2 × effective_state_size` words. Valid only for
+    /// `edge_in_batch < batch` of the most recent `run_edges`, and only when
+    /// [`CosimBackend::enable_vcd_ring`] was called. (CpuBackend, N=1, fills
+    /// slot 0 each `run_edges`.)
+    fn vcd_snapshot(&self, edge_in_batch: usize) -> &[u32];
+
     /// Run `batch` consecutive scheduler edges starting at `schedule_offset`
-    /// in one dispatch, snapshotting each output slot into `vcd_ring` when
-    /// present. Returns the completion token to pass to [`CosimBackend::wait`].
-    ///
-    /// Phase 1 follow-up: `vcd_ring: Option<&metal::Buffer>` leaks a Metal type
-    /// into the otherwise backend-agnostic seam. When `CpuBackend` lands, the
-    /// per-edge output snapshot ring should become a backend-owned buffer with
-    /// a `&[u32]` drain accessor, so this parameter drops out of the trait.
-    fn run_edges(
-        &self,
-        batch: usize,
-        schedule_offset: usize,
-        vcd_ring: Option<&metal::Buffer>,
-    ) -> u64;
+    /// in one dispatch, snapshotting each output slot into the VCD ring when
+    /// enabled. Returns the completion token to pass to [`CosimBackend::wait`].
+    fn run_edges(&self, batch: usize, schedule_offset: usize) -> u64;
     /// Block until the dispatch identified by `token` has completed.
     fn wait(&self, token: u64);
 }
@@ -2295,6 +2304,9 @@ struct MetalBackend {
     wb_trace_channel_buffer: metal::Buffer,
     bus_trace_params_buffer: metal::Buffer,
     bus_trace_channel_buffer: metal::Buffer,
+    /// Per-edge `[input | output]` snapshot ring for VCD; `None` until
+    /// `enable_vcd_ring`. `run_edges` blits each edge's state into it.
+    vcd_ring: Option<metal::Buffer>,
 }
 
 impl MetalBackend {
@@ -2386,12 +2398,46 @@ impl CosimBackend for MetalBackend {
         self.schedule().gcd_ps
     }
 
-    fn run_edges(
-        &self,
-        batch: usize,
-        schedule_offset: usize,
-        vcd_ring: Option<&metal::Buffer>,
-    ) -> u64 {
+    fn flash_set_in_reset(&mut self, in_reset: bool) {
+        unsafe {
+            let fs = &mut *(self.flash_state_buffer.contents() as *mut FlashState);
+            fs.in_reset = if in_reset { 1 } else { 0 };
+        }
+    }
+
+    fn enable_vcd_ring(&mut self) {
+        if self.vcd_ring.is_some() {
+            return;
+        }
+        let ring_bytes = BATCH_SIZE * 2 * self.state_size * std::mem::size_of::<u32>();
+        self.vcd_ring = Some(self.sim.device.new_buffer(
+            ring_bytes as u64,
+            MTLResourceOptions::StorageModeShared,
+        ));
+        clilog::info!(
+            "VCD ring buffer: {} ticks × {} words = {:.1} MB",
+            BATCH_SIZE,
+            2 * self.state_size,
+            ring_bytes as f64 / (1024.0 * 1024.0)
+        );
+    }
+
+    #[inline]
+    fn vcd_snapshot(&self, edge_in_batch: usize) -> &[u32] {
+        let ring = self
+            .vcd_ring
+            .as_ref()
+            .expect("vcd_snapshot called without enable_vcd_ring");
+        let slot_words = 2 * self.state_size;
+        unsafe {
+            std::slice::from_raw_parts(
+                (ring.contents() as *const u32).add(edge_in_batch * slot_words),
+                slot_words,
+            )
+        }
+    }
+
+    fn run_edges(&self, batch: usize, schedule_offset: usize) -> u64 {
         self.sim.encode_and_commit_gpu_batch(
             batch,
             self.num_blocks,
@@ -2418,7 +2464,7 @@ impl CosimBackend for MetalBackend {
             &self.sram_xmask_buffer,
             self.timing_constraints_buffer.as_ref(),
             self.arrival_state_offset,
-            vcd_ring,
+            self.vcd_ring.as_ref(),
         )
     }
 
@@ -3518,6 +3564,7 @@ pub fn run_cosim(
         wb_trace_channel_buffer,
         bus_trace_params_buffer,
         bus_trace_channel_buffer,
+        vcd_ring: None,
     };
     backend.init_schedule(
         per_edge_ops,
@@ -3626,23 +3673,10 @@ pub fn run_cosim(
     // When stimulus or output VCD is active, we snapshot output_state after
     // each edge via a GPU blit into a ring buffer. This allows batched dispatch
     // (no batch=1 override) while preserving per-tick VCD accuracy.
-    let vcd_ring_buffer: Option<metal::Buffer> =
-        if stimulus_vcd_state.is_some() || output_vcd_state.is_some() {
-            let ring_bytes = BATCH_SIZE * 2 * state_size * std::mem::size_of::<u32>();
-            let buf = backend.sim.device.new_buffer(
-                ring_bytes as u64,
-                MTLResourceOptions::StorageModeShared,
-            );
-            clilog::info!(
-                "VCD ring buffer: {} ticks × {} words = {:.1} MB",
-                BATCH_SIZE,
-                2 * state_size,
-                ring_bytes as f64 / 1048576.0
-            );
-            Some(buf)
-        } else {
-            None
-        };
+    let vcd_enabled = stimulus_vcd_state.is_some() || output_vcd_state.is_some();
+    if vcd_enabled {
+        backend.enable_vcd_ring();
+    }
 
     // ── DFF state dump setup (optional) ────────────────────────────────────
     //
@@ -3992,11 +4026,8 @@ pub fn run_cosim(
         };
         patch_reset_in_ops(&mut backend, reset_pos, current_reset_val);
 
-        // Update flash_state.in_reset on GPU
-        unsafe {
-            let fs = &mut *(backend.flash_state_buffer.contents() as *mut FlashState);
-            fs.in_reset = if in_reset { 1 } else { 0 };
-        }
+        // Update the flash reset line for this batch.
+        backend.flash_set_in_reset(in_reset);
 
         // Save pre-tick state for CPU verification
         let saved_flash_d_i: u8;
@@ -4051,7 +4082,7 @@ pub fn run_cosim(
 
         // Encode and commit GPU batch
         let t_encode = std::time::Instant::now();
-        let batch_done = backend.run_edges(batch, schedule_offset, vcd_ring_buffer.as_ref());
+        let batch_done = backend.run_edges(batch, schedule_offset);
         let batch_schedule_start = schedule_offset;
         schedule_offset = (schedule_offset + batch) % backend.edges_per_period();
         prof_batch_encode += t_encode.elapsed().as_nanos() as u64;
@@ -4062,18 +4093,11 @@ pub fn run_cosim(
         prof_gpu_wait += t_wait.elapsed().as_nanos() as u64;
 
         // ── Drain VCD ring buffer (stimulus + timing) ──────────────────────
-        if let Some(ref ring) = vcd_ring_buffer {
-            let ring_ptr = ring.contents() as *const u32;
-            let slot_words = 2 * state_size;
+        if vcd_enabled {
             let mut timed_transitions: Vec<(u64, usize, u32)> = Vec::new();
 
             for edge_in_batch in 0..batch {
-                let slot_base = unsafe {
-                    std::slice::from_raw_parts(
-                        ring_ptr.add(edge_in_batch * slot_words),
-                        slot_words,
-                    )
-                };
+                let slot_base = backend.vcd_snapshot(edge_in_batch);
                 let input_state = &slot_base[..state_size];
                 let output_state = &slot_base[state_size..];
                 let edge_tick = tick + edge_in_batch;
