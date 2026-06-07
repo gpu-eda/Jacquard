@@ -59,7 +59,7 @@ pub fn simulate_block_v1(
                 };
                 while mask != 0 {
                     cur_state <<= 1;
-                    let lowbit = mask & (-(mask as i32)) as u32;
+                    let lowbit = mask & mask.wrapping_neg();
                     if (value & lowbit) != 0 {
                         cur_state |= 1;
                     }
@@ -373,7 +373,7 @@ pub fn simulate_block_v1_xprop(
                 while mask != 0 {
                     cur_v <<= 1;
                     cur_x <<= 1;
-                    let lowbit = mask & (-(mask as i32)) as u32;
+                    let lowbit = mask & mask.wrapping_neg();
                     if (value & lowbit) != 0 {
                         cur_v |= 1;
                     }
