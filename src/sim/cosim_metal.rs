@@ -308,6 +308,16 @@ struct BusTraceLane {
 const BATCH_SIZE: usize = 1024;
 
 /// Pre-allocated Metal buffers for each scheduler edge's ops.
+///
+/// This is the Metal backend's native schedule storage: the edge ops are a
+/// tiny, fixed, repeating set (`edges_per_period` entries) built once and
+/// retained. Mutation goes through [`ScheduleBuffers::edge_ops_mut`], which
+/// returns a slice straight over the shared `MTLBuffer` — zero-copy, the write
+/// *is* the upload. The accessor name and signature deliberately match the
+/// `edge_ops_mut` method on the forthcoming backend-portable `CosimBackend`
+/// trait (ADR 0017, *Amendment 2026-06-07*), so callers need no renaming when
+/// this struct is later subsumed into `MetalBackend`; a CUDA/HIP backend would
+/// back the same accessor with a host mirror + dirty-flag + lazy upload.
 struct ScheduleBuffers {
     /// Per-scheduler-edge: (params, ops). Length = scheduler.schedule.len()
     /// (= 2 for single-domain: edge 0 = falling, edge 1 = rising).
@@ -316,6 +326,35 @@ struct ScheduleBuffers {
     edge_ops_lens: Vec<usize>,
     /// Time per scheduler edge in picoseconds (= MultiClockScheduler::gcd_ps).
     gcd_ps: u64,
+}
+
+impl ScheduleBuffers {
+    /// Mutable view of one edge's ops (reset / model-driven / clock-edge
+    /// patching). On Metal this is a slice straight over the shared
+    /// `MTLBuffer` backing that edge — zero-copy, so the write *is* the
+    /// upload. Takes `&self` (not `&mut self`) because the storage is
+    /// interior-mutable GPU shared memory; this lets the per-edge patching
+    /// closures in the cosim loop share a borrow of the schedule.
+    ///
+    /// # Safety / aliasing
+    /// The returned slice aliases shared GPU memory. Callers must not hold two
+    /// overlapping slices live at once, and must not call this while the GPU is
+    /// concurrently reading the buffer (the cosim loop only patches ops between
+    /// command-buffer completions).
+    #[inline]
+    fn edge_ops_mut(&self, edge_idx: usize) -> &mut [BitOp] {
+        let ops_buf = &self.edge_buffers[edge_idx].1;
+        let len = self.edge_ops_lens[edge_idx];
+        unsafe { std::slice::from_raw_parts_mut(ops_buf.contents() as *mut BitOp, len) }
+    }
+
+    /// Read-only view of one edge's ops (e.g. the `--check-with-cpu` replay).
+    /// Reborrows [`Self::edge_ops_mut`] as immutable — same shared buffer, no
+    /// second `unsafe` block.
+    #[inline]
+    fn edge_ops(&self, edge_idx: usize) -> &[BitOp] {
+        self.edge_ops_mut(edge_idx)
+    }
 }
 
 // ── Metal Simulator ──────────────────────────────────────────────────────────
@@ -3398,13 +3437,8 @@ pub fn run_cosim(
     // Helper: update reset value in all schedule ops buffers
     let update_reset_in_ops = |reset_val: u8| {
         let reset_pos = gpio_map.input_bits[&reset_gpio];
-        for (sched_idx, (ref _params, ref ops_buf)) in
-            schedule_buffers.edge_buffers.iter().enumerate()
-        {
-            let len = schedule_buffers.edge_ops_lens[sched_idx];
-            let ops: &mut [BitOp] =
-                unsafe { std::slice::from_raw_parts_mut(ops_buf.contents() as *mut BitOp, len) };
-            for op in ops.iter_mut() {
+        for sched_idx in 0..schedule_buffers.edge_buffers.len() {
+            for op in schedule_buffers.edge_ops_mut(sched_idx).iter_mut() {
                 if op.position == reset_pos {
                     op.value = reset_val as u32;
                 }
@@ -3419,13 +3453,8 @@ pub fn run_cosim(
         if overrides.is_empty() {
             return;
         }
-        for (sched_idx, (ref _params, ref ops_buf)) in
-            schedule_buffers.edge_buffers.iter().enumerate()
-        {
-            let len = schedule_buffers.edge_ops_lens[sched_idx];
-            let ops: &mut [BitOp] =
-                unsafe { std::slice::from_raw_parts_mut(ops_buf.contents() as *mut BitOp, len) };
-            for op in ops.iter_mut() {
+        for sched_idx in 0..schedule_buffers.edge_buffers.len() {
+            for op in schedule_buffers.edge_ops_mut(sched_idx).iter_mut() {
                 if let Some(&val) = overrides.get(&op.position) {
                     op.value = val as u32;
                 }
@@ -3478,10 +3507,7 @@ pub fn run_cosim(
             return;
         }
         let sched_idx = sched_offset % schedule_buffers.edge_buffers.len();
-        let (ref _params, ref ops_buf) = schedule_buffers.edge_buffers[sched_idx];
-        let len = schedule_buffers.edge_ops_lens[sched_idx];
-        let ops: &mut [BitOp] =
-            unsafe { std::slice::from_raw_parts_mut(ops_buf.contents() as *mut BitOp, len) };
+        let ops = schedule_buffers.edge_ops_mut(sched_idx);
 
         for clock in clocks.iter_mut() {
             let new_val = overrides
@@ -4046,13 +4072,7 @@ pub fn run_cosim(
             // current schedule position.
             let cpu_sched_idx = schedule_offset % schedule_buffers.edge_buffers.len();
             cpu_states.copy_within(state_size..2 * state_size, 0);
-            let (_, ref cpu_edge_buf) = schedule_buffers.edge_buffers[cpu_sched_idx];
-            let cpu_edge_ops: &[BitOp] = unsafe {
-                std::slice::from_raw_parts(
-                    cpu_edge_buf.contents() as *const BitOp,
-                    schedule_buffers.edge_ops_lens[cpu_sched_idx],
-                )
-            };
+            let cpu_edge_ops = schedule_buffers.edge_ops(cpu_sched_idx);
             for op in cpu_edge_ops {
                 let word_idx = op.position as usize >> 5;
                 let bit_mask = 1u32 << (op.position & 31);
