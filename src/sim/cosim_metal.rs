@@ -2318,6 +2318,148 @@ impl MetalBackend {
             .expect("MetalBackend::init_schedule must be called before use")
     }
 
+    /// Allocate + initialise the four GPU SPI-flash buffers (Phase 1 step 2a:
+    /// relocated from `run_cosim`'s inline setup). Returns
+    /// `(state, din_params, model_params, data)`. Loads firmware into the data
+    /// buffer when `config.flash` is set.
+    fn build_flash_buffers(
+        device: &metal::Device,
+        config: &TestbenchConfig,
+        script: &FlattenedScriptV1,
+        state_size: usize,
+        gpio_map: &GpioMapping,
+    ) -> (metal::Buffer, metal::Buffer, metal::Buffer, metal::Buffer) {
+        // FlashState (shared, persistent across ticks)
+        let flash_state_buffer = device.new_buffer(
+            std::mem::size_of::<FlashState>() as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        unsafe {
+            let fs = &mut *(flash_state_buffer.contents() as *mut FlashState);
+            *fs = std::mem::zeroed();
+            fs.data_width = 1; // SPI single-bit mode (reset by posedge_csn, but first tx has none)
+            fs.prev_csn = 1; // CSN starts high (deselected)
+            fs.model_prev_csn = 1; // Model internal edge detection starts high
+            fs.d_i = 0x0F; // Flash output starts high
+            fs.in_reset = 1; // Start in reset
+                             // Verify write
+            let verify = std::ptr::read_volatile(&fs.d_i);
+            assert_eq!(
+                verify, 0x0F,
+                "FlashState.d_i not written correctly: got 0x{:02X}",
+                verify
+            );
+            clilog::info!(
+                "FlashState init: d_i=0x{:02X}, data_width={}, prev_csn={}, in_reset={}",
+                fs.d_i,
+                fs.data_width,
+                fs.prev_csn,
+                fs.in_reset
+            );
+        }
+
+        // FlashDinParams (constant)
+        let flash_din_params_buffer = device.new_buffer(
+            std::mem::size_of::<FlashDinParams>() as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        unsafe {
+            let p = &mut *(flash_din_params_buffer.contents() as *mut FlashDinParams);
+            p.has_flash = if config.flash.is_some() { 1 } else { 0 };
+            p.xmask_state_offset = script.xprop_state_offset;
+            for i in 0..4 {
+                p.d_in_pos[i] = config
+                    .flash
+                    .as_ref()
+                    .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
+                    .unwrap_or(0xFFFFFFFF);
+            }
+        }
+
+        // FlashModelParams (constant)
+        let flash_model_params_buffer = device.new_buffer(
+            std::mem::size_of::<FlashModelParams>() as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        unsafe {
+            let p = &mut *(flash_model_params_buffer.contents() as *mut FlashModelParams);
+            p.state_size = state_size as u32;
+            p.clk_out_pos = config
+                .flash
+                .as_ref()
+                .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
+                .unwrap_or(0);
+            p.csn_out_pos = config
+                .flash
+                .as_ref()
+                .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
+                .unwrap_or(0);
+            for i in 0..4 {
+                p.d_out_pos[i] = config
+                    .flash
+                    .as_ref()
+                    .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
+                    .unwrap_or(0xFFFFFFFF);
+            }
+            p.flash_data_size = 16 * 1024 * 1024; // 16 MB
+            clilog::info!("FlashModelParams: state_size={}, clk_out_pos={}, csn_out_pos={}, d_out_pos={:?}, flash_data_size={}",
+                p.state_size, p.clk_out_pos, p.csn_out_pos, p.d_out_pos, p.flash_data_size);
+        }
+
+        // Log flash din params too
+        unsafe {
+            let p = &*(flash_din_params_buffer.contents() as *const FlashDinParams);
+            clilog::info!(
+                "FlashDinParams: has_flash={}, d_in_pos={:?}",
+                p.has_flash,
+                p.d_in_pos
+            );
+        }
+
+        // Flash data buffer (16 MB, loaded with firmware)
+        let flash_data_buffer =
+            device.new_buffer(16 * 1024 * 1024, MTLResourceOptions::StorageModeShared);
+        unsafe {
+            // Fill with 0xFF (erased flash state)
+            std::ptr::write_bytes(
+                flash_data_buffer.contents() as *mut u8,
+                0xFF,
+                16 * 1024 * 1024,
+            );
+        }
+        // Load firmware into flash data buffer
+        if let Some(ref flash_cfg) = config.flash {
+            use std::io::Read;
+            let firmware_path = std::path::Path::new(&flash_cfg.firmware);
+            let mut file =
+                std::fs::File::open(firmware_path).expect("Failed to open firmware file");
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)
+                .expect("Failed to read firmware");
+            let offset = flash_cfg.firmware_offset;
+            assert!(
+                offset + data.len() <= 16 * 1024 * 1024,
+                "Firmware too large for flash buffer"
+            );
+            unsafe {
+                let dest = (flash_data_buffer.contents() as *mut u8).add(offset);
+                std::ptr::copy_nonoverlapping(data.as_ptr(), dest, data.len());
+            }
+            clilog::info!(
+                "Loaded {} bytes firmware into GPU flash buffer at offset 0x{:X}",
+                data.len(),
+                offset
+            );
+        }
+
+        (
+            flash_state_buffer,
+            flash_din_params_buffer,
+            flash_model_params_buffer,
+            flash_data_buffer,
+        )
+    }
+
     /// Metal-only GPU kernel profiling (forwards to the simulator). Not part
     /// of `CosimBackend` — a CPU backend has no GPU kernels to profile.
     fn profile_kernels(&self, num_ticks: usize) {
@@ -3274,130 +3416,19 @@ pub fn run_cosim(
         .max_clock_edges
         .unwrap_or(config.num_cycles * sched_ticks_per_sys_clk_cycle as usize);
 
-    // ── GPU Flash IO buffers ────────────────────────────────────────────
-
-    // FlashState (shared, persistent across ticks)
-    let flash_state_buffer = simulator.device.new_buffer(
-        std::mem::size_of::<FlashState>() as u64,
-        MTLResourceOptions::StorageModeShared,
+    // ── GPU Flash IO buffers (built in MetalBackend — Phase 1 step 2a) ──────
+    let (
+        flash_state_buffer,
+        flash_din_params_buffer,
+        flash_model_params_buffer,
+        flash_data_buffer,
+    ) = MetalBackend::build_flash_buffers(
+        &simulator.device,
+        config,
+        script,
+        state_size,
+        &gpio_map,
     );
-    unsafe {
-        let fs = &mut *(flash_state_buffer.contents() as *mut FlashState);
-        *fs = std::mem::zeroed();
-        fs.data_width = 1; // SPI single-bit mode (reset by posedge_csn, but first tx has none)
-        fs.prev_csn = 1; // CSN starts high (deselected)
-        fs.model_prev_csn = 1; // Model internal edge detection starts high
-        fs.d_i = 0x0F; // Flash output starts high
-        fs.in_reset = 1; // Start in reset
-                         // Verify write
-        let verify = std::ptr::read_volatile(&fs.d_i);
-        assert_eq!(
-            verify, 0x0F,
-            "FlashState.d_i not written correctly: got 0x{:02X}",
-            verify
-        );
-        clilog::info!(
-            "FlashState init: d_i=0x{:02X}, data_width={}, prev_csn={}, in_reset={}",
-            fs.d_i,
-            fs.data_width,
-            fs.prev_csn,
-            fs.in_reset
-        );
-    }
-
-    // FlashDinParams (constant)
-    let flash_din_params_buffer = simulator.device.new_buffer(
-        std::mem::size_of::<FlashDinParams>() as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let p = &mut *(flash_din_params_buffer.contents() as *mut FlashDinParams);
-        p.has_flash = if config.flash.is_some() { 1 } else { 0 };
-        p.xmask_state_offset = script.xprop_state_offset;
-        for i in 0..4 {
-            p.d_in_pos[i] = config
-                .flash
-                .as_ref()
-                .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
-                .unwrap_or(0xFFFFFFFF);
-        }
-    }
-
-    // FlashModelParams (constant)
-    let flash_model_params_buffer = simulator.device.new_buffer(
-        std::mem::size_of::<FlashModelParams>() as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let p = &mut *(flash_model_params_buffer.contents() as *mut FlashModelParams);
-        p.state_size = state_size as u32;
-        p.clk_out_pos = config
-            .flash
-            .as_ref()
-            .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
-            .unwrap_or(0);
-        p.csn_out_pos = config
-            .flash
-            .as_ref()
-            .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
-            .unwrap_or(0);
-        for i in 0..4 {
-            p.d_out_pos[i] = config
-                .flash
-                .as_ref()
-                .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
-                .unwrap_or(0xFFFFFFFF);
-        }
-        p.flash_data_size = 16 * 1024 * 1024; // 16 MB
-        clilog::info!("FlashModelParams: state_size={}, clk_out_pos={}, csn_out_pos={}, d_out_pos={:?}, flash_data_size={}",
-            p.state_size, p.clk_out_pos, p.csn_out_pos, p.d_out_pos, p.flash_data_size);
-    }
-
-    // Log flash din params too
-    unsafe {
-        let p = &*(flash_din_params_buffer.contents() as *const FlashDinParams);
-        clilog::info!(
-            "FlashDinParams: has_flash={}, d_in_pos={:?}",
-            p.has_flash,
-            p.d_in_pos
-        );
-    }
-
-    // Flash data buffer (16 MB, loaded with firmware)
-    let flash_data_buffer = simulator
-        .device
-        .new_buffer(16 * 1024 * 1024, MTLResourceOptions::StorageModeShared);
-    unsafe {
-        // Fill with 0xFF (erased flash state)
-        std::ptr::write_bytes(
-            flash_data_buffer.contents() as *mut u8,
-            0xFF,
-            16 * 1024 * 1024,
-        );
-    }
-    // Load firmware into flash data buffer
-    if let Some(ref flash_cfg) = config.flash {
-        use std::io::Read;
-        let firmware_path = std::path::Path::new(&flash_cfg.firmware);
-        let mut file = std::fs::File::open(firmware_path).expect("Failed to open firmware file");
-        let mut data = Vec::new();
-        file.read_to_end(&mut data)
-            .expect("Failed to read firmware");
-        let offset = flash_cfg.firmware_offset;
-        assert!(
-            offset + data.len() <= 16 * 1024 * 1024,
-            "Firmware too large for flash buffer"
-        );
-        unsafe {
-            let dest = (flash_data_buffer.contents() as *mut u8).add(offset);
-            std::ptr::copy_nonoverlapping(data.as_ptr(), dest, data.len());
-        }
-        clilog::info!(
-            "Loaded {} bytes firmware into GPU flash buffer at offset 0x{:X}",
-            data.len(),
-            offset
-        );
-    }
 
     // ── GPU UART IO buffers (multi-instance, ADR 0013) ──────────────────
 
