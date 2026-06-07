@@ -2727,8 +2727,8 @@ pub fn run_cosim(
     }
     for (name, _tx_gpio, rx_gpio, cpb) in &uart_configs {
         if let Some(&rx_pos) = gpio_map.input_bits.get(rx_gpio) {
-            let edges_per_sys_clk = (clock_period_ps / scheduler.gcd_ps) as u32;
-            let baud_div_edges = cpb * edges_per_sys_clk;
+            let sched_ticks_per_sys_clk = (clock_period_ps / scheduler.gcd_ps) as u32;
+            let baud_div_edges = cpb * sched_ticks_per_sys_clk;
             let driver = crate::sim::models::uart::UartRxDriver::new(
                 name.clone(),
                 rx_pos,
@@ -2868,17 +2868,23 @@ pub fn run_cosim(
     // (the main loop's `tick` variable, scheduler offsets, UART decoder
     // current_cycle) advance per scheduler edge (one GCD tick).
     //
-    // edges_per_sys_clk_cycle = how many scheduler ticks per one sys_clk
-    // cycle. For single-clock that's 2 (posedge + negedge). For multi-clock
-    // it's still 2 because sys_clk always has exactly one rising + one
-    // falling edge per period regardless of other clocks in the schedule.
-    let edges_per_sys_clk_cycle = clock_period_ps / schedule_buffers.gcd_ps;
-    let reset_edges = config.reset_cycles * edges_per_sys_clk_cycle as usize;
+    // sched_ticks_per_sys_clk_cycle = how many dense scheduler ticks (each
+    // `gcd_ps` long) fall in one sys_clk period. NOT the number of sys_clk
+    // *transitions* (which is always 2). It is 2 only when `gcd_ps` equals
+    // sys_clk's half-period — i.e. single-clock, or multi-clock whose other
+    // domains' half-periods and phase offsets are all integer multiples of
+    // it. With non-commensurate periods or phase offsets, `gcd_ps` shrinks
+    // below the half-period (`MultiClockScheduler::new`, where gcd folds in
+    // every half-period and offset) and this is >2. It is the user-cycles →
+    // internal-tick conversion factor (the codebase calls GCD ticks "edges",
+    // cf. `--max-clock-edges`).
+    let sched_ticks_per_sys_clk_cycle = clock_period_ps / schedule_buffers.gcd_ps;
+    let reset_edges = config.reset_cycles * sched_ticks_per_sys_clk_cycle as usize;
     // CLI --max-clock-edges is already in edges; config `num_cycles` is in
     // sys_clk cycles and gets multiplied here.
     let max_edges = opts
         .max_clock_edges
-        .unwrap_or(config.num_cycles * edges_per_sys_clk_cycle as usize);
+        .unwrap_or(config.num_cycles * sched_ticks_per_sys_clk_cycle as usize);
 
     // ── GPU Flash IO buffers ────────────────────────────────────────────
 
@@ -3045,7 +3051,7 @@ pub fn run_cosim(
                 .copied()
                 .unwrap_or(0);
             // GPU decoder counts scheduler edges, not clock cycles
-            p.channels[i].cycles_per_bit = cpb * edges_per_sys_clk_cycle as u32;
+            p.channels[i].cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle as u32;
         }
     }
 
@@ -3338,7 +3344,7 @@ pub fn run_cosim(
         writeln!(writer, "#").unwrap();
 
         // dump_dff_cycles is user-facing (sys_clk cycles); internal counter is in edges.
-        let max_dump_edges = opts.dump_dff_cycles * edges_per_sys_clk_cycle as usize;
+        let max_dump_edges = opts.dump_dff_cycles * sched_ticks_per_sys_clk_cycle as usize;
         clilog::info!(
             "DFF dump enabled: {} DFFs, {} cycles ({} edges) → {}",
             entries.len(),
