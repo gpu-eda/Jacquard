@@ -1,23 +1,32 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
-**Created:** 2026-06-07 (updated 2026-06-07, fourth session)
-**Branch:** `cosim-backend-seam-phase0` @ `9b7b105` = **PR #118** (pushed, **CI
-fully green** across Phase 0 + P1.1 + P1.2a + P1.2b). Holds Phase 0 + the Phase
-1 plan + ADR amendment + Phase 1 steps 1/2a/2b. **#118 is being grown to Phase 0
-+ Phase 1** (maintainer's call: one PR, not stacked). Working tree clean.
-Consider refreshing the PR #118 title/description (still "Phase 0" framed) to
-reflect the broadened Phase 0 + Phase 1 scope before the next push.
+**Created:** 2026-06-07 (updated 2026-06-07, fifth session)
+**Branch:** `cosim-backend-seam-phase0` @ `9593a9f` (P1.2c committed locally,
+**not yet pushed**; PR #118 last pushed at `9b7b105`). Holds Phase 0 + the Phase
+1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c. **#118 is being grown to
+Phase 0 + Phase 1** (maintainer's call: one PR, not stacked). Working tree clean.
+**Push `9593a9f` and refresh the PR #118 title/description** (still "Phase 0"
+framed) to reflect the broadened Phase 0 + Phase 1 scope on the next push.
 
 ## Goal & next-up
 
 **Goal:** bring CUDA/HIP up to Metal parity. Two tracks: (a) cross-backend
 *equivalence* of the `sim` kernel (done — guard in CI), (b) **cosim backend
-portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (step 1 of 7 done).
+portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (steps 1/2a/2b/2c
+of 7 done).
 
-**Now (pick up here): Phase 1 step 2c — extract the state/sram/event/blocks
-buffer setup.** Authoritative plan: `docs/plans/cosim-phase1-cpu-backend.md`
-(reviewed + revised; read it). The 7-step sequencing + the peripheral-contract
-design (ADR 0017 Layer 3) are recorded.
+**Now (pick up here): Phase 1 step 3 — make `run_cosim` generic
+`run_cosim<B: CosimBackend>(...)`.** Route the ~15 diagnostic `.contents()`
+reads (`--check-with-cpu`, dff-dump, trace-signals, deep-diag,
+`post_reset_state_snapshot`) through re-added `state()`/`sram()` trait methods;
+gate/extract the flash-`FlashState` diagnostic reads. Metal path constructs
+`MetalBackend`. **Exit gate:** no `metal::` / `MTLResourceOptions` token remains
+outside the (about-to-move-in-step-4) Metal constructor + impl. Authoritative
+plan: `docs/plans/cosim-phase1-cpu-backend.md` (reviewed + revised; read it).
+The 7-step sequencing + the peripheral-contract design (ADR 0017 Layer 3) are
+recorded. **Optional cleanup the plan calls for but step 2 didn't reach: fold
+build_flash + build_io + build_state into a `MetalBackend::new` so `run_cosim`
+calls one constructor** — can be done as part of step 3 or 4.
 
 **Done so far in Phase 1:**
 - **Step 1** (`bc18f79`): de-Metaled the `run_edges` seam (dropped
@@ -26,27 +35,28 @@ design (ADR 0017 Layer 3) are recorded.
 - **Step 2a** (`75c9ec0`): extracted flash buffers → `MetalBackend::build_flash_buffers`.
 - **Step 2b** (`a93812a`): extracted gpu_io_step (uart/wb/bus) buffers →
   `MetalBackend::build_io_buffers` (returns 7 buffers + CPU `bus_lanes`).
+- **Step 2c** (`9593a9f`): extracted state/sram/sram-xmask/event/blocks buffer
+  setup → `MetalBackend::build_state_buffers` (`cosim_metal.rs:2603`), a static
+  fn `(device, script, config, state_size)` returning a 7-tuple incl.
+  `event_buffer_ptr` (caller keeps the two `drop(Box::from_raw(...))` sites).
+  Moved: states alloc+`fill(0)`, xprop X-mask seed (both slots), sram
+  data/xmask alloc+fill, SRAM ELF preload, blocks no-copy, leaked-`Box` event
+  buffer. **Stayed in `run_cosim`** (agnostic, for CpuBackend reuse in step 3):
+  `reg_init`/reset/constant_ports/`set_flash_din` stimulus deposits,
+  `sram_dumper`, `timing_constraints_buffer`. Metal bit-identical, 298 tests
+  pass. Blocks/event hoisted earlier than before — bit-identical (no `states`
+  dep, harness-confirmed).
 
-**Step 2c (next):** extract the remaining buffer setup into a
-`MetalBackend::build_state_buffers` (companion to the two above): `states_buffer`
-(`cosim_metal.rs` ~`:2710`) + xprop X-mask seed + `set_flash_din`, sram
-(`:2755`/`:2776`), `blocks_start/data` no-copy (`:2939`, wrap `script` UVec) and
-the leaked-`Box` event buffer (`:2955`). **Trickier than 2a/2b** — the state
-init is part-agnostic (state writes) and interleaved with xprop seeding +
-`set_flash_din`; the no-copy/leaked-box lifetimes need care. Then **assemble
-`MetalBackend::new`** composing build_flash + build_io + build_state + the struct
-literal, so `run_cosim` calls `MetalBackend::new(...)`. Each Metal bit-identical
-(harness + `shasum -c`).
-
-**Then:** step 3 (generic `run_cosim<B>` + route the ~15 diagnostic `.contents()`
-reads via re-added `state()`/`sram()`; gate/extract the flash-`FlashState`
-diagnostic reads), step 4 (module split `cosim/{mod,metal}.rs`, `cargo check
+**Then:** step 4 (module split `cosim/{mod,metal}.rs`, `cargo check
 --lib` no-feature must compile), step 5 (`CpuBackend` + CPU UART-TX decoder
 mirroring `UartDecoderState`), steps 6–7 (`cmd_cosim` wiring + Linux CI).
 
 **Bit-identical gate:** `/tmp/claude/cosim_fixtures.sh <out>` + `shasum -c
-/tmp/claude/golden.sums` after every step (all green through P1.1). Two Phase-0
-deferrals are now folded into the Phase 1 steps above (see plan).
+/tmp/claude/golden.sums` after every step (all green through P1.2c). **Note:**
+`run_params.json` was dropped from `golden.sums` this session — it carries a
+per-run random `master_seed` (`run_params.rs:12`) so it could never be
+bit-identical; the 7 meaningful artifacts (4 VCDs, UART events, 2 APB CSVs) are
+the gate. Two Phase-0 deferrals are folded into the Phase 1 steps above (see plan).
 
 **Phase 0 — what landed (branch `cosim-backend-seam-phase0`):**
 - `bda27ce` — factored the repeated `*mut BitOp` shared-memory slice behind
