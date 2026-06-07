@@ -1,10 +1,8 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
 **Created:** 2026-06-07 (updated 2026-06-07, second session)
-**Branch:** `main` @ `c3e9e0f` (#115 merged + handoff + JTAG CI pin). Two
-PRs open off it: **#116** (debug-build mask fix), **#117** (telemetry +
-rename + **target-architecture docs**).
-**Working tree:** clean (after this handoff commit).
+**Branch:** `main` @ `82523a3`. **#115, #116, #117 all merged.** Working
+tree clean.
 
 ## Goal & next-up
 
@@ -18,23 +16,26 @@ design review concluded and the **target architecture is now in ADR 0017**
 decisions (maintainer-approved):
 - `CosimBackend` trait is **batch-granular** (`run_edges`, not per-edge) —
   a literal per-edge trait regresses Metal ~1000× (measurements in the ADR).
+- **The backend owns the schedule storage** (opaque to orchestration): built
+  once via `init_schedule`, mutated via `edge_ops_mut` — NOT an
+  orchestration-owned `Vec` the backend re-materialises (that would regress
+  Metal's zero-copy unified memory). Metal: `edge_ops_mut` → slice over the
+  shared `MTLBuffer` (write IS the upload). CUDA/HIP: host mirror + dirty-flag
+  + lazy per-edge upload. Also resolves the closure-borrow friction.
 - **GPU peripherals are the primary path to CUDA/HIP batching** (a discrete
   GPU's per-edge PCIe round-trip is untenable). 3-tier `GpuPeripheral`:
   Tier 1 CPU model (reference/oracle/fallback), Tier 2 hand-written kernels
   (CUDA+HIP share `*_impl.cuh` ⇒ 2 impls, + `.metal`), Tier 3 single-source
   user-extensible (later).
-- Plan re-sequenced: P0 seam → P1 CpuBackend+Linux CI → P2 CUDA *correctness*
-  (per-edge, CI gate, NOT perf) → **P3 GPU peripherals = the perf path** →
-  P4 single-source. See `docs/plans/cosim-backend-portability.md`.
+- Plan staging (P2/P3 **merged** after review): P0 seam → P1 CpuBackend+Linux
+  CI → **P2 CUDA/HIP backend WITH Tier-2 GPU peripherals** (internal 2a/2b
+  checkpoint: per-edge correctness → batched; per-edge stays as the CPU-model
+  fallback) → P3 single-source. See `docs/plans/cosim-backend-portability.md`.
 
 When resuming Phase 0: trait can land in-place in `cosim_metal.rs` first
 (module split to `cosim/{mod,metal}.rs` is separable/cosmetic). The
-load-bearing friction is de-Metaling the in-place `*mut BitOp` shared-memory
-ops mutation (the trait's explicit upload point removes it).
-
-Open PRs: **#116** (green, trivial — merge anytime), **#117** (telemetry +
-rename + ADR/plan target-architecture rewrite — **needs design review**).
-Both off `main`; merge in either order.
+load-bearing friction is converting the in-place `*mut BitOp` shared-memory
+ops mutation to `edge_ops_mut` (stays zero-copy on Metal).
 
 **Bit-identical harness ready:** `/tmp/claude/cosim_fixtures.sh <outdir>`
 runs all 7 Metal cosim fixtures; golden baseline at `/tmp/claude/golden`
@@ -47,25 +48,25 @@ fixtures script above (all PASSED, byte-identical to golden).
 
 - **#115 merged** (rebase-merge → `main` @ `1371c52`). CPU
   `simulate_block_v1` consolidation; CI green pre-merge.
-- **#116 (OPEN, green)** — `fix(cpu_reference)`: `mask & mask.wrapping_neg()`
+- **#116 merged** — `fix(cpu_reference)`: `mask & mask.wrapping_neg()`
   replaces `mask & (-(mask as i32)) as u32` (2 sites in `cpu_reference.rs`),
   fixing the debug-build "negate with overflow" panic on bit 31 → makes
-  `cosim --check-with-cpu` runnable in debug. (Carry-forward item below, now
-  done.)
-- **#117 (OPEN, needs design review)** — `feat(cosim)`, three commits:
-  (1) batch-utilisation telemetry in the run summary (behaviour-preserving,
-  7 fixtures byte-identical); (2) rename `edges_per_sys_clk*` →
-  `sched_ticks_per_sys_clk*` + comment fix (it counts dense scheduler ticks
-  per sys_clk period, not the always-2 transitions); (3) **ADR 0017 rewritten
-  to the target architecture** + plan re-sequenced (see Now section).
-  **Key data:** GPU-peripheral designs (dual_uart, apb_trace, xprop) run
-  **100% batched**; `jtag_minimal` batches 97.4% of edges but emits **102,310
-  single-edge commits** (96% of submits) — the measured MC.3 bottleneck.
-- **JTAG CI pinned to self-hosted** (`main` @ `c3e9e0f`) — the
-  `macos-latest-xlarge` path (first exercised on a main push) is ~3× slower
-  for the per-edge JTAG-replay cosim and **timed out at the 15-min step cap**
-  (run 27088699240, 1.8M/4M). Pinned `jtag-minimal-cosim` to `macos-runner-1`;
-  main green again (JTAG 10.8 min). Resolves the xlarge carry-forward item.
+  `cosim --check-with-cpu` runnable in debug.
+- **#117 merged** — `feat(cosim)`, commits: (1) batch-utilisation telemetry
+  in the run summary (behaviour-preserving, 7 fixtures byte-identical);
+  (2) rename `edges_per_sys_clk*` → `sched_ticks_per_sys_clk*` + comment fix
+  (counts dense scheduler ticks per sys_clk period, not the always-2
+  transitions); (3) **ADR 0017 target-architecture rewrite** + plan staging,
+  incl. review refinements (backend-owned schedule / `edge_ops_mut`; merged
+  P2/P3). **Key data:** GPU-peripheral designs run **100% batched**;
+  `jtag_minimal` batches 97.4% of edges but emits **102,310 single-edge
+  commits** (96% of submits) — the measured MC.3 bottleneck.
+- **JTAG CI: xlarge + extended timeout** (`82523a3`) — first tried pinning to
+  self-hosted (`c3e9e0f`), but that serialised all Metal jobs on the one box
+  (slower wall-clock). Reverted to the `macos-latest-xlarge` conditional (like
+  the `metal` job) so JTAG runs in **parallel** on main, with step timeout
+  15→40min / job 20→45min to fit xlarge's ~3× rate (validated: **32.0 min** on
+  xlarge, 8 min margin). Self-hosted PR runs still ~10 min, well under.
 
 ## Done (1st session, all merged to `main` unless noted)
 
@@ -100,21 +101,18 @@ fixtures script above (all PASSED, byte-identical to golden).
   --tags` → `release.yml` draft → Homebrew tap PR (`gpu-eda/homebrew-tap`) →
   `netlist-graph` PyPI + tag. (Deliberately maintainer-triggered; see
   `docs/release-process.md`.)
-- **#105 cosim portability — Phase 0 remaining** (PAUSED for design review):
-  0b de-Metal `ScheduleBuffers` → `Vec<BitOp>` (`cosim_metal.rs:3072`,
-  `update_model_driven_in_ops`/`update_reset_in_ops` ~`:3643-3678`); **0c
-  `CosimBackend` trait + `MetalBackend` impl** (the big one); 0d move ~20
-  `device.new_buffer` allocations into the backend. **Design correction from
-  this session (see #117 / ADR 0017 amendment):** 0b and 0c are entangled —
-  the shared-memory in-place ops mutation (`*mut BitOp` via `.contents()`) is
-  the load-bearing Metal coupling; de-Metaling it needs the explicit upload
-  point the trait provides. And the trait must be **batch-granular** ("run N
-  edges, snapshot each to ring") to preserve Metal's batched fast path, not
-  the literal per-edge `simulate_edge` in the original plan sketch. The
-  module split (`cosim/mod.rs` + `cosim/metal.rs`) is separable/cosmetic —
-  the trait can land in-place first. Then Phase 1 (CpuBackend + Linux cosim
-  CI), Phase 2 (CUDA/HIP GPU cosim, **now T4-testable**), Phase 3 (port GPU
-  IO kernels). Full map in the plan doc + ADR 0017 amendment.
+- **#105 cosim portability — Phase 0 not started** (design settled, merged in
+  #117). Authoritative design: ADR 0017 *Amendment 2026-06-07* +
+  `docs/plans/cosim-backend-portability.md` (both on `main`). Phase 0 =
+  extract the batch-granular `CosimBackend` trait + backend-owned schedule
+  (`init_schedule`/`edge_ops_mut`) + `MetalBackend`, Metal bit-identical
+  (harness above). The trait can land in-place in `cosim_metal.rs` first
+  (module split separable). Key sites: `ScheduleBuffers` (`cosim_metal.rs`
+  ~`:311`/construction ~`:2822`), the ops-update helpers
+  `update_model_driven_in_ops`/`update_reset_in_ops`/`patch_model_clock_edges`
+  (~`:3393-3490`) → `edge_ops_mut`, ~20 `device.new_buffer` allocs → backend.
+  Then P1 (CpuBackend + Linux CI), P2 (CUDA/HIP backend **with** Tier-2 GPU
+  peripherals, T4-testable), P3 (single-source peripherals).
 - **CDC/island batching (multi-clock plan MC.1→MC.4)** is the long-term fix
   for JTAG's single-edge tail — fast `sys_clk` island runs ahead/batched
   while only the model-driven `tck` boundary needs per-edge handover. MC.4
@@ -124,9 +122,11 @@ fixtures script above (all PASSED, byte-identical to golden).
   (open, green). `mask & mask.wrapping_neg()` in `cpu_reference.rs`.
 - ~~**Verify the `macos-latest-xlarge` path schedules on a main push**~~ —
   **RESOLVED**: it does schedule, but is ~3× slower for heavy per-edge cosim
-  → JTAG timed out and is now pinned to `macos-runner-1` (`c3e9e0f`). The
-  light `metal` job still uses xlarge on main. Re-evaluate the pin after
-  multi-clock/island batching cuts JTAG's per-edge tail (MC.3/MC.4).
+  → JTAG timed out at the 15-min step cap. Final fix (`82523a3`): JTAG stays
+  on the xlarge conditional (parallel offload) with step/job timeouts raised
+  to 40/45 min — validated at 32.0 min on xlarge. (A self-hosted pin was
+  tried first but serialised the Metal jobs.) Re-evaluate after multi-clock
+  batching cuts JTAG's per-edge tail (MC.3/MC.4).
 - **#104** (CUDA/HIP `sim` timing) — Metal-only today; now T4-testable.
   **#106/#107** (x-assert detection/SVA). **#103** (multi-SRAM preload).
 - **Single-source `simulate_block_v1` macro-prelude** (cross-shader compute
@@ -170,7 +170,7 @@ real divergence and not in scope.
 
 ## References
 
-- cosim portability: ADR 0017 (Amendment 2026-06-05),
+- cosim portability: ADR 0017 (Amendment 2026-06-07 — target architecture),
   `docs/plans/cosim-backend-portability.md`, issue #105.
 - Equivalence guard: `scripts/ci/compare_backend_vcds.py`, `backend-equivalence`
   CI job, PR #113.
