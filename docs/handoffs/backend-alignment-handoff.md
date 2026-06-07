@@ -1,23 +1,40 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
-**Created:** 2026-06-07 (updated 2026-06-07, third session)
-**Branch:** `cosim-backend-seam-phase0` @ `cf053b7` (2 commits ahead of
-`main` @ `789b2bf`; **not yet pushed / no PR**). **#115, #116, #117 merged.**
-Working tree clean.
+**Created:** 2026-06-07 (updated 2026-06-07, fourth session)
+**Branch:** `cosim-backend-seam-phase0` @ `bc18f79` = **PR #118** (pushed, CI
+green on Phase 0; re-running after P1.1). Holds Phase 0 + the Phase 1 plan +
+ADR amendment + Phase 1 step 1. **#118 is being grown to Phase 0 + Phase 1**
+(maintainer's call: one PR, not stacked). Working tree clean.
 
 ## Goal & next-up
 
 **Goal:** bring CUDA/HIP up to Metal parity. Two tracks: (a) cross-backend
 *equivalence* of the `sim` kernel (done — guard in CI), (b) **cosim backend
-portability (#105)** — **Phase 0 now DONE** (this session); next is Phase 1.
+portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (step 1 of 7 done).
 
-**Now (pick up here): Phase 1 — `CpuBackend` + Linux cosim CI.** Phase 0 (the
-seam extraction) is complete on branch `cosim-backend-seam-phase0` (2 commits,
-below). Phase 1 adds a `CpuBackend` impl of the `CosimBackend` trait (now in
-`cosim_metal.rs`), wires `cmd_cosim` to select it when `--features metal` is
-absent (removing the hard-error), and moves the cosim regression fixtures to a
-free `ubuntu-latest` CI job. See `docs/plans/cosim-backend-portability.md`
-Phase 1. Two Phase-0 deferrals feed directly into Phase 1 (see below).
+**Now (pick up here): Phase 1 step 2 — move buffer setup+init into
+`MetalBackend::new`.** Authoritative plan:
+`docs/plans/cosim-phase1-cpu-backend.md` (reviewed + revised; read it). The
+7-step sequencing + the peripheral-contract design (ADR 0017 Layer 3,
+input/output unification) are recorded. **Step 1 done** (`bc18f79`): de-Metaled
+the `run_edges` seam (dropped `metal::Buffer`), moved the VCD ring into
+`MetalBackend` (`enable_vcd_ring`/`vcd_snapshot`), added `flash_set_in_reset`.
+
+**Step 2 (next, the largest):** relocate the ~20 buffer allocs + init (sites
+mapped: `states_buffer` `cosim_metal.rs:2710`, sram `:2755`/`:2776`, blocks
+`:2939`, event `:2955`, **flash `:3280–3367`**, uart `:3407`, wb `:3464`, bus
+`:3493`; struct literal `:3542`) into `MetalBackend::new(...)`, as **2a flash →
+2b uart/wb/bus → 2c states/sram/event/blocks+xprop-seed**, each Metal
+bit-identical. Then step 3 (generic `run_cosim<B>` + route the ~15 diagnostic
+`.contents()` reads via `state()`/`sram()` — re-add those accessors here; the
+flash-`FlashState` diagnostic reads get gated/extracted), step 4 (module split
+`cosim/{mod,metal}.rs`, `cargo check --lib` no-feature must compile), step 5
+(`CpuBackend` + CPU UART-TX decoder mirroring `UartDecoderState`), steps 6–7
+(`cmd_cosim` wiring + Linux CI).
+
+**Bit-identical gate:** `/tmp/claude/cosim_fixtures.sh <out>` + `shasum -c
+/tmp/claude/golden.sums` after every step (all green through P1.1). Two Phase-0
+deferrals are now folded into the Phase 1 steps above (see plan).
 
 **Phase 0 — what landed (branch `cosim-backend-seam-phase0`):**
 - `bda27ce` — factored the repeated `*mut BitOp` shared-memory slice behind
