@@ -1906,7 +1906,7 @@ impl MultiClockScheduler {
         }
 
         // Placeholders for peripheral-model-driven inputs. Initial value 0;
-        // updated each batch in `update_model_driven_in_ops` to reflect the
+        // updated each batch in `patch_model_driven_in_ops` to reflect the
         // current model state.
         for &pos in model_driven_positions {
             ops.push(BitOp {
@@ -2189,6 +2189,329 @@ fn simulate_block_v1_diag(
     crate::sim::cpu_reference::simulate_block_v1(
         script, input_state, output_state, sram_data, true,
     );
+}
+
+// ── Cosim backend seam ─────────────────────────────────────────────────────
+
+/// Design execution + state ownership for cosim. One impl per GPU/CPU backend
+/// (ADR 0017, *Amendment 2026-06-07*). The backend-agnostic orchestration
+/// (multi-clock scheduler, peripheral models, VCD, ring drains, batch-size
+/// policy) lives above this seam and drives the backend through it.
+///
+/// **Batch-granular by construction.** Measurements (ADR 0017) show Metal runs
+/// 100% batched on GPU-peripheral designs, so a per-edge method would regress
+/// it ~1000×. `run_edges` therefore runs *N* consecutive scheduler edges in
+/// one dispatch; the orchestration decides *N* (`force_single_edge`).
+///
+/// **The backend owns its schedule storage** (opaque to orchestration): built
+/// once via [`CosimBackend::init_schedule`] from a backend-agnostic description,
+/// mutated through [`CosimBackend::edge_ops_mut`]. On Metal that is a slice over
+/// the shared `MTLBuffer` (zero-copy; the write *is* the upload); a CUDA/HIP
+/// backend backs it with a host mirror + dirty-flag + lazy upload.
+///
+/// Phase 0 (this commit) defines the subset the Metal cosim driver actually
+/// calls. The CPU per-edge `state_prep` method (plan's Phase 1) lands with
+/// `CpuBackend`; on Metal, state_prep is encoded *inside* `run_edges`' command
+/// buffer, so it is not a separate orchestration call. See
+/// `docs/plans/cosim-backend-portability.md`.
+trait CosimBackend {
+    /// Materialise the backend's native per-edge schedule storage *once* from
+    /// the backend-agnostic ops description (one `Vec<BitOp>` per scheduler
+    /// edge). The orchestration keeps only scalars (`edges_per_period`,
+    /// `gcd_ps`) afterwards — never a parallel copy the backend re-materialises.
+    fn init_schedule(
+        &mut self,
+        per_edge_ops: Vec<Vec<BitOp>>,
+        state_size: u32,
+        xmask_state_offset: u32,
+        gcd_ps: u64,
+    );
+    /// Mutable view of one edge's ops (reset / model-driven / clock-edge
+    /// patching). Zero-copy over shared memory on Metal. Takes `&mut self` so
+    /// the seam enforces exclusive access at compile time, even though the
+    /// Metal storage underneath is interior-mutable shared memory.
+    fn edge_ops_mut(&mut self, edge_idx: usize) -> &mut [BitOp];
+    /// Read-only view of one edge's ops (e.g. the `--check-with-cpu` replay).
+    fn edge_ops(&self, edge_idx: usize) -> &[BitOp];
+    /// Number of scheduler edges per LCM period (the schedule repeats).
+    fn edges_per_period(&self) -> usize;
+    /// Picoseconds per scheduler edge (= `MultiClockScheduler::gcd_ps`).
+    fn gcd_ps(&self) -> u64;
+    // NOTE: design-state accessors (the plan's `output_state`/`input_state_mut`)
+    // land in Phase 1 with `CpuBackend`, which needs CPU-side state_prep. The
+    // Metal driver reads state via the VCD ring + direct buffer access, so they
+    // are omitted here to keep the Phase 0 trait to exactly what is used.
+    /// Run `batch` consecutive scheduler edges starting at `schedule_offset`
+    /// in one dispatch, snapshotting each output slot into `vcd_ring` when
+    /// present. Returns the completion token to pass to [`CosimBackend::wait`].
+    ///
+    /// Phase 1 follow-up: `vcd_ring: Option<&metal::Buffer>` leaks a Metal type
+    /// into the otherwise backend-agnostic seam. When `CpuBackend` lands, the
+    /// per-edge output snapshot ring should become a backend-owned buffer with
+    /// a `&[u32]` drain accessor, so this parameter drops out of the trait.
+    fn run_edges(
+        &self,
+        batch: usize,
+        schedule_offset: usize,
+        vcd_ring: Option<&metal::Buffer>,
+    ) -> u64;
+    /// Block until the dispatch identified by `token` has completed.
+    fn wait(&self, token: u64);
+}
+
+/// Metal implementation of [`CosimBackend`]: owns the `MetalSimulator`
+/// (pipelines, queue, device), the design state buffer, the per-edge schedule
+/// storage, and every GPU IO buffer. `run_edges`/`profile_kernels` forward to
+/// the unchanged `MetalSimulator::encode_and_commit_gpu_batch` /
+/// `profile_gpu_kernels` using these owned fields, so the GPU-encoding logic is
+/// byte-for-byte unchanged from the pre-seam call site. Fields are
+/// module-visible so the cosim loop can read the IO buffers directly
+/// (`flash_state_buffer.in_reset` writes, `--check-with-cpu` state reads).
+struct MetalBackend {
+    sim: MetalSimulator,
+    /// Set once by `init_schedule`; `None` until then.
+    schedule: Option<ScheduleBuffers>,
+    state_size: usize,
+    num_blocks: usize,
+    num_major_stages: usize,
+    arrival_state_offset: u32,
+    // Design state + program.
+    states_buffer: metal::Buffer,
+    blocks_start_buffer: metal::Buffer,
+    blocks_data_buffer: metal::Buffer,
+    event_buffer_metal: metal::Buffer,
+    sram_data_buffer: metal::Buffer,
+    sram_xmask_buffer: metal::Buffer,
+    timing_constraints_buffer: Option<metal::Buffer>,
+    // GPU peripheral IO buffers.
+    flash_state_buffer: metal::Buffer,
+    flash_din_params_buffer: metal::Buffer,
+    flash_model_params_buffer: metal::Buffer,
+    flash_data_buffer: metal::Buffer,
+    uart_state_buffer: metal::Buffer,
+    uart_params_buffer: metal::Buffer,
+    uart_channel_buffer: metal::Buffer,
+    wb_trace_params_buffer: metal::Buffer,
+    wb_trace_channel_buffer: metal::Buffer,
+    bus_trace_params_buffer: metal::Buffer,
+    bus_trace_channel_buffer: metal::Buffer,
+}
+
+impl MetalBackend {
+    /// Borrow the schedule storage, asserting `init_schedule` has run.
+    #[inline]
+    fn schedule(&self) -> &ScheduleBuffers {
+        self.schedule
+            .as_ref()
+            .expect("MetalBackend::init_schedule must be called before use")
+    }
+
+    /// Metal-only GPU kernel profiling (forwards to the simulator). Not part
+    /// of `CosimBackend` — a CPU backend has no GPU kernels to profile.
+    fn profile_kernels(&self, num_ticks: usize) {
+        self.sim.profile_gpu_kernels(
+            num_ticks,
+            self.num_blocks,
+            self.num_major_stages,
+            self.state_size,
+            &self.blocks_start_buffer,
+            &self.blocks_data_buffer,
+            &self.sram_data_buffer,
+            &self.states_buffer,
+            &self.event_buffer_metal,
+            self.schedule(),
+            &self.flash_state_buffer,
+            &self.flash_din_params_buffer,
+            &self.flash_model_params_buffer,
+            &self.flash_data_buffer,
+            &self.uart_state_buffer,
+            &self.uart_params_buffer,
+            &self.uart_channel_buffer,
+            &self.wb_trace_channel_buffer,
+            &self.wb_trace_params_buffer,
+            &self.bus_trace_channel_buffer,
+            &self.bus_trace_params_buffer,
+            &self.sram_xmask_buffer,
+            self.timing_constraints_buffer.as_ref(),
+        );
+    }
+}
+
+impl CosimBackend for MetalBackend {
+    fn init_schedule(
+        &mut self,
+        per_edge_ops: Vec<Vec<BitOp>>,
+        state_size: u32,
+        xmask_state_offset: u32,
+        gcd_ps: u64,
+    ) {
+        let device = &self.sim.device;
+        let mut edge_buffers = Vec::with_capacity(per_edge_ops.len());
+        let mut edge_ops_lens = Vec::with_capacity(per_edge_ops.len());
+        for ops in &per_edge_ops {
+            let len = ops.len();
+            let ops_buf = create_ops_buffer(device, ops);
+            // `xmask_state_offset` is reg_io_state_size when xprop is on and 0
+            // otherwise — the sentinel state_prep uses to decide whether to
+            // clear each driven bit's X-mask (driven ⇒ known, #95 ph3).
+            let params =
+                create_prep_params_buffer(device, state_size, len as u32, 0, 0, xmask_state_offset);
+            edge_buffers.push((params, ops_buf));
+            edge_ops_lens.push(len);
+        }
+        self.schedule = Some(ScheduleBuffers {
+            edge_buffers,
+            edge_ops_lens,
+            gcd_ps,
+        });
+    }
+
+    #[inline]
+    fn edge_ops_mut(&mut self, edge_idx: usize) -> &mut [BitOp] {
+        self.schedule().edge_ops_mut(edge_idx)
+    }
+
+    #[inline]
+    fn edge_ops(&self, edge_idx: usize) -> &[BitOp] {
+        self.schedule().edge_ops(edge_idx)
+    }
+
+    #[inline]
+    fn edges_per_period(&self) -> usize {
+        self.schedule().edge_buffers.len()
+    }
+
+    #[inline]
+    fn gcd_ps(&self) -> u64 {
+        self.schedule().gcd_ps
+    }
+
+    fn run_edges(
+        &self,
+        batch: usize,
+        schedule_offset: usize,
+        vcd_ring: Option<&metal::Buffer>,
+    ) -> u64 {
+        self.sim.encode_and_commit_gpu_batch(
+            batch,
+            self.num_blocks,
+            self.num_major_stages,
+            self.state_size,
+            &self.blocks_start_buffer,
+            &self.blocks_data_buffer,
+            &self.sram_data_buffer,
+            &self.states_buffer,
+            &self.event_buffer_metal,
+            self.schedule(),
+            schedule_offset,
+            &self.flash_state_buffer,
+            &self.flash_din_params_buffer,
+            &self.flash_model_params_buffer,
+            &self.flash_data_buffer,
+            &self.uart_state_buffer,
+            &self.uart_params_buffer,
+            &self.uart_channel_buffer,
+            &self.wb_trace_channel_buffer,
+            &self.wb_trace_params_buffer,
+            &self.bus_trace_channel_buffer,
+            &self.bus_trace_params_buffer,
+            &self.sram_xmask_buffer,
+            self.timing_constraints_buffer.as_ref(),
+            self.arrival_state_offset,
+            vcd_ring,
+        )
+    }
+
+    #[inline]
+    fn wait(&self, token: u64) {
+        self.sim.spin_wait(token);
+    }
+}
+
+// ── Free-function ops patchers ─────────────────────────────────────────────
+//
+// These mutate per-edge ops between command-buffer completions, through the
+// backend's `edge_ops_mut` seam (zero-copy over shared GPU memory on Metal).
+// They take the backend by shared ref and are called sequentially before
+// `run_edges`, so no long-lived borrow is held — this is the "closure-borrow"
+// resolution noted in ADR 0017. `&dyn CosimBackend` keeps them backend-neutral
+// for Phase 1.
+
+/// Set the reset input bit's value in every edge's ops.
+fn patch_reset_in_ops(backend: &mut dyn CosimBackend, reset_pos: u32, reset_val: u8) {
+    for sched_idx in 0..backend.edges_per_period() {
+        for op in backend.edge_ops_mut(sched_idx).iter_mut() {
+            if op.position == reset_pos {
+                op.value = reset_val as u32;
+            }
+        }
+    }
+}
+
+/// Sync model-driven input bits into every edge's ops (called when a
+/// peripheral model's state changes).
+fn patch_model_driven_in_ops(
+    backend: &mut dyn CosimBackend,
+    overrides: &crate::sim::models::ModelOverrides,
+) {
+    if overrides.is_empty() {
+        return;
+    }
+    for sched_idx in 0..backend.edges_per_period() {
+        for op in backend.edge_ops_mut(sched_idx).iter_mut() {
+            if let Some(&val) = overrides.get(&op.position) {
+                op.value = val as u32;
+            }
+        }
+    }
+}
+
+/// Tracks a clock domain whose input pin is driven by a peripheral model
+/// (e.g. JTAG TCK), so model transitions can be reflected into the schedule's
+/// pre-computed posedge/negedge flags.
+struct ModelDrivenClockState {
+    clock_input_pos: u32,
+    posedge_flag_positions: Vec<u32>,
+    negedge_flag_positions: Vec<u32>,
+    prev_value: u8,
+}
+
+/// After model overrides are applied, patch the edge flags in the current
+/// tick's ops to reflect the model's actual clock transitions.
+fn patch_model_clock_edges(
+    backend: &mut dyn CosimBackend,
+    clocks: &mut [ModelDrivenClockState],
+    overrides: &crate::sim::models::ModelOverrides,
+    sched_offset: usize,
+) {
+    if clocks.is_empty() {
+        return;
+    }
+    let sched_idx = sched_offset % backend.edges_per_period();
+    let ops = backend.edge_ops_mut(sched_idx);
+
+    for clock in clocks.iter_mut() {
+        let new_val = overrides
+            .get(&clock.clock_input_pos)
+            .copied()
+            .unwrap_or(clock.prev_value);
+        let rising = clock.prev_value == 0 && new_val == 1;
+        let falling = clock.prev_value == 1 && new_val == 0;
+        clock.prev_value = new_val;
+
+        for op in ops.iter_mut() {
+            for &pos in &clock.posedge_flag_positions {
+                if op.position == pos {
+                    op.value = if rising { 1 } else { 0 };
+                }
+            }
+            for &pos in &clock.negedge_flag_positions {
+                if op.position == pos {
+                    op.value = if falling { 1 } else { 0 };
+                }
+            }
+        }
+    }
 }
 
 // ── Public Entry Point ───────────────────────────────────────────────────────
@@ -2858,12 +3181,14 @@ pub fn run_cosim(
     // posedge_flag=1. For single-domain this gives 2 edges per full cycle
     // (one falling, one rising); for multi-domain, schedule_len edges per
     // LCM period at GCD granularity.
-    let schedule_buffers = {
-        let mut edge_buffers = Vec::with_capacity(edges_per_period);
-        let mut edge_ops_lens = Vec::with_capacity(edges_per_period);
-
-        for edge_idx in 0..edges_per_period {
-            let ops = scheduler.build_edge_ops(
+    // Backend-agnostic schedule description: one ops vector per scheduler
+    // edge. Handed to the backend *once* via `init_schedule` (after backend
+    // construction below); the backend materialises its native per-edge
+    // buffers and owns them. The orchestration keeps only the scalars
+    // (`edges_per_period`, `scheduler.gcd_ps`).
+    let per_edge_ops: Vec<Vec<BitOp>> = (0..edges_per_period)
+        .map(|edge_idx| {
+            scheduler.build_edge_ops(
                 edge_idx,
                 &gpio_map,
                 reset_gpio,
@@ -2871,36 +3196,14 @@ pub fn run_cosim(
                 &config.constant_inputs,
                 &config.constant_ports,
                 &model_driven_positions,
-            );
-            let len = ops.len();
-            let ops_buf = create_ops_buffer(&simulator.device, &ops);
-            // `xprop_state_offset` is reg_io_state_size when xprop is on and 0
-            // otherwise — exactly the sentinel state_prep wants to decide
-            // whether to clear each driven bit's X-mask (driven ⇒ known, #95 ph3).
-            let params = create_prep_params_buffer(
-                &simulator.device,
-                state_size as u32,
-                len as u32,
-                0,
-                0,
-                script.xprop_state_offset,
-            );
-            edge_buffers.push((params, ops_buf));
-            edge_ops_lens.push(len);
-        }
-
-        clilog::info!(
-            "Multi-clock schedule: {} edges per LCM period (gcd={}ps)",
-            edges_per_period,
-            scheduler.gcd_ps
-        );
-
-        ScheduleBuffers {
-            edge_buffers,
-            edge_ops_lens,
-            gcd_ps: scheduler.gcd_ps,
-        }
-    };
+            )
+        })
+        .collect();
+    clilog::info!(
+        "Multi-clock schedule: {} edges per LCM period (gcd={}ps)",
+        edges_per_period,
+        scheduler.gcd_ps
+    );
 
     // Edge-granularity conversion: config fields `reset_cycles` and
     // `num_cycles` are user-facing in sys_clk cycles, but internal counters
@@ -2917,7 +3220,7 @@ pub fn run_cosim(
     // every half-period and offset) and this is >2. It is the user-cycles →
     // internal-tick conversion factor (the codebase calls GCD ticks "edges",
     // cf. `--max-clock-edges`).
-    let sched_ticks_per_sys_clk_cycle = clock_period_ps / schedule_buffers.gcd_ps;
+    let sched_ticks_per_sys_clk_cycle = clock_period_ps / scheduler.gcd_ps;
     let reset_edges = config.reset_cycles * sched_ticks_per_sys_clk_cycle as usize;
     // CLI --max-clock-edges is already in edges; config `num_cycles` is in
     // sys_clk cycles and gets multiplied here.
@@ -3182,35 +3485,52 @@ pub fn run_cosim(
 
     clilog::finish!(timer_prep);
 
+    // ── Assemble the Metal backend ───────────────────────────────────────
+    //
+    // Move the simulator, design state/program, and every GPU IO buffer into
+    // the backend, which now owns them (ADR 0017, Amendment 2026-06-07). The
+    // schedule storage is materialised once, here, via `init_schedule` from the
+    // backend-agnostic `per_edge_ops` description built above. After this point
+    // the cosim loop drives the design through `backend` rather than the loose
+    // locals.
+    let mut backend = MetalBackend {
+        sim: simulator,
+        schedule: None,
+        state_size,
+        num_blocks,
+        num_major_stages,
+        arrival_state_offset,
+        states_buffer,
+        blocks_start_buffer,
+        blocks_data_buffer,
+        event_buffer_metal,
+        sram_data_buffer,
+        sram_xmask_buffer,
+        timing_constraints_buffer,
+        flash_state_buffer,
+        flash_din_params_buffer,
+        flash_model_params_buffer,
+        flash_data_buffer,
+        uart_state_buffer,
+        uart_params_buffer,
+        uart_channel_buffer,
+        wb_trace_params_buffer,
+        wb_trace_channel_buffer,
+        bus_trace_params_buffer,
+        bus_trace_channel_buffer,
+    };
+    backend.init_schedule(
+        per_edge_ops,
+        state_size as u32,
+        script.xprop_state_offset,
+        scheduler.gcd_ps,
+    );
+
     // ── GPU Kernel Profiling (optional) ──────────────────────────────────
 
     if opts.gpu_profile {
         let profile_ticks = opts.max_clock_edges.unwrap_or(1000).min(5000);
-        simulator.profile_gpu_kernels(
-            profile_ticks,
-            num_blocks,
-            num_major_stages,
-            state_size,
-            &blocks_start_buffer,
-            &blocks_data_buffer,
-            &sram_data_buffer,
-            &states_buffer,
-            &event_buffer_metal,
-            &schedule_buffers,
-            &flash_state_buffer,
-            &flash_din_params_buffer,
-            &flash_model_params_buffer,
-            &flash_data_buffer,
-            &uart_state_buffer,
-            &uart_params_buffer,
-            &uart_channel_buffer,
-            &wb_trace_channel_buffer,
-            &wb_trace_params_buffer,
-            &bus_trace_channel_buffer,
-            &bus_trace_params_buffer,
-            &sram_xmask_buffer,
-            timing_constraints_buffer.as_ref(),
-        );
+        backend.profile_kernels(profile_ticks);
 
         // Clean up event buffer
         unsafe {
@@ -3309,7 +3629,7 @@ pub fn run_cosim(
     let vcd_ring_buffer: Option<metal::Buffer> =
         if stimulus_vcd_state.is_some() || output_vcd_state.is_some() {
             let ring_bytes = BATCH_SIZE * 2 * state_size * std::mem::size_of::<u32>();
-            let buf = simulator.device.new_buffer(
+            let buf = backend.sim.device.new_buffer(
                 ring_bytes as u64,
                 MTLResourceOptions::StorageModeShared,
             );
@@ -3434,45 +3754,15 @@ pub fn run_cosim(
     let timer_sim = clilog::stimer!("simulation");
     let sim_start = std::time::Instant::now();
 
-    // Helper: update reset value in all schedule ops buffers
-    let update_reset_in_ops = |reset_val: u8| {
-        let reset_pos = gpio_map.input_bits[&reset_gpio];
-        for sched_idx in 0..schedule_buffers.edge_buffers.len() {
-            for op in schedule_buffers.edge_ops_mut(sched_idx).iter_mut() {
-                if op.position == reset_pos {
-                    op.value = reset_val as u32;
-                }
-            }
-        }
-    };
-
-    // Helper: sync model-driven input bits into all per-edge ops buffers.
-    // Called whenever a peripheral model's state changes (e.g. after a
-    // queued action is applied).
-    let update_model_driven_in_ops = |overrides: &crate::sim::models::ModelOverrides| {
-        if overrides.is_empty() {
-            return;
-        }
-        for sched_idx in 0..schedule_buffers.edge_buffers.len() {
-            for op in schedule_buffers.edge_ops_mut(sched_idx).iter_mut() {
-                if let Some(&val) = overrides.get(&op.position) {
-                    op.value = val as u32;
-                }
-            }
-        }
-    };
+    // Reset input bit position, looked up once for the per-batch reset patch.
+    let reset_pos = gpio_map.input_bits[&reset_gpio];
 
     // Model-driven clock edge tracking: when a peripheral model drives
     // a pin that is also a clock domain's input (e.g. JTAG TCK), the
     // scheduler's pre-computed edge flags don't match the model's actual
-    // transitions. We detect model-driven clock transitions and patch
-    // the edge flags in the current tick's ops buffer.
-    struct ModelDrivenClockState {
-        clock_input_pos: u32,
-        posedge_flag_positions: Vec<u32>,
-        negedge_flag_positions: Vec<u32>,
-        prev_value: u8,
-    }
+    // transitions. The `patch_model_clock_edges` free function detects
+    // model-driven clock transitions and patches the edge flags in the
+    // current tick's ops.
     let mut model_driven_clocks: Vec<ModelDrivenClockState> = Vec::new();
     {
         let model_pos_set: std::collections::HashSet<u32> =
@@ -3496,49 +3786,12 @@ pub fn run_cosim(
         }
     }
 
-    // Helper: after model overrides are applied, patch edge flags in
-    // the current tick's ops buffer to reflect actual clock transitions.
-    let patch_model_clock_edges = |
-        clocks: &mut [ModelDrivenClockState],
-        overrides: &crate::sim::models::ModelOverrides,
-        sched_offset: usize,
-    | {
-        if clocks.is_empty() {
-            return;
-        }
-        let sched_idx = sched_offset % schedule_buffers.edge_buffers.len();
-        let ops = schedule_buffers.edge_ops_mut(sched_idx);
-
-        for clock in clocks.iter_mut() {
-            let new_val = overrides
-                .get(&clock.clock_input_pos)
-                .copied()
-                .unwrap_or(clock.prev_value);
-            let rising = clock.prev_value == 0 && new_val == 1;
-            let falling = clock.prev_value == 1 && new_val == 0;
-            clock.prev_value = new_val;
-
-            for op in ops.iter_mut() {
-                for &pos in &clock.posedge_flag_positions {
-                    if op.position == pos {
-                        op.value = if rising { 1 } else { 0 };
-                    }
-                }
-                for &pos in &clock.negedge_flag_positions {
-                    if op.position == pos {
-                        op.value = if falling { 1 } else { 0 };
-                    }
-                }
-            }
-        }
-    };
-
     // Track schedule position across batches
     let mut schedule_offset: usize = 0;
 
     // Verify flash state hasn't been corrupted before main loop
     unsafe {
-        let fs = &*(flash_state_buffer.contents() as *const FlashState);
+        let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
         clilog::info!(
             "FlashState before main loop: d_i=0x{:02X}, data_width={}, prev_csn={}, in_reset={}",
             fs.d_i,
@@ -3617,7 +3870,7 @@ pub fn run_cosim(
         for model in &models {
             model.contribute_overrides(&mut overrides);
         }
-        update_model_driven_in_ops(&overrides);
+        patch_model_driven_in_ops(&mut backend, &overrides);
         // Seed initial clock values (no edge flags — no transition yet).
         for clock in &mut model_driven_clocks {
             if let Some(&val) = overrides.get(&clock.clock_input_pos) {
@@ -3671,8 +3924,9 @@ pub fn run_cosim(
             }
 
             if any_change {
-                update_model_driven_in_ops(&overrides);
+                patch_model_driven_in_ops(&mut backend, &overrides);
                 patch_model_clock_edges(
+                    &mut backend,
                     &mut model_driven_clocks,
                     &overrides,
                     schedule_offset,
@@ -3736,11 +3990,11 @@ pub fn run_cosim(
         } else {
             reset_val_inactive
         };
-        update_reset_in_ops(current_reset_val);
+        patch_reset_in_ops(&mut backend, reset_pos, current_reset_val);
 
         // Update flash_state.in_reset on GPU
         unsafe {
-            let fs = &mut *(flash_state_buffer.contents() as *mut FlashState);
+            let fs = &mut *(backend.flash_state_buffer.contents() as *mut FlashState);
             fs.in_reset = if in_reset { 1 } else { 0 };
         }
 
@@ -3748,23 +4002,23 @@ pub fn run_cosim(
         let saved_flash_d_i: u8;
         if opts.check_with_cpu && tick < cpu_check_max_edges && batch == 1 {
             let gpu_states: &[u32] = unsafe {
-                std::slice::from_raw_parts(states_buffer.contents() as *const u32, 2 * state_size)
+                std::slice::from_raw_parts(backend.states_buffer.contents() as *const u32, 2 * state_size)
             };
             cpu_states.copy_from_slice(gpu_states);
             let gpu_sram: &[u32] = unsafe {
                 std::slice::from_raw_parts(
-                    sram_data_buffer.contents() as *const u32,
+                    backend.sram_data_buffer.contents() as *const u32,
                     script.sram_storage_size as usize,
                 )
             };
             cpu_sram.copy_from_slice(gpu_sram);
             // Save flash d_i before GPU modifies it (apply_flash_din reads this)
             saved_flash_d_i = unsafe {
-                let fs = &*(flash_state_buffer.contents() as *const FlashState);
+                let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
                 if tick == 0 {
                     // Dump raw bytes at flash state location
                     let raw = std::slice::from_raw_parts(
-                        flash_state_buffer.contents() as *const u8,
+                        backend.flash_state_buffer.contents() as *const u8,
                         std::mem::size_of::<FlashState>(),
                     );
                     eprintln!("  FlashState raw bytes (tick 0): {:02X?}", raw);
@@ -3797,41 +4051,14 @@ pub fn run_cosim(
 
         // Encode and commit GPU batch
         let t_encode = std::time::Instant::now();
-        let batch_done = simulator.encode_and_commit_gpu_batch(
-            batch,
-            num_blocks,
-            num_major_stages,
-            state_size,
-            &blocks_start_buffer,
-            &blocks_data_buffer,
-            &sram_data_buffer,
-            &states_buffer,
-            &event_buffer_metal,
-            &schedule_buffers,
-            schedule_offset,
-            &flash_state_buffer,
-            &flash_din_params_buffer,
-            &flash_model_params_buffer,
-            &flash_data_buffer,
-            &uart_state_buffer,
-            &uart_params_buffer,
-            &uart_channel_buffer,
-            &wb_trace_channel_buffer,
-            &wb_trace_params_buffer,
-            &bus_trace_channel_buffer,
-            &bus_trace_params_buffer,
-            &sram_xmask_buffer,
-            timing_constraints_buffer.as_ref(),
-            arrival_state_offset,
-            vcd_ring_buffer.as_ref(),
-        );
+        let batch_done = backend.run_edges(batch, schedule_offset, vcd_ring_buffer.as_ref());
         let batch_schedule_start = schedule_offset;
-        schedule_offset = (schedule_offset + batch) % schedule_buffers.edge_buffers.len();
+        schedule_offset = (schedule_offset + batch) % backend.edges_per_period();
         prof_batch_encode += t_encode.elapsed().as_nanos() as u64;
 
         // Wait for GPU batch to complete
         let t_wait = std::time::Instant::now();
-        simulator.spin_wait(batch_done);
+        backend.wait(batch_done);
         prof_gpu_wait += t_wait.elapsed().as_nanos() as u64;
 
         // ── Drain VCD ring buffer (stimulus + timing) ──────────────────────
@@ -3856,7 +4083,7 @@ pub fn run_cosim(
                 if let Some((ref mut writer, ref mapping, ref mut prev_values)) =
                     stimulus_vcd_state
                 {
-                    let t_edge = edge_tick as u64 * schedule_buffers.gcd_ps;
+                    let t_edge = edge_tick as u64 * backend.gcd_ps();
                     writer.timestamp(t_edge).unwrap();
                     for (sig_idx, &(pos, vid, _is_clock)) in mapping.signals.iter().enumerate() {
                         let val = ((input_state[(pos >> 5) as usize] >> (pos & 31)) & 1) as u8;
@@ -3882,7 +4109,7 @@ pub fn run_cosim(
                     // Draw from each domain's PRNG at every tick to keep
                     // streams stable regardless of which domain fires.
                     let sched_idx = (batch_schedule_start + edge_in_batch)
-                        % schedule_buffers.edge_buffers.len();
+                        % backend.edges_per_period();
                     let mut jitter_displacement: i64 = 0;
                     if jitter_active {
                         use rand::Rng;
@@ -3975,11 +4202,11 @@ pub fn run_cosim(
         if dff_dump_active && tick >= reset_edges {
             use std::io::Write;
             let input_state: &[u32] = unsafe {
-                std::slice::from_raw_parts(states_buffer.contents() as *const u32, state_size)
+                std::slice::from_raw_parts(backend.states_buffer.contents() as *const u32, state_size)
             };
             let output_state_dff: &[u32] = unsafe {
                 std::slice::from_raw_parts(
-                    (states_buffer.contents() as *const u32).add(state_size),
+                    (backend.states_buffer.contents() as *const u32).add(state_size),
                     state_size,
                 )
             };
@@ -4049,19 +4276,19 @@ pub fn run_cosim(
         if trace_ticks > 0 && tick + batch <= reset_edges + trace_ticks as usize {
             let output_state: &[u32] = unsafe {
                 std::slice::from_raw_parts(
-                    (states_buffer.contents() as *const u32).add(state_size),
+                    (backend.states_buffer.contents() as *const u32).add(state_size),
                     state_size,
                 )
             };
             let fmp =
-                unsafe { &*(flash_model_params_buffer.contents() as *const FlashModelParams) };
+                unsafe { &*(backend.flash_model_params_buffer.contents() as *const FlashModelParams) };
             let flash_clk_pos = fmp.clk_out_pos;
             let flash_csn_pos = fmp.csn_out_pos;
             let flash_clk =
                 (output_state[(flash_clk_pos >> 5) as usize] >> (flash_clk_pos & 31)) & 1;
             let flash_csn =
                 (output_state[(flash_csn_pos >> 5) as usize] >> (flash_csn_pos & 31)) & 1;
-            let fs = unsafe { &*(flash_state_buffer.contents() as *const FlashState) };
+            let fs = unsafe { &*(backend.flash_state_buffer.contents() as *const FlashState) };
             clilog::debug!("FLASH_TRACE tick {}: clk={} csn={} d_i=0x{:02X} cmd=0x{:02X} addr=0x{:06X} in_reset={}",
                 tick + batch, flash_clk, flash_csn, fs.d_i, fs.command, fs.addr, fs.in_reset);
         }
@@ -4070,9 +4297,9 @@ pub fn run_cosim(
         if opts.check_with_cpu && tick < cpu_check_max_edges && batch == 1 {
             // CPU state_prep: copy output → input, apply edge ops at the
             // current schedule position.
-            let cpu_sched_idx = schedule_offset % schedule_buffers.edge_buffers.len();
+            let cpu_sched_idx = schedule_offset % backend.edges_per_period();
             cpu_states.copy_within(state_size..2 * state_size, 0);
-            let cpu_edge_ops = schedule_buffers.edge_ops(cpu_sched_idx);
+            let cpu_edge_ops = backend.edge_ops(cpu_sched_idx);
             for op in cpu_edge_ops {
                 let word_idx = op.position as usize >> 5;
                 let bit_mask = 1u32 << (op.position & 31);
@@ -4085,7 +4312,7 @@ pub fn run_cosim(
 
             // CPU apply_flash_din
             {
-                let p = unsafe { &*(flash_din_params_buffer.contents() as *const FlashDinParams) };
+                let p = unsafe { &*(backend.flash_din_params_buffer.contents() as *const FlashDinParams) };
                 if tick == 0 {
                     eprintln!(
                         "  CPU flash_din: has_flash={}, d_i=0x{:02X}, d_in_pos={:?}",
@@ -4176,7 +4403,7 @@ pub fn run_cosim(
 
             // Compare GPU input with CPU input (should match after state_prep+flash_din)
             let gpu_states: &[u32] = unsafe {
-                std::slice::from_raw_parts(states_buffer.contents() as *const u32, 2 * state_size)
+                std::slice::from_raw_parts(backend.states_buffer.contents() as *const u32, 2 * state_size)
             };
             let mut input_mismatches = 0;
             for i in 0..state_size {
@@ -4227,7 +4454,7 @@ pub fn run_cosim(
             // Also compare SRAM
             let gpu_sram: &[u32] = unsafe {
                 std::slice::from_raw_parts(
-                    sram_data_buffer.contents() as *const u32,
+                    backend.sram_data_buffer.contents() as *const u32,
                     script.sram_storage_size as usize,
                 )
             };
@@ -4289,7 +4516,7 @@ pub fn run_cosim(
         // Drain UART channels (CPU reads decoded bytes from GPU ring buffers)
         let t_drain = std::time::Instant::now();
         unsafe {
-            let base = uart_channel_buffer.contents() as *const UartChannel;
+            let base = backend.uart_channel_buffer.contents() as *const UartChannel;
             for i in 0..n_uarts {
                 let channel = &*base.add(i);
                 let name = &uart_names[i];
@@ -4317,9 +4544,9 @@ pub fn run_cosim(
         }
         // Drain WB trace channel
         unsafe {
-            let ch = &*(wb_trace_channel_buffer.contents() as *const WbTraceChannel);
+            let ch = &*(backend.wb_trace_channel_buffer.contents() as *const WbTraceChannel);
             let entries_ptr =
-                (wb_trace_channel_buffer.contents() as *const u8).add(16) as *const WbTraceEntry;
+                (backend.wb_trace_channel_buffer.contents() as *const u8).add(16) as *const WbTraceEntry;
             while wb_trace_read_head < ch.write_head {
                 let idx = (wb_trace_read_head % ch.capacity) as usize;
                 let e = &*entries_ptr.add(idx);
@@ -4354,8 +4581,8 @@ pub fn run_cosim(
         if !bus_lanes.is_empty() {
             use crate::sim::models::bus_trace::RawBeat;
             unsafe {
-                let ch = &*(bus_trace_channel_buffer.contents() as *const BusTraceChannel);
-                let entries_ptr = (bus_trace_channel_buffer.contents() as *const u8)
+                let ch = &*(backend.bus_trace_channel_buffer.contents() as *const BusTraceChannel);
+                let entries_ptr = (backend.bus_trace_channel_buffer.contents() as *const u8)
                     .add(std::mem::size_of::<BusTraceChannel>())
                     as *const BusTraceEntry;
                 while bus_trace_read_head < ch.write_head {
@@ -4396,7 +4623,7 @@ pub fn run_cosim(
         if let Some(dumper) = sram_dumper.as_mut() {
             let storage: &[u32] = unsafe {
                 std::slice::from_raw_parts(
-                    sram_data_buffer.contents() as *const u32,
+                    backend.sram_data_buffer.contents() as *const u32,
                     script.sram_storage_size as usize,
                 )
             };
@@ -4406,10 +4633,10 @@ pub fn run_cosim(
         // Deep diagnostics: SRAM activity + flash transaction tracking
         if deep_diag && tick > reset_edges && batch == 1 {
             unsafe {
-                let fs = &*(flash_state_buffer.contents() as *const FlashState);
-                let fmp = &*(flash_model_params_buffer.contents() as *const FlashModelParams);
+                let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
+                let fmp = &*(backend.flash_model_params_buffer.contents() as *const FlashModelParams);
                 let st = std::slice::from_raw_parts(
-                    states_buffer.contents() as *const u32,
+                    backend.states_buffer.contents() as *const u32,
                     2 * state_size,
                 );
                 let read_out_bit = |pos: u32| -> u32 {
@@ -4445,7 +4672,7 @@ pub fn run_cosim(
                 // Check SRAM activity every 100 ticks
                 if tick % 100 == 0 {
                     let sram = std::slice::from_raw_parts(
-                        sram_data_buffer.contents() as *const u32,
+                        backend.sram_data_buffer.contents() as *const u32,
                         script.sram_storage_size as usize,
                     );
                     let nonzero = sram.iter().filter(|&&w| w != 0).count();
@@ -4464,7 +4691,7 @@ pub fn run_cosim(
         if trace_ticks > 0 && tick <= reset_edges + trace_ticks && tick > reset_edges {
             unsafe {
                 let st = std::slice::from_raw_parts(
-                    states_buffer.contents() as *const u32,
+                    backend.states_buffer.contents() as *const u32,
                     2 * state_size,
                 );
                 let read_out_bit = |pos: u32| -> u32 {
@@ -4477,9 +4704,9 @@ pub fn run_cosim(
                     let bit_idx = pos & 31;
                     (st[word_idx] >> bit_idx) & 1
                 };
-                let fmp = &*(flash_model_params_buffer.contents() as *const FlashModelParams);
-                let fdp = &*(flash_din_params_buffer.contents() as *const FlashDinParams);
-                let fs = &*(flash_state_buffer.contents() as *const FlashState);
+                let fmp = &*(backend.flash_model_params_buffer.contents() as *const FlashModelParams);
+                let fdp = &*(backend.flash_din_params_buffer.contents() as *const FlashDinParams);
+                let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
                 let clk_val = read_out_bit(fmp.clk_out_pos);
                 let csn_val = read_out_bit(fmp.csn_out_pos);
                 let mut d_out_vals = [0u32; 4];
@@ -4512,17 +4739,17 @@ pub fn run_cosim(
             let us_per_edge = elapsed.as_micros() as f64 / tick as f64;
             // Read first UART's TX bit and decoder state for diagnostics
             let (uart_tx_val, uart_dec_state, uart_dec_cycle) = unsafe {
-                let up = &*(uart_params_buffer.contents() as *const UartParams);
+                let up = &*(backend.uart_params_buffer.contents() as *const UartParams);
                 if up.n_uarts > 0 {
                     let st = std::slice::from_raw_parts(
-                        states_buffer.contents() as *const u32,
+                        backend.states_buffer.contents() as *const u32,
                         2 * state_size,
                     );
                     let tx_pos = up.channels[0].tx_out_pos;
                     let tx_word = state_size + (tx_pos as usize >> 5);
                     let tx_bit = tx_pos & 31;
                     let tx_val = (st[tx_word] >> tx_bit) & 1;
-                    let us = &*(uart_state_buffer.contents() as *const UartDecoderState);
+                    let us = &*(backend.uart_state_buffer.contents() as *const UartDecoderState);
                     (tx_val, us.state, us.current_cycle)
                 } else {
                     (0, 0, 0)
@@ -4540,7 +4767,7 @@ pub fn run_cosim(
             if post_reset_state_snapshot.is_none() {
                 let st = unsafe {
                     std::slice::from_raw_parts(
-                        states_buffer.contents() as *const u32,
+                        backend.states_buffer.contents() as *const u32,
                         2 * state_size,
                     )
                 };
@@ -4618,7 +4845,7 @@ pub fn run_cosim(
     // ── State buffer diagnostics ─────────────────────────────────────────
 
     unsafe {
-        let st = std::slice::from_raw_parts(states_buffer.contents() as *const u32, 2 * state_size);
+        let st = std::slice::from_raw_parts(backend.states_buffer.contents() as *const u32, 2 * state_size);
         let input_state = &st[..state_size];
         let output_state = &st[state_size..2 * state_size];
         let in_nonzero = input_state.iter().filter(|&&w| w != 0).count();
@@ -4669,7 +4896,7 @@ pub fn run_cosim(
     // ── Check GPU flash state for errors ─────────────────────────────────
 
     let last_error_cmd = unsafe {
-        let fs = &*(flash_state_buffer.contents() as *const FlashState);
+        let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
         fs.last_error_cmd
     };
     if last_error_cmd != 0 {
@@ -4758,7 +4985,7 @@ pub fn run_cosim(
 
     // Print flash model stats (GPU-side state)
     if config.flash.is_some() {
-        let fs = unsafe { &*(flash_state_buffer.contents() as *const FlashState) };
+        let fs = unsafe { &*(backend.flash_state_buffer.contents() as *const FlashState) };
         println!(
             "GPU Flash model: command=0x{:02X}, byte_count={}, addr=0x{:06X}, error_cmd=0x{:X}",
             fs.command, fs.byte_count, fs.addr, fs.last_error_cmd
