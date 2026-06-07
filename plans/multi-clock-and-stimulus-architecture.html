@@ -257,6 +257,17 @@ this doc and should not be confused with the timing-IR phase numbering in
 <tr><td><strong>MC.6+</strong></td><td>Speculation staircase, AOT trace compilation, profile-guided kernel specialization</td><td>Demand-driven; deferred until measurement shows residual sync overhead after MC.4</td></tr>
 </tbody></table>
 </div>
+<p><strong>MC.3/MC.4 trigger is now measured (2026-06-07).</strong> Instrumenting the cosim
+loop's batch utilisation (see ADR 0017 amendment, <em>Measured batch
+utilisation</em>) shows GPU-peripheral designs run 100% batched, but
+<code>jtag_minimal</code> — CPU-side JTAG replay — emits <strong>102,310 single-edge command
+buffers out of 106,117</strong> (96% of all submits; 2.6% of edges). Those per-edge
+CPU↔GPU round-trips dominate its wall-clock: this is the MC.3
+"round-trip measured as the bottleneck" trigger. The structural fix is
+MC.4 — the fast <code>sys_clk</code> island runs ahead/batched while only the slow
+model-driven <code>tck</code> boundary needs per-edge handover — which is why MC.4
+depends on the MC.1 island partitioner. Both are orthogonal to the #105
+backend-portability seam (which preserves today's batch model unchanged).</p>
 <h3 id="mc1--static-island-partitioner"><a class="header" href="#mc1--static-island-partitioner">MC.1 — Static island partitioner</a></h3>
 <p>Walk the AIG; for each gate compute the set of clock domains its transitive
 fanin/fanout touches. Tag gates as <strong>island-internal</strong> (fanin and fanout both
