@@ -3535,6 +3535,12 @@ pub fn run_cosim(
     let mut prof_stimulus_vcd: u64 = 0;
     let mut prof_output_vcd: u64 = 0;
     let mut total_batches: u64 = 0;
+    // Batch-utilisation telemetry: how often the GPU-only batched fast path
+    // (batch>1) is exercised vs. forced single-edge dispatch. Informs the
+    // cosim-backend seam design (#105): edges run under batch=1 are the only
+    // ones that need a true per-edge CPU↔GPU handover.
+    let mut single_edge_batches: u64 = 0;
+    let mut max_batch_seen: usize = 0;
 
     // Per-tick tracing: run 1 tick at a time for first N ticks after reset
     let trace_ticks = if std::env::var("FLASH_TRACE").is_ok() {
@@ -4351,6 +4357,12 @@ pub fn run_cosim(
         prof_drain += t_drain.elapsed().as_nanos() as u64;
 
         total_batches += 1;
+        if batch == 1 {
+            single_edge_batches += 1;
+        }
+        if batch > max_batch_seen {
+            max_batch_seen = batch;
+        }
         tick += batch;
 
         // SRAM write dumper: snapshot per batch and accumulate
@@ -4537,6 +4549,19 @@ pub fn run_cosim(
     );
     println!();
     println!("  Total batches:                 {}", total_batches);
+    let total_edges = tick.max(1);
+    let batched_edges = total_edges.saturating_sub(single_edge_batches as usize);
+    let mean_batch = total_edges as f64 / total_batches.max(1) as f64;
+    println!(
+        "  Batch utilisation:             {}/{} edges batched ({:.1}%), \
+         {} single-edge commits, mean batch={:.1}, max batch={}",
+        batched_edges,
+        total_edges,
+        100.0 * batched_edges as f64 / total_edges as f64,
+        single_edge_batches,
+        mean_batch,
+        max_batch_seen,
+    );
 
     let sim_elapsed = sim_start.elapsed();
     clilog::finish!(timer_sim);

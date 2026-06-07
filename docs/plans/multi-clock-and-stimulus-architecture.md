@@ -114,6 +114,18 @@ this doc and should not be confused with the timing-IR phase numbering in
 | **MC.5** | Record-and-replay with divergence detection | Regression CI throughput becomes a release blocker |
 | **MC.6+** | Speculation staircase, AOT trace compilation, profile-guided kernel specialization | Demand-driven; deferred until measurement shows residual sync overhead after MC.4 |
 
+**MC.3/MC.4 trigger is now measured (2026-06-07).** Instrumenting the cosim
+loop's batch utilisation (see ADR 0017 amendment, *Measured batch
+utilisation*) shows GPU-peripheral designs run 100% batched, but
+`jtag_minimal` — CPU-side JTAG replay — emits **102,310 single-edge command
+buffers out of 106,117** (96% of all submits; 2.6% of edges). Those per-edge
+CPU↔GPU round-trips dominate its wall-clock: this is the MC.3
+"round-trip measured as the bottleneck" trigger. The structural fix is
+MC.4 — the fast `sys_clk` island runs ahead/batched while only the slow
+model-driven `tck` boundary needs per-edge handover — which is why MC.4
+depends on the MC.1 island partitioner. Both are orthogonal to the #105
+backend-portability seam (which preserves today's batch model unchanged).
+
 ### MC.1 — Static island partitioner
 
 Walk the AIG; for each gate compute the set of clock domains its transitive

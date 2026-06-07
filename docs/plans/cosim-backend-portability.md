@@ -69,6 +69,25 @@ Metal does — it does **not** need the `sim` command's cooperative
 single-launch + `grid.sync`, the one CUDA feature hardest to port. See ADR
 0017 amendment, fact (1).
 
+### Batch granularity (measured refinement, 2026-06-07)
+
+The trait above reads as single-edge, but instrumentation of the real
+fixtures shows Metal's **production path is batched**: designs with
+GPU-side peripherals (`dual_uart`, `apb_trace`, `xprop_cosim`) run **100%
+batched** (handover at `BATCH_SIZE`-edge boundaries), and even the
+CPU-side-replay `jtag_minimal` batches 97% of edges. A literal per-edge
+`simulate_edge` would regress Metal ~1000× on those designs.
+
+So `state_prep` + `simulate_edge` are realised as a **batch-granular**
+backend method — "run N consecutive scheduler edges, snapshotting each
+output slot to the ring buffer." Metal implements it with its existing
+GPU-peripheral batched loop (`encode_and_commit_gpu_batch`); `CpuBackend` /
+`Cuda`/`HipBackend` implement it as a per-edge loop with CPU peripherals
+(N collapses toward 1 until their IO kernels land in Phase 3). The
+`force_single_edge` batch-size decision stays in the orchestration, above
+the seam. Full data + reasoning: ADR 0017 amendment, *Measured batch
+utilisation*.
+
 ## Phases
 
 ### Phase 0 — Extract the seam (Metal-only refactor, zero behaviour change)
