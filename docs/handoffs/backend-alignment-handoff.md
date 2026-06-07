@@ -12,25 +12,35 @@ ADR amendment + Phase 1 step 1. **#118 is being grown to Phase 0 + Phase 1**
 *equivalence* of the `sim` kernel (done — guard in CI), (b) **cosim backend
 portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (step 1 of 7 done).
 
-**Now (pick up here): Phase 1 step 2 — move buffer setup+init into
-`MetalBackend::new`.** Authoritative plan:
-`docs/plans/cosim-phase1-cpu-backend.md` (reviewed + revised; read it). The
-7-step sequencing + the peripheral-contract design (ADR 0017 Layer 3,
-input/output unification) are recorded. **Step 1 done** (`bc18f79`): de-Metaled
-the `run_edges` seam (dropped `metal::Buffer`), moved the VCD ring into
-`MetalBackend` (`enable_vcd_ring`/`vcd_snapshot`), added `flash_set_in_reset`.
+**Now (pick up here): Phase 1 step 2c — extract the state/sram/event/blocks
+buffer setup.** Authoritative plan: `docs/plans/cosim-phase1-cpu-backend.md`
+(reviewed + revised; read it). The 7-step sequencing + the peripheral-contract
+design (ADR 0017 Layer 3) are recorded.
 
-**Step 2 (next, the largest):** relocate the ~20 buffer allocs + init (sites
-mapped: `states_buffer` `cosim_metal.rs:2710`, sram `:2755`/`:2776`, blocks
-`:2939`, event `:2955`, **flash `:3280–3367`**, uart `:3407`, wb `:3464`, bus
-`:3493`; struct literal `:3542`) into `MetalBackend::new(...)`, as **2a flash →
-2b uart/wb/bus → 2c states/sram/event/blocks+xprop-seed**, each Metal
-bit-identical. Then step 3 (generic `run_cosim<B>` + route the ~15 diagnostic
-`.contents()` reads via `state()`/`sram()` — re-add those accessors here; the
-flash-`FlashState` diagnostic reads get gated/extracted), step 4 (module split
-`cosim/{mod,metal}.rs`, `cargo check --lib` no-feature must compile), step 5
-(`CpuBackend` + CPU UART-TX decoder mirroring `UartDecoderState`), steps 6–7
-(`cmd_cosim` wiring + Linux CI).
+**Done so far in Phase 1:**
+- **Step 1** (`bc18f79`): de-Metaled the `run_edges` seam (dropped
+  `metal::Buffer`), moved the VCD ring into `MetalBackend`
+  (`enable_vcd_ring`/`vcd_snapshot`), added `flash_set_in_reset`.
+- **Step 2a** (`75c9ec0`): extracted flash buffers → `MetalBackend::build_flash_buffers`.
+- **Step 2b** (`a93812a`): extracted gpu_io_step (uart/wb/bus) buffers →
+  `MetalBackend::build_io_buffers` (returns 7 buffers + CPU `bus_lanes`).
+
+**Step 2c (next):** extract the remaining buffer setup into a
+`MetalBackend::build_state_buffers` (companion to the two above): `states_buffer`
+(`cosim_metal.rs` ~`:2710`) + xprop X-mask seed + `set_flash_din`, sram
+(`:2755`/`:2776`), `blocks_start/data` no-copy (`:2939`, wrap `script` UVec) and
+the leaked-`Box` event buffer (`:2955`). **Trickier than 2a/2b** — the state
+init is part-agnostic (state writes) and interleaved with xprop seeding +
+`set_flash_din`; the no-copy/leaked-box lifetimes need care. Then **assemble
+`MetalBackend::new`** composing build_flash + build_io + build_state + the struct
+literal, so `run_cosim` calls `MetalBackend::new(...)`. Each Metal bit-identical
+(harness + `shasum -c`).
+
+**Then:** step 3 (generic `run_cosim<B>` + route the ~15 diagnostic `.contents()`
+reads via re-added `state()`/`sram()`; gate/extract the flash-`FlashState`
+diagnostic reads), step 4 (module split `cosim/{mod,metal}.rs`, `cargo check
+--lib` no-feature must compile), step 5 (`CpuBackend` + CPU UART-TX decoder
+mirroring `UartDecoderState`), steps 6–7 (`cmd_cosim` wiring + Linux CI).
 
 **Bit-identical gate:** `/tmp/claude/cosim_fixtures.sh <out>` + `shasum -c
 /tmp/claude/golden.sums` after every step (all green through P1.1). Two Phase-0
