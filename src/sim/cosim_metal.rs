@@ -2460,6 +2460,146 @@ impl MetalBackend {
         )
     }
 
+    /// Allocate + initialise the GPU `gpu_io_step` peripheral buffers (Phase 1
+    /// step 2b: relocated from `run_cosim`). Returns the seven buffers (UART
+    /// state/params/channel, Wishbone-trace params/channel, bus-trace
+    /// params/channel) plus the CPU-side `bus_lanes` decoders the drain uses.
+    #[allow(clippy::type_complexity)]
+    fn build_io_buffers(
+        device: &metal::Device,
+        aig: &AIG,
+        netlistdb: &NetlistDB,
+        script: &FlattenedScriptV1,
+        config: &TestbenchConfig,
+        gpio_map: &GpioMapping,
+        state_size: usize,
+        uart_configs: &[(String, usize, usize, u32)],
+        sched_ticks_per_sys_clk_cycle: u64,
+    ) -> (
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        metal::Buffer,
+        Vec<BusTraceLane>,
+    ) {
+        let n_uarts = uart_configs.len();
+
+        // UartDecoderState[MAX_UARTS] (shared, persistent across ticks)
+        let uart_state_buffer = device.new_buffer(
+            (std::mem::size_of::<UartDecoderState>() * MAX_UARTS) as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        unsafe {
+            let base = uart_state_buffer.contents() as *mut UartDecoderState;
+            for i in 0..MAX_UARTS {
+                let us = &mut *base.add(i);
+                us.state = 0; // IDLE
+                us.last_tx = 1; // TX line idle high
+                us.start_cycle = 0;
+                us.bits_received = 0;
+                us.value = 0;
+                us.current_cycle = 0;
+            }
+        }
+
+        // UartParams (constant, with per-channel configs)
+        let uart_params_buffer = device.new_buffer(
+            std::mem::size_of::<UartParams>() as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        unsafe {
+            let p = &mut *(uart_params_buffer.contents() as *mut UartParams);
+            p.state_size = state_size as u32;
+            p.n_uarts = n_uarts as u32;
+            p._pad = [0; 2];
+            p.channels = [UartPerChannelConfig::default(); MAX_UARTS];
+            for (i, (_, tx_gpio, _, cpb)) in uart_configs.iter().enumerate() {
+                p.channels[i].tx_out_pos =
+                    gpio_map.output_bits.get(tx_gpio).copied().unwrap_or(0);
+                // GPU decoder counts scheduler edges, not clock cycles
+                p.channels[i].cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle as u32;
+            }
+        }
+
+        // UartChannel[MAX_UARTS] (shared ring buffers, CPU drains after each batch)
+        let uart_channel_buffer = device.new_buffer(
+            (std::mem::size_of::<UartChannel>() * MAX_UARTS) as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        unsafe {
+            let base = uart_channel_buffer.contents() as *mut UartChannel;
+            for i in 0..MAX_UARTS {
+                let ch = &mut *base.add(i);
+                ch.write_head = 0;
+                ch.capacity = UART_CHANNEL_CAP as u32;
+                ch._pad = [0; 2];
+            }
+        }
+
+        // ── GPU Wishbone Bus Trace buffers ────────────────────────────────
+        let wb_trace_params = build_wb_trace_params(aig, netlistdb, script);
+        let wb_trace_params_buffer = device.new_buffer(
+            std::mem::size_of::<WbTraceParams>() as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        unsafe {
+            let p = &mut *(wb_trace_params_buffer.contents() as *mut WbTraceParams);
+            *p = wb_trace_params;
+        }
+
+        // WbTraceChannel: header (16 bytes) + entries array
+        let wb_channel_byte_size = std::mem::size_of::<WbTraceChannel>()
+            + WB_TRACE_CHANNEL_CAP * std::mem::size_of::<WbTraceEntry>();
+        let wb_trace_channel_buffer =
+            device.new_buffer(wb_channel_byte_size as u64, MTLResourceOptions::StorageModeShared);
+        unsafe {
+            let ch = &mut *(wb_trace_channel_buffer.contents() as *mut WbTraceChannel);
+            ch.write_head = 0;
+            ch.capacity = WB_TRACE_CHANNEL_CAP as u32;
+            ch.current_tick = 0;
+            ch.prev_flags = 0;
+        }
+
+        // ── GPU AHB/APB Bus Transaction Trace buffers (ADR 0013) ──────────
+        // Always allocated (the kernel binds slots 6/7 unconditionally); the
+        // kernel skips capture when n_buses == 0.
+        let (bus_trace_params, bus_lanes) =
+            build_bus_trace_params(aig, netlistdb, script, config.effective_bus_traces());
+        let bus_trace_params_buffer = device.new_buffer(
+            std::mem::size_of::<BusTraceParamsAll>() as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        unsafe {
+            let p = &mut *(bus_trace_params_buffer.contents() as *mut BusTraceParamsAll);
+            *p = bus_trace_params;
+        }
+        let bus_channel_byte_size = std::mem::size_of::<BusTraceChannel>()
+            + BUS_TRACE_CHANNEL_CAP * std::mem::size_of::<BusTraceEntry>();
+        let bus_trace_channel_buffer =
+            device.new_buffer(bus_channel_byte_size as u64, MTLResourceOptions::StorageModeShared);
+        unsafe {
+            let ch = &mut *(bus_trace_channel_buffer.contents() as *mut BusTraceChannel);
+            ch.write_head = 0;
+            ch.capacity = BUS_TRACE_CHANNEL_CAP as u32;
+            ch.current_tick = 0;
+            ch.prev_gate = 0;
+        }
+
+        (
+            uart_state_buffer,
+            uart_params_buffer,
+            uart_channel_buffer,
+            wb_trace_params_buffer,
+            wb_trace_channel_buffer,
+            bus_trace_params_buffer,
+            bus_trace_channel_buffer,
+            bus_lanes,
+        )
+    }
+
     /// Metal-only GPU kernel profiling (forwards to the simulator). Not part
     /// of `CosimBackend` — a CPU backend has no GPU kernels to profile.
     fn profile_kernels(&self, num_ticks: usize) {
@@ -3430,118 +3570,28 @@ pub fn run_cosim(
         &gpio_map,
     );
 
-    // ── GPU UART IO buffers (multi-instance, ADR 0013) ──────────────────
-
+    // ── GPU IO peripheral buffers (built in MetalBackend — Phase 1 step 2b) ──
+    let (
+        uart_state_buffer,
+        uart_params_buffer,
+        uart_channel_buffer,
+        wb_trace_params_buffer,
+        wb_trace_channel_buffer,
+        bus_trace_params_buffer,
+        bus_trace_channel_buffer,
+        mut bus_lanes,
+    ) = MetalBackend::build_io_buffers(
+        &simulator.device,
+        aig,
+        netlistdb,
+        script,
+        config,
+        &gpio_map,
+        state_size,
+        &uart_configs,
+        sched_ticks_per_sys_clk_cycle,
+    );
     let n_uarts = uart_configs.len();
-
-    // UartDecoderState[MAX_UARTS] (shared, persistent across ticks)
-    let uart_state_buffer = simulator.device.new_buffer(
-        (std::mem::size_of::<UartDecoderState>() * MAX_UARTS) as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let base = uart_state_buffer.contents() as *mut UartDecoderState;
-        for i in 0..MAX_UARTS {
-            let us = &mut *base.add(i);
-            us.state = 0; // IDLE
-            us.last_tx = 1; // TX line idle high
-            us.start_cycle = 0;
-            us.bits_received = 0;
-            us.value = 0;
-            us.current_cycle = 0;
-        }
-    }
-
-    // UartParams (constant, with per-channel configs)
-    let uart_params_buffer = simulator.device.new_buffer(
-        std::mem::size_of::<UartParams>() as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let p = &mut *(uart_params_buffer.contents() as *mut UartParams);
-        p.state_size = state_size as u32;
-        p.n_uarts = n_uarts as u32;
-        p._pad = [0; 2];
-        p.channels = [UartPerChannelConfig::default(); MAX_UARTS];
-        for (i, (_, tx_gpio, _, cpb)) in uart_configs.iter().enumerate() {
-            p.channels[i].tx_out_pos = gpio_map
-                .output_bits
-                .get(tx_gpio)
-                .copied()
-                .unwrap_or(0);
-            // GPU decoder counts scheduler edges, not clock cycles
-            p.channels[i].cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle as u32;
-        }
-    }
-
-    // UartChannel[MAX_UARTS] (shared ring buffers, CPU drains after each batch)
-    let uart_channel_buffer = simulator.device.new_buffer(
-        (std::mem::size_of::<UartChannel>() * MAX_UARTS) as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let base = uart_channel_buffer.contents() as *mut UartChannel;
-        for i in 0..MAX_UARTS {
-            let ch = &mut *base.add(i);
-            ch.write_head = 0;
-            ch.capacity = UART_CHANNEL_CAP as u32;
-            ch._pad = [0; 2];
-        }
-    }
-
-    // ── GPU Wishbone Bus Trace buffers ────────────────────────────────
-
-    let wb_trace_params = build_wb_trace_params(aig, netlistdb, script);
-    let wb_trace_params_buffer = simulator.device.new_buffer(
-        std::mem::size_of::<WbTraceParams>() as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let p = &mut *(wb_trace_params_buffer.contents() as *mut WbTraceParams);
-        *p = wb_trace_params;
-    }
-
-    // WbTraceChannel: header (16 bytes) + entries array
-    let wb_channel_byte_size = std::mem::size_of::<WbTraceChannel>()
-        + WB_TRACE_CHANNEL_CAP * std::mem::size_of::<WbTraceEntry>();
-    let wb_trace_channel_buffer = simulator.device.new_buffer(
-        wb_channel_byte_size as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let ch = &mut *(wb_trace_channel_buffer.contents() as *mut WbTraceChannel);
-        ch.write_head = 0;
-        ch.capacity = WB_TRACE_CHANNEL_CAP as u32;
-        ch.current_tick = 0;
-        ch.prev_flags = 0;
-    }
-
-    // ── GPU AHB/APB Bus Transaction Trace buffers (ADR 0013) ──────────
-    // Always allocated (the kernel binds slots 6/7 unconditionally); the
-    // kernel skips capture when n_buses == 0.
-    let (bus_trace_params, mut bus_lanes) =
-        build_bus_trace_params(aig, netlistdb, script, config.effective_bus_traces());
-    let bus_trace_params_buffer = simulator.device.new_buffer(
-        std::mem::size_of::<BusTraceParamsAll>() as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let p = &mut *(bus_trace_params_buffer.contents() as *mut BusTraceParamsAll);
-        *p = bus_trace_params;
-    }
-    let bus_channel_byte_size = std::mem::size_of::<BusTraceChannel>()
-        + BUS_TRACE_CHANNEL_CAP * std::mem::size_of::<BusTraceEntry>();
-    let bus_trace_channel_buffer = simulator.device.new_buffer(
-        bus_channel_byte_size as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    unsafe {
-        let ch = &mut *(bus_trace_channel_buffer.contents() as *mut BusTraceChannel);
-        ch.write_head = 0;
-        ch.capacity = BUS_TRACE_CHANNEL_CAP as u32;
-        ch.current_tick = 0;
-        ch.prev_gate = 0;
-    }
     // Accumulated decoded transactions (bus_id, transaction), drained
     // each batch. The name is looked up from `bus_lanes` at CSV-write
     // time, so the hot drain path stays allocation-free.
