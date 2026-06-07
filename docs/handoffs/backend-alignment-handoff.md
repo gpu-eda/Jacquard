@@ -1,48 +1,57 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
-**Created:** 2026-06-07 (updated 2026-06-07, second session)
-**Branch:** `main` @ `82523a3`. **#115, #116, #117 all merged.** Working
-tree clean.
+**Created:** 2026-06-07 (updated 2026-06-07, third session)
+**Branch:** `cosim-backend-seam-phase0` @ `cf053b7` (2 commits ahead of
+`main` @ `789b2bf`; **not yet pushed / no PR**). **#115, #116, #117 merged.**
+Working tree clean.
 
 ## Goal & next-up
 
 **Goal:** bring CUDA/HIP up to Metal parity. Two tracks: (a) cross-backend
 *equivalence* of the `sim` kernel (done — guard in CI), (b) **cosim backend
-portability (#105)** — Phase 0 (the seam extraction).
+portability (#105)** — **Phase 0 now DONE** (this session); next is Phase 1.
 
-**Now (pick up here):** Phase 0 implementation is **not started** — the
-design review concluded and the **target architecture is now in ADR 0017**
-(*Amendment 2026-06-07*, shipped in #117). Read it before any code. Key
-decisions (maintainer-approved):
-- `CosimBackend` trait is **batch-granular** (`run_edges`, not per-edge) —
-  a literal per-edge trait regresses Metal ~1000× (measurements in the ADR).
-- **The backend owns the schedule storage** (opaque to orchestration): built
-  once via `init_schedule`, mutated via `edge_ops_mut` — NOT an
-  orchestration-owned `Vec` the backend re-materialises (that would regress
-  Metal's zero-copy unified memory). Metal: `edge_ops_mut` → slice over the
-  shared `MTLBuffer` (write IS the upload). CUDA/HIP: host mirror + dirty-flag
-  + lazy per-edge upload. Also resolves the closure-borrow friction.
-- **GPU peripherals are the primary path to CUDA/HIP batching** (a discrete
-  GPU's per-edge PCIe round-trip is untenable). 3-tier `GpuPeripheral`:
-  Tier 1 CPU model (reference/oracle/fallback), Tier 2 hand-written kernels
-  (CUDA+HIP share `*_impl.cuh` ⇒ 2 impls, + `.metal`), Tier 3 single-source
-  user-extensible (later).
-- Plan staging (P2/P3 **merged** after review): P0 seam → P1 CpuBackend+Linux
-  CI → **P2 CUDA/HIP backend WITH Tier-2 GPU peripherals** (internal 2a/2b
-  checkpoint: per-edge correctness → batched; per-edge stays as the CPU-model
-  fallback) → P3 single-source. See `docs/plans/cosim-backend-portability.md`.
+**Now (pick up here): Phase 1 — `CpuBackend` + Linux cosim CI.** Phase 0 (the
+seam extraction) is complete on branch `cosim-backend-seam-phase0` (2 commits,
+below). Phase 1 adds a `CpuBackend` impl of the `CosimBackend` trait (now in
+`cosim_metal.rs`), wires `cmd_cosim` to select it when `--features metal` is
+absent (removing the hard-error), and moves the cosim regression fixtures to a
+free `ubuntu-latest` CI job. See `docs/plans/cosim-backend-portability.md`
+Phase 1. Two Phase-0 deferrals feed directly into Phase 1 (see below).
 
-When resuming Phase 0: trait can land in-place in `cosim_metal.rs` first
-(module split to `cosim/{mod,metal}.rs` is separable/cosmetic). The
-load-bearing friction is converting the in-place `*mut BitOp` shared-memory
-ops mutation to `edge_ops_mut` (stays zero-copy on Metal).
+**Phase 0 — what landed (branch `cosim-backend-seam-phase0`):**
+- `bda27ce` — factored the repeated `*mut BitOp` shared-memory slice behind
+  `ScheduleBuffers::edge_ops_mut`/`edge_ops` (the plan's "main friction").
+- `cf053b7` — extracted the `CosimBackend` trait + `MetalBackend` struct.
+  `MetalBackend` owns the `MetalSimulator`, the `[2×state_size]` state buffer,
+  the per-edge schedule (built once via `init_schedule` from a backend-agnostic
+  `Vec<Vec<BitOp>>`), and all ~18 GPU IO buffers. `run_edges`/`profile_kernels`/
+  `wait` **forward to the UNCHANGED** `encode_and_commit_gpu_batch`/
+  `profile_gpu_kernels`/`spin_wait` (GPU-encoding logic byte-identical). The
+  three ops-patching closures became free fns taking `&mut dyn CosimBackend`
+  (closure-borrow resolved). `edge_ops_mut` is `&mut self` (compile-time
+  exclusivity over interior-mutable Metal shared memory).
+
+**Phase-0 deferrals → do in Phase 1 (both noted in-code):**
+- **`state()`/`state_mut()`** (the plan's `output_state`/`input_state_mut`)
+  were omitted — Metal reads state via the VCD ring + direct buffer access, so
+  they were dead on Metal. `CpuBackend` needs them (CPU-side `state_prep`);
+  add them to the trait then.
+- **`run_edges(vcd_ring: Option<&metal::Buffer>)` leaks a Metal type** into the
+  agnostic trait. When `CpuBackend` lands, make the per-edge output-snapshot
+  ring a backend-owned buffer with a `&[u32]` drain accessor so the param drops
+  out of the trait.
+- The module split to `cosim/{mod,metal}.rs` remains separable/cosmetic.
 
 **Bit-identical harness ready:** `/tmp/claude/cosim_fixtures.sh <outdir>`
 runs all 7 Metal cosim fixtures; golden baseline at `/tmp/claude/golden`
-(sums in `/tmp/claude/golden.sums`). Re-run + `cmp` after any 0b/0c step.
+(sums in `/tmp/claude/golden.sums`). Re-run + `shasum -c` after any refactor
+step. (Verified byte-identical after both Phase 0 commits.)
 
-**Verify:** `cargo test --lib` (293+ pass). Metal cosim parity via the
-fixtures script above (all PASSED, byte-identical to golden).
+**Verify:** `cargo test --lib --features metal` (298 pass). Metal cosim
+parity via the fixtures script (all byte-identical to golden) +
+`jtag_minimal` 4M-edge replay PASS (`data0_obs=0xCAFEBABE`, exercises the
+model-driven-clock per-edge path).
 
 ## Done this session (2nd session, 2026-06-07)
 
@@ -101,18 +110,19 @@ fixtures script above (all PASSED, byte-identical to golden).
   --tags` → `release.yml` draft → Homebrew tap PR (`gpu-eda/homebrew-tap`) →
   `netlist-graph` PyPI + tag. (Deliberately maintainer-triggered; see
   `docs/release-process.md`.)
-- **#105 cosim portability — Phase 0 not started** (design settled, merged in
-  #117). Authoritative design: ADR 0017 *Amendment 2026-06-07* +
-  `docs/plans/cosim-backend-portability.md` (both on `main`). Phase 0 =
-  extract the batch-granular `CosimBackend` trait + backend-owned schedule
-  (`init_schedule`/`edge_ops_mut`) + `MetalBackend`, Metal bit-identical
-  (harness above). The trait can land in-place in `cosim_metal.rs` first
-  (module split separable). Key sites: `ScheduleBuffers` (`cosim_metal.rs`
-  ~`:311`/construction ~`:2822`), the ops-update helpers
-  `update_model_driven_in_ops`/`update_reset_in_ops`/`patch_model_clock_edges`
-  (~`:3393-3490`) → `edge_ops_mut`, ~20 `device.new_buffer` allocs → backend.
-  Then P1 (CpuBackend + Linux CI), P2 (CUDA/HIP backend **with** Tier-2 GPU
-  peripherals, T4-testable), P3 (single-source peripherals).
+- **#105 cosim portability — Phase 0 DONE** (branch `cosim-backend-seam-phase0`,
+  commits `bda27ce` + `cf053b7`; not yet pushed). `CosimBackend` trait +
+  `MetalBackend` extracted in-place in `cosim_metal.rs`, Metal bit-identical
+  (harness + JTAG verified). **Next: Phase 1** (CpuBackend + Linux CI), then
+  P2 (CUDA/HIP backend **with** Tier-2 GPU peripherals, T4-testable), P3
+  (single-source peripherals). Authoritative design: ADR 0017 *Amendment
+  2026-06-07* + `docs/plans/cosim-backend-portability.md`. Phase-1 entry
+  points: implement `CpuBackend: CosimBackend` (the trait is at
+  `cosim_metal.rs` ~`:2210`), reuse `cpu_reference::simulate_block_v1` for
+  `run_edges` (N=1), add `state()`/`state_mut()` to the trait, de-Metal the
+  VCD ring (see deferrals in Goal section). The `--check-with-cpu` per-block
+  CPU stepper loop in `run_cosim` is a working prototype of the CpuBackend
+  step path.
 - **CDC/island batching (multi-clock plan MC.1→MC.4)** is the long-term fix
   for JTAG's single-edge tail — fast `sys_clk` island runs ahead/batched
   while only the model-driven `tck` boundary needs per-edge handover. MC.4
