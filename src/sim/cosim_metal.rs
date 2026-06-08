@@ -2238,10 +2238,17 @@ trait CosimBackend {
     /// Picoseconds per scheduler edge (= `MultiClockScheduler::gcd_ps`).
     fn gcd_ps(&self) -> u64;
 
-    // NOTE: design-state / SRAM read accessors (`state()`, `sram()`) and the
-    // mutable `state_mut()` land in step 3/5 alongside the diagnostic-read
-    // routing and `CpuBackend` — kept off the trait here to match exactly what
-    // the Metal driver calls today.
+    /// Full design state `[input_state | output_state]`, `2 × state_size`
+    /// words. Backend-owned storage (Metal: a slice over the shared MTLBuffer;
+    /// CpuBackend: a `Vec<u32>`). Read accessor for VCD/diagnostic paths.
+    fn state(&self) -> &[u32];
+    /// Mutable view of the full design state (pre-loop stimulus deposits /
+    /// CPU-side state_prep). First exercised in step 3b; on the trait now so
+    /// the seam is complete.
+    fn state_mut(&mut self) -> &mut [u32];
+    /// SRAM backing store, `sram_storage_size` words (may be empty for a
+    /// SRAM-less design). For final dump / equivalence compare.
+    fn sram(&self) -> &[u32];
 
     /// Set the SPI-flash reset line for the upcoming batch. Both the GPU flash
     /// kernel and the CPU `CppSpiFlash` model honour it. Called before
@@ -2281,6 +2288,10 @@ struct MetalBackend {
     /// Set once by `init_schedule`; `None` until then.
     schedule: Option<ScheduleBuffers>,
     state_size: usize,
+    /// Logical SRAM length in words (`script.sram_storage_size`). The backing
+    /// `sram_data_buffer` is allocated `max(1)`, so this can differ from / be
+    /// less than the buffer's capacity, and is 0 for a SRAM-less design.
+    sram_len: usize,
     num_blocks: usize,
     num_major_stages: usize,
     arrival_state_offset: u32,
@@ -2871,6 +2882,30 @@ impl CosimBackend for MetalBackend {
     #[inline]
     fn gcd_ps(&self) -> u64 {
         self.schedule().gcd_ps
+    }
+
+    fn state(&self) -> &[u32] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.states_buffer.contents() as *const u32,
+                2 * self.state_size,
+            )
+        }
+    }
+
+    fn state_mut(&mut self) -> &mut [u32] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.states_buffer.contents() as *mut u32,
+                2 * self.state_size,
+            )
+        }
+    }
+
+    fn sram(&self) -> &[u32] {
+        unsafe {
+            std::slice::from_raw_parts(self.sram_data_buffer.contents() as *const u32, self.sram_len)
+        }
     }
 
     fn flash_set_in_reset(&mut self, in_reset: bool) {
@@ -3697,6 +3732,7 @@ pub fn run_cosim(
         sim: simulator,
         schedule: None,
         state_size,
+        sram_len: script.sram_storage_size as usize,
         num_blocks,
         num_major_stages,
         arrival_state_offset,
@@ -4186,16 +4222,9 @@ pub fn run_cosim(
         // Save pre-tick state for CPU verification
         let saved_flash_d_i: u8;
         if opts.check_with_cpu && tick < cpu_check_max_edges && batch == 1 {
-            let gpu_states: &[u32] = unsafe {
-                std::slice::from_raw_parts(backend.states_buffer.contents() as *const u32, 2 * state_size)
-            };
+            let gpu_states: &[u32] = backend.state();
             cpu_states.copy_from_slice(gpu_states);
-            let gpu_sram: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    backend.sram_data_buffer.contents() as *const u32,
-                    script.sram_storage_size as usize,
-                )
-            };
+            let gpu_sram: &[u32] = backend.sram();
             cpu_sram.copy_from_slice(gpu_sram);
             // Save flash d_i before GPU modifies it (apply_flash_din reads this)
             saved_flash_d_i = unsafe {
@@ -4379,15 +4408,8 @@ pub fn run_cosim(
         // ── Dump DFF states (if active for this cycle) ──
         if dff_dump_active && tick >= reset_edges {
             use std::io::Write;
-            let input_state: &[u32] = unsafe {
-                std::slice::from_raw_parts(backend.states_buffer.contents() as *const u32, state_size)
-            };
-            let output_state_dff: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    (backend.states_buffer.contents() as *const u32).add(state_size),
-                    state_size,
-                )
-            };
+            let input_state: &[u32] = &backend.state()[..state_size];
+            let output_state_dff: &[u32] = &backend.state()[state_size..];
             let cycle = tick - reset_edges;
             if let Some((ref mut writer, ref entries, _)) = dff_dump_state {
                 // Compute hash for both input_state (pre-capture) and output_state (post-capture)
@@ -4452,12 +4474,7 @@ pub fn run_cosim(
 
         // Per-tick flash signal diagnostic
         if trace_ticks > 0 && tick + batch <= reset_edges + trace_ticks as usize {
-            let output_state: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    (backend.states_buffer.contents() as *const u32).add(state_size),
-                    state_size,
-                )
-            };
+            let output_state: &[u32] = &backend.state()[state_size..];
             let fmp =
                 unsafe { &*(backend.flash_model_params_buffer.contents() as *const FlashModelParams) };
             let flash_clk_pos = fmp.clk_out_pos;
@@ -4580,9 +4597,7 @@ pub fn run_cosim(
             }
 
             // Compare GPU input with CPU input (should match after state_prep+flash_din)
-            let gpu_states: &[u32] = unsafe {
-                std::slice::from_raw_parts(backend.states_buffer.contents() as *const u32, 2 * state_size)
-            };
+            let gpu_states: &[u32] = backend.state();
             let mut input_mismatches = 0;
             for i in 0..state_size {
                 if gpu_states[i] != cpu_states[i] {
@@ -4630,12 +4645,7 @@ pub fn run_cosim(
                 }
             }
             // Also compare SRAM
-            let gpu_sram: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    backend.sram_data_buffer.contents() as *const u32,
-                    script.sram_storage_size as usize,
-                )
-            };
+            let gpu_sram: &[u32] = backend.sram();
             let mut sram_mismatches = 0;
             for i in 0..script.sram_storage_size as usize {
                 if gpu_sram[i] != cpu_sram[i] {
@@ -4799,12 +4809,7 @@ pub fn run_cosim(
         // SRAM write dumper: snapshot per batch and accumulate
         // per-block write events. Cheap when disabled (None).
         if let Some(dumper) = sram_dumper.as_mut() {
-            let storage: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    backend.sram_data_buffer.contents() as *const u32,
-                    script.sram_storage_size as usize,
-                )
-            };
+            let storage: &[u32] = backend.sram();
             dumper.snapshot_and_diff(storage, tick as u64);
         }
 
@@ -4813,10 +4818,7 @@ pub fn run_cosim(
             unsafe {
                 let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
                 let fmp = &*(backend.flash_model_params_buffer.contents() as *const FlashModelParams);
-                let st = std::slice::from_raw_parts(
-                    backend.states_buffer.contents() as *const u32,
-                    2 * state_size,
-                );
+                let st = backend.state();
                 let read_out_bit = |pos: u32| -> u32 {
                     let word_idx = state_size + (pos as usize >> 5);
                     let bit_idx = pos & 31;
@@ -4849,10 +4851,7 @@ pub fn run_cosim(
 
                 // Check SRAM activity every 100 ticks
                 if tick % 100 == 0 {
-                    let sram = std::slice::from_raw_parts(
-                        backend.sram_data_buffer.contents() as *const u32,
-                        script.sram_storage_size as usize,
-                    );
+                    let sram = backend.sram();
                     let nonzero = sram.iter().filter(|&&w| w != 0).count();
                     if nonzero != diag_sram_write_count {
                         eprintln!(
@@ -4868,10 +4867,7 @@ pub fn run_cosim(
         // Diagnostic: dump flash-related signals
         if trace_ticks > 0 && tick <= reset_edges + trace_ticks && tick > reset_edges {
             unsafe {
-                let st = std::slice::from_raw_parts(
-                    backend.states_buffer.contents() as *const u32,
-                    2 * state_size,
-                );
+                let st = backend.state();
                 let read_out_bit = |pos: u32| -> u32 {
                     let word_idx = state_size + (pos as usize >> 5);
                     let bit_idx = pos & 31;
@@ -4919,10 +4915,7 @@ pub fn run_cosim(
             let (uart_tx_val, uart_dec_state, uart_dec_cycle) = unsafe {
                 let up = &*(backend.uart_params_buffer.contents() as *const UartParams);
                 if up.n_uarts > 0 {
-                    let st = std::slice::from_raw_parts(
-                        backend.states_buffer.contents() as *const u32,
-                        2 * state_size,
-                    );
+                    let st = backend.state();
                     let tx_pos = up.channels[0].tx_out_pos;
                     let tx_word = state_size + (tx_pos as usize >> 5);
                     let tx_bit = tx_pos & 31;
@@ -4943,12 +4936,7 @@ pub fn run_cosim(
             clilog::info!("Reset released at tick {}", reset_edges);
             // Snapshot output state just after reset for change detection
             if post_reset_state_snapshot.is_none() {
-                let st = unsafe {
-                    std::slice::from_raw_parts(
-                        backend.states_buffer.contents() as *const u32,
-                        2 * state_size,
-                    )
-                };
+                let st = backend.state();
                 post_reset_state_snapshot = Some(st[state_size..2 * state_size].to_vec());
             }
         }
@@ -5022,8 +5010,8 @@ pub fn run_cosim(
 
     // ── State buffer diagnostics ─────────────────────────────────────────
 
-    unsafe {
-        let st = std::slice::from_raw_parts(backend.states_buffer.contents() as *const u32, 2 * state_size);
+    {
+        let st = backend.state();
         let input_state = &st[..state_size];
         let output_state = &st[state_size..2 * state_size];
         let in_nonzero = input_state.iter().filter(|&&w| w != 0).count();
