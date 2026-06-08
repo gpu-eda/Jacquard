@@ -2243,6 +2243,31 @@ struct FlashDebug {
 }
 
 trait CosimBackend {
+    /// Fat constructor (ADR 0017 Layer 1/2): the backend allocates + initialises
+    /// all its own storage from the agnostic descriptions. Returns the backend
+    /// plus the CPU-side bus-trace decoder lanes the orchestration owns (Layer 1).
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        aig: &AIG,
+        netlistdb: &NetlistDB,
+        script: &FlattenedScriptV1,
+        config: &TestbenchConfig,
+        gpio_map: &GpioMapping,
+        uart_configs: &[(String, usize, usize, u32)],
+        sched_ticks_per_sys_clk_cycle: u64,
+        state_size: usize,
+        num_blocks: usize,
+        num_major_stages: usize,
+        arrival_state_offset: u32,
+        timing_constraints: &Option<Vec<u32>>,
+    ) -> (Self, Vec<BusTraceLane>)
+    where
+        Self: Sized;
+
+    /// Profile the backend's per-tick kernels (Metal: GPU pipelines). Default
+    /// no-op — a CPU backend has no GPU kernels to profile.
+    fn profile_kernels(&self, _num_ticks: usize) {}
+
     /// Materialise the backend's native per-edge schedule storage *once* from
     /// the backend-agnostic ops description (one `Vec<BitOp>` per scheduler
     /// edge). The orchestration keeps only scalars (`edges_per_period`,
@@ -2901,13 +2926,17 @@ impl MetalBackend {
         )
     }
 
-    /// Fat constructor (Phase 1 step 3b-ii-a). Assembles the full Metal
-    /// backend: `MetalSimulator::new` → `build_state_buffers` →
+}
+
+impl CosimBackend for MetalBackend {
+    /// Fat constructor (ADR 0017 Layer 1/2; Phase 1 step 3b-ii-a/b). Assembles
+    /// the full Metal backend: `MetalSimulator::new` → `build_state_buffers` →
     /// `build_flash_buffers` → `build_io_buffers` → the timing-constraints
-    /// buffer → the struct literal. Returns the constructed backend AND the
-    /// agnostic CPU bus decoders (`bus_lanes`) — `run_cosim`'s orchestration
-    /// (ADR 0017 Layer 1) owns those, so they ride out separately rather than
-    /// being trapped in the Metal struct.
+    /// buffer → the struct literal → the per-stage `write_params` pre-write.
+    /// Returns the constructed backend AND the agnostic CPU bus decoders
+    /// (`bus_lanes`) — `run_cosim`'s orchestration (ADR 0017 Layer 1) owns
+    /// those, so they ride out separately rather than being trapped in the
+    /// Metal struct.
     ///
     /// The order here is the exact pre-refactor order, preserved for
     /// bit-identicality. Buffer-intrinsic init (states.fill + xprop X-mask
@@ -2929,7 +2958,7 @@ impl MetalBackend {
         num_major_stages: usize,
         arrival_state_offset: u32,
         timing_constraints: &Option<Vec<u32>>,
-    ) -> (MetalBackend, Vec<BusTraceLane>) {
+    ) -> (Self, Vec<BusTraceLane>) {
         let simulator = MetalSimulator::new(num_major_stages);
 
         // Design-state, SRAM, blocks-program, and event buffers. The builder
@@ -3026,11 +3055,26 @@ impl MetalBackend {
             bus_trace_read_head: 0,
             event_buffer_ptr,
         };
+
+        // Pre-write params for all simulation stages (they don't change between
+        // ticks). Moved here from `run_cosim` in P1.3b-ii-b — it ran right
+        // after `new` before, so this is order-equivalent and bit-identical.
+        for stage_i in 0..num_major_stages {
+            backend.sim.write_params(
+                stage_i,
+                num_blocks,
+                num_major_stages,
+                state_size,
+                0,
+                arrival_state_offset,
+            );
+        }
+
         (backend, bus_lanes)
     }
 
-    /// Metal-only GPU kernel profiling (forwards to the simulator). Not part
-    /// of `CosimBackend` — a CPU backend has no GPU kernels to profile.
+    /// Metal-only GPU kernel profiling (forwards to the simulator). Overrides
+    /// the trait's default no-op — a CPU backend has no GPU kernels to profile.
     fn profile_kernels(&self, num_ticks: usize) {
         self.sim.profile_gpu_kernels(
             num_ticks,
@@ -3058,9 +3102,7 @@ impl MetalBackend {
             self.timing_constraints_buffer.as_ref(),
         );
     }
-}
 
-impl CosimBackend for MetalBackend {
     fn init_schedule(
         &mut self,
         per_edge_ops: Vec<Vec<BitOp>>,
@@ -3451,6 +3493,20 @@ pub fn run_cosim(
     opts: &CosimOpts,
     timing_constraints: &Option<Vec<u32>>,
 ) -> CosimResult {
+    run_cosim_generic::<MetalBackend>(design, config, opts, timing_constraints)
+}
+
+/// Backend-generic co-simulation driver (ADR 0017). Drives the entire run
+/// through the [`CosimBackend`] trait — `B::new` constructs the backend, every
+/// per-tick interaction is a trait method, and no concrete `MetalBackend` /
+/// `metal::` token appears in this body. The public [`run_cosim`] shim picks
+/// `MetalBackend`; a future CPU backend monomorphises the same code path.
+fn run_cosim_generic<B: CosimBackend>(
+    design: &mut LoadedDesign,
+    config: &TestbenchConfig,
+    opts: &CosimOpts,
+    timing_constraints: &Option<Vec<u32>>,
+) -> CosimResult {
     let script = &design.script;
     let aig = &design.aig;
     let netlistdb = &design.netlistdb;
@@ -3467,7 +3523,7 @@ pub fn run_cosim(
     // ── Agnostic flash const-params (P1.3b-i) ────────────────────────────
     //
     // The flash MISO bit positions and clk/csn output positions are
-    // const-after-init in `MetalBackend::build_flash_buffers`
+    // const-after-init in the backend's flash-buffer setup
     // (FlashModelParams / FlashDinParams). Recompute them here as
     // backend-agnostic locals so the cosim loop's flash diagnostics don't
     // read the GPU param buffers. Bit-identical to the buffer init formulas.
@@ -3612,15 +3668,15 @@ pub fn run_cosim(
         uart_configs.len()
     );
 
-    // ── Backend construction is deferred to MetalBackend::new ────────────
+    // ── Backend construction is deferred to B::new ───────────────────────
     //
-    // Phase 1 step 3b-ii-a: `MetalSimulator::new`, the state/SRAM/blocks/event
-    // buffers, the flash + IO peripheral buffers, the timing-constraints
-    // buffer, and the struct literal are all encapsulated in
-    // `MetalBackend::new` below (called after the scheduler + per_edge_ops are
-    // built, since `new` needs `sched_ticks_per_sys_clk_cycle`). The
-    // backend-agnostic stimulus deposits (reg_init / reset / constant_ports /
-    // set_flash_din) run *after* construction, through `state_mut()`.
+    // The native simulator, the state/SRAM/blocks/event buffers, the flash +
+    // IO peripheral buffers, the timing-constraints buffer, and the struct
+    // literal are all encapsulated in `B::new` below (called after the
+    // scheduler + per_edge_ops are built, since `new` needs
+    // `sched_ticks_per_sys_clk_cycle`). The backend-agnostic stimulus deposits
+    // (reg_init / reset / constant_ports / set_flash_din) run *after*
+    // construction, through `state_mut()`.
 
     // SRAM write dumper (JACQUARD_SRAM_DUMP=<path>). Opt-in
     // diagnostic that snapshots `sram_storage` per batch and emits
@@ -3934,16 +3990,16 @@ pub fn run_cosim(
         .max_clock_edges
         .unwrap_or(config.num_cycles * sched_ticks_per_sys_clk_cycle as usize);
 
-    // ── Assemble the Metal backend (fat constructor, Phase 1 step 3b-ii-a) ─
+    // ── Assemble the backend (fat constructor, ADR 0017 Layer 1/2) ───────
     //
-    // `MetalBackend::new` encapsulates `MetalSimulator::new`, the
-    // state/SRAM/blocks/event buffers, the flash + IO peripheral buffers, the
-    // timing-constraints buffer, and the struct literal — in the exact
-    // pre-refactor order (bit-identical). It returns the backend plus the
-    // agnostic CPU bus decoders (`bus_lanes`); `run_cosim`'s orchestration
-    // (ADR 0017 Layer 1) owns those. `run_cosim` stays concrete-typed here —
-    // the generic flip (`run_cosim<B>` / trait `new`) is step 3b-ii-b.
-    let (mut backend, mut bus_lanes) = MetalBackend::new(
+    // `B::new` encapsulates the native simulator, the state/SRAM/blocks/event
+    // buffers, the flash + IO peripheral buffers, the timing-constraints
+    // buffer, the struct literal, and the per-stage param pre-write — in the
+    // exact pre-refactor order (bit-identical). It returns the backend plus
+    // the agnostic CPU bus decoders (`bus_lanes`); the orchestration (ADR 0017
+    // Layer 1) owns those. `run_cosim_generic` is parameterised over the
+    // backend; the public `run_cosim` shim picks `MetalBackend`.
+    let (mut backend, mut bus_lanes) = B::new(
         aig,
         netlistdb,
         script,
@@ -3964,26 +4020,14 @@ pub fn run_cosim(
     let mut bus_transactions: Vec<(u32, crate::sim::models::bus_trace::BusTransaction)> =
         Vec::new();
 
-    // Pre-write params for all simulation stages (they don't change between ticks)
-    for stage_i in 0..num_major_stages {
-        backend.sim.write_params(
-            stage_i,
-            num_blocks,
-            num_major_stages,
-            state_size,
-            0,
-            arrival_state_offset,
-        );
-    }
-
     // ── Stimulus deposits (backend-agnostic) ─────────────────────────────
     //
-    // Phase 1 step 3b-ii-a: these were inline before construction; they now
-    // run *after* `MetalBackend::new` through `state_mut()`, since the backend
-    // owns `states_buffer`. Bit-identical: `build_state_buffers` already did
-    // `fill(0)` + the xprop X-mask seed + SRAM preload, and build_flash/
-    // build_io allocate independent buffers that don't read `states`, so
-    // depositing here (rather than before those builds) is order-equivalent.
+    // These were inline before construction; they now run *after* `B::new`
+    // through `state_mut()`, since the backend owns its state storage.
+    // Bit-identical: the backend's state-buffer setup already did `fill(0)` +
+    // the xprop X-mask seed + SRAM preload, and the flash/IO buffer setup
+    // allocates independent buffers that don't read the state, so depositing
+    // here (rather than before those builds) is order-equivalent.
     {
         let states = backend.state_mut();
 
@@ -4104,8 +4148,8 @@ pub fn run_cosim(
         let profile_ticks = opts.max_clock_edges.unwrap_or(1000).min(5000);
         backend.profile_kernels(profile_ticks);
 
-        // Event buffer freed by `Drop for MetalBackend` when `backend` drops
-        // at this early return (all GPU profiling work has completed).
+        // Backend resources (e.g. the Metal event buffer) freed when `backend`
+        // drops at this early return (all backend work has completed).
         return CosimResult {
             passed: true,
             uart_events: Vec::new(),
@@ -5528,8 +5572,9 @@ pub fn run_cosim(
         }
     }
 
-    // Event buffer freed by `Drop for MetalBackend` when `backend` drops at
-    // end-of-scope (all GPU work has completed). No manual cleanup needed.
+    // Backend resources (e.g. the Metal event buffer) freed when `backend`
+    // drops at end-of-scope (all backend work has completed). No manual
+    // cleanup needed.
 
     println!();
     if events_passed {
