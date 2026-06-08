@@ -1,12 +1,13 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
 **Created:** 2026-06-07 (updated 2026-06-08, sixth session)
-**Branch:** `cosim-backend-seam-phase0` @ `32d31b8` (P1.2c/3a/3b-i committed
-locally, **not yet pushed**; PR #118 last pushed at `9b7b105`). Holds Phase 0 +
-the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/3a/3b-i. **#118 is
-being grown to Phase 0 + Phase 1** (maintainer's call: one PR, not stacked).
-Working tree clean. **Push and refresh the PR #118 title/description** (still
-"Phase 0" framed) to reflect the broadened Phase 0 + Phase 1 scope on the next push.
+**Branch:** `cosim-backend-seam-phase0` @ `14f6a27` (P1.2c/3a/3b-i/3b-ii-a/3b-ii-b
+committed locally, **not yet pushed**; PR #118 last pushed at `9b7b105`). Holds
+Phase 0 + the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3 (done)**.
+**#118 is being grown to Phase 0 + Phase 1** (maintainer's call: one PR, not
+stacked). Working tree clean. **Push and refresh the PR #118 title/description**
+(still "Phase 0" framed) to reflect the broadened Phase 0 + Phase 1 scope on the
+next push.
 
 ## Goal & next-up
 
@@ -15,35 +16,28 @@ Working tree clean. **Push and refresh the PR #118 title/description** (still
 portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (steps 1/2a/2b/2c
 of 7 done).
 
-**Now (pick up here): Phase 1 step 3b-ii — the generic flip + `MetalBackend::new`
-fat-constructor assembly** (the last piece of step 3; 3a + 3b-i are done — the
-`run_cosim` loop body now has ZERO `backend.<field>.contents()` reads). Plan: the
-step-3 **3b-ii** bullet in `docs/plans/cosim-phase1-cpu-backend.md`. Scope:
-1. **Assemble `MetalBackend::new(...)`** (the deferred step-2 finale) composing
-   `build_flash_buffers` + `build_io_buffers` + `build_state_buffers` +
-   `MetalSimulator::new` + the timing-constraints buffer + the struct literal.
-   Add `fn new(...)` to the `CosimBackend` trait (uniform agnostic-description
-   args) so `run_cosim<B>` calls `B::new(...)`. Keep `init_schedule` /
-   `enable_vcd_ring` as the separate post-construction trait calls they already are.
-2. **`bus_lanes` ownership:** `bus_lanes` (`BusTraceLane`, CPU/agnostic decoders)
-   must move OUT of `build_io_buffers`' return into `run_cosim` (Layer 1) —
-   compute them agnostically before `B::new`, since the Metal constructor would
-   otherwise trap them. Split `build_bus_trace_params` accordingly.
-3. **`event_buffer_ptr` lifetime:** fold the leaked `Box` into a `MetalBackend`
-   field + a `Drop for MetalBackend` (`drop(Box::from_raw(...))`), removing the
-   two manual `drop` sites (profile early-return + end). Construction is now
-   encapsulated, so this is the natural home; ordering is safe (backend drops
-   after all GPU work).
-4. **Route the pre-loop stimulus deposits** (reg_init/reset/constant_ports/
-   set_flash_din) through `state_mut()` — once the backend owns `states_buffer`
-   and `run_cosim` is generic, the raw local `states` slice can't be re-derived.
-5. **Flip `run_cosim` → `run_cosim<B: CosimBackend>`**, Metal path via `B::new`;
-   update the `jacquard.rs:1792` call site (`run_cosim::<MetalBackend>(...)` or
-   inferred). **Exit gate:** no `metal::` / `MTLResourceOptions` token outside
-   the Metal constructor + impl. Riskiest checkpoint — bit-identical gated.
+**Now (pick up here): Phase 1 step 4 — module split `cosim_metal.rs` →
+`src/sim/cosim/{mod,metal}.rs`.** `mod.rs` (NOT gated): `CosimBackend` trait,
+`BitOp`, `run_cosim_generic`/`run_cosim` shim, the patchers, `FlashDebug`, the
+agnostic glue. `metal.rs` (`#[cfg(feature="metal")]`): `MetalBackend`,
+`MetalSimulator`, `ScheduleBuffers`, the GPU IO structs, `build_*`,
+`create_ops_buffer`/`create_prep_params_buffer`. `src/sim/mod.rs`: `pub mod
+cosim;` (drop gated `cosim_metal`). Audit `pub use`, `jacquard.rs`, docs, CI.
+**Gate: `cargo check --lib` (no feature) must compile** — it currently can't
+(`cosim_metal` is fully gated). `mod.rs` must import **zero** `metal::*`. Metal
+bit-identical with `--features metal`. Plan: step 4 bullet in
+`docs/plans/cosim-phase1-cpu-backend.md`. Step 1's exit assertion + step 3's
+token sweep front-loaded this, so step 4 only *moves* code. **Then** step 5
+(`CpuBackend` — the trait surface is now complete: `new` returns `(Self,
+Vec<BusTraceLane>)`, `state`/`state_mut`/`sram`, the `drain_*`/`flash_*` decode
+methods with sane no-op defaults), steps 6–7 (`cmd_cosim` backend selection +
+Linux CI).
 
-The 7-step sequencing + the peripheral-contract design (ADR 0017 Layer 3) are
-recorded in the plan + ADR 0017.
+Step 3 left the trait fully backend-neutral: `run_cosim_generic<B: CosimBackend>`
+drives everything through trait methods; `CpuBackend` only needs to implement
+`new`/`init_schedule`/`edge_ops`/`run_edges`/`state*`/`sram`/`flash_d_i`/
+`drain_uart_tx`/`drain_bus_beats`/`flash_set_in_reset`/`wait`/`vcd_snapshot`
+(+ the no-op-default debug/profile methods come free).
 
 **Done so far in Phase 1:**
 - **Step 1** (`bc18f79`): de-Metaled the `run_edges` seam (dropped
@@ -80,6 +74,21 @@ recorded in the plan + ADR 0017.
   bit-identical: added `flash_d_out_pos` local for the trace dump; 3 `FlashDebug`
   fields carried `#[allow(dead_code)]` for the CpuBackend contract; tick-0
   raw+field dump consolidated into `debug_flash_raw_tick0`, stderr-only.)
+- **Step 3b-ii-a** (`0bb150c`): assembled `MetalBackend::new(...) -> (Self,
+  Vec<BusTraceLane>)` (fat constructor: `MetalSimulator::new` + build_state/flash/io
+  + timing buffer + struct literal). Stimulus deposits now go through
+  `state_mut()` after construction. `event_buffer_ptr` became a field freed by a
+  `Drop for MetalBackend`, removing the two manual `drop(Box::from_raw(...))`
+  sites. `run_cosim` stayed concrete. Profile early-return Drop path explicitly
+  exercised; no double-free. Metal bit-identical, 298 tests pass.
+- **Step 3b-ii-b** (`14f6a27`): added `CosimBackend::new` (fat constructor) +
+  `profile_kernels` (default no-op) to the trait; moved the `write_params`
+  GPU-setup loop into `MetalBackend::new`. Renamed the body to
+  `run_cosim_generic<B: CosimBackend>` (all `backend.*` via trait methods — zero
+  concrete `MetalBackend`/`metal::` tokens); `pub fn run_cosim` is now a thin
+  `run_cosim_generic::<MetalBackend>` shim, so `jacquard.rs:1792` is unchanged
+  and `MetalBackend` stays private. **Step 3 done.** Metal bit-identical, 298
+  tests pass.
 
 **Then:** step 4 (module split `cosim/{mod,metal}.rs`, `cargo check
 --lib` no-feature must compile), step 5 (`CpuBackend` + CPU UART-TX decoder
