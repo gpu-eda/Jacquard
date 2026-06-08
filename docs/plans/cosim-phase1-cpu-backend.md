@@ -130,10 +130,35 @@ shift-register baud FSM).
    - **2b** — UART + WB + bus-trace buffer alloc + init.
    - **2c** — states/sram/sram-xmask/event/blocks alloc + init (incl. xprop
      X-mask seeding). `run_cosim` ends up calling `MetalBackend::new(...)`.
-3. **Make `run_cosim` generic** `run_cosim<B: CosimBackend>(...)`; Metal path
-   constructs `MetalBackend`. Metal bit-identical. *Exit: no `metal::` /
-   `MTLResourceOptions` token remains outside the (about-to-move) Metal
-   constructor + impl.*
+3. **De-Metal the `run_cosim` body + make it generic.** Split into three
+   bit-identical checkpoints (the loop body, not the construction block, is the
+   real work — step 1 deferred the diagnostic-read routing, so it lands here):
+   - **3a** *(done, `d5a029f`)* — add `state`/`state_mut`/`sram` to the trait +
+     `MetalBackend` (`sram_len` field); route the ~15 read-only
+     `states_buffer`/`sram_data_buffer` loop-body reads through `state()`/
+     `sram()`. `run_cosim` stays concrete-typed.
+   - **3b-i** — route the remaining concrete-field reads (groups C+D) off
+     `MetalBackend` fields, **decoded-records seam** (ADR 0017 Layer 3):
+     - *Flash diagnostics (C):* `FlashModelParams`/`FlashDinParams` reads become
+       agnostic locals (derived from `config`+`gpio_map`, as `build_flash_buffers`
+       does). `FlashState` reads → `flash_d_i() -> u8` (functional, for
+       `--check-with-cpu`) + `flash_debug_snapshot() -> FlashDebug` (agnostic
+       struct mirroring the printed fields); the tick-0 raw-bytes/offsetof dump
+       stays Metal-internal behind a debug trait method (not deleted).
+     - *Peripheral drains (D):* `drain_uart_tx() -> Vec<(usize,u8)>`,
+       `drain_bus_beats() -> Vec<RawBeat>`, `drain_wb_trace_debug()` (legacy
+       eprintln, Metal-internal; CpuBackend no-op), `uart_decoder_debug(ch)`.
+       The read cursors (`uart_read_heads`, `wb/bus_trace_read_head`) move into
+       `MetalBackend`; `bus_lanes`/`uart_names`/event-dispatch/`tick` stay in the
+       agnostic orchestration. `run_cosim` stays concrete-typed.
+       *Exit: zero `backend.<field>.contents()` in the loop body.*
+   - **3b-ii** — assemble `MetalBackend::new` (the deferred step-2 finale:
+     `build_flash`+`build_io`+`build_state`+struct literal+`init_schedule`),
+     route the pre-loop stimulus deposits through `state_mut()`, flip to
+     `run_cosim<B: CosimBackend>` constructing the backend via the fat
+     constructor, update the `jacquard.rs` call site. Metal bit-identical.
+     *Exit: no `metal::` / `MTLResourceOptions` token outside the Metal
+     constructor + impl.*
 4. **Module split** `cosim_metal.rs` → `cosim/{mod,metal}.rs`. `mod.rs` must
    import **zero** `metal::*`; `ScheduleBuffers`/`MetalSimulator`/
    `create_ops_buffer`/`create_prep_params_buffer` and the GPU IO structs live
