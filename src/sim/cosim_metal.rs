@@ -2214,6 +2214,34 @@ fn simulate_block_v1_diag(
 /// `CpuBackend`; on Metal, state_prep is encoded *inside* `run_edges`' command
 /// buffer, so it is not a separate orchestration call. See
 /// `docs/plans/cosim-backend-portability.md`.
+/// Backend-agnostic snapshot of the SPI-flash decode FSM's printable fields
+/// (ADR 0017, Layer 3: output decode is backend-internal, the orchestration
+/// only sees decoded records). Mirrors the GPU `FlashState` struct's fields the
+/// cosim diagnostics print, but carries no Metal-ABI layout — each backend
+/// copies its native state into this on demand.
+///
+/// `curr_byte`/`out_buffer`/`prev_d_out` round out the FSM record for the
+/// future CpuBackend decoder + full-snapshot diagnostics; the Metal tick-0
+/// hexdump reads them straight from `FlashState` via `debug_flash_raw_tick0`,
+/// so they're carried but not yet read on this path.
+#[allow(dead_code)]
+struct FlashDebug {
+    d_i: u8,
+    data_width: u32,
+    prev_csn: u32,
+    in_reset: u32,
+    bit_count: i32,
+    byte_count: i32,
+    addr: u32,
+    curr_byte: u8,
+    command: u8,
+    out_buffer: u8,
+    prev_clk: u32,
+    prev_d_out: u8,
+    last_error_cmd: u32,
+    model_prev_csn: u32,
+}
+
 trait CosimBackend {
     /// Materialise the backend's native per-edge schedule storage *once* from
     /// the backend-agnostic ops description (one `Vec<BitOp>` per scheduler
@@ -2267,6 +2295,48 @@ trait CosimBackend {
     /// slot 0 each `run_edges`.)
     fn vcd_snapshot(&self, edge_in_batch: usize) -> &[u32];
 
+    // ── Peripheral output decode (ADR 0017, Layer 3) ──────────────────────
+    //
+    // Output decode is backend-internal: the GPU mirrors run the FSMs as
+    // kernels and stash results in shared ring buffers; a CpuBackend would run
+    // the equivalent CPU decoders. The orchestration never touches the native
+    // structs — it reads decoded records (bytes / beats / snapshots) through
+    // these methods.
+
+    /// Current SPI-flash MISO nibble (`FlashState.d_i`). Functional read for
+    /// the `--check-with-cpu` replay (the value `gpu_apply_flash_din` injects
+    /// into the input state before the edge).
+    fn flash_d_i(&self) -> u8;
+
+    /// Snapshot the flash decode FSM's printable fields for diagnostics. No
+    /// default — each backend copies from its native state.
+    fn flash_debug_snapshot(&self) -> FlashDebug;
+
+    /// Backend-specific tick-0 debug dump of the raw flash-state bytes (Metal:
+    /// the `FlashState` ABI hexdump + `offsetof d_i`). Pure debug artifact;
+    /// non-Metal backends are no-ops.
+    fn debug_flash_raw_tick0(&self) {}
+
+    /// Drain the UART TX decoder's decoded bytes, advancing the backend's read
+    /// cursor. Returns `(channel_idx, byte)` pairs in capture order; the
+    /// orchestration maps idx → name, records `UartEvent`s and dispatches.
+    fn drain_uart_tx(&mut self) -> Vec<(usize, u8)>;
+
+    /// Drain the AHB/APB bus-trace decoder's raw beats, advancing the read
+    /// cursor. The orchestration routes each beat to its protocol decoder.
+    fn drain_bus_beats(&mut self) -> Vec<crate::sim::models::bus_trace::RawBeat>;
+
+    /// Drain the legacy Wishbone-trace channel, emitting its debug `eprintln!`s
+    /// internally and advancing the read cursor. Debug-only; default no-op
+    /// (CpuBackend leaves `write_head=0`, so this never fires).
+    fn drain_wb_trace_debug(&mut self) {}
+
+    /// Diagnostic read of a UART channel's decoder FSM: `(state, current_cycle)`
+    /// for channel `ch`. Default `(0, 0)` for backends without the GPU mirror.
+    fn uart_decoder_debug(&self, _ch: usize) -> (u32, u32) {
+        (0, 0)
+    }
+
     /// Run `batch` consecutive scheduler edges starting at `schedule_offset`
     /// in one dispatch, snapshotting each output slot into the VCD ring when
     /// enabled. Returns the completion token to pass to [`CosimBackend::wait`].
@@ -2318,6 +2388,16 @@ struct MetalBackend {
     /// Per-edge `[input | output]` snapshot ring for VCD; `None` until
     /// `enable_vcd_ring`. `run_edges` blits each edge's state into it.
     vcd_ring: Option<metal::Buffer>,
+    /// Number of active UART channels (== `uart_configs.len()`); bounds the
+    /// `drain_uart_tx` loop.
+    n_uarts: usize,
+    /// Per-UART ring read cursors (decoded-byte drain). Sized `n_uarts`,
+    /// zeroed; `drain_uart_tx` advances each from its cursor to `write_head`.
+    uart_read_heads: Vec<u32>,
+    /// Wishbone-trace ring read cursor (legacy debug drain).
+    wb_trace_read_head: u32,
+    /// AHB/APB bus-trace ring read cursor.
+    bus_trace_read_head: u32,
 }
 
 impl MetalBackend {
@@ -2947,6 +3027,147 @@ impl CosimBackend for MetalBackend {
         }
     }
 
+    fn flash_d_i(&self) -> u8 {
+        unsafe {
+            let fs = &*(self.flash_state_buffer.contents() as *const FlashState);
+            fs.d_i
+        }
+    }
+
+    fn flash_debug_snapshot(&self) -> FlashDebug {
+        unsafe {
+            let fs = &*(self.flash_state_buffer.contents() as *const FlashState);
+            FlashDebug {
+                d_i: fs.d_i,
+                data_width: fs.data_width,
+                prev_csn: fs.prev_csn,
+                in_reset: fs.in_reset,
+                bit_count: fs.bit_count,
+                byte_count: fs.byte_count,
+                addr: fs.addr,
+                curr_byte: fs.curr_byte,
+                command: fs.command,
+                out_buffer: fs.out_buffer,
+                prev_clk: fs.prev_clk,
+                prev_d_out: fs.prev_d_out,
+                last_error_cmd: fs.last_error_cmd,
+                model_prev_csn: fs.model_prev_csn,
+            }
+        }
+    }
+
+    fn debug_flash_raw_tick0(&self) {
+        unsafe {
+            let fs = &*(self.flash_state_buffer.contents() as *const FlashState);
+            // Dump raw bytes at flash state location (Metal-ABI debug artifact).
+            let raw = std::slice::from_raw_parts(
+                self.flash_state_buffer.contents() as *const u8,
+                std::mem::size_of::<FlashState>(),
+            );
+            eprintln!("  FlashState raw bytes (tick 0): {:02X?}", raw);
+            eprintln!("  FlashState fields: bit_count={}, byte_count={}, data_width={}, addr=0x{:08X}",
+                fs.bit_count, fs.byte_count, fs.data_width, fs.addr);
+            eprintln!("  FlashState fields: curr_byte=0x{:02X}, command=0x{:02X}, out_buffer=0x{:02X}",
+                fs.curr_byte, fs.command, fs.out_buffer);
+            eprintln!(
+                "  FlashState fields: prev_clk={}, prev_csn={}, d_i=0x{:02X}",
+                fs.prev_clk, fs.prev_csn, fs.d_i
+            );
+            eprintln!("  FlashState fields: prev_d_out=0x{:02X}, in_reset={}, last_error_cmd={}, model_prev_csn={}",
+                fs.prev_d_out, fs.in_reset, fs.last_error_cmd, fs.model_prev_csn);
+            eprintln!(
+                "  FlashState offsetof d_i = {}",
+                (&fs.d_i as *const u8 as usize) - (fs as *const FlashState as usize)
+            );
+        }
+    }
+
+    fn drain_uart_tx(&mut self) -> Vec<(usize, u8)> {
+        let mut out = Vec::new();
+        unsafe {
+            let base = self.uart_channel_buffer.contents() as *const UartChannel;
+            for i in 0..self.n_uarts {
+                let channel = &*base.add(i);
+                while self.uart_read_heads[i] < channel.write_head {
+                    let byte = channel.data[(self.uart_read_heads[i] % channel.capacity) as usize];
+                    out.push((i, byte));
+                    self.uart_read_heads[i] += 1;
+                }
+            }
+        }
+        out
+    }
+
+    fn drain_bus_beats(&mut self) -> Vec<crate::sim::models::bus_trace::RawBeat> {
+        use crate::sim::models::bus_trace::RawBeat;
+        let mut out = Vec::new();
+        unsafe {
+            let ch = &*(self.bus_trace_channel_buffer.contents() as *const BusTraceChannel);
+            let entries_ptr = (self.bus_trace_channel_buffer.contents() as *const u8)
+                .add(std::mem::size_of::<BusTraceChannel>())
+                as *const BusTraceEntry;
+            while self.bus_trace_read_head < ch.write_head {
+                let idx = (self.bus_trace_read_head % ch.capacity) as usize;
+                let e = &*entries_ptr.add(idx);
+                let bus_id = (e.flags >> 8) & 0xFF;
+                out.push(RawBeat {
+                    tick: e.tick as u64,
+                    bus_id,
+                    write: (e.flags & 1) != 0,
+                    err: (e.flags >> 1) & 1 != 0,
+                    addr: e.addr as u64,
+                    wdata: e.wdata as u64,
+                    rdata: e.rdata as u64,
+                });
+                self.bus_trace_read_head += 1;
+            }
+        }
+        out
+    }
+
+    fn drain_wb_trace_debug(&mut self) {
+        unsafe {
+            let ch = &*(self.wb_trace_channel_buffer.contents() as *const WbTraceChannel);
+            let entries_ptr =
+                (self.wb_trace_channel_buffer.contents() as *const u8).add(16) as *const WbTraceEntry;
+            while self.wb_trace_read_head < ch.write_head {
+                let idx = (self.wb_trace_read_head % ch.capacity) as usize;
+                let e = &*entries_ptr.add(idx);
+                let ibus_cyc = e.flags & 1;
+                let ibus_stb = (e.flags >> 1) & 1;
+                let dbus_cyc = (e.flags >> 2) & 1;
+                let dbus_stb = (e.flags >> 3) & 1;
+                let dbus_we = (e.flags >> 4) & 1;
+                let spi_ack = (e.flags >> 5) & 1;
+                let sram_ack = (e.flags >> 6) & 1;
+                let _csr_ack = (e.flags >> 7) & 1;
+                if ibus_cyc != 0 && ibus_stb != 0 {
+                    eprintln!(
+                        "WB T{:>5}: IBUS adr=0x{:08X} rdata=0x{:08X} spi_ack={} sram_ack={}",
+                        e.tick, e.ibus_adr, e.ibus_rdata, spi_ack, sram_ack
+                    );
+                }
+                if dbus_cyc != 0 && dbus_stb != 0 {
+                    eprintln!(
+                        "WB T{:>5}: DBUS adr=0x{:08X} we={} sram_ack={}",
+                        e.tick, e.dbus_adr, dbus_we, sram_ack
+                    );
+                }
+                if ibus_cyc == 0 && ibus_stb == 0 && dbus_cyc == 0 && dbus_stb == 0 {
+                    eprintln!("WB T{:>5}: bus idle (flags=0x{:02X})", e.tick, e.flags);
+                }
+                self.wb_trace_read_head += 1;
+            }
+        }
+    }
+
+    fn uart_decoder_debug(&self, ch: usize) -> (u32, u32) {
+        unsafe {
+            let us = &*(self.uart_state_buffer.contents() as *const UartDecoderState).add(ch);
+            (us.state, us.current_cycle)
+        }
+    }
+
     fn run_edges(&self, batch: usize, schedule_offset: usize) -> u64 {
         self.sim.encode_and_commit_gpu_batch(
             batch,
@@ -3097,6 +3318,41 @@ pub fn run_cosim(
     // ── Build GPIO mapping ───────────────────────────────────────────────
 
     let gpio_map = build_gpio_mapping(aig, netlistdb, script, config.port_mapping.as_ref());
+
+    // ── Agnostic flash const-params (P1.3b-i) ────────────────────────────
+    //
+    // The flash MISO bit positions and clk/csn output positions are
+    // const-after-init in `MetalBackend::build_flash_buffers`
+    // (FlashModelParams / FlashDinParams). Recompute them here as
+    // backend-agnostic locals so the cosim loop's flash diagnostics don't
+    // read the GPU param buffers. Bit-identical to the buffer init formulas.
+    let flash_clk_out_pos: u32 = config
+        .flash
+        .as_ref()
+        .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
+        .unwrap_or(0);
+    let flash_csn_out_pos: u32 = config
+        .flash
+        .as_ref()
+        .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
+        .unwrap_or(0);
+    let flash_has: bool = config.flash.is_some();
+    let mut flash_d_in_pos: [u32; 4] = [0xFFFFFFFF; 4];
+    for (i, slot) in flash_d_in_pos.iter_mut().enumerate() {
+        *slot = config
+            .flash
+            .as_ref()
+            .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
+            .unwrap_or(0xFFFFFFFF);
+    }
+    let mut flash_d_out_pos: [u32; 4] = [0xFFFFFFFF; 4];
+    for (i, slot) in flash_d_out_pos.iter_mut().enumerate() {
+        *slot = config
+            .flash
+            .as_ref()
+            .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
+            .unwrap_or(0xFFFFFFFF);
+    }
 
     // Verify we found the expected GPIO pins
     let clock_gpio = config.clock_gpio;
@@ -3755,6 +4011,10 @@ pub fn run_cosim(
         bus_trace_params_buffer,
         bus_trace_channel_buffer,
         vcd_ring: None,
+        n_uarts,
+        uart_read_heads: vec![0u32; n_uarts],
+        wb_trace_read_head: 0,
+        bus_trace_read_head: 0,
     };
     backend.init_schedule(
         per_edge_ops,
@@ -4014,8 +4274,8 @@ pub fn run_cosim(
     let mut schedule_offset: usize = 0;
 
     // Verify flash state hasn't been corrupted before main loop
-    unsafe {
-        let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
+    {
+        let fs = backend.flash_debug_snapshot();
         clilog::info!(
             "FlashState before main loop: d_i=0x{:02X}, data_width={}, prev_csn={}, in_reset={}",
             fs.d_i,
@@ -4032,10 +4292,7 @@ pub fn run_cosim(
 
     // UART event collection (CPU-side, populated from channel drain)
     let mut uart_events: Vec<UartEvent> = Vec::new();
-    let mut uart_read_heads: Vec<u32> = vec![0u32; n_uarts];
     let uart_names: Vec<String> = uart_configs.iter().map(|(name, _, _, _)| name.clone()).collect();
-    let mut wb_trace_read_head: u32 = 0;
-    let mut bus_trace_read_head: u32 = 0;
 
     // Profiling accumulators
     let mut prof_batch_encode: u64 = 0;
@@ -4227,32 +4484,12 @@ pub fn run_cosim(
             let gpu_sram: &[u32] = backend.sram();
             cpu_sram.copy_from_slice(gpu_sram);
             // Save flash d_i before GPU modifies it (apply_flash_din reads this)
-            saved_flash_d_i = unsafe {
-                let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
-                if tick == 0 {
-                    // Dump raw bytes at flash state location
-                    let raw = std::slice::from_raw_parts(
-                        backend.flash_state_buffer.contents() as *const u8,
-                        std::mem::size_of::<FlashState>(),
-                    );
-                    eprintln!("  FlashState raw bytes (tick 0): {:02X?}", raw);
-                    eprintln!("  FlashState fields: bit_count={}, byte_count={}, data_width={}, addr=0x{:08X}",
-                        fs.bit_count, fs.byte_count, fs.data_width, fs.addr);
-                    eprintln!("  FlashState fields: curr_byte=0x{:02X}, command=0x{:02X}, out_buffer=0x{:02X}",
-                        fs.curr_byte, fs.command, fs.out_buffer);
-                    eprintln!(
-                        "  FlashState fields: prev_clk={}, prev_csn={}, d_i=0x{:02X}",
-                        fs.prev_clk, fs.prev_csn, fs.d_i
-                    );
-                    eprintln!("  FlashState fields: prev_d_out=0x{:02X}, in_reset={}, last_error_cmd={}, model_prev_csn={}",
-                        fs.prev_d_out, fs.in_reset, fs.last_error_cmd, fs.model_prev_csn);
-                    eprintln!(
-                        "  FlashState offsetof d_i = {}",
-                        (&fs.d_i as *const u8 as usize) - (fs as *const FlashState as usize)
-                    );
-                }
-                fs.d_i
-            };
+            if tick == 0 {
+                // Metal-ABI raw-bytes hexdump + field dump + offsetof
+                // (backend-internal debug artifact).
+                backend.debug_flash_raw_tick0();
+            }
+            saved_flash_d_i = backend.flash_d_i();
             if tick == 0 {
                 eprintln!(
                     "  saved_flash_d_i = 0x{:02X} (right after assignment)",
@@ -4475,15 +4712,13 @@ pub fn run_cosim(
         // Per-tick flash signal diagnostic
         if trace_ticks > 0 && tick + batch <= reset_edges + trace_ticks as usize {
             let output_state: &[u32] = &backend.state()[state_size..];
-            let fmp =
-                unsafe { &*(backend.flash_model_params_buffer.contents() as *const FlashModelParams) };
-            let flash_clk_pos = fmp.clk_out_pos;
-            let flash_csn_pos = fmp.csn_out_pos;
+            let flash_clk_pos = flash_clk_out_pos;
+            let flash_csn_pos = flash_csn_out_pos;
             let flash_clk =
                 (output_state[(flash_clk_pos >> 5) as usize] >> (flash_clk_pos & 31)) & 1;
             let flash_csn =
                 (output_state[(flash_csn_pos >> 5) as usize] >> (flash_csn_pos & 31)) & 1;
-            let fs = unsafe { &*(backend.flash_state_buffer.contents() as *const FlashState) };
+            let fs = backend.flash_debug_snapshot();
             clilog::debug!("FLASH_TRACE tick {}: clk={} csn={} d_i=0x{:02X} cmd=0x{:02X} addr=0x{:06X} in_reset={}",
                 tick + batch, flash_clk, flash_csn, fs.d_i, fs.command, fs.addr, fs.in_reset);
         }
@@ -4507,16 +4742,15 @@ pub fn run_cosim(
 
             // CPU apply_flash_din
             {
-                let p = unsafe { &*(backend.flash_din_params_buffer.contents() as *const FlashDinParams) };
                 if tick == 0 {
                     eprintln!(
                         "  CPU flash_din: has_flash={}, d_i=0x{:02X}, d_in_pos={:?}",
-                        p.has_flash, saved_flash_d_i, p.d_in_pos
+                        flash_has as u32, saved_flash_d_i, flash_d_in_pos
                     );
                 }
-                if p.has_flash != 0 {
+                if flash_has {
                     for i in 0..4usize {
-                        let pos = p.d_in_pos[i];
+                        let pos = flash_d_in_pos[i];
                         if pos == 0xFFFFFFFF {
                             continue;
                         }
@@ -4701,97 +4935,38 @@ pub fn run_cosim(
             }
         }
 
-        // Drain UART channels (CPU reads decoded bytes from GPU ring buffers)
+        // Drain UART channels: the backend decodes TX bytes into its ring;
+        // the orchestration maps channel idx → name and records events.
         let t_drain = std::time::Instant::now();
-        unsafe {
-            let base = backend.uart_channel_buffer.contents() as *const UartChannel;
-            for i in 0..n_uarts {
-                let channel = &*base.add(i);
-                let name = &uart_names[i];
-                while uart_read_heads[i] < channel.write_head {
-                    let byte =
-                        channel.data[(uart_read_heads[i] % channel.capacity) as usize];
-                    let ch = if byte >= 32 && byte < 127 {
-                        byte as char
-                    } else {
-                        '.'
-                    };
-                    clilog::info!("UART '{}' TX: 0x{:02X} '{}'", name, byte, ch);
-                    uart_events.push(UartEvent {
-                        timestamp: tick,
-                        peripheral: name.clone(),
-                        event: "tx".to_string(),
-                        payload: byte,
-                    });
-                    if let Some(d) = input_dispatcher.as_mut() {
-                        d.on_event(name, "tx", &serde_json::json!(byte));
-                    }
-                    uart_read_heads[i] += 1;
-                }
+        for (i, byte) in backend.drain_uart_tx() {
+            let name = &uart_names[i];
+            let ch = if byte >= 32 && byte < 127 {
+                byte as char
+            } else {
+                '.'
+            };
+            clilog::info!("UART '{}' TX: 0x{:02X} '{}'", name, byte, ch);
+            uart_events.push(UartEvent {
+                timestamp: tick,
+                peripheral: name.clone(),
+                event: "tx".to_string(),
+                payload: byte,
+            });
+            if let Some(d) = input_dispatcher.as_mut() {
+                d.on_event(name, "tx", &serde_json::json!(byte));
             }
         }
-        // Drain WB trace channel
-        unsafe {
-            let ch = &*(backend.wb_trace_channel_buffer.contents() as *const WbTraceChannel);
-            let entries_ptr =
-                (backend.wb_trace_channel_buffer.contents() as *const u8).add(16) as *const WbTraceEntry;
-            while wb_trace_read_head < ch.write_head {
-                let idx = (wb_trace_read_head % ch.capacity) as usize;
-                let e = &*entries_ptr.add(idx);
-                let ibus_cyc = e.flags & 1;
-                let ibus_stb = (e.flags >> 1) & 1;
-                let dbus_cyc = (e.flags >> 2) & 1;
-                let dbus_stb = (e.flags >> 3) & 1;
-                let dbus_we = (e.flags >> 4) & 1;
-                let spi_ack = (e.flags >> 5) & 1;
-                let sram_ack = (e.flags >> 6) & 1;
-                let _csr_ack = (e.flags >> 7) & 1;
-                if ibus_cyc != 0 && ibus_stb != 0 {
-                    eprintln!(
-                        "WB T{:>5}: IBUS adr=0x{:08X} rdata=0x{:08X} spi_ack={} sram_ack={}",
-                        e.tick, e.ibus_adr, e.ibus_rdata, spi_ack, sram_ack
-                    );
-                }
-                if dbus_cyc != 0 && dbus_stb != 0 {
-                    eprintln!(
-                        "WB T{:>5}: DBUS adr=0x{:08X} we={} sram_ack={}",
-                        e.tick, e.dbus_adr, dbus_we, sram_ack
-                    );
-                }
-                if ibus_cyc == 0 && ibus_stb == 0 && dbus_cyc == 0 && dbus_stb == 0 {
-                    eprintln!("WB T{:>5}: bus idle (flags=0x{:02X})", e.tick, e.flags);
-                }
-                wb_trace_read_head += 1;
-            }
-        }
+        // Drain WB trace channel (legacy debug-only; backend-internal eprintln).
+        backend.drain_wb_trace_debug();
         // Drain AHB/APB bus trace channel: route each raw beat to its
         // bus's protocol decoder, collecting completed transactions.
         if !bus_lanes.is_empty() {
-            use crate::sim::models::bus_trace::RawBeat;
-            unsafe {
-                let ch = &*(backend.bus_trace_channel_buffer.contents() as *const BusTraceChannel);
-                let entries_ptr = (backend.bus_trace_channel_buffer.contents() as *const u8)
-                    .add(std::mem::size_of::<BusTraceChannel>())
-                    as *const BusTraceEntry;
-                while bus_trace_read_head < ch.write_head {
-                    let idx = (bus_trace_read_head % ch.capacity) as usize;
-                    let e = &*entries_ptr.add(idx);
-                    let bus_id = (e.flags >> 8) & 0xFF;
-                    if let Some(lane) = bus_lanes.get_mut(bus_id as usize) {
-                        let beat = RawBeat {
-                            tick: e.tick as u64,
-                            bus_id,
-                            write: (e.flags & 1) != 0,
-                            err: (e.flags >> 1) & 1 != 0,
-                            addr: e.addr as u64,
-                            wdata: e.wdata as u64,
-                            rdata: e.rdata as u64,
-                        };
-                        if let Some(txn) = lane.decoder.push(beat) {
-                            bus_transactions.push((bus_id, txn));
-                        }
+            for beat in backend.drain_bus_beats() {
+                let bus_id = beat.bus_id;
+                if let Some(lane) = bus_lanes.get_mut(bus_id as usize) {
+                    if let Some(txn) = lane.decoder.push(beat) {
+                        bus_transactions.push((bus_id, txn));
                     }
-                    bus_trace_read_head += 1;
                 }
             }
         }
@@ -4815,58 +4990,55 @@ pub fn run_cosim(
 
         // Deep diagnostics: SRAM activity + flash transaction tracking
         if deep_diag && tick > reset_edges && batch == 1 {
-            unsafe {
-                let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
-                let fmp = &*(backend.flash_model_params_buffer.contents() as *const FlashModelParams);
-                let st = backend.state();
-                let read_out_bit = |pos: u32| -> u32 {
-                    let word_idx = state_size + (pos as usize >> 5);
-                    let bit_idx = pos & 31;
-                    (st[word_idx] >> bit_idx) & 1
-                };
-                let csn_val = read_out_bit(fmp.csn_out_pos);
+            let fs = backend.flash_debug_snapshot();
+            let st = backend.state();
+            let read_out_bit = |pos: u32| -> u32 {
+                let word_idx = state_size + (pos as usize >> 5);
+                let bit_idx = pos & 31;
+                (st[word_idx] >> bit_idx) & 1
+            };
+            let csn_val = read_out_bit(flash_csn_out_pos);
 
-                // Detect CSN transitions (transaction boundaries)
-                if csn_val == 1 && diag_prev_csn == 0 {
-                    // CSN rising edge = transaction complete
+            // Detect CSN transitions (transaction boundaries)
+            if csn_val == 1 && diag_prev_csn == 0 {
+                // CSN rising edge = transaction complete
+                eprintln!(
+                    "DIAG T{}: Flash transaction end: cmd=0x{:02X} addr=0x{:06X} bytes={}",
+                    tick, fs.command, fs.addr, fs.byte_count
+                );
+            }
+            if csn_val == 0 && diag_prev_csn == 1 {
+                eprintln!("DIAG T{}: Flash transaction start", tick);
+            }
+            diag_prev_csn = csn_val;
+
+            // Track address changes
+            if fs.addr != diag_prev_flash_addr || fs.command != diag_prev_flash_cmd {
+                if fs.command != 0 {
+                    eprintln!("DIAG T{}: Flash addr changed: cmd=0x{:02X} addr=0x{:06X} bytes={} bitc={}",
+                        tick, fs.command, fs.addr, fs.byte_count, fs.bit_count);
+                }
+                diag_prev_flash_addr = fs.addr;
+                diag_prev_flash_cmd = fs.command;
+            }
+
+            // Check SRAM activity every 100 ticks
+            if tick % 100 == 0 {
+                let sram = backend.sram();
+                let nonzero = sram.iter().filter(|&&w| w != 0).count();
+                if nonzero != diag_sram_write_count {
                     eprintln!(
-                        "DIAG T{}: Flash transaction end: cmd=0x{:02X} addr=0x{:06X} bytes={}",
-                        tick, fs.command, fs.addr, fs.byte_count
+                        "DIAG T{}: SRAM non-zero words: {} (was {})",
+                        tick, nonzero, diag_sram_write_count
                     );
-                }
-                if csn_val == 0 && diag_prev_csn == 1 {
-                    eprintln!("DIAG T{}: Flash transaction start", tick);
-                }
-                diag_prev_csn = csn_val;
-
-                // Track address changes
-                if fs.addr != diag_prev_flash_addr || fs.command != diag_prev_flash_cmd {
-                    if fs.command != 0 {
-                        eprintln!("DIAG T{}: Flash addr changed: cmd=0x{:02X} addr=0x{:06X} bytes={} bitc={}",
-                            tick, fs.command, fs.addr, fs.byte_count, fs.bit_count);
-                    }
-                    diag_prev_flash_addr = fs.addr;
-                    diag_prev_flash_cmd = fs.command;
-                }
-
-                // Check SRAM activity every 100 ticks
-                if tick % 100 == 0 {
-                    let sram = backend.sram();
-                    let nonzero = sram.iter().filter(|&&w| w != 0).count();
-                    if nonzero != diag_sram_write_count {
-                        eprintln!(
-                            "DIAG T{}: SRAM non-zero words: {} (was {})",
-                            tick, nonzero, diag_sram_write_count
-                        );
-                        diag_sram_write_count = nonzero;
-                    }
+                    diag_sram_write_count = nonzero;
                 }
             }
         }
 
         // Diagnostic: dump flash-related signals
         if trace_ticks > 0 && tick <= reset_edges + trace_ticks && tick > reset_edges {
-            unsafe {
+            {
                 let st = backend.state();
                 let read_out_bit = |pos: u32| -> u32 {
                     let word_idx = state_size + (pos as usize >> 5);
@@ -4878,21 +5050,19 @@ pub fn run_cosim(
                     let bit_idx = pos & 31;
                     (st[word_idx] >> bit_idx) & 1
                 };
-                let fmp = &*(backend.flash_model_params_buffer.contents() as *const FlashModelParams);
-                let fdp = &*(backend.flash_din_params_buffer.contents() as *const FlashDinParams);
-                let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
-                let clk_val = read_out_bit(fmp.clk_out_pos);
-                let csn_val = read_out_bit(fmp.csn_out_pos);
+                let fs = backend.flash_debug_snapshot();
+                let clk_val = read_out_bit(flash_clk_out_pos);
+                let csn_val = read_out_bit(flash_csn_out_pos);
                 let mut d_out_vals = [0u32; 4];
                 for i in 0..4 {
-                    if fmp.d_out_pos[i] != 0xFFFFFFFF {
-                        d_out_vals[i] = read_out_bit(fmp.d_out_pos[i]);
+                    if flash_d_out_pos[i] != 0xFFFFFFFF {
+                        d_out_vals[i] = read_out_bit(flash_d_out_pos[i]);
                     }
                 }
                 let mut d_in_vals = [0u32; 4];
                 for i in 0..4 {
-                    if fdp.d_in_pos[i] != 0xFFFFFFFF {
-                        d_in_vals[i] = read_in_bit(fdp.d_in_pos[i]);
+                    if flash_d_in_pos[i] != 0xFFFFFFFF {
+                        d_in_vals[i] = read_in_bit(flash_d_in_pos[i]);
                     }
                 }
                 eprintln!("T{:>4}: clk={} csn={} d_o={}{}{}{} d_i={}{}{}{} | fs: d_i=0x{:X} cmd=0x{:02X} bc={} bitc={} dw={} addr=0x{:06X} pclk={} pcsn={} mcsn={} inr={}",
@@ -4911,20 +5081,22 @@ pub fn run_cosim(
         if tick > 0 && tick % 100000 < batch {
             let elapsed = sim_start.elapsed();
             let us_per_edge = elapsed.as_micros() as f64 / tick as f64;
-            // Read first UART's TX bit and decoder state for diagnostics
-            let (uart_tx_val, uart_dec_state, uart_dec_cycle) = unsafe {
-                let up = &*(backend.uart_params_buffer.contents() as *const UartParams);
-                if up.n_uarts > 0 {
-                    let st = backend.state();
-                    let tx_pos = up.channels[0].tx_out_pos;
-                    let tx_word = state_size + (tx_pos as usize >> 5);
-                    let tx_bit = tx_pos & 31;
-                    let tx_val = (st[tx_word] >> tx_bit) & 1;
-                    let us = &*(backend.uart_state_buffer.contents() as *const UartDecoderState);
-                    (tx_val, us.state, us.current_cycle)
-                } else {
-                    (0, 0, 0)
-                }
+            // Read first UART's TX bit and decoder state for diagnostics. The
+            // TX bit position is the agnostic UartParams.channels[0].tx_out_pos
+            // formula (build_io_buffers): output_bits[tx_gpio], default 0.
+            let (uart_tx_val, uart_dec_state, uart_dec_cycle) = if n_uarts > 0 {
+                let tx_pos = uart_configs
+                    .first()
+                    .and_then(|(_, tx_gpio, _, _)| gpio_map.output_bits.get(tx_gpio).copied())
+                    .unwrap_or(0);
+                let st = backend.state();
+                let tx_word = state_size + (tx_pos as usize >> 5);
+                let tx_bit = tx_pos & 31;
+                let tx_val = (st[tx_word] >> tx_bit) & 1;
+                let (dec_state, dec_cycle) = backend.uart_decoder_debug(0);
+                (tx_val, dec_state, dec_cycle)
+            } else {
+                (0, 0, 0)
             };
             clilog::info!(
                 "Tick {} / {} ({:.1}μs/tick, batches={}, UART bytes={}, tx={}, uart_st={}, uart_cyc={})",
@@ -5061,10 +5233,7 @@ pub fn run_cosim(
 
     // ── Check GPU flash state for errors ─────────────────────────────────
 
-    let last_error_cmd = unsafe {
-        let fs = &*(backend.flash_state_buffer.contents() as *const FlashState);
-        fs.last_error_cmd
-    };
+    let last_error_cmd = backend.flash_debug_snapshot().last_error_cmd;
     if last_error_cmd != 0 {
         clilog::warn!(
             "GPU flash model encountered unknown command: 0x{:02X}",
@@ -5151,7 +5320,7 @@ pub fn run_cosim(
 
     // Print flash model stats (GPU-side state)
     if config.flash.is_some() {
-        let fs = unsafe { &*(backend.flash_state_buffer.contents() as *const FlashState) };
+        let fs = backend.flash_debug_snapshot();
         println!(
             "GPU Flash model: command=0x{:02X}, byte_count={}, addr=0x{:06X}, error_cmd=0x{:X}",
             fs.command, fs.byte_count, fs.addr, fs.last_error_cmd
