@@ -2398,6 +2398,24 @@ struct MetalBackend {
     wb_trace_read_head: u32,
     /// AHB/APB bus-trace ring read cursor.
     bus_trace_read_head: u32,
+    /// Leaked `Box<EventBuffer>` raw pointer (`$stop`/`$finish`/assertions).
+    /// The Metal event buffer wraps this no-copy; freed by `Drop for
+    /// MetalBackend` at end-of-scope / early-return (all GPU work has
+    /// completed by then). Owns the box — do NOT free it elsewhere.
+    event_buffer_ptr: *mut crate::event_buffer::EventBuffer,
+}
+
+impl Drop for MetalBackend {
+    fn drop(&mut self) {
+        // SAFETY: `event_buffer_ptr` was produced by `Box::into_raw` in
+        // `build_state_buffers` and is owned solely by this backend. All GPU
+        // work referencing the no-copy event buffer has completed before the
+        // backend drops (end-of-run or the profile early-return), so freeing
+        // the box here is sound and cannot use-after-free.
+        unsafe {
+            drop(Box::from_raw(self.event_buffer_ptr));
+        }
+    }
 }
 
 impl MetalBackend {
@@ -2697,14 +2715,13 @@ impl MetalBackend {
     /// SRAM data/X-mask fills, the SRAM ELF preload, the no-copy wrappers over
     /// the `script` blocks UVecs, and the leaked-`Box` event buffer. The
     /// backend-agnostic stimulus deposits (reg_init / reset / constant_ports /
-    /// set_flash_din) stay in `run_cosim`, operating on a `states` slice
-    /// re-derived over the returned `states_buffer`.
+    /// set_flash_din) run after construction in `run_cosim`, through
+    /// `state_mut()`.
     ///
     /// Returns the four GPU buffers, the blocks no-copy buffers, the event
     /// buffer, **and `event_buffer_ptr`** — the `*mut EventBuffer` from
-    /// `Box::into_raw`. The caller keeps ownership of the leaked box and is
-    /// responsible for the matching `drop(Box::from_raw(event_buffer_ptr))`
-    /// (two existing sites in `run_cosim`); no Drop impl is added here.
+    /// `Box::into_raw`. `MetalBackend::new` stores it in the `event_buffer_ptr`
+    /// field; `Drop for MetalBackend` frees the box (Phase 1 step 3b-ii-a).
     #[allow(clippy::type_complexity)]
     fn build_state_buffers(
         device: &metal::Device,
@@ -2882,6 +2899,134 @@ impl MetalBackend {
             event_buffer_metal,
             event_buffer_ptr,
         )
+    }
+
+    /// Fat constructor (Phase 1 step 3b-ii-a). Assembles the full Metal
+    /// backend: `MetalSimulator::new` → `build_state_buffers` →
+    /// `build_flash_buffers` → `build_io_buffers` → the timing-constraints
+    /// buffer → the struct literal. Returns the constructed backend AND the
+    /// agnostic CPU bus decoders (`bus_lanes`) — `run_cosim`'s orchestration
+    /// (ADR 0017 Layer 1) owns those, so they ride out separately rather than
+    /// being trapped in the Metal struct.
+    ///
+    /// The order here is the exact pre-refactor order, preserved for
+    /// bit-identicality. Buffer-intrinsic init (states.fill + xprop X-mask
+    /// seed, SRAM data/X-mask fills + ELF preload, blocks no-copy, the leaked
+    /// event box) happens inside the builders; the backend-agnostic stimulus
+    /// deposits (reg_init / reset / constant_ports / set_flash_din) run
+    /// *after* construction at the call site, through `state_mut()`.
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        aig: &AIG,
+        netlistdb: &NetlistDB,
+        script: &FlattenedScriptV1,
+        config: &TestbenchConfig,
+        gpio_map: &GpioMapping,
+        uart_configs: &[(String, usize, usize, u32)],
+        sched_ticks_per_sys_clk_cycle: u64,
+        state_size: usize,
+        num_blocks: usize,
+        num_major_stages: usize,
+        arrival_state_offset: u32,
+        timing_constraints: &Option<Vec<u32>>,
+    ) -> (MetalBackend, Vec<BusTraceLane>) {
+        let simulator = MetalSimulator::new(num_major_stages);
+
+        // Design-state, SRAM, blocks-program, and event buffers. The builder
+        // owns the buffer-intrinsic init and returns the leaked `*mut
+        // EventBuffer`, which becomes the `event_buffer_ptr` field (freed by
+        // `Drop for MetalBackend`).
+        let (
+            states_buffer,
+            sram_data_buffer,
+            sram_xmask_buffer,
+            blocks_start_buffer,
+            blocks_data_buffer,
+            event_buffer_metal,
+            event_buffer_ptr,
+        ) = MetalBackend::build_state_buffers(&simulator.device, script, config, state_size);
+
+        // GPU SPI-flash IO buffers.
+        let (
+            flash_state_buffer,
+            flash_din_params_buffer,
+            flash_model_params_buffer,
+            flash_data_buffer,
+        ) = MetalBackend::build_flash_buffers(
+            &simulator.device,
+            config,
+            script,
+            state_size,
+            gpio_map,
+        );
+
+        // GPU IO peripheral buffers (uart/wb/bus). Returns the 7 buffers + the
+        // agnostic CPU bus decoders.
+        let (
+            uart_state_buffer,
+            uart_params_buffer,
+            uart_channel_buffer,
+            wb_trace_params_buffer,
+            wb_trace_channel_buffer,
+            bus_trace_params_buffer,
+            bus_trace_channel_buffer,
+            bus_lanes,
+        ) = MetalBackend::build_io_buffers(
+            &simulator.device,
+            aig,
+            netlistdb,
+            script,
+            config,
+            gpio_map,
+            state_size,
+            uart_configs,
+            sched_ticks_per_sys_clk_cycle,
+        );
+
+        // Timing constraint buffer for GPU-side setup/hold checking.
+        let timing_constraints_buffer = timing_constraints.as_ref().map(|buf| {
+            simulator.device.new_buffer_with_data(
+                buf.as_ptr() as *const _,
+                (buf.len() * std::mem::size_of::<u32>()) as u64,
+                MTLResourceOptions::StorageModeShared,
+            )
+        });
+
+        let n_uarts = uart_configs.len();
+        let backend = MetalBackend {
+            sim: simulator,
+            schedule: None,
+            state_size,
+            sram_len: script.sram_storage_size as usize,
+            num_blocks,
+            num_major_stages,
+            arrival_state_offset,
+            states_buffer,
+            blocks_start_buffer,
+            blocks_data_buffer,
+            event_buffer_metal,
+            sram_data_buffer,
+            sram_xmask_buffer,
+            timing_constraints_buffer,
+            flash_state_buffer,
+            flash_din_params_buffer,
+            flash_model_params_buffer,
+            flash_data_buffer,
+            uart_state_buffer,
+            uart_params_buffer,
+            uart_channel_buffer,
+            wb_trace_params_buffer,
+            wb_trace_channel_buffer,
+            bus_trace_params_buffer,
+            bus_trace_channel_buffer,
+            vcd_ring: None,
+            n_uarts,
+            uart_read_heads: vec![0u32; n_uarts],
+            wb_trace_read_head: 0,
+            bus_trace_read_head: 0,
+            event_buffer_ptr,
+        };
+        (backend, bus_lanes)
     }
 
     /// Metal-only GPU kernel profiling (forwards to the simulator). Not part
@@ -3467,154 +3612,23 @@ pub fn run_cosim(
         uart_configs.len()
     );
 
-    // ── Initialize Metal simulator and GPU state buffers ─────────────────
-
-    let timer_init = clilog::stimer!("init_gpu");
-    let simulator = MetalSimulator::new(num_major_stages);
-
-    // ── Design-state, SRAM, blocks-program, and event buffers ────────────
-    // (built in MetalBackend — Phase 1 step 2c). The builder owns the
-    // buffer-intrinsic init (states.fill + xprop X-mask seed, SRAM data/X-mask
-    // fills + ELF preload, blocks no-copy wrappers, leaked-Box event buffer)
-    // and returns `event_buffer_ptr` so the caller keeps ownership of the
-    // leaked box (two `drop(Box::from_raw(..))` sites below). The
+    // ── Backend construction is deferred to MetalBackend::new ────────────
+    //
+    // Phase 1 step 3b-ii-a: `MetalSimulator::new`, the state/SRAM/blocks/event
+    // buffers, the flash + IO peripheral buffers, the timing-constraints
+    // buffer, and the struct literal are all encapsulated in
+    // `MetalBackend::new` below (called after the scheduler + per_edge_ops are
+    // built, since `new` needs `sched_ticks_per_sys_clk_cycle`). The
     // backend-agnostic stimulus deposits (reg_init / reset / constant_ports /
-    // set_flash_din) stay here, operating on a `states` slice re-derived over
-    // the returned `states_buffer`.
-    let (
-        states_buffer,
-        sram_data_buffer,
-        sram_xmask_buffer,
-        blocks_start_buffer,
-        blocks_data_buffer,
-        event_buffer_metal,
-        event_buffer_ptr,
-    ) = MetalBackend::build_state_buffers(&simulator.device, script, config, state_size);
-    let states: &mut [u32] = unsafe {
-        std::slice::from_raw_parts_mut(states_buffer.contents() as *mut u32, 2 * state_size)
-    };
+    // set_flash_din) run *after* construction, through `state_mut()`.
 
     // SRAM write dumper (JACQUARD_SRAM_DUMP=<path>). Opt-in
     // diagnostic that snapshots `sram_storage` per batch and emits
     // a per-block write log at end of simulation. See
-    // `src/sim/sram_dump.rs` for the report format.
+    // `src/sim/sram_dump.rs` for the report format. (Borrows aig/netlist/
+    // script only — no `states` dependency, so it stays here.)
     let mut sram_dumper =
         crate::sim::sram_dump::SramDumper::from_env(aig, netlistdb, script);
-
-    // (SRAM preload moved into MetalBackend::build_state_buffers — Phase 1
-    // step 2c. The states/sram/xmask buffers are now allocated + initialised by
-    // the builder above; only the agnostic stimulus deposits remain inline.)
-
-    // Register value-injection (issue #108, ADR 0016). `reg_init` deposits a
-    // definite value into chosen registers at tick 0 with `$deposit`
-    // semantics — the seed clears the power-up X-mask, then the design drives
-    // the register normally. The register sibling of `sram_init` above; the
-    // fix path for X-poisoned unreset CDC launch registers (#102). NOT
-    // `force`: applied once here, not re-driven each edge.
-    //
-    // A DFF Q is sequential state, not a primary input in the per-edge BitOp
-    // schedule, so a deposit must survive `state_prep`'s output→input copy
-    // (kernel_v1.metal): write the value AND clear the X-mask in BOTH slots,
-    // mirroring the xprop seed above. The output slot is the source of truth
-    // the first `simulate` reads; the input slot covers any pre-copy read.
-    if !config.reg_init.is_empty() {
-        let rio = script.reg_io_state_size as usize;
-        let mut deposited_bits = 0usize;
-        for entry in &config.reg_init {
-            let width = entry.width.unwrap_or(1);
-            for b in 0..width {
-                // A scalar register (width 1, however spelled) resolves by its
-                // bare name; a wider one resolves each bit `name[b]` (a
-                // register's bits need not be contiguous after synthesis).
-                let bit_name = if width == 1 {
-                    entry.name.clone()
-                } else {
-                    format!("{}[{}]", entry.name, b)
-                };
-                let pos = crate::sim::trace_signals::resolve_to_input_state_pos(
-                    aig, netlistdb, script, &bit_name,
-                )
-                .unwrap_or_else(|| {
-                    panic!(
-                        "reg_init: cannot resolve register '{}' to a DFF state slot \
-                         (not a register, or name not found in netlist)",
-                        bit_name
-                    )
-                });
-                let val = if b < 64 { ((entry.value >> b) & 1) as u8 } else { 0 };
-                // Deposit the value into both slots' value sections.
-                set_bit(&mut states[..state_size], pos, val);
-                set_bit(&mut states[state_size..2 * state_size], pos, val);
-                // Clear the X-mask in both slots so the deposit reads known.
-                // The X-mask section starts `rio` words into each slot.
-                if script.xprop_enabled {
-                    clear_bit(&mut states[rio..state_size], pos);
-                    clear_bit(&mut states[state_size + rio..2 * state_size], pos);
-                }
-                deposited_bits += 1;
-            }
-        }
-        clilog::info!(
-            "reg_init: deposited {} register bit(s) from {} config entries (cleared power-up X)",
-            deposited_bits,
-            config.reg_init.len()
-        );
-    }
-
-    // Initialize: set reset active
-    let reset_val = if config.reset_active_high { 1u8 } else { 0u8 };
-    set_bit(
-        &mut states[..state_size],
-        gpio_map.input_bits[&reset_gpio],
-        reset_val,
-    );
-    clilog::info!(
-        "Initial state: reset GPIO {} = {} (active)",
-        reset_gpio,
-        reset_val
-    );
-
-    // Initialize constant ports (e.g. por_l=1, resetb_h=1 for Caravel wrapper)
-    for (port_name, val) in &config.constant_ports {
-        if let Some(&pos) = gpio_map.named_input_bits.get(port_name) {
-            set_bit(&mut states[..state_size], pos, *val);
-            clilog::info!(
-                "Initial state: port '{}' = {} (pos {})",
-                port_name,
-                val,
-                pos
-            );
-        } else {
-            clilog::warn!("constant_port '{}' not found in named inputs", port_name);
-        }
-    }
-
-    // Set flash D_IN defaults (high = no data) — initial state before GPU flash takes over
-    if let Some(ref flash_cfg) = config.flash {
-        set_flash_din(
-            &mut states[..state_size],
-            &gpio_map,
-            flash_cfg.d0_gpio,
-            0x0F,
-        );
-    }
-
-    // (blocks no-copy + event buffer moved into
-    // MetalBackend::build_state_buffers — Phase 1 step 2c. `blocks_start_buffer`,
-    // `blocks_data_buffer`, `event_buffer_metal`, and `event_buffer_ptr` come
-    // from the builder call above; the two `drop(Box::from_raw(event_buffer_ptr))`
-    // sites below free the leaked box.)
-
-    // Timing constraint buffer for GPU-side setup/hold checking.
-    let timing_constraints_buffer = timing_constraints.as_ref().map(|buf| {
-        simulator.device.new_buffer_with_data(
-            buf.as_ptr() as *const _,
-            (buf.len() * std::mem::size_of::<u32>()) as u64,
-            MTLResourceOptions::StorageModeShared,
-        )
-    });
-
-    clilog::finish!(timer_init);
 
     // ── Build GPU-side state_prep + IO model buffers ──────────────────────
 
@@ -3920,40 +3934,28 @@ pub fn run_cosim(
         .max_clock_edges
         .unwrap_or(config.num_cycles * sched_ticks_per_sys_clk_cycle as usize);
 
-    // ── GPU Flash IO buffers (built in MetalBackend — Phase 1 step 2a) ──────
-    let (
-        flash_state_buffer,
-        flash_din_params_buffer,
-        flash_model_params_buffer,
-        flash_data_buffer,
-    ) = MetalBackend::build_flash_buffers(
-        &simulator.device,
-        config,
-        script,
-        state_size,
-        &gpio_map,
-    );
-
-    // ── GPU IO peripheral buffers (built in MetalBackend — Phase 1 step 2b) ──
-    let (
-        uart_state_buffer,
-        uart_params_buffer,
-        uart_channel_buffer,
-        wb_trace_params_buffer,
-        wb_trace_channel_buffer,
-        bus_trace_params_buffer,
-        bus_trace_channel_buffer,
-        mut bus_lanes,
-    ) = MetalBackend::build_io_buffers(
-        &simulator.device,
+    // ── Assemble the Metal backend (fat constructor, Phase 1 step 3b-ii-a) ─
+    //
+    // `MetalBackend::new` encapsulates `MetalSimulator::new`, the
+    // state/SRAM/blocks/event buffers, the flash + IO peripheral buffers, the
+    // timing-constraints buffer, and the struct literal — in the exact
+    // pre-refactor order (bit-identical). It returns the backend plus the
+    // agnostic CPU bus decoders (`bus_lanes`); `run_cosim`'s orchestration
+    // (ADR 0017 Layer 1) owns those. `run_cosim` stays concrete-typed here —
+    // the generic flip (`run_cosim<B>` / trait `new`) is step 3b-ii-b.
+    let (mut backend, mut bus_lanes) = MetalBackend::new(
         aig,
         netlistdb,
         script,
         config,
         &gpio_map,
-        state_size,
         &uart_configs,
         sched_ticks_per_sys_clk_cycle,
+        state_size,
+        num_blocks,
+        num_major_stages,
+        arrival_state_offset,
+        timing_constraints,
     );
     let n_uarts = uart_configs.len();
     // Accumulated decoded transactions (bus_id, transaction), drained
@@ -3964,7 +3966,7 @@ pub fn run_cosim(
 
     // Pre-write params for all simulation stages (they don't change between ticks)
     for stage_i in 0..num_major_stages {
-        simulator.write_params(
+        backend.sim.write_params(
             stage_i,
             num_blocks,
             num_major_stages,
@@ -3974,48 +3976,121 @@ pub fn run_cosim(
         );
     }
 
+    // ── Stimulus deposits (backend-agnostic) ─────────────────────────────
+    //
+    // Phase 1 step 3b-ii-a: these were inline before construction; they now
+    // run *after* `MetalBackend::new` through `state_mut()`, since the backend
+    // owns `states_buffer`. Bit-identical: `build_state_buffers` already did
+    // `fill(0)` + the xprop X-mask seed + SRAM preload, and build_flash/
+    // build_io allocate independent buffers that don't read `states`, so
+    // depositing here (rather than before those builds) is order-equivalent.
+    {
+        let states = backend.state_mut();
+
+        // Register value-injection (issue #108, ADR 0016). `reg_init` deposits
+        // a definite value into chosen registers at tick 0 with `$deposit`
+        // semantics — the seed clears the power-up X-mask, then the design
+        // drives the register normally. The register sibling of `sram_init`;
+        // the fix path for X-poisoned unreset CDC launch registers (#102). NOT
+        // `force`: applied once here, not re-driven each edge.
+        //
+        // A DFF Q is sequential state, not a primary input in the per-edge
+        // BitOp schedule, so a deposit must survive `state_prep`'s
+        // output→input copy (kernel_v1.metal): write the value AND clear the
+        // X-mask in BOTH slots, mirroring the xprop seed. The output slot is
+        // the source of truth the first `simulate` reads; the input slot
+        // covers any pre-copy read.
+        if !config.reg_init.is_empty() {
+            let rio = script.reg_io_state_size as usize;
+            let mut deposited_bits = 0usize;
+            for entry in &config.reg_init {
+                let width = entry.width.unwrap_or(1);
+                for b in 0..width {
+                    // A scalar register (width 1, however spelled) resolves by
+                    // its bare name; a wider one resolves each bit `name[b]` (a
+                    // register's bits need not be contiguous after synthesis).
+                    let bit_name = if width == 1 {
+                        entry.name.clone()
+                    } else {
+                        format!("{}[{}]", entry.name, b)
+                    };
+                    let pos = crate::sim::trace_signals::resolve_to_input_state_pos(
+                        aig, netlistdb, script, &bit_name,
+                    )
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "reg_init: cannot resolve register '{}' to a DFF state slot \
+                             (not a register, or name not found in netlist)",
+                            bit_name
+                        )
+                    });
+                    let val = if b < 64 { ((entry.value >> b) & 1) as u8 } else { 0 };
+                    // Deposit the value into both slots' value sections.
+                    set_bit(&mut states[..state_size], pos, val);
+                    set_bit(&mut states[state_size..2 * state_size], pos, val);
+                    // Clear the X-mask in both slots so the deposit reads known.
+                    // The X-mask section starts `rio` words into each slot.
+                    if script.xprop_enabled {
+                        clear_bit(&mut states[rio..state_size], pos);
+                        clear_bit(&mut states[state_size + rio..2 * state_size], pos);
+                    }
+                    deposited_bits += 1;
+                }
+            }
+            clilog::info!(
+                "reg_init: deposited {} register bit(s) from {} config entries (cleared power-up X)",
+                deposited_bits,
+                config.reg_init.len()
+            );
+        }
+
+        // Initialize: set reset active
+        let reset_val = if config.reset_active_high { 1u8 } else { 0u8 };
+        set_bit(
+            &mut states[..state_size],
+            gpio_map.input_bits[&reset_gpio],
+            reset_val,
+        );
+        clilog::info!(
+            "Initial state: reset GPIO {} = {} (active)",
+            reset_gpio,
+            reset_val
+        );
+
+        // Initialize constant ports (e.g. por_l=1, resetb_h=1 for Caravel wrapper)
+        for (port_name, val) in &config.constant_ports {
+            if let Some(&pos) = gpio_map.named_input_bits.get(port_name) {
+                set_bit(&mut states[..state_size], pos, *val);
+                clilog::info!(
+                    "Initial state: port '{}' = {} (pos {})",
+                    port_name,
+                    val,
+                    pos
+                );
+            } else {
+                clilog::warn!("constant_port '{}' not found in named inputs", port_name);
+            }
+        }
+
+        // Set flash D_IN defaults (high = no data) — initial state before GPU
+        // flash takes over.
+        if let Some(ref flash_cfg) = config.flash {
+            set_flash_din(
+                &mut states[..state_size],
+                &gpio_map,
+                flash_cfg.d0_gpio,
+                0x0F,
+            );
+        }
+    }
+
     clilog::finish!(timer_prep);
 
-    // ── Assemble the Metal backend ───────────────────────────────────────
+    // ── Materialise the per-edge schedule ────────────────────────────────
     //
-    // Move the simulator, design state/program, and every GPU IO buffer into
-    // the backend, which now owns them (ADR 0017, Amendment 2026-06-07). The
-    // schedule storage is materialised once, here, via `init_schedule` from the
-    // backend-agnostic `per_edge_ops` description built above. After this point
-    // the cosim loop drives the design through `backend` rather than the loose
-    // locals.
-    let mut backend = MetalBackend {
-        sim: simulator,
-        schedule: None,
-        state_size,
-        sram_len: script.sram_storage_size as usize,
-        num_blocks,
-        num_major_stages,
-        arrival_state_offset,
-        states_buffer,
-        blocks_start_buffer,
-        blocks_data_buffer,
-        event_buffer_metal,
-        sram_data_buffer,
-        sram_xmask_buffer,
-        timing_constraints_buffer,
-        flash_state_buffer,
-        flash_din_params_buffer,
-        flash_model_params_buffer,
-        flash_data_buffer,
-        uart_state_buffer,
-        uart_params_buffer,
-        uart_channel_buffer,
-        wb_trace_params_buffer,
-        wb_trace_channel_buffer,
-        bus_trace_params_buffer,
-        bus_trace_channel_buffer,
-        vcd_ring: None,
-        n_uarts,
-        uart_read_heads: vec![0u32; n_uarts],
-        wb_trace_read_head: 0,
-        bus_trace_read_head: 0,
-    };
+    // `init_schedule` builds the backend's native per-edge buffers once from
+    // the backend-agnostic `per_edge_ops` description built above. After this
+    // point the cosim loop drives the design through `backend`.
     backend.init_schedule(
         per_edge_ops,
         state_size as u32,
@@ -4029,10 +4104,8 @@ pub fn run_cosim(
         let profile_ticks = opts.max_clock_edges.unwrap_or(1000).min(5000);
         backend.profile_kernels(profile_ticks);
 
-        // Clean up event buffer
-        unsafe {
-            drop(Box::from_raw(event_buffer_ptr));
-        }
+        // Event buffer freed by `Drop for MetalBackend` when `backend` drops
+        // at this early return (all GPU profiling work has completed).
         return CosimResult {
             passed: true,
             uart_events: Vec::new(),
@@ -5455,10 +5528,8 @@ pub fn run_cosim(
         }
     }
 
-    // Clean up event buffer
-    unsafe {
-        drop(Box::from_raw(event_buffer_ptr));
-    }
+    // Event buffer freed by `Drop for MetalBackend` when `backend` drops at
+    // end-of-scope (all GPU work has completed). No manual cleanup needed.
 
     println!();
     if events_passed {
