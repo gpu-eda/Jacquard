@@ -1,12 +1,13 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
 **Created:** 2026-06-07 (updated 2026-06-08, sixth session)
-**Branch:** `cosim-backend-seam-phase0` @ `b4a9bea` (**step 5a committed locally,
-not yet pushed**; everything through `2b69183` is pushed = PR #118, **CI green
-through step 4**; PR title/description = "Phase 0 + Phase 1 steps 1-4"). Holds
-Phase 0 + the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3/4
-(done)** + **5a (CpuBackend logic subset)**. **#118 is being grown to Phase 0 +
-Phase 1** (maintainer's call: one PR, not stacked). Working tree clean.
+**Branch:** `cosim-backend-seam-phase0` @ `4140ae0` (**steps 5a/5b committed
+locally, not yet pushed**; everything through `2b69183` is pushed = PR #118, **CI
+green through step 4**; PR title/description = "Phase 0 + Phase 1 steps 1-4").
+Holds Phase 0 + the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3/4
+(done)** + **5a (CpuBackend logic) + 5b (CPU UART-TX decoder)**. step 6
+(`cmd_cosim` no-GPU wiring) was folded into 5a. **#118 is being grown to Phase 0
++ Phase 1** (maintainer's call: one PR, not stacked). Working tree clean.
 
 ## Goal & next-up
 
@@ -15,23 +16,26 @@ Phase 1** (maintainer's call: one PR, not stacked). Working tree clean.
 portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (steps 1/2a/2b/2c
 of 7 done).
 
-**Now (pick up here): Phase 1 step 5b — port the UART-TX decoder FSM to CPU.**
-The CPU UART-TX decode FSM lives ONLY in the Metal shader (`gpu_io_step` in
-`csrc/kernel_v1.metal`; GPU mirror struct `UartDecoderState` at
-`cosim/metal.rs:104`). Port it to a CPU `step(output_state)`-style decoder so
-`CpuBackend::drain_uart_tx() -> Vec<(usize,u8)>` returns decoded bytes (currently
-returns empty). Per-channel: observe the TX out bit each edge, run the
-shift-register/baud FSM (counting scheduler edges = `cycles_per_bit *
-sched_ticks_per_sys_clk_cycle`, mirroring `UartParams.channels[i].cycles_per_bit`).
-**Verify:** no-feature binary runs `dual_uart` → `dual_uart_events.json`
-byte-identical to the Metal golden (it lands at `target/test-out/` then copied).
-Then **5c** — port the bus-trace beat extraction (also in `gpu_io_step`) to CPU
-so `drain_bus_beats() -> Vec<RawBeat>` works + extract an agnostic bus-lanes
-helper (currently `build_bus_trace_params` is in `cosim/metal.rs`) so
-`CpuBackend::new` returns real `bus_lanes`; verify `apb_trace.csv` +
-`apb_trace_xprop.csv` vs golden. Then step 7 (Linux cosim CI on `ubuntu-latest`
-running these fixtures via the CPU build; extend `scripts/ci/
-compare_backend_vcds.py` to cosim if useful).
+**Now (pick up here): Phase 1 step 5c — port the bus-trace beat extraction to
+CPU** (the last functional piece; then only Linux CI remains). The APB/bus-trace
+beat extraction lives in the Metal shader `gpu_io_step` (`csrc/kernel_v1.metal`,
+the "bus trace" block AFTER the UART block + the AHB/APB `BusTraceParamsAll`
+capture — grep `bus_trace`/`BusTrace`/`n_buses`); it observes the bus pins each
+edge and emits `RawBeat`s. Port it so `CpuBackend::drain_bus_beats() ->
+Vec<RawBeat>` returns beats (currently empty), run per-edge in `run_edges` after
+simulate (same point as the UART FSM). **`bus_lanes`:** `CpuBackend::new`
+currently returns empty — extract an **agnostic** bus-lanes builder (the lane/
+decoder half of `build_bus_trace_params`, currently in `cosim/metal.rs`; it also
+builds a GPU `BusTraceParamsAll`) into `cosim/mod.rs` so both backends share it,
+and have `CpuBackend::new` build the per-bus pin positions + `bus_lanes`.
+`run_cosim_generic` already feeds `drain_bus_beats()` → `bus_lanes[id].decoder.
+push(beat)` → transactions → CSV. **Verify:** no-feature binary runs `apb_trace`
+(±`--xprop`) → `apb_trace.csv` + `apb_trace_xprop.csv` byte-identical to golden.
+**Also drop** `CpuBackend.flash_in_reset`'s `#[allow(dead_code)]` if now used, and
+re-confirm all 7 fixtures pass on CPU. Then **step 7** — Linux cosim CI on
+`ubuntu-latest`: build no-feature, run `{xprop_cosim, dual_uart, apb_trace}` via
+CpuBackend, assert their checkers (extend `scripts/ci/compare_backend_vcds.py` to
+cosim, or shasum vs committed expected outputs).
 
 **Older step-5 notes (now partly done in 5a) below.** Plan: step 5 bullet in
 `docs/plans/cosim-phase1-cpu-backend.md`. `Vec<u32>` state sized
@@ -164,6 +168,18 @@ golden (no timing, no SRAM-xprop — both asserted off in `CpuBackend::new`).
   interior mutability is pragmatic (matches Metal's `&self` run_edges) — a
   candidate for a cleaner pattern, or change the trait `run_edges` to `&mut self`
   (would touch MetalBackend too).
+- **Step 5b** (`4140ae0`): ported the UART-TX decoder FSM
+  (`kernel_v1.metal:1189–1249`) to `CpuBackend`. Per-channel 4-state decoder
+  (`CpuUartConfig` tx_out_pos/cycles_per_bit built in `new` mirroring
+  `build_io_buffers`' `UartParams`; `CpuUartDecoderState` mirroring the GPU
+  struct, `last_tx=1` init), run **per-edge in `run_edges` after simulate**
+  (matches Metal's `encode_io_step` cadence — `gpu_io_step` runs once per edge,
+  `current_cycle += 1`/edge), accumulating completed bytes drained by
+  `drain_uart_tx` (`std::mem::take`). Byte-identical because both backends share
+  the agnostic batch-size policy (timestamps align) + identical FSM.
+  **`dual_uart_events.json` byte-identical to golden** on a no-GPU build; 4 logic
+  VCDs still OK; Metal 7/7; 298 tests. (Stale rust-analyzer dead_code warnings
+  appeared mid-edit; `cargo check` on the commit is clean — FSM is wired.)
 
 **Then:** step 7 (Linux cosim CI).
 
