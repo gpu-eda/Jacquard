@@ -1,0 +1,5 @@
+tick,bus,protocol,dir,addr,data,resp,burst
+24,apb0,apb3,WR,0x0,0xCAFEBABE,OK,
+30,apb0,apb3,WR,0x4,0x12345678,OK,
+36,apb0,apb3,RD,0x0,0xCAFEBABE,OK,
+42,apb0,apb3,RD,0x4,0x12345678,OK,

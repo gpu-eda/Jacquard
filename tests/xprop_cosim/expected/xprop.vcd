@@ -1,0 +1,33 @@
+$timescale 1 ps $end
+$scope module top $end
+$var wire 1 ! q_unreset $end
+$var wire 1 " q_reset $end
+$var wire 1 # q_undriven_reg $end
+$var wire 1 $ q_undriven_comb $end
+$upscope $end
+$enddefinitions $end
+$dumpvars
+#20000
+x!
+0"
+0#
+x$
+#900000
+1"
+x#
+#980000
+0"
+#1060000
+1"
+#1140000
+0"
+#1220000
+1"
+#1300000
+0"
+#1380000
+1"
+#1460000
+0"
+#1540000
+1"
