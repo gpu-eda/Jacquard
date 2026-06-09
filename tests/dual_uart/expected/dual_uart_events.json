@@ -1,0 +1,28 @@
+{
+  "events": [
+    {
+      "timestamp": 4116,
+      "peripheral": "console",
+      "event": "tx",
+      "payload": 72
+    },
+    {
+      "timestamp": 4116,
+      "peripheral": "debug",
+      "event": "tx",
+      "payload": 79
+    },
+    {
+      "timestamp": 8212,
+      "peripheral": "console",
+      "event": "tx",
+      "payload": 105
+    },
+    {
+      "timestamp": 8212,
+      "peripheral": "debug",
+      "event": "tx",
+      "payload": 75
+    }
+  ]
+}

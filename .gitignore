@@ -25,6 +25,8 @@ __pycache__/
 # Simulation artifacts
 *.vvp
 *.vcd
+# Committed cosim regression goldens (CpuBackend CI diffs against these).
+!tests/xprop_cosim/expected/*.vcd
 *.tar.gz
 debug_trace.csv
 *_watchlist.json

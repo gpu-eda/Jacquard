@@ -56,6 +56,52 @@ jobs:
       - name: Run library tests
         run: cargo test --lib
 
+  # Cosim CpuBackend regression on a free Linux runner (no GPU). Builds the
+  # no-feature jacquard binary (CpuBackend) and runs the seven cosim fixtures,
+  # diffing each output against the committed golden in tests/*/expected/.
+  # Those goldens are byte-identical to the Metal backend (Phase 1, #105), so
+  # this job locks in cross-backend equivalence without a GPU runner.
+  cosim-cpu:
+    name: Cosim CpuBackend (Linux, no GPU)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      # The build's build.rs generates pin tables from the sky130/gf180 cell
+      # libraries and compiles the C++ SPI-flash model; eda-infra-rs supplies
+      # the path-dep crates. No GPU/PDK runtime data or benchmarks submodule
+      # is needed for the cosim fixtures (all inputs live in tests/).
+      - name: Init required submodules
+        run: |
+          git submodule update --init \
+            vendor/eda-infra-rs \
+            vendor/sky130_fd_sc_hd \
+            vendor/gf180mcu_fd_sc_mcu7t5v0 \
+            vendor/gf180mcu_fd_sc_mcu9t5v0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build jacquard (CpuBackend, no features)
+        run: cargo build -r --bin jacquard
+
+      - name: Run cosim CpuBackend regression
+        run: bash scripts/ci/cosim_cpu_check.sh
+
   # opensta-to-ir crate is outside the root workspace; the unit-tests job
   # above only covers `cargo test --lib`, so the corpus regression test
   # (WS4), the CLI tests, and the OpenSTA-driven integration tests need a
