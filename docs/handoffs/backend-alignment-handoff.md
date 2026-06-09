@@ -1,13 +1,13 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
 **Created:** 2026-06-07 (updated 2026-06-08, sixth session)
-**Branch:** `cosim-backend-seam-phase0` @ `14f6a27` (P1.2c/3a/3b-i/3b-ii-a/3b-ii-b
-committed locally, **not yet pushed**; PR #118 last pushed at `9b7b105`). Holds
-Phase 0 + the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3 (done)**.
-**#118 is being grown to Phase 0 + Phase 1** (maintainer's call: one PR, not
-stacked). Working tree clean. **Push and refresh the PR #118 title/description**
-(still "Phase 0" framed) to reflect the broadened Phase 0 + Phase 1 scope on the
-next push.
+**Branch:** `cosim-backend-seam-phase0` @ `0327080` (**step 4 committed locally,
+not yet pushed**; everything through `8885818` is pushed = PR #118, **CI green**;
+PR title/description refreshed to "Phase 0 + Phase 1 steps 1-3"). Holds Phase 0
++ the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3 (done)**/**4
+(done)**. **#118 is being grown to Phase 0 + Phase 1** (maintainer's call: one
+PR, not stacked). Working tree clean. (PR body still lists step 4 under "next" —
+refresh on the step-4 push.)
 
 ## Goal & next-up
 
@@ -16,28 +16,29 @@ next push.
 portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (steps 1/2a/2b/2c
 of 7 done).
 
-**Now (pick up here): Phase 1 step 4 — module split `cosim_metal.rs` →
-`src/sim/cosim/{mod,metal}.rs`.** `mod.rs` (NOT gated): `CosimBackend` trait,
-`BitOp`, `run_cosim_generic`/`run_cosim` shim, the patchers, `FlashDebug`, the
-agnostic glue. `metal.rs` (`#[cfg(feature="metal")]`): `MetalBackend`,
-`MetalSimulator`, `ScheduleBuffers`, the GPU IO structs, `build_*`,
-`create_ops_buffer`/`create_prep_params_buffer`. `src/sim/mod.rs`: `pub mod
-cosim;` (drop gated `cosim_metal`). Audit `pub use`, `jacquard.rs`, docs, CI.
-**Gate: `cargo check --lib` (no feature) must compile** — it currently can't
-(`cosim_metal` is fully gated). `mod.rs` must import **zero** `metal::*`. Metal
-bit-identical with `--features metal`. Plan: step 4 bullet in
-`docs/plans/cosim-phase1-cpu-backend.md`. Step 1's exit assertion + step 3's
-token sweep front-loaded this, so step 4 only *moves* code. **Then** step 5
-(`CpuBackend` — the trait surface is now complete: `new` returns `(Self,
-Vec<BusTraceLane>)`, `state`/`state_mut`/`sram`, the `drain_*`/`flash_*` decode
-methods with sane no-op defaults), steps 6–7 (`cmd_cosim` backend selection +
-Linux CI).
-
-Step 3 left the trait fully backend-neutral: `run_cosim_generic<B: CosimBackend>`
-drives everything through trait methods; `CpuBackend` only needs to implement
-`new`/`init_schedule`/`edge_ops`/`run_edges`/`state*`/`sram`/`flash_d_i`/
-`drain_uart_tx`/`drain_bus_beats`/`flash_set_in_reset`/`wait`/`vcd_snapshot`
-(+ the no-op-default debug/profile methods come free).
+**Now (pick up here): Phase 1 step 5 — implement `CpuBackend`** in
+`src/sim/cosim/mod.rs` (non-gated). Plan: step 5 bullet in
+`docs/plans/cosim-phase1-cpu-backend.md`. `Vec<u32>` state sized
+`effective_state_size()*2`, `Vec<u32>` sram, `Vec<Vec<BitOp>>` schedule.
+`run_edges` (blocks × `num_major_stages`) via
+`cpu_reference::simulate_block_v1`; flash via `CppSpiFlash::step` (internal,
+injects `d_i` into input state); bus via `BusTraceDecoder`; **new CPU UART-TX
+decoder** mirroring `UartDecoderState`'s FSM. `CpuBackend::new` **asserts**
+`!script.timing_arrivals_enabled` and `!(xprop_enabled && sram_storage_size>0)`
+(see plan Risks). `--check-with-cpu` becomes a no-op-with-warning under
+CpuBackend (the backend *is* the reference). The trait is fully backend-neutral
+after step 3: `CpuBackend` implements `new`/`init_schedule`/`edge_ops`(`_mut`)/
+`edges_per_period`/`gcd_ps`/`run_edges`/`wait`/`state`(`_mut`)/`sram`/`flash_d_i`/
+`flash_set_in_reset`/`drain_uart_tx`/`drain_bus_beats`/`vcd_snapshot`/
+`enable_vcd_ring` — the debug/profile methods (`profile_kernels`,
+`debug_flash_raw_tick0`, `drain_wb_trace_debug`, `uart_decoder_debug`,
+`flash_debug_snapshot`) have **no-op/default trait bodies** so come free.
+**`bus_lanes` for `CpuBackend::new`:** `build_bus_trace_params` currently lives in
+`cosim/metal.rs` (returns a GPU struct + lanes) — extract a lanes-only agnostic
+helper into `mod.rs` so `CpuBackend::new` can build lanes without metal.
+**When CpuBackend consumes the agnostic surface, drop the temporary
+`#![cfg_attr(not(feature="metal"), allow(dead_code))]` at `cosim/mod.rs:18`.**
+Then steps 6–7 (`cmd_cosim` backend selection + Linux cosim CI on `ubuntu-latest`).
 
 **Done so far in Phase 1:**
 - **Step 1** (`bc18f79`): de-Metaled the `run_edges` seam (dropped
@@ -89,10 +90,23 @@ drives everything through trait methods; `CpuBackend` only needs to implement
   `run_cosim_generic::<MetalBackend>` shim, so `jacquard.rs:1792` is unchanged
   and `MetalBackend` stays private. **Step 3 done.** Metal bit-identical, 298
   tests pass.
+- **Step 4** (`0327080`): module split `cosim_metal.rs` →
+  `src/sim/cosim/{mod,metal}.rs`. `mod.rs` (3298 lines, **non-gated**):
+  `CosimBackend` trait, `BitOp`/`FlashDebug`, `CosimOpts`/`CosimResult`,
+  `run_cosim_generic<B>`, the patchers, the multi-clock scheduler, CPU-baseline
+  helpers, `set_bit`/`clear_bit`/`set_flash_din`/`build_gpio_mapping`/
+  `BusTraceLane`, agnostic glue. `metal.rs` (2318 lines,
+  `#[cfg(feature="metal")]`): `MetalBackend`(+`Drop`)/`MetalSimulator`/
+  `ScheduleBuffers`, all GPU `#[repr(C)]` structs, `build_*`/`encode_*`/
+  `write_params`/`create_*`, `build_wb/bus_trace_params`, the `run_cosim` shim.
+  `src/sim/mod.rs` now `pub mod cosim;` (non-gated); `jacquard.rs` paths
+  `cosim_metal::` → `cosim::`. **`cargo check --lib --no-default-features` now
+  compiles the agnostic half** (the real new gate). Metal bit-identical, 298
+  tests pass. (Deviations: `StatePrepParams` kept in `metal.rs` (GPU-ABI, sole
+  user is metal); temporary `#![cfg_attr(not(feature="metal"),
+  allow(dead_code))]` in `mod.rs:18` until `CpuBackend` consumes the surface.)
 
-**Then:** step 4 (module split `cosim/{mod,metal}.rs`, `cargo check
---lib` no-feature must compile), step 5 (`CpuBackend` + CPU UART-TX decoder
-mirroring `UartDecoderState`), steps 6–7 (`cmd_cosim` wiring + Linux CI).
+**Then:** steps 6–7 (`cmd_cosim` backend selection + Linux cosim CI).
 
 **Bit-identical gate:** `/tmp/claude/cosim_fixtures.sh <out>` + `shasum -c
 /tmp/claude/golden.sums` after every step (all green through P1.2c). **Note:**
