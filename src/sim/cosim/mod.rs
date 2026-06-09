@@ -3303,6 +3303,42 @@ fn run_cosim_generic<B: CosimBackend>(
 // promises for the pre-loop stimulus deposits.
 use std::cell::UnsafeCell;
 
+/// Per-channel UART-TX decoder config, mirroring Metal `UartPerChannelConfig`
+/// (`tx_out_pos`, `cycles_per_bit`) built identically to
+/// `MetalBackend::build_io_buffers`. `cycles_per_bit` is already scaled to
+/// scheduler edges (`cpb * sched_ticks_per_sys_clk_cycle`).
+struct CpuUartConfig {
+    tx_out_pos: u32,
+    cycles_per_bit: u32,
+}
+
+/// Per-channel UART-TX decoder FSM state, mirroring Metal `UartDecoderState`.
+/// Persistent across edges/batches (like the GPU `uart_state` buffer). Ported
+/// verbatim from `gpu_io_step` (kernel_v1.metal:1189-1249): a 4-state decoder
+/// (0=idle, 1=start, 2=data, 3=stop) advancing `current_cycle` by 1 per edge.
+struct CpuUartDecoderState {
+    state: u32,
+    last_tx: u32,
+    start_cycle: u32,
+    bits_received: u32,
+    value: u32,
+    current_cycle: u32,
+}
+
+impl CpuUartDecoderState {
+    /// Init matching `build_io_buffers`: idle, TX line idle-high, counters zero.
+    fn new() -> Self {
+        CpuUartDecoderState {
+            state: 0,
+            last_tx: 1, // TX line idle high
+            start_cycle: 0,
+            bits_received: 0,
+            value: 0,
+            current_cycle: 0,
+        }
+    }
+}
+
 struct CpuBackend {
     /// Full design state `[input_state | output_state]`, `2 × state_size` words.
     state: UnsafeCell<Vec<u32>>,
@@ -3338,6 +3374,17 @@ struct CpuBackend {
     /// one slot per edge in the batch (N=1 per edge). `None` until enabled.
     vcd_ring: UnsafeCell<Option<Vec<Vec<u32>>>>,
     enable_vcd: bool,
+    /// Per-channel UART-TX decoder config (`tx_out_pos`, `cycles_per_bit`),
+    /// derived in `new` exactly as `MetalBackend::build_io_buffers` builds
+    /// `UartParams`. Length `n_uarts`; empty for designs with no UART.
+    uart_configs: Vec<CpuUartConfig>,
+    /// Per-channel UART-TX decoder FSM state, persistent across edges/batches
+    /// (mirrors the GPU `uart_state` buffer). Stepped per edge in `run_edges`.
+    uart_states: UnsafeCell<Vec<CpuUartDecoderState>>,
+    /// Completed `(channel_idx, byte)` pairs awaiting drain (mirrors the GPU
+    /// `UartChannel` ring; `drain_uart_tx` empties it). Interior-mutable so the
+    /// per-edge FSM in `run_edges(&self)` can push.
+    uart_decoded: UnsafeCell<Vec<(usize, u8)>>,
 }
 
 impl CpuBackend {
@@ -3360,9 +3407,9 @@ impl CosimBackend for CpuBackend {
         _netlistdb: &NetlistDB,
         script: &FlattenedScriptV1,
         config: &TestbenchConfig,
-        _gpio_map: &GpioMapping,
-        _uart_configs: &[(String, usize, usize, u32)],
-        _sched_ticks_per_sys_clk_cycle: u64,
+        gpio_map: &GpioMapping,
+        uart_configs: &[(String, usize, usize, u32)],
+        sched_ticks_per_sys_clk_cycle: u64,
         state_size: usize,
         num_blocks: usize,
         num_major_stages: usize,
@@ -3447,6 +3494,23 @@ impl CosimBackend for CpuBackend {
             );
         }
 
+        // Per-channel UART-TX decoder config + FSM state (Phase 1 step 5b).
+        // Built EXACTLY as MetalBackend::build_io_buffers builds UartParams:
+        //   tx_out_pos   = gpio_map.output_bits[tx_gpio] (or 0 if absent)
+        //   cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle (edges, not
+        //                    clock cycles — the decoder counts scheduler edges)
+        // The uart_configs tuple is (name, tx_gpio, _, cpb).
+        let cpu_uart_configs: Vec<CpuUartConfig> = uart_configs
+            .iter()
+            .map(|(_, tx_gpio, _, cpb)| CpuUartConfig {
+                tx_out_pos: gpio_map.output_bits.get(tx_gpio).copied().unwrap_or(0),
+                cycles_per_bit: cpb * sched_ticks_per_sys_clk_cycle as u32,
+            })
+            .collect();
+        let cpu_uart_states: Vec<CpuUartDecoderState> = (0..uart_configs.len())
+            .map(|_| CpuUartDecoderState::new())
+            .collect();
+
         let backend = CpuBackend {
             state: UnsafeCell::new(state),
             sram: UnsafeCell::new(sram),
@@ -3466,8 +3530,11 @@ impl CosimBackend for CpuBackend {
             blocks_data: script.blocks_data.iter().copied().collect(),
             vcd_ring: UnsafeCell::new(None),
             enable_vcd: false,
+            uart_configs: cpu_uart_configs,
+            uart_states: UnsafeCell::new(cpu_uart_states),
+            uart_decoded: UnsafeCell::new(Vec::new()),
         };
-        // 5a: bus-trace beat extraction is deferred (5c) — no lanes yet.
+        // 5c: bus-trace beat extraction is deferred — no lanes yet.
         (backend, Vec::new())
     }
 
@@ -3557,8 +3624,10 @@ impl CosimBackend for CpuBackend {
     }
 
     fn drain_uart_tx(&mut self) -> Vec<(usize, u8)> {
-        // UART-TX CPU decoder is Phase 1 step 5b.
-        Vec::new()
+        // Drain semantics (called once per batch by run_cosim_generic, which
+        // stamps each byte with the batch `tick` + maps idx→name): return the
+        // bytes the per-edge FSM accumulated this batch, then clear.
+        std::mem::take(self.uart_decoded.get_mut())
     }
 
     fn drain_bus_beats(&mut self) -> Vec<crate::sim::models::bus_trace::RawBeat> {
@@ -3574,6 +3643,11 @@ impl CosimBackend for CpuBackend {
         let sram = unsafe { &mut *self.sram.get() };
         let sram_xmask = unsafe { &mut *self.sram_xmask.get() };
         let ring = unsafe { &mut *self.vcd_ring.get() };
+        // UART-TX decoder state + accumulator (Phase 1 step 5b). The FSM state
+        // persists across edges/batches (mirrors the GPU `uart_state` buffer);
+        // completed bytes accumulate until `drain_uart_tx`.
+        let uart_states = unsafe { &mut *self.uart_states.get() };
+        let uart_decoded = unsafe { &mut *self.uart_decoded.get() };
 
         if let Some(r) = ring.as_mut() {
             r.clear();
@@ -3641,6 +3715,75 @@ impl CosimBackend for CpuBackend {
                         );
                     }
                 }
+            }
+
+            // ── UART-TX decoder (ported from gpu_io_step, kernel_v1.metal ──
+            // 1189-1249). Runs AFTER `simulate` — same point the Metal
+            // `encode_io_step` runs, with the output slot fresh — on EVERY
+            // edge from tick 0 (including reset edges), `current_cycle` += 1
+            // per edge, matching the GPU. READ_OUT_BIT reads the OUTPUT slot:
+            // states[state_size + (pos>>5)] >> (pos&31) & 1; pos==u32::MAX → 0.
+            for (ui, cfg) in self.uart_configs.iter().enumerate() {
+                let cycles_per_bit = cfg.cycles_per_bit;
+                let tx = if cfg.tx_out_pos != u32::MAX {
+                    (state[state_size + (cfg.tx_out_pos >> 5) as usize]
+                        >> (cfg.tx_out_pos & 31))
+                        & 1
+                } else {
+                    0
+                };
+
+                let us = &mut uart_states[ui];
+                let cycle = us.current_cycle;
+                let mut st = us.state;
+                let last_tx = us.last_tx;
+                let mut start_cycle = us.start_cycle;
+                let mut bits_received = us.bits_received;
+                let mut value = us.value;
+
+                if st == 0 {
+                    if last_tx == 1 && tx == 0 {
+                        st = 1;
+                        start_cycle = cycle;
+                    }
+                } else if st == 1 {
+                    if cycle >= start_cycle + cycles_per_bit / 2 {
+                        if tx == 0 {
+                            st = 2;
+                            start_cycle += cycles_per_bit;
+                            bits_received = 0;
+                            value = 0;
+                        } else {
+                            st = 0;
+                        }
+                    }
+                } else if st == 2 {
+                    let bit_center =
+                        start_cycle + bits_received * cycles_per_bit + cycles_per_bit / 2;
+                    if cycle >= bit_center {
+                        value |= tx << bits_received;
+                        if bits_received >= 7 {
+                            st = 3;
+                            start_cycle += 8 * cycles_per_bit;
+                        } else {
+                            bits_received += 1;
+                        }
+                    }
+                } else if st == 3 {
+                    if cycle >= start_cycle + cycles_per_bit / 2 {
+                        if tx == 1 {
+                            uart_decoded.push((ui, (value & 0xFF) as u8));
+                        }
+                        st = 0;
+                    }
+                }
+
+                us.state = st;
+                us.last_tx = tx;
+                us.start_cycle = start_cycle;
+                us.bits_received = bits_received;
+                us.value = value;
+                us.current_cycle = cycle + 1;
             }
 
             // ── VCD snapshot: full [input | output] slot for this edge ─────
