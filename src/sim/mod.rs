@@ -9,8 +9,7 @@
 //! - [`vcd_io`] — VCD input parsing and output writing utilities
 //! - [`setup`] — Design loading pipeline (netlist → AIG → script)
 
-#[cfg(feature = "metal")]
-pub mod cosim_metal;
+pub mod cosim;
 pub mod cpu_reference;
 pub mod input_stim;
 pub mod models;
