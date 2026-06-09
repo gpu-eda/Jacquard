@@ -180,9 +180,9 @@ struct WbTraceChannel {
 
 // ── Config-driven AHB/APB bus transaction trace (ADR 0013) ──────────────────
 
-const MAX_BUS_TRACES: usize = 4;
-const BUS_TRACE_MAX_ADR_BITS: usize = 32;
-const BUS_TRACE_MAX_DAT_BITS: usize = 32;
+// Bus-trace widths are defined agnostically in the parent module (shared with
+// the CPU backend); re-export under the names the GPU structs use.
+use super::{BUS_TRACE_MAX_ADR_BITS, BUS_TRACE_MAX_DAT_BITS, MAX_BUS_TRACES};
 const BUS_TRACE_CHANNEL_CAP: usize = 16384;
 
 /// Per-bus signal positions (must match Metal BusTraceParams).
@@ -1129,101 +1129,38 @@ fn build_bus_trace_params(
     script: &FlattenedScriptV1,
     configs: &[crate::testbench::BusTraceConfig],
 ) -> (BusTraceParamsAll, Vec<BusTraceLane>) {
-    use crate::sim::models::bus_trace::{pin_basename, BusTraceDecoder};
-    use crate::sim::trace_signals::resolve_to_state_pos;
-    use crate::testbench::BusProtocol;
+    // Resolve pin positions + build the CPU decoder lanes agnostically (shared
+    // with the CPU backend), then pack the positions field-for-field into the
+    // GPU `BusTraceParams`. The packing below is the *only* GPU-specific step;
+    // the resolve/warn/lane logic lives in `super::build_bus_trace`, so the
+    // GPU struct bytes are unchanged from the pre-extraction inline version.
+    let (positions, lanes) = super::build_bus_trace(aig, netlistdb, script, configs);
 
     let mut all = BusTraceParamsAll {
         n_buses: 0,
         _pad: [0; 3],
         buses: [BusTraceParams::default(); MAX_BUS_TRACES],
     };
-    let mut lanes: Vec<BusTraceLane> = Vec::new();
-
-    let resolve =
-        |name: &str| resolve_to_state_pos(aig, netlistdb, script, name).unwrap_or(0xFFFFFFFF);
-
-    for cfg in configs.iter() {
-        if all.n_buses as usize >= MAX_BUS_TRACES {
-            clilog::warn!(
-                "bus-trace: more than {} buses configured; `{}` and later ignored",
-                MAX_BUS_TRACES,
-                cfg.name
-            );
-            break;
-        }
-        match cfg.protocol {
-            BusProtocol::Apb3 => {}
-            other => {
-                clilog::warn!(
-                    "bus-trace `{}`: protocol {:?} not yet implemented (Phase 2); skipping",
-                    cfg.name,
-                    other
-                );
-                continue;
-            }
-        }
-
-        let addr_bits = cfg.addr_bits.min(BUS_TRACE_MAX_ADR_BITS);
-        let data_bits = cfg.data_bits.min(BUS_TRACE_MAX_DAT_BITS);
-        if cfg.addr_bits > BUS_TRACE_MAX_ADR_BITS || cfg.data_bits > BUS_TRACE_MAX_DAT_BITS {
-            clilog::warn!(
-                "bus-trace `{}`: addr/data width capped at {}/{} bits (Phase 1)",
-                cfg.name,
-                BUS_TRACE_MAX_ADR_BITS,
-                BUS_TRACE_MAX_DAT_BITS
-            );
-        }
-
-        let mut p = BusTraceParams {
-            protocol: 0, // APB3
-            addr_bits: addr_bits as u32,
-            data_bits: data_bits as u32,
-            sel_pos: resolve(&pin_basename(cfg, "psel")),
-            enable_pos: resolve(&pin_basename(cfg, "penable")),
-            ready_pos: resolve(&pin_basename(cfg, "pready")),
-            write_pos: resolve(&pin_basename(cfg, "pwrite")),
-            resp_pos: resolve(&pin_basename(cfg, "pslverr")),
-            ..Default::default()
+    for pos in positions.iter() {
+        // Only APB3 buses reach here (others are skipped in build_bus_trace),
+        // so the GPU `protocol` field is always 0 == BUS_PROTO_APB3.
+        debug_assert!(pos.protocol_apb3);
+        let p = BusTraceParams {
+            protocol: 0,
+            addr_bits: pos.addr_bits as u32,
+            data_bits: pos.data_bits as u32,
+            sel_pos: pos.sel_pos,
+            enable_pos: pos.enable_pos,
+            ready_pos: pos.ready_pos,
+            write_pos: pos.write_pos,
+            resp_pos: pos.resp_pos,
+            addr_pos: pos.addr_pos,
+            wdata_pos: pos.wdata_pos,
+            rdata_pos: pos.rdata_pos,
         };
-        let abase = pin_basename(cfg, "paddr");
-        for b in 0..addr_bits {
-            p.addr_pos[b] = resolve(&format!("{abase}[{b}]"));
-        }
-        let wbase = pin_basename(cfg, "pwdata");
-        let rbase = pin_basename(cfg, "prdata");
-        for b in 0..data_bits {
-            p.wdata_pos[b] = resolve(&format!("{wbase}[{b}]"));
-            p.rdata_pos[b] = resolve(&format!("{rbase}[{b}]"));
-        }
-
-        if p.sel_pos == 0xFFFFFFFF || p.enable_pos == 0xFFFFFFFF {
-            clilog::warn!(
-                "bus-trace `{}`: psel/penable did not resolve (prefix `{}`) — \
-                 this bus will not capture. Check the prefix / `signals` overrides.",
-                cfg.name,
-                cfg.prefix
-            );
-        } else {
-            let n_addr = p.addr_pos.iter().filter(|&&x| x != 0xFFFFFFFF).count();
-            clilog::info!(
-                "bus-trace `{}` (APB3): psel/penable resolved, addr {}/{} bits, \
-                 pready={} pslverr={}",
-                cfg.name,
-                n_addr,
-                addr_bits,
-                p.ready_pos != 0xFFFFFFFF,
-                p.resp_pos != 0xFFFFFFFF
-            );
-        }
-
         let idx = all.n_buses as usize;
         all.buses[idx] = p;
         all.n_buses += 1;
-        lanes.push(BusTraceLane {
-            name: cfg.name.clone(),
-            decoder: BusTraceDecoder::new(cfg.protocol),
-        });
     }
 
     (all, lanes)

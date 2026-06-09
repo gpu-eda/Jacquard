@@ -83,9 +83,167 @@ const BATCH_SIZE: usize = 1024;
 
 /// CPU-side per-bus lane: pairs a GPU capture slot with its name and
 /// protocol decoder. Vec index == GPU `bus_id` packed into entry flags.
-struct BusTraceLane {
+pub(crate) struct BusTraceLane {
     name: String,
     decoder: crate::sim::models::bus_trace::BusTraceDecoder,
+}
+
+// ── Bus-trace pin-position resolution (ADR 0013) ────────────────────────────
+//
+// Backend-agnostic counterparts of the Metal `BusTraceParams` widths. The Metal
+// GPU struct (`metal::BusTraceParams`, `#[repr(C)]`) reuses these via `super::`
+// so the agnostic resolution here and the GPU struct packing stay in lockstep.
+
+/// Max buses a single cosim run may trace (bounds both backends' per-bus arrays).
+pub(crate) const MAX_BUS_TRACES: usize = 4;
+/// Max address-bus width captured per beat.
+pub(crate) const BUS_TRACE_MAX_ADR_BITS: usize = 32;
+/// Max data-bus width captured per beat.
+pub(crate) const BUS_TRACE_MAX_DAT_BITS: usize = 32;
+
+/// Backend-agnostic per-bus pin positions resolved from the netlist. Plain
+/// Rust (no `repr(C)`, no `metal::`): the Metal backend packs these field-for-
+/// field into the GPU `BusTraceParams`; the CPU backend reads them directly in
+/// its bus-trace FSM. `0xFFFFFFFF` is the "unresolved / absent" sentinel,
+/// matching the GPU `READ_OUT_BIT` short-circuit.
+pub(crate) struct BusTracePositions {
+    /// True iff this bus decodes APB3 (the only protocol gated in Phase 1).
+    pub protocol_apb3: bool,
+    pub addr_bits: usize,
+    pub data_bits: usize,
+    pub sel_pos: u32,
+    pub enable_pos: u32,
+    pub ready_pos: u32,
+    pub write_pos: u32,
+    pub resp_pos: u32,
+    pub addr_pos: [u32; BUS_TRACE_MAX_ADR_BITS],
+    pub wdata_pos: [u32; BUS_TRACE_MAX_DAT_BITS],
+    pub rdata_pos: [u32; BUS_TRACE_MAX_DAT_BITS],
+}
+
+impl Default for BusTracePositions {
+    fn default() -> Self {
+        BusTracePositions {
+            protocol_apb3: true, // APB3 == GPU `protocol: 0`
+            addr_bits: 0,
+            data_bits: 0,
+            sel_pos: 0xFFFFFFFF,
+            enable_pos: 0xFFFFFFFF,
+            ready_pos: 0xFFFFFFFF,
+            write_pos: 0xFFFFFFFF,
+            resp_pos: 0xFFFFFFFF,
+            addr_pos: [0xFFFFFFFF; BUS_TRACE_MAX_ADR_BITS],
+            wdata_pos: [0xFFFFFFFF; BUS_TRACE_MAX_DAT_BITS],
+            rdata_pos: [0xFFFFFFFF; BUS_TRACE_MAX_DAT_BITS],
+        }
+    }
+}
+
+/// Resolve every configured bus's pin positions + build its CPU-side decoder
+/// lane. Backend-agnostic (uses the agnostic `resolve_to_state_pos`); shared by
+/// the Metal backend (which packs the positions into the GPU `BusTraceParams`)
+/// and the CPU backend (which runs the beat FSM directly). Protocol-gated to
+/// APB3 — other protocols are skipped with a warning (Phase 2). The returned
+/// `Vec<BusTracePositions>` and `Vec<BusTraceLane>` are index-aligned: vec index
+/// == GPU `bus_id` (packed into the beat `flags>>8`).
+pub(crate) fn build_bus_trace(
+    aig: &AIG,
+    netlistdb: &NetlistDB,
+    script: &FlattenedScriptV1,
+    configs: &[crate::testbench::BusTraceConfig],
+) -> (Vec<BusTracePositions>, Vec<BusTraceLane>) {
+    use crate::sim::models::bus_trace::{pin_basename, BusTraceDecoder};
+    use crate::sim::trace_signals::resolve_to_state_pos;
+    use crate::testbench::BusProtocol;
+
+    let mut positions: Vec<BusTracePositions> = Vec::new();
+    let mut lanes: Vec<BusTraceLane> = Vec::new();
+
+    let resolve =
+        |name: &str| resolve_to_state_pos(aig, netlistdb, script, name).unwrap_or(0xFFFFFFFF);
+
+    for cfg in configs.iter() {
+        if positions.len() >= MAX_BUS_TRACES {
+            clilog::warn!(
+                "bus-trace: more than {} buses configured; `{}` and later ignored",
+                MAX_BUS_TRACES,
+                cfg.name
+            );
+            break;
+        }
+        match cfg.protocol {
+            BusProtocol::Apb3 => {}
+            other => {
+                clilog::warn!(
+                    "bus-trace `{}`: protocol {:?} not yet implemented (Phase 2); skipping",
+                    cfg.name,
+                    other
+                );
+                continue;
+            }
+        }
+
+        let addr_bits = cfg.addr_bits.min(BUS_TRACE_MAX_ADR_BITS);
+        let data_bits = cfg.data_bits.min(BUS_TRACE_MAX_DAT_BITS);
+        if cfg.addr_bits > BUS_TRACE_MAX_ADR_BITS || cfg.data_bits > BUS_TRACE_MAX_DAT_BITS {
+            clilog::warn!(
+                "bus-trace `{}`: addr/data width capped at {}/{} bits (Phase 1)",
+                cfg.name,
+                BUS_TRACE_MAX_ADR_BITS,
+                BUS_TRACE_MAX_DAT_BITS
+            );
+        }
+
+        let mut p = BusTracePositions {
+            protocol_apb3: true,
+            addr_bits,
+            data_bits,
+            sel_pos: resolve(&pin_basename(cfg, "psel")),
+            enable_pos: resolve(&pin_basename(cfg, "penable")),
+            ready_pos: resolve(&pin_basename(cfg, "pready")),
+            write_pos: resolve(&pin_basename(cfg, "pwrite")),
+            resp_pos: resolve(&pin_basename(cfg, "pslverr")),
+            ..Default::default()
+        };
+        let abase = pin_basename(cfg, "paddr");
+        for b in 0..addr_bits {
+            p.addr_pos[b] = resolve(&format!("{abase}[{b}]"));
+        }
+        let wbase = pin_basename(cfg, "pwdata");
+        let rbase = pin_basename(cfg, "prdata");
+        for b in 0..data_bits {
+            p.wdata_pos[b] = resolve(&format!("{wbase}[{b}]"));
+            p.rdata_pos[b] = resolve(&format!("{rbase}[{b}]"));
+        }
+
+        if p.sel_pos == 0xFFFFFFFF || p.enable_pos == 0xFFFFFFFF {
+            clilog::warn!(
+                "bus-trace `{}`: psel/penable did not resolve (prefix `{}`) — \
+                 this bus will not capture. Check the prefix / `signals` overrides.",
+                cfg.name,
+                cfg.prefix
+            );
+        } else {
+            let n_addr = p.addr_pos.iter().filter(|&&x| x != 0xFFFFFFFF).count();
+            clilog::info!(
+                "bus-trace `{}` (APB3): psel/penable resolved, addr {}/{} bits, \
+                 pready={} pslverr={}",
+                cfg.name,
+                n_addr,
+                addr_bits,
+                p.ready_pos != 0xFFFFFFFF,
+                p.resp_pos != 0xFFFFFFFF
+            );
+        }
+
+        positions.push(p);
+        lanes.push(BusTraceLane {
+            name: cfg.name.clone(),
+            decoder: BusTraceDecoder::new(cfg.protocol),
+        });
+    }
+
+    (positions, lanes)
 }
 
 
@@ -3364,7 +3522,6 @@ struct CpuBackend {
     /// Reg/IO words per slot (`reg_io_state_size`); the X-mask lane width.
     reg_io_state_size: usize,
     /// Flash reset line (logic fixtures have no flash; carried for the contract).
-    #[allow(dead_code)]
     flash_in_reset: bool,
     /// Block program, copied from `script` so the backend owns its storage
     /// (no lifetime entanglement with `LoadedDesign`).
@@ -3385,6 +3542,19 @@ struct CpuBackend {
     /// `UartChannel` ring; `drain_uart_tx` empties it). Interior-mutable so the
     /// per-edge FSM in `run_edges(&self)` can push.
     uart_decoded: UnsafeCell<Vec<(usize, u8)>>,
+    /// Per-bus APB3 pin positions (Phase 1 step 5c), resolved in `new` via the
+    /// shared `build_bus_trace`. Index == GPU `bus_id` (packed into beat flags).
+    /// Empty for designs with no `bus_traces`.
+    bus_positions: Vec<BusTracePositions>,
+    /// Per-bus gate bits from the previous edge (rising-edge detection); mirrors
+    /// the GPU `BusTraceChannel.prev_gate`. Bit `b` == bus `b`'s gate last edge.
+    bus_prev_gate: UnsafeCell<u32>,
+    /// Monotonic edge counter stamped into each beat's `tick`; mirrors the GPU
+    /// `BusTraceChannel.current_tick`, incremented once per edge from 0.
+    bus_current_tick: UnsafeCell<u32>,
+    /// Captured raw beats awaiting drain (mirrors the GPU `BusTraceEntry` ring;
+    /// `drain_bus_beats` empties it). Interior-mutable for the per-edge FSM.
+    bus_beats: UnsafeCell<Vec<crate::sim::models::bus_trace::RawBeat>>,
 }
 
 impl CpuBackend {
@@ -3403,8 +3573,8 @@ impl CpuBackend {
 
 impl CosimBackend for CpuBackend {
     fn new(
-        _aig: &AIG,
-        _netlistdb: &NetlistDB,
+        aig: &AIG,
+        netlistdb: &NetlistDB,
         script: &FlattenedScriptV1,
         config: &TestbenchConfig,
         gpio_map: &GpioMapping,
@@ -3511,6 +3681,12 @@ impl CosimBackend for CpuBackend {
             .map(|_| CpuUartDecoderState::new())
             .collect();
 
+        // Per-bus APB3 pin positions + CPU decoder lanes (Phase 1 step 5c),
+        // built EXACTLY as MetalBackend's build_bus_trace_params (which packs
+        // the same positions into the GPU struct) via the shared builder.
+        let (bus_positions, bus_lanes) =
+            build_bus_trace(aig, netlistdb, script, config.effective_bus_traces());
+
         let backend = CpuBackend {
             state: UnsafeCell::new(state),
             sram: UnsafeCell::new(sram),
@@ -3533,9 +3709,12 @@ impl CosimBackend for CpuBackend {
             uart_configs: cpu_uart_configs,
             uart_states: UnsafeCell::new(cpu_uart_states),
             uart_decoded: UnsafeCell::new(Vec::new()),
+            bus_positions,
+            bus_prev_gate: UnsafeCell::new(0),
+            bus_current_tick: UnsafeCell::new(0),
+            bus_beats: UnsafeCell::new(Vec::new()),
         };
-        // 5c: bus-trace beat extraction is deferred — no lanes yet.
-        (backend, Vec::new())
+        (backend, bus_lanes)
     }
 
     fn init_schedule(
@@ -3631,8 +3810,10 @@ impl CosimBackend for CpuBackend {
     }
 
     fn drain_bus_beats(&mut self) -> Vec<crate::sim::models::bus_trace::RawBeat> {
-        // Bus-trace beat extraction is Phase 1 step 5c.
-        Vec::new()
+        // Return the beats the per-edge FSM accumulated this batch, then clear
+        // (mirrors the GPU ring drain in MetalBackend::drain_bus_beats; here the
+        // beats are already in RawBeat form, captured in run_edges).
+        std::mem::take(self.bus_beats.get_mut())
     }
 
     fn run_edges(&self, batch: usize, schedule_offset: usize) -> u64 {
@@ -3648,6 +3829,12 @@ impl CosimBackend for CpuBackend {
         // completed bytes accumulate until `drain_uart_tx`.
         let uart_states = unsafe { &mut *self.uart_states.get() };
         let uart_decoded = unsafe { &mut *self.uart_decoded.get() };
+        // Bus-trace FSM state + accumulator (Phase 1 step 5c). `prev_gate` /
+        // `current_tick` persist across edges/batches (mirror the GPU
+        // `BusTraceChannel` header); beats accumulate until `drain_bus_beats`.
+        let bus_prev_gate = unsafe { &mut *self.bus_prev_gate.get() };
+        let bus_current_tick = unsafe { &mut *self.bus_current_tick.get() };
+        let bus_beats = unsafe { &mut *self.bus_beats.get() };
 
         if let Some(r) = ring.as_mut() {
             r.clear();
@@ -3784,6 +3971,72 @@ impl CosimBackend for CpuBackend {
                 us.bits_received = bits_received;
                 us.value = value;
                 us.current_cycle = cycle + 1;
+            }
+
+            // ── Bus transaction trace (APB3, ported from gpu_io_step,
+            // kernel_v1.metal:1305-1352). Runs AFTER `simulate`, same point as
+            // the GPU block, reading the OUTPUT slot. Per bus: gate = sel & en &
+            // rdy (rdy=1 when pready absent); on a rising edge of the gate emit
+            // one RawBeat stamped with `current_tick`. `prev_gate` /
+            // `current_tick` persist; `current_tick` += 1 once per edge from 0,
+            // regardless of whether any bus fired. READ_OUT_BIT reads the OUTPUT
+            // slot; pos==u32::MAX → 0 (sentinel short-circuit).
+            if !self.bus_positions.is_empty() {
+                let btick = *bus_current_tick;
+                let prev = *bus_prev_gate;
+                let mut new_gate = 0u32;
+                let read_out = |pos: u32| -> u32 {
+                    if pos != u32::MAX {
+                        (state[state_size + (pos >> 5) as usize] >> (pos & 31)) & 1
+                    } else {
+                        0
+                    }
+                };
+                for (b, bp) in self.bus_positions.iter().enumerate() {
+                    let gate = if bp.protocol_apb3 {
+                        let sel = read_out(bp.sel_pos);
+                        let en = read_out(bp.enable_pos);
+                        let rdy = if bp.ready_pos == 0xFFFFFFFF {
+                            1
+                        } else {
+                            read_out(bp.ready_pos)
+                        };
+                        sel & en & rdy
+                    } else {
+                        0
+                    };
+                    new_gate |= gate << b;
+
+                    let rising = gate != 0 && ((prev >> b) & 1) == 0;
+                    if rising {
+                        let write = read_out(bp.write_pos);
+                        let err = read_out(bp.resp_pos);
+                        let mut addr = 0u32;
+                        for i in 0..bp.addr_bits.min(BUS_TRACE_MAX_ADR_BITS) {
+                            addr |= read_out(bp.addr_pos[i]) << i;
+                        }
+                        let mut wdata = 0u32;
+                        let mut rdata = 0u32;
+                        for i in 0..bp.data_bits.min(BUS_TRACE_MAX_DAT_BITS) {
+                            wdata |= read_out(bp.wdata_pos[i]) << i;
+                            rdata |= read_out(bp.rdata_pos[i]) << i;
+                        }
+                        // Pack the same flags the GPU writes, then unpack into a
+                        // RawBeat identically to MetalBackend::drain_bus_beats.
+                        let flags = (write & 1) | ((err & 1) << 1) | ((b as u32) << 8);
+                        bus_beats.push(crate::sim::models::bus_trace::RawBeat {
+                            tick: btick as u64,
+                            bus_id: (flags >> 8) & 0xFF,
+                            write: (flags & 1) != 0,
+                            err: (flags >> 1) & 1 != 0,
+                            addr: addr as u64,
+                            wdata: wdata as u64,
+                            rdata: rdata as u64,
+                        });
+                    }
+                }
+                *bus_prev_gate = new_gate;
+                *bus_current_tick = btick + 1;
             }
 
             // ── VCD snapshot: full [input | output] slot for this edge ─────
