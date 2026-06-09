@@ -1692,7 +1692,7 @@ fn cmd_cosim(args: CosimArgs) {
 
     #[cfg(feature = "metal")]
     {
-        use jacquard::sim::cosim_metal::CosimOpts;
+        use jacquard::sim::cosim::CosimOpts;
         use jacquard::sim::setup;
         use jacquard::testbench::TestbenchConfig;
 
@@ -1789,7 +1789,7 @@ fn cmd_cosim(args: CosimArgs) {
         };
 
         let result =
-            jacquard::sim::cosim_metal::run_cosim(&mut design, &config, &opts, &timing_constraints);
+            jacquard::sim::cosim::run_cosim(&mut design, &config, &opts, &timing_constraints);
         std::process::exit(if result.passed { 0 } else { 1 });
     }
 }
