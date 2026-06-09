@@ -1681,16 +1681,6 @@ fn main() {
 
 #[allow(unused_variables)]
 fn cmd_cosim(args: CosimArgs) {
-    #[cfg(not(feature = "metal"))]
-    {
-        eprintln!(
-            "jacquard cosim requires Metal support (macOS only). Build with:\n\
-             \n  cargo build -r --features metal --bin jacquard\n"
-        );
-        std::process::exit(1);
-    }
-
-    #[cfg(feature = "metal")]
     {
         use jacquard::sim::cosim::CosimOpts;
         use jacquard::sim::setup;
@@ -1788,8 +1778,15 @@ fn cmd_cosim(args: CosimArgs) {
             bus_trace_csv: args.bus_trace_csv.clone(),
         };
 
+        // Backend selection: Metal when the GPU feature is built, otherwise the
+        // non-gated CpuBackend reference path (Phase 1 step 5a). An explicit
+        // `--backend cpu` override under Metal is deferred (optional, 5a).
+        #[cfg(feature = "metal")]
         let result =
             jacquard::sim::cosim::run_cosim(&mut design, &config, &opts, &timing_constraints);
+        #[cfg(not(feature = "metal"))]
+        let result =
+            jacquard::sim::cosim::run_cosim_cpu(&mut design, &config, &opts, &timing_constraints);
         std::process::exit(if result.passed { 0 } else { 1 });
     }
 }
