@@ -9,14 +9,6 @@
 //! / `MTLResourceOptions` dependencies. Anything GPU-specific belongs in
 //! `metal.rs` behind `#[cfg(feature = "metal")]`.
 
-// Without a GPU feature the only consumer of this agnostic surface (the
-// `CosimBackend` trait, the `run_cosim_generic<B>` driver, the scheduler, the
-// CPU baseline helpers, the patchers) is the gated `MetalBackend` + `run_cosim`
-// shim, so everything reads as dead code in a no-feature `cargo check`. The
-// `CpuBackend` (Phase 1 step 5) becomes the non-gated consumer; until then this
-// silences the expected dead-code warnings without per-item gating.
-#![cfg_attr(not(feature = "metal"), allow(dead_code))]
-
 use std::collections::HashMap;
 
 use crate::aig::{DriverType, AIG};
@@ -3290,6 +3282,394 @@ fn run_cosim_generic<B: CosimBackend>(
         uart_events,
         edges_simulated: edges_actually_simulated,
     }
+}
+
+// ── CpuBackend (non-gated CPU reference backend, Phase 1 step 5a) ───────────
+//
+// The CPU reference backend (ADR 0017 Layer 2): all design state lives in plain
+// `Vec<u32>`s, and `run_edges` steps the design through
+// `cpu_reference::simulate_block_v1[_xprop]` — the same partition executor the
+// `--check-with-cpu` path uses. It is the cosim oracle: byte-identical to the
+// Metal golden on the logic fixtures (no timing, no SRAM-xprop — both asserted
+// off in `new`). Phase 1 step 5a implements the LOGIC subset; the UART-TX
+// decoder (5b) and bus-trace beat extraction (5c) are stubbed (the `drain_*`
+// methods return empty, `new` returns empty `bus_lanes`).
+//
+// Interior mutability: the trait's `run_edges(&self)` and `vcd_snapshot(&self)`
+// take a shared ref (Metal's buffers are interior-mutable shared memory). The
+// CpuBackend mirrors that with `UnsafeCell` over its `Vec`s — sound because
+// cosim dispatch is strictly sequential (no concurrent access to a backend),
+// and `state_mut(&mut self)` keeps the compile-time exclusivity the seam
+// promises for the pre-loop stimulus deposits.
+use std::cell::UnsafeCell;
+
+struct CpuBackend {
+    /// Full design state `[input_state | output_state]`, `2 × state_size` words.
+    state: UnsafeCell<Vec<u32>>,
+    /// SRAM backing store, sized `max(1)` like Metal (a SRAM-less design has
+    /// `sram_storage_size == 0`); `sram()` returns the `[..sram_len]` view.
+    sram: UnsafeCell<Vec<u32>>,
+    /// SRAM X-mask shadow (xprop); sized like `sram` when xprop is on, else 1.
+    sram_xmask: UnsafeCell<Vec<u32>>,
+    /// Per-edge schedule: one `Vec<BitOp>` per scheduler edge.
+    schedule: Vec<Vec<BitOp>>,
+    edges_per_period: usize,
+    gcd_ps: u64,
+    /// Words per state slot (`effective_state_size()`).
+    state_size: usize,
+    /// True SRAM word count (`sram_storage_size`); `sram()` view length.
+    sram_len: usize,
+    num_blocks: usize,
+    num_major_stages: usize,
+    xprop_enabled: bool,
+    /// X-mask word offset within a slot (`reg_io_state_size` when xprop on,
+    /// else 0). Mirrors the GPU `state_prep` `xmask_state_offset` sentinel.
+    xmask_state_offset: usize,
+    /// Reg/IO words per slot (`reg_io_state_size`); the X-mask lane width.
+    reg_io_state_size: usize,
+    /// Flash reset line (logic fixtures have no flash; carried for the contract).
+    #[allow(dead_code)]
+    flash_in_reset: bool,
+    /// Block program, copied from `script` so the backend owns its storage
+    /// (no lifetime entanglement with `LoadedDesign`).
+    blocks_start: Vec<usize>,
+    blocks_data: Vec<u32>,
+    /// Per-edge `[input | output]` snapshots for the most recent `run_edges`,
+    /// one slot per edge in the batch (N=1 per edge). `None` until enabled.
+    vcd_ring: UnsafeCell<Option<Vec<Vec<u32>>>>,
+    enable_vcd: bool,
+}
+
+impl CpuBackend {
+    #[inline]
+    fn state_ref(&self) -> &[u32] {
+        // SAFETY: cosim dispatch is sequential; no other live borrow exists.
+        unsafe { &*self.state.get() }
+    }
+    #[inline]
+    #[allow(clippy::mut_from_ref)]
+    fn state_inner_mut(&self) -> &mut Vec<u32> {
+        // SAFETY: only called from `run_edges`/`state_mut`, never concurrently.
+        unsafe { &mut *self.state.get() }
+    }
+}
+
+impl CosimBackend for CpuBackend {
+    fn new(
+        _aig: &AIG,
+        _netlistdb: &NetlistDB,
+        script: &FlattenedScriptV1,
+        config: &TestbenchConfig,
+        _gpio_map: &GpioMapping,
+        _uart_configs: &[(String, usize, usize, u32)],
+        _sched_ticks_per_sys_clk_cycle: u64,
+        state_size: usize,
+        num_blocks: usize,
+        num_major_stages: usize,
+        _arrival_state_offset: u32,
+        _timing_constraints: &Option<Vec<u32>>,
+    ) -> (Self, Vec<BusTraceLane>) {
+        // Phase 1 scope guards (plan Risks): the CPU stepper has no arrival
+        // readback, and `simulate_block_v1` carries no SRAM X-mask, so SRAM
+        // under xprop would read as always-known.
+        assert!(
+            !script.timing_arrivals_enabled,
+            "CpuBackend: timed cosim not supported (Phase 1) — arrival readback \
+             rides the GPU ring; use the Metal backend for --timing-vcd cosim."
+        );
+        assert!(
+            !(script.xprop_enabled && script.sram_storage_size > 0),
+            "CpuBackend: --xprop with SRAM not supported (Phase 1) — \
+             cpu_reference::simulate_block_v1 has no SRAM X-mask, so SRAM cells \
+             would read as always-known; use the Metal backend."
+        );
+
+        // Design state: [input | output], zeroed, with the xprop X-mask seed
+        // mirroring MetalBackend::build_state_buffers (both slots seeded so
+        // edge-0 state_prep's output→input copy doesn't wipe the seed).
+        let mut state = vec![0u32; 2 * state_size];
+        if script.xprop_enabled {
+            let rio = script.reg_io_state_size as usize;
+            let xmask = crate::sim::vcd_io::xprop_xmask_template_cosim(script);
+            state[rio..2 * rio].copy_from_slice(&xmask);
+            state[state_size + rio..state_size + 2 * rio].copy_from_slice(&xmask);
+            clilog::info!(
+                "cosim X-propagation enabled (CpuBackend): {} reg/io words, \
+                 X-mask seeded (both slots) for uninitialised state",
+                rio
+            );
+        }
+
+        // SRAM backing store (sized max(1) like Metal; sliced to the real len).
+        let sram_alloc_len = (script.sram_storage_size as usize).max(1);
+        let mut sram = vec![0u32; sram_alloc_len];
+
+        // SRAM X-mask shadow (all-X when xprop, sized 1 dummy otherwise). The
+        // (xprop && sram>0) assert above means xprop with real SRAM never
+        // reaches here; this stays for layout parity.
+        let sram_xmask_len = if script.xprop_enabled {
+            (script.sram_storage_size as usize).max(1)
+        } else {
+            1
+        };
+        let mut sram_xmask =
+            vec![if script.xprop_enabled { 0xFFFF_FFFFu32 } else { 0u32 }; sram_xmask_len];
+
+        // SRAM preload (issue #80) — same path as build_state_buffers. The
+        // logic fixtures declare no `sram_init`, so this is untaken; wired for
+        // correctness.
+        if let Some(sram_init) = config.sram_init.as_ref() {
+            let elf_path = std::path::Path::new(&sram_init.elf_path);
+            let chunks = crate::sim::sram_preload::parse_elf_chunks(elf_path)
+                .unwrap_or_else(|e| panic!("sram_init: {e}"));
+            let (cellid, storage_offset) =
+                crate::sim::sram_preload::resolve_single_sram(&script.sram_cell_storage_offsets)
+                    .unwrap_or_else(|e| panic!("sram_init: {e}"));
+            let total_bytes: usize = chunks.iter().map(|c| c.bytes.len()).sum();
+            let mut xmask_slice = if script.xprop_enabled {
+                Some(sram_xmask.as_mut_slice())
+            } else {
+                None
+            };
+            crate::sim::sram_preload::apply_chunks(
+                &mut sram,
+                storage_offset,
+                &chunks,
+                xmask_slice.as_deref_mut(),
+            )
+            .unwrap_or_else(|e| panic!("sram_init: {e}"));
+            clilog::info!(
+                "SRAM preload (CpuBackend): {} bytes from {} → cell {} at storage offset {}",
+                total_bytes,
+                elf_path.display(),
+                cellid,
+                storage_offset
+            );
+        }
+
+        let backend = CpuBackend {
+            state: UnsafeCell::new(state),
+            sram: UnsafeCell::new(sram),
+            sram_xmask: UnsafeCell::new(sram_xmask),
+            schedule: Vec::new(),
+            edges_per_period: 0,
+            gcd_ps: 0,
+            state_size,
+            sram_len: script.sram_storage_size as usize,
+            num_blocks,
+            num_major_stages,
+            xprop_enabled: script.xprop_enabled,
+            xmask_state_offset: 0,
+            reg_io_state_size: script.reg_io_state_size as usize,
+            flash_in_reset: false,
+            blocks_start: script.blocks_start.iter().copied().collect(),
+            blocks_data: script.blocks_data.iter().copied().collect(),
+            vcd_ring: UnsafeCell::new(None),
+            enable_vcd: false,
+        };
+        // 5a: bus-trace beat extraction is deferred (5c) — no lanes yet.
+        (backend, Vec::new())
+    }
+
+    fn init_schedule(
+        &mut self,
+        per_edge_ops: Vec<Vec<BitOp>>,
+        _state_size: u32,
+        xmask_state_offset: u32,
+        gcd_ps: u64,
+    ) {
+        self.edges_per_period = per_edge_ops.len();
+        self.schedule = per_edge_ops;
+        self.gcd_ps = gcd_ps;
+        self.xmask_state_offset = xmask_state_offset as usize;
+    }
+
+    #[inline]
+    fn edge_ops_mut(&mut self, edge_idx: usize) -> &mut [BitOp] {
+        &mut self.schedule[edge_idx]
+    }
+    #[inline]
+    fn edge_ops(&self, edge_idx: usize) -> &[BitOp] {
+        &self.schedule[edge_idx]
+    }
+    #[inline]
+    fn edges_per_period(&self) -> usize {
+        self.edges_per_period
+    }
+    #[inline]
+    fn gcd_ps(&self) -> u64 {
+        self.gcd_ps
+    }
+
+    fn state(&self) -> &[u32] {
+        self.state_ref()
+    }
+    fn state_mut(&mut self) -> &mut [u32] {
+        self.state.get_mut()
+    }
+    fn sram(&self) -> &[u32] {
+        // SAFETY: sequential dispatch — no concurrent borrow.
+        let sram: &Vec<u32> = unsafe { &*self.sram.get() };
+        &sram[..self.sram_len]
+    }
+
+    fn flash_set_in_reset(&mut self, in_reset: bool) {
+        self.flash_in_reset = in_reset;
+    }
+
+    fn enable_vcd_ring(&mut self) {
+        self.enable_vcd = true;
+        // Lazily allocate on first run_edges; N=1 → one slot per edge.
+        *self.vcd_ring.get_mut() = Some(Vec::new());
+    }
+
+    fn vcd_snapshot(&self, edge_in_batch: usize) -> &[u32] {
+        // SAFETY: sequential dispatch; the ring is populated by run_edges.
+        let ring = unsafe { &*self.vcd_ring.get() };
+        &ring
+            .as_ref()
+            .expect("vcd_snapshot called without enable_vcd_ring")[edge_in_batch]
+    }
+
+    fn flash_d_i(&self) -> u8 {
+        // Logic fixtures have no flash; idle MISO nibble is all-high.
+        0x0F
+    }
+
+    fn flash_debug_snapshot(&self) -> FlashDebug {
+        // No flash FSM on the CPU logic path (5a); report a zeroed snapshot.
+        FlashDebug {
+            d_i: 0x0F,
+            data_width: 0,
+            prev_csn: 0,
+            in_reset: self.flash_in_reset as u32,
+            bit_count: 0,
+            byte_count: 0,
+            addr: 0,
+            curr_byte: 0,
+            command: 0,
+            out_buffer: 0,
+            prev_clk: 0,
+            prev_d_out: 0,
+            last_error_cmd: 0,
+            model_prev_csn: 0,
+        }
+    }
+
+    fn drain_uart_tx(&mut self) -> Vec<(usize, u8)> {
+        // UART-TX CPU decoder is Phase 1 step 5b.
+        Vec::new()
+    }
+
+    fn drain_bus_beats(&mut self) -> Vec<crate::sim::models::bus_trace::RawBeat> {
+        // Bus-trace beat extraction is Phase 1 step 5c.
+        Vec::new()
+    }
+
+    fn run_edges(&self, batch: usize, schedule_offset: usize) -> u64 {
+        let state_size = self.state_size;
+        let state = self.state_inner_mut();
+        // SAFETY: sequential dispatch — sram/sram_xmask/vcd_ring are only
+        // touched here and in &mut-self methods, never concurrently.
+        let sram = unsafe { &mut *self.sram.get() };
+        let sram_xmask = unsafe { &mut *self.sram_xmask.get() };
+        let ring = unsafe { &mut *self.vcd_ring.get() };
+
+        if let Some(r) = ring.as_mut() {
+            r.clear();
+        }
+
+        let xmask_off = self.xmask_state_offset;
+        let rio = self.reg_io_state_size;
+
+        for e in 0..batch {
+            let sched_idx = (schedule_offset + e) % self.edges_per_period;
+
+            // ── CPU state_prep (mirrors kernel_v1.metal `state_prep`) ──────
+            // Step 1: copy output slot → input slot.
+            state.copy_within(state_size..2 * state_size, 0);
+            // Step 2: apply this edge's BitOps to the input slot; driving a
+            // bit clears its X-mask (xmask_off != 0 ⇒ xprop on).
+            for op in &self.schedule[sched_idx] {
+                let word_idx = (op.position >> 5) as usize;
+                let bit_mask = 1u32 << (op.position & 31);
+                if op.value != 0 {
+                    state[word_idx] |= bit_mask;
+                } else {
+                    state[word_idx] &= !bit_mask;
+                }
+                if xmask_off != 0 {
+                    state[xmask_off + word_idx] &= !bit_mask;
+                }
+            }
+            // (No flash_din injection: logic fixtures have no SPI flash. 5a.)
+
+            // ── Simulate every partition for this edge ─────────────────────
+            for stage_i in 0..self.num_major_stages {
+                for block_i in 0..self.num_blocks {
+                    let start = self.blocks_start[stage_i * self.num_blocks + block_i];
+                    let end = self.blocks_start[stage_i * self.num_blocks + block_i + 1];
+                    if start == end {
+                        continue;
+                    }
+                    let script_slice = &self.blocks_data[start..end];
+                    let (input_half, output_half) = state.split_at_mut(state_size);
+                    if self.xprop_enabled {
+                        // Value + X-mask lanes are packed in the same slot at
+                        // [0..rio] and [xmask_off..xmask_off+rio]. The xprop
+                        // executor takes them as separate slices (it indexes
+                        // xmasks from 0, not from xmask_off).
+                        let (in_val, in_x) = input_half.split_at(xmask_off);
+                        let (out_val, out_x) = output_half.split_at_mut(xmask_off);
+                        crate::sim::cpu_reference::simulate_block_v1_xprop(
+                            script_slice,
+                            in_val,
+                            out_val,
+                            &in_x[..rio],
+                            &mut out_x[..rio],
+                            sram,
+                            sram_xmask,
+                            false,
+                        );
+                    } else {
+                        crate::sim::cpu_reference::simulate_block_v1(
+                            script_slice,
+                            input_half,
+                            output_half,
+                            sram,
+                            false,
+                        );
+                    }
+                }
+            }
+
+            // ── VCD snapshot: full [input | output] slot for this edge ─────
+            if self.enable_vcd {
+                if let Some(r) = ring.as_mut() {
+                    r.push(state.clone());
+                }
+            }
+        }
+
+        // CpuBackend runs synchronously; the token is unused (wait is a no-op).
+        0
+    }
+
+    fn wait(&self, _token: u64) {
+        // Synchronous CPU backend — run_edges already completed.
+    }
+}
+
+/// Public CPU-backend cosim entry point (Phase 1 step 5a). Drives the same
+/// agnostic `run_cosim_generic<B>` orchestration as the Metal shim, with the
+/// CPU reference backend. Available with no GPU feature; the cosim oracle.
+pub fn run_cosim_cpu(
+    design: &mut LoadedDesign,
+    config: &TestbenchConfig,
+    opts: &CosimOpts,
+    timing_constraints: &Option<Vec<u32>>,
+) -> CosimResult {
+    run_cosim_generic::<CpuBackend>(design, config, opts, timing_constraints)
 }
 
 #[cfg(feature = "metal")]
