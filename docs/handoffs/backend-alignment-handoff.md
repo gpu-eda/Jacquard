@@ -1,13 +1,12 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
 **Created:** 2026-06-07 (updated 2026-06-08, sixth session)
-**Branch:** `cosim-backend-seam-phase0` @ `0327080` (**step 4 committed locally,
-not yet pushed**; everything through `8885818` is pushed = PR #118, **CI green**;
-PR title/description refreshed to "Phase 0 + Phase 1 steps 1-3"). Holds Phase 0
-+ the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3 (done)**/**4
-(done)**. **#118 is being grown to Phase 0 + Phase 1** (maintainer's call: one
-PR, not stacked). Working tree clean. (PR body still lists step 4 under "next" —
-refresh on the step-4 push.)
+**Branch:** `cosim-backend-seam-phase0` @ `b4a9bea` (**step 5a committed locally,
+not yet pushed**; everything through `2b69183` is pushed = PR #118, **CI green
+through step 4**; PR title/description = "Phase 0 + Phase 1 steps 1-4"). Holds
+Phase 0 + the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3/4
+(done)** + **5a (CpuBackend logic subset)**. **#118 is being grown to Phase 0 +
+Phase 1** (maintainer's call: one PR, not stacked). Working tree clean.
 
 ## Goal & next-up
 
@@ -16,8 +15,25 @@ refresh on the step-4 push.)
 portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (steps 1/2a/2b/2c
 of 7 done).
 
-**Now (pick up here): Phase 1 step 5 — implement `CpuBackend`** in
-`src/sim/cosim/mod.rs` (non-gated). Plan: step 5 bullet in
+**Now (pick up here): Phase 1 step 5b — port the UART-TX decoder FSM to CPU.**
+The CPU UART-TX decode FSM lives ONLY in the Metal shader (`gpu_io_step` in
+`csrc/kernel_v1.metal`; GPU mirror struct `UartDecoderState` at
+`cosim/metal.rs:104`). Port it to a CPU `step(output_state)`-style decoder so
+`CpuBackend::drain_uart_tx() -> Vec<(usize,u8)>` returns decoded bytes (currently
+returns empty). Per-channel: observe the TX out bit each edge, run the
+shift-register/baud FSM (counting scheduler edges = `cycles_per_bit *
+sched_ticks_per_sys_clk_cycle`, mirroring `UartParams.channels[i].cycles_per_bit`).
+**Verify:** no-feature binary runs `dual_uart` → `dual_uart_events.json`
+byte-identical to the Metal golden (it lands at `target/test-out/` then copied).
+Then **5c** — port the bus-trace beat extraction (also in `gpu_io_step`) to CPU
+so `drain_bus_beats() -> Vec<RawBeat>` works + extract an agnostic bus-lanes
+helper (currently `build_bus_trace_params` is in `cosim/metal.rs`) so
+`CpuBackend::new` returns real `bus_lanes`; verify `apb_trace.csv` +
+`apb_trace_xprop.csv` vs golden. Then step 7 (Linux cosim CI on `ubuntu-latest`
+running these fixtures via the CPU build; extend `scripts/ci/
+compare_backend_vcds.py` to cosim if useful).
+
+**Older step-5 notes (now partly done in 5a) below.** Plan: step 5 bullet in
 `docs/plans/cosim-phase1-cpu-backend.md`. `Vec<u32>` state sized
 `effective_state_size()*2`, `Vec<u32>` sram, `Vec<Vec<BitOp>>` schedule.
 `run_edges` (blocks × `num_major_stages`) via
@@ -128,8 +144,28 @@ golden (no timing, no SRAM-xprop — both asserted off in `CpuBackend::new`).
   tests pass. (Deviations: `StatePrepParams` kept in `metal.rs` (GPU-ABI, sole
   user is metal); temporary `#![cfg_attr(not(feature="metal"),
   allow(dead_code))]` in `mod.rs:18` until `CpuBackend` consumes the surface.)
+- **Step 5a** (`b4a9bea`): `CpuBackend` (logic subset) + no-GPU `cmd_cosim`
+  wiring. `CpuBackend` in `cosim/mod.rs` (non-gated): `run_edges` via
+  `cpu_reference::simulate_block_v1[_xprop]` mirroring the `--check-with-cpu`
+  stepper; **xprop X-mask state_prep ported from `kernel_v1.metal:679–715`**
+  (output→input copy + per-BitOp value set + driven-bit xmask clear at
+  `xmask_state_offset`). Scope-guard asserts in `new`: `!timing_arrivals_enabled`,
+  `!(xprop_enabled && sram_storage_size>0)`. Interior mutability via
+  `UnsafeCell<Vec<u32>>` (state/sram/sram_xmask/vcd_ring) because trait
+  `run_edges` is `&self` (sound — sequential dispatch; `state_mut` uses
+  `get_mut`). **`run_cosim_cpu` pub shim** (`run_cosim_generic::<CpuBackend>`);
+  `cmd_cosim`'s `#[cfg(not(feature="metal"))]` branch now runs cosim on CPU
+  (hard-error removed; shared setup de-gated, only final dispatch gated). Flash
+  (`flash_d_i`→0x0F, `drain_*`→empty) + `bus_lanes`→empty stubbed for 5b/5c.
+  Dropped the temporary `allow(dead_code)`. **Verified: the 4 logic VCDs
+  (`xprop`/`2state`/`noreginit`/`reginit`) byte-identical to the Metal golden on
+  a no-feature build** (xprop matched — X-mask port correct); Metal path
+  unchanged (7/7 bit-identical), 298 tests pass. ⚠️ Review note: the `UnsafeCell`
+  interior mutability is pragmatic (matches Metal's `&self` run_edges) — a
+  candidate for a cleaner pattern, or change the trait `run_edges` to `&mut self`
+  (would touch MetalBackend too).
 
-**Then:** steps 6–7 (`cmd_cosim` backend selection + Linux cosim CI).
+**Then:** step 7 (Linux cosim CI).
 
 **Bit-identical gate:** `/tmp/claude/cosim_fixtures.sh <out>` + `shasum -c
 /tmp/claude/golden.sums` after every step (all green through P1.2c). **Note:**
