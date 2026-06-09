@@ -1,13 +1,15 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
 **Created:** 2026-06-07 (updated 2026-06-08, sixth session)
-**Branch:** `cosim-backend-seam-phase0` @ `4140ae0` (**steps 5a/5b committed
+**Branch:** `cosim-backend-seam-phase0` @ `a525a25` (**steps 5a/5b/5c committed
 locally, not yet pushed**; everything through `2b69183` is pushed = PR #118, **CI
 green through step 4**; PR title/description = "Phase 0 + Phase 1 steps 1-4").
 Holds Phase 0 + the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3/4
-(done)** + **5a (CpuBackend logic) + 5b (CPU UART-TX decoder)**. step 6
-(`cmd_cosim` no-GPU wiring) was folded into 5a. **#118 is being grown to Phase 0
-+ Phase 1** (maintainer's call: one PR, not stacked). Working tree clean.
+(done)** + **5a/5b/5c — `CpuBackend` is FUNCTIONALLY COMPLETE: all 7 cosim
+fixtures byte-identical to the Metal golden on a no-GPU build.** step 6
+(`cmd_cosim` no-GPU wiring) was folded into 5a. **Only step 7 (Linux CI) remains
+for Phase 1.** **#118 is being grown to Phase 0 + Phase 1** (maintainer's call:
+one PR, not stacked). Working tree clean.
 
 ## Goal & next-up
 
@@ -16,26 +18,25 @@ Holds Phase 0 + the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3/
 portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (steps 1/2a/2b/2c
 of 7 done).
 
-**Now (pick up here): Phase 1 step 5c — port the bus-trace beat extraction to
-CPU** (the last functional piece; then only Linux CI remains). The APB/bus-trace
-beat extraction lives in the Metal shader `gpu_io_step` (`csrc/kernel_v1.metal`,
-the "bus trace" block AFTER the UART block + the AHB/APB `BusTraceParamsAll`
-capture — grep `bus_trace`/`BusTrace`/`n_buses`); it observes the bus pins each
-edge and emits `RawBeat`s. Port it so `CpuBackend::drain_bus_beats() ->
-Vec<RawBeat>` returns beats (currently empty), run per-edge in `run_edges` after
-simulate (same point as the UART FSM). **`bus_lanes`:** `CpuBackend::new`
-currently returns empty — extract an **agnostic** bus-lanes builder (the lane/
-decoder half of `build_bus_trace_params`, currently in `cosim/metal.rs`; it also
-builds a GPU `BusTraceParamsAll`) into `cosim/mod.rs` so both backends share it,
-and have `CpuBackend::new` build the per-bus pin positions + `bus_lanes`.
-`run_cosim_generic` already feeds `drain_bus_beats()` → `bus_lanes[id].decoder.
-push(beat)` → transactions → CSV. **Verify:** no-feature binary runs `apb_trace`
-(±`--xprop`) → `apb_trace.csv` + `apb_trace_xprop.csv` byte-identical to golden.
-**Also drop** `CpuBackend.flash_in_reset`'s `#[allow(dead_code)]` if now used, and
-re-confirm all 7 fixtures pass on CPU. Then **step 7** — Linux cosim CI on
-`ubuntu-latest`: build no-feature, run `{xprop_cosim, dual_uart, apb_trace}` via
-CpuBackend, assert their checkers (extend `scripts/ci/compare_backend_vcds.py` to
-cosim, or shasum vs committed expected outputs).
+**Now (pick up here): Phase 1 step 7 — Linux cosim CI** (the only remaining
+Phase-1 step; `CpuBackend` is functionally complete). Add a CI job on
+`ubuntu-latest` (free runner) that builds the no-GPU binary
+(`cargo build -r --bin jacquard`, no features) and runs the Phase-1 cosim
+fixtures `{xprop_cosim (4 variants), dual_uart, apb_trace (±xprop)}` via
+`CpuBackend`, asserting their outputs. Two options for the assertion: (a) commit
+the expected outputs (the 7 golden artifacts — currently only in `/tmp/claude/
+golden/`, ephemeral) into the repo (e.g. `tests/<fixture>/expected/`) and shasum/
+diff against them; or (b) extend `scripts/ci/compare_backend_vcds.py` (the #113
+cross-backend harness) to cosim and, where a Metal runner is available, diff
+CPU-vs-Metal directly. (a) is simpler + works on free Linux without a GPU — the
+CPU output is deterministic and already proven byte-identical to Metal. Look at
+`.github/workflows/ci.yml` (the existing `jtag-minimal-cosim` / `metal` jobs) for
+the job pattern; the fixtures live in `tests/{xprop_cosim,dual_uart,apb_trace}/`.
+Mind the project rule: don't assume CI YAML — read the actual workflow first.
+**Verification harness reference:** `/tmp/claude/cosim_fixtures.sh` runs all 7
+(it uses a metal binary; a CPU variant just drops `--features metal` from the
+build). After step 7, Phase 1 is DONE → push, finalise PR #118, consider Phase 2
+(CUDA/HIP backend + Tier-2 GPU peripherals).
 
 **Older step-5 notes (now partly done in 5a) below.** Plan: step 5 bullet in
 `docs/plans/cosim-phase1-cpu-backend.md`. `Vec<u32>` state sized
@@ -180,8 +181,19 @@ golden (no timing, no SRAM-xprop — both asserted off in `CpuBackend::new`).
   **`dual_uart_events.json` byte-identical to golden** on a no-GPU build; 4 logic
   VCDs still OK; Metal 7/7; 298 tests. (Stale rust-analyzer dead_code warnings
   appeared mid-edit; `cargo check` on the commit is clean — FSM is wired.)
+- **Step 5c** (`a525a25`): ported the APB3 bus-trace beat extraction
+  (`kernel_v1.metal:1305–1352`) to `CpuBackend` + shared the bus-lanes builder.
+  Extracted agnostic `build_bus_trace(...) -> (Vec<BusTracePositions>,
+  Vec<BusTraceLane>)` + the `BUS_TRACE_MAX_*`/`MAX_BUS_TRACES` consts into
+  `cosim/mod.rs`; `metal.rs`'s `build_bus_trace_params` calls it and packs into
+  the GPU `BusTraceParamsAll` (Metal bit-identical). `CpuBackend` gained
+  `bus_positions` + per-edge FSM (`bus_prev_gate`/`bus_current_tick`/`bus_beats`,
+  after the UART FSM) emitting `RawBeat`s (same `flags` mapping as
+  `MetalBackend::drain_bus_beats`); `new` returns real `bus_lanes`. **ALL 7
+  CpuBackend fixtures byte-identical to the Metal golden on a no-GPU build**;
+  Metal 7/7; 298 tests. **CpuBackend Phase-1 functional parity complete.**
 
-**Then:** step 7 (Linux cosim CI).
+**Then:** step 7 (Linux cosim CI) — the only remaining Phase-1 step.
 
 **Bit-identical gate:** `/tmp/claude/cosim_fixtures.sh <out>` + `shasum -c
 /tmp/claude/golden.sums` after every step (all green through P1.2c). **Note:**
