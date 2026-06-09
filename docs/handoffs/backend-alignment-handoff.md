@@ -40,6 +40,29 @@ helper into `mod.rs` so `CpuBackend::new` can build lanes without metal.
 `#![cfg_attr(not(feature="metal"), allow(dead_code))]` at `cosim/mod.rs:18`.**
 Then steps 6–7 (`cmd_cosim` backend selection + Linux cosim CI on `ubuntu-latest`).
 
+**Step-5 reference implementations** (kraken should read these): the
+`--check-with-cpu` CPU-stepper block in `run_cosim_generic` (`cosim/mod.rs`
+~`:2546–2600`: CPU state_prep = copy output→input + apply edge `BitOp`s, then
+`apply_flash_din`, then `simulate_block_v1`) is the working prototype for
+`CpuBackend::run_edges`. `cpu_reference::simulate_block_v1` (`cpu_reference.rs:17`;
+`_xprop` variant `:299`). `CppSpiFlash` (`testbench.rs:45`, FFI `spiflash_step(clk,
+csn, d_o) -> u8` returns MISO `d_i`). `BusTraceDecoder::push(RawBeat) ->
+Option<BusTransaction>` (`models/bus_trace.rs:121`). **The UART-TX decode FSM
+lives in the Metal shader (`gpu_io_step` in `csrc/kernel_v1.metal`), NOT in Rust**
+— the CPU port must mirror that shift-register/baud FSM (the GPU mirror struct
+`UartDecoderState` is at `cosim/metal.rs:104`); equivalence-test it against
+Metal's `dual_uart` output.
+
+**Step-5 verification couples with step 6:** `CpuBackend` can't be *run*
+end-to-end until `cmd_cosim` selects it (step 6). Options: (a) do 5+6 together so
+the existing fixtures harness can run `{xprop_cosim, dual_uart, apb_trace}` on a
+no-GPU build and compare to the Metal golden (most robust — the byte-identical
+cross-backend assertion the plan calls for); or (b) land step 5 with only a
+compile gate (`cargo build --no-default-features`) + a focused unit test for the
+new CPU UART-TX FSM, deferring runtime verification to step 6. The Phase-1
+fixtures are chosen so CpuBackend output should be byte-identical to the Metal
+golden (no timing, no SRAM-xprop — both asserted off in `CpuBackend::new`).
+
 **Done so far in Phase 1:**
 - **Step 1** (`bc18f79`): de-Metaled the `run_edges` seam (dropped
   `metal::Buffer`), moved the VCD ring into `MetalBackend`
