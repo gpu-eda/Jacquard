@@ -1,42 +1,41 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
-**Created:** 2026-06-07 (updated 2026-06-08, sixth session)
-**Branch:** `cosim-backend-seam-phase0` @ `a525a25` (**steps 5a/5b/5c committed
-locally, not yet pushed**; everything through `2b69183` is pushed = PR #118, **CI
-green through step 4**; PR title/description = "Phase 0 + Phase 1 steps 1-4").
-Holds Phase 0 + the Phase 1 plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/**3/4
-(done)** + **5a/5b/5c — `CpuBackend` is FUNCTIONALLY COMPLETE: all 7 cosim
-fixtures byte-identical to the Metal golden on a no-GPU build.** step 6
-(`cmd_cosim` no-GPU wiring) was folded into 5a. **Only step 7 (Linux CI) remains
-for Phase 1.** **#118 is being grown to Phase 0 + Phase 1** (maintainer's call:
-one PR, not stacked). Working tree clean.
+**Created:** 2026-06-07 (updated 2026-06-15, seventh session)
+**Branch:** `cosim-backend-seam-phase0` @ `e530f32` (**PHASE 1 COMPLETE — steps
+1–7 all pushed; PR #118 CI fully green incl. the new `cosim-cpu` Linux job**).
+PR title/description = "Phase 0 + Phase 1 complete". Holds Phase 0 + the Phase 1
+plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/3/4/5a/5b/5c (`CpuBackend`
+functional parity — all 7 cosim fixtures byte-identical to the Metal golden on a
+no-GPU build; step 6 folded into 5a) + **step 7 (`e530f32`): Linux `cosim-cpu` CI
+job + 7 committed golden fixtures**. Working tree clean. **Next: Phase 2**
+(CUDA/HIP cosim backend + Tier-2 GPU peripherals) — not yet started.
 
 ## Goal & next-up
 
 **Goal:** bring CUDA/HIP up to Metal parity. Two tracks: (a) cross-backend
 *equivalence* of the `sim` kernel (done — guard in CI), (b) **cosim backend
-portability (#105)** — Phase 0 DONE, **Phase 1 in progress** (steps 1/2a/2b/2c
-of 7 done).
+portability (#105)** — Phase 0 DONE, **Phase 1 DONE** (all 7 steps pushed, CI
+green incl. the Linux `cosim-cpu` job).
 
-**Now (pick up here): Phase 1 step 7 — Linux cosim CI** (the only remaining
-Phase-1 step; `CpuBackend` is functionally complete). Add a CI job on
-`ubuntu-latest` (free runner) that builds the no-GPU binary
-(`cargo build -r --bin jacquard`, no features) and runs the Phase-1 cosim
-fixtures `{xprop_cosim (4 variants), dual_uart, apb_trace (±xprop)}` via
-`CpuBackend`, asserting their outputs. Two options for the assertion: (a) commit
-the expected outputs (the 7 golden artifacts — currently only in `/tmp/claude/
-golden/`, ephemeral) into the repo (e.g. `tests/<fixture>/expected/`) and shasum/
-diff against them; or (b) extend `scripts/ci/compare_backend_vcds.py` (the #113
-cross-backend harness) to cosim and, where a Metal runner is available, diff
-CPU-vs-Metal directly. (a) is simpler + works on free Linux without a GPU — the
-CPU output is deterministic and already proven byte-identical to Metal. Look at
-`.github/workflows/ci.yml` (the existing `jtag-minimal-cosim` / `metal` jobs) for
-the job pattern; the fixtures live in `tests/{xprop_cosim,dual_uart,apb_trace}/`.
-Mind the project rule: don't assume CI YAML — read the actual workflow first.
-**Verification harness reference:** `/tmp/claude/cosim_fixtures.sh` runs all 7
-(it uses a metal binary; a CPU variant just drops `--features metal` from the
-build). After step 7, Phase 1 is DONE → push, finalise PR #118, consider Phase 2
-(CUDA/HIP backend + Tier-2 GPU peripherals).
+**Now (pick up here): Phase 2 — CUDA/HIP cosim backend + Tier-2 GPU peripherals.**
+With the `CosimBackend` trait seam proven on two backends (Metal GPU + CPU
+reference), the next track adds a CUDA/HIP backend (T4-testable in CI) carrying
+the Tier-2 on-GPU peripheral kernels. Authoritative design: ADR 0017 *Amendment
+2026-06-07* (Layer 1/2/3) + `docs/plans/cosim-backend-portability.md`. The CPU
+reference backend now serves as the equivalence oracle for any new backend (the
+`cosim-cpu` Linux job + the committed `tests/*/expected/` goldens are the
+regression gate). **Before starting Phase 2, scope it with the maintainer** —
+whether it lands in #118 (unlikely; that PR is Phase 0+1) or a fresh branch/PR.
+
+**Step 7 — DONE (`e530f32`):** `scripts/ci/cosim_cpu_check.sh` builds the no-GPU
+binary (`cargo build -r --bin jacquard`, no features), runs all 7 cosim fixtures
+`{xprop_cosim (4 variants), dual_uart, apb_trace (±xprop)}` via `CpuBackend`, and
+diffs against committed goldens under `tests/{xprop_cosim,dual_uart,apb_trace}/
+expected/`. The `cosim-cpu` job (`ubuntu-latest`, free runner) in
+`.github/workflows/ci.yml` runs it on every push. `.gitignore` carries a scoped
+`!tests/xprop_cosim/expected/*.vcd` negation so the goldens are tracked.
+**Verification harness reference:** `/tmp/claude/cosim_fixtures.sh` runs all 7 on
+a Metal binary; the committed CI variant drops `--features metal`.
 
 **Older step-5 notes (now partly done in 5a) below.** Plan: step 5 bullet in
 `docs/plans/cosim-phase1-cpu-backend.md`. `Vec<u32>` state sized
@@ -193,7 +192,14 @@ golden (no timing, no SRAM-xprop — both asserted off in `CpuBackend::new`).
   CpuBackend fixtures byte-identical to the Metal golden on a no-GPU build**;
   Metal 7/7; 298 tests. **CpuBackend Phase-1 functional parity complete.**
 
-**Then:** step 7 (Linux cosim CI) — the only remaining Phase-1 step.
+- **Step 7** (`e530f32`): Linux cosim regression CI. `scripts/ci/cosim_cpu_check.sh`
+  runs all 7 fixtures via the no-GPU `CpuBackend` build and diffs against committed
+  goldens (`tests/{xprop_cosim,dual_uart,apb_trace}/expected/`); new `cosim-cpu`
+  `ubuntu-latest` job in `.github/workflows/ci.yml` wires it into every push;
+  `.gitignore` negation tracks the `.vcd` goldens. CI fully green on `e530f32`
+  incl. this job. **Phase 1 DONE.**
+
+**Then:** Phase 2 — CUDA/HIP cosim backend + Tier-2 GPU peripherals (not started).
 
 **Bit-identical gate:** `/tmp/claude/cosim_fixtures.sh <out>` + `shasum -c
 /tmp/claude/golden.sums` after every step (all green through P1.2c). **Note:**
