@@ -394,6 +394,71 @@ the tractable route.</li>
 </ul>
 <p>The <code>GpuPeripheral</code> seam is defined at Tier 2 so Tier 3 slots in without
 reworking the orchestration.</p>
+<h4 id="the-peripheral-contract--one-shape-input-and-output-every-model"><a class="header" href="#the-peripheral-contract--one-shape-input-and-output-every-model">The peripheral contract — one shape, input <em>and</em> output, every model</a></h4>
+<p>The seam above only sketched Tier 2 as <code>encode_step(encoder)</code>. This fills in
+<em>what</em> a peripheral is, so the CPU model (Tier 1), the GPU kernel (Tier 2), and
+the eventual single source (Tier 3) all express the <strong>same</strong> contract rather
+than two parallel ones.</p>
+<p>Every peripheral — on either substrate, input-driving or output-observing — is
+the same shape:</p>
+<blockquote>
+<p><strong>observe</strong> some design-output bits → <strong>advance an FSM</strong> (over persistent
+state + const params) → <strong>drive</strong> some design-input bits and/or <strong>emit</strong>
+decoded records.</p>
+</blockquote>
+<p>The CPU <code>PeripheralModel</code> trait (<code>src/sim/models/mod.rs:56</code>) is <em>already</em> this
+contract and <em>already</em> bidirectional:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn step_edge(&amp;mut self,
+    output_state: &amp;[u32],              // OBSERVE design outputs
+    overrides: &amp;mut ModelOverrides,    // DRIVE design inputs (position → value)
+    emitted: &amp;mut Vec&lt;EmittedEvent&gt;);  // EMIT decoded records
+fn driven_positions(&amp;self) -&gt; &amp;[u32]; // the input bits it may drive
+fn is_active(&amp;self) -&gt; bool;           // forces batch=1 mid-transmission
+<span class="boring">}</span></code></pre></pre>
+<p>One trait already covers the whole spectrum via <em>optional halves</em>: GPIO is
+input-only (default <code>step_edge</code> just contributes overrides), UART-TX decode /
+bus-trace are output-only (empty <code>driven_positions</code>), SPI flash is
+bidirectional. So a single interface genuinely covers input and output — the
+doubt about "enough commonality" is unfounded: the commonality is the
+FSM-over-IO-bits shape, and six models already share it.</p>
+<p>The GPU half is <strong>not</strong> yet unified — it is three bespoke kernels with the same
+skeleton but no common trait:</p>
+<div class="table-wrapper"><table><thead><tr><th>Kernel</th><th>reads</th><th>FSM state</th><th>writes</th><th>role</th></tr></thead><tbody>
+<tr><td><code>gpu_apply_flash_din</code></td><td><code>states</code>, <code>FlashState</code></td><td>—</td><td><code>states</code> (MISO)</td><td><strong>input</strong> inject</td></tr>
+<tr><td><code>gpu_flash_model_step</code></td><td><code>states</code>, <code>flash_data</code></td><td><code>FlashState</code></td><td><code>FlashState</code></td><td><strong>output</strong> observe + FSM</td></tr>
+<tr><td><code>gpu_io_step</code></td><td><code>states</code></td><td><code>UartDecoderState</code></td><td><code>UartChannel</code>/<code>BusTraceChannel</code> rings</td><td><strong>output</strong> decode → ring</td></tr>
+</tbody></table>
+</div>
+<p>Every kernel is <code>kernel(device u32* states, device FsmState* state, constant Params&amp; params, [device Ring* out], [const Data* in])</code>.</p>
+<p><strong>Target shape — one logical contract, two substrates:</strong></p>
+<ul>
+<li><strong>CPU substrate</strong> = today's <code>step_edge</code> (Rust over <code>&amp;[u32]</code>; drives via
+<code>ModelOverrides</code>).</li>
+<li><strong>GPU substrate</strong> (<code>GpuPeripheral</code>) = <code>encode_step(encoder, states_buf, fsm_buf, params_buf, ring_buf)</code> running the <em>same FSM</em> over <code>device u32* states</code>.</li>
+<li><strong>Consistency anchor = the shared <code>#[repr(C)]</code> FSM-state + params structs.</strong>
+These already exist on both sides but are <strong>hand-synced</strong> ("<code>must match Metal UartChannel</code>", <code>cosim_metal.rs:178</code>); that duplication is the tax Tier 3
+removes by generating the Rust <code>step</code>, the GPU kernel, <strong>and</strong> the one struct
+from a single FSM definition.</li>
+</ul>
+<p><strong>The decision that makes it consistent: all input drives are <code>(position, value)</code> pairs applied through the one <code>state_prep</code>/ops path.</strong> Today this is the
+<em>inconsistent</em> part — CPU models drive indirectly (<code>overrides → BitOps → state_prep</code>, so drives land clock-edge-aligned), but <code>gpu_apply_flash_din</code>
+writes <code>states</code> directly. They are the same logical operation done two ways.
+Normalising flash's direct-write into FSM-produced ops applied by <code>state_prep</code>
+makes input application uniform across every peripheral and both substrates, and
+removes flash's special case. (Flash writes directly today only because its MISO
+depends on the FSM computed that same edge — expressible as ops the FSM emits.)</p>
+<p><strong>What deliberately does <em>not</em> unify</strong> (substrate detail below the contract):
+output draining (GPU needs ring buffers because the CPU cannot observe
+intra-batch state; CPU models emit immediately — same <code>events out</code> contract,
+different plumbing), and the FSM body itself (Rust vs kernel, single-sourced
+only by Tier 3's IR). These divergences are expected and bounded.</p>
+<p><strong>Phase-1 implication:</strong> the CPU UART-TX decoder added in Phase 1 (no GPU
+equivalent exists today — <code>models/uart.rs</code> only has an RX-line <em>receiver</em>
+decode) must be written to this contract, with its FSM state mirroring
+<code>UartDecoderState</code>'s fields, so the Phase-2 <code>GpuPeripheral</code> kernel and the
+Tier-3 single source fold into one definition rather than a third parallel one.</p>
 <h3 id="correctness-contract"><a class="header" href="#correctness-contract">Correctness contract</a></h3>
 <p>The CPU <code>PeripheralModel</code> (Tier 1) is ground truth. The cross-backend
 equivalence harness (<a href="https://github.com/gpu-eda/Jacquard/pull/113">#113</a>,
