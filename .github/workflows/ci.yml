@@ -373,55 +373,8 @@ jobs:
 
       - name: Validate timing report JSON shape
         run: |
-          python3 - <<'PY'
-          import json, sys
-
-          with open("tests/timing_test/inv_chain_pnr/timing_report.json") as f:
-              report = json.load(f)
-
-          errors = []
-
-          # Top-level keys
-          for key in ("schema_version", "metadata", "stats", "violations", "per_word", "worst_slack"):
-              if key not in report:
-                  errors.append(f"missing top-level key: {key}")
-
-          # schema_version is semver-like
-          sv = report.get("schema_version", "")
-          if len(sv.split(".")) != 3:
-              errors.append(f"schema_version not semver: {sv}")
-
-          # metadata fields
-          meta = report.get("metadata", {})
-          for key in ("design", "clock_period_ps", "cycles_run", "jacquard_version"):
-              if key not in meta:
-                  errors.append(f"missing metadata.{key}")
-          if meta.get("cycles_run", 0) < 1:
-              errors.append(f"cycles_run too low: {meta.get('cycles_run')}")
-
-          # stats fields
-          stats = report.get("stats", {})
-          for key in ("setup_violations", "hold_violations"):
-              if key not in stats:
-                  errors.append(f"missing stats.{key}")
-
-          # violations is an array
-          if not isinstance(report.get("violations"), list):
-              errors.append("violations is not an array")
-
-          # worst_slack has setup and hold arrays
-          ws = report.get("worst_slack", {})
-          for key in ("setup", "hold"):
-              if not isinstance(ws.get(key), list):
-                  errors.append(f"worst_slack.{key} is not an array")
-
-          if errors:
-              for e in errors:
-                  print(f"FAIL: {e}", file=sys.stderr)
-              sys.exit(1)
-          print(f"Timing report valid: schema {sv}, {meta.get('cycles_run')} cycles, "
-                f"{stats.get('setup_violations', 0)} setup / {stats.get('hold_violations', 0)} hold violations")
-          PY
+          python3 scripts/ci/validate_timing_report.py \
+            tests/timing_test/inv_chain_pnr/timing_report.json
 
       - name: Run dual-UART cosim (multi-UART regression, issue #90)
         run: |
@@ -596,6 +549,30 @@ jobs:
             exit 1
           fi
 
+      # #104: exercise the CUDA timed path (timed launcher + EventBuffer drain +
+      # report finalize). The timing/arrival logic itself is shared kernel code
+      # (kernel_v1_impl.cuh); this asserts the CUDA-specific Rust wiring runs and
+      # emits a structurally valid report. (inv_chain_pnr has 0 violations, so
+      # the violation-observe path is not yet exercised — see follow-up.)
+      - name: Run CUDA simulation with timing (inv_chain_pnr, #104)
+        run: |
+          set -o pipefail
+          cargo run --release --features cuda --bin jacquard -- sim \
+            tests/timing_test/inv_chain_pnr/inv_chain.v \
+            tests/timing_test/inv_chain_pnr/inv_chain_stimulus.vcd \
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_cuda.vcd \
+            1 \
+            --timing-ir tests/timing_test/inv_chain_pnr/inv_chain.jtir \
+            --timed \
+            --timing-report tests/timing_test/inv_chain_pnr/timing_report_cuda.json \
+            --timing-summary \
+            2>&1 | tee cuda_timed.txt
+
+      - name: Validate CUDA timing report JSON shape (#104)
+        run: |
+          python3 scripts/ci/validate_timing_report.py \
+            tests/timing_test/inv_chain_pnr/timing_report_cuda.json
+
       - name: Upload CUDA artifacts
         uses: actions/upload-artifact@v7
         if: always()
@@ -604,8 +581,11 @@ jobs:
           path: |
             tests/timing_test/ci_cuda_output.vcd
             tests/timing_test/ci_cuda_xprop_output.vcd
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_cuda.vcd
+            tests/timing_test/inv_chain_pnr/timing_report_cuda.json
             cuda_timing.txt
             cuda_xprop.txt
+            cuda_timed.txt
             perf_metrics/
 
   # Build and run HIP simulation on NVIDIA GPU (HIP's NVIDIA backend)
@@ -718,6 +698,28 @@ jobs:
             echo "WARNING: No X values in HIP xprop output VCD"
           fi
 
+      # #104: exercise the HIP timed path (timed launcher + EventBuffer drain +
+      # report finalize). Mirrors the CUDA timing step; the arrival/violation
+      # logic is shared kernel code (kernel_v1_impl.cuh).
+      - name: Run HIP simulation with timing (inv_chain_pnr, #104)
+        run: |
+          set -o pipefail
+          cargo run --release --features hip --bin jacquard -- sim \
+            tests/timing_test/inv_chain_pnr/inv_chain.v \
+            tests/timing_test/inv_chain_pnr/inv_chain_stimulus.vcd \
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_hip.vcd \
+            1 \
+            --timing-ir tests/timing_test/inv_chain_pnr/inv_chain.jtir \
+            --timed \
+            --timing-report tests/timing_test/inv_chain_pnr/timing_report_hip.json \
+            --timing-summary \
+            2>&1 | tee hip_timed.txt
+
+      - name: Validate HIP timing report JSON shape (#104)
+        run: |
+          python3 scripts/ci/validate_timing_report.py \
+            tests/timing_test/inv_chain_pnr/timing_report_hip.json
+
       - name: Upload HIP artifacts
         uses: actions/upload-artifact@v7
         if: always()
@@ -726,8 +728,11 @@ jobs:
           path: |
             tests/timing_test/ci_hip_output.vcd
             tests/timing_test/ci_hip_xprop_output.vcd
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_hip.vcd
+            tests/timing_test/inv_chain_pnr/timing_report_hip.json
             hip_timing.txt
             hip_xprop.txt
+            hip_timed.txt
             perf_metrics/
 
   # Check formatting and clippy

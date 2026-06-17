@@ -25,10 +25,19 @@ Track 0 code landed on `cuda-hip-parity`, validating on T4; (d) **cosim Phase 2*
    Watch run for the `cuda-hip-parity` push; run id in
    `/tmp/claude/cudahip-runid.txt`. If red, fix the CUDA/HIP-specific compile
    error and re-push.
-2. **Add the #104 CI timing-equivalence check** (Track 0 follow-up): extend the
-   `cuda`/`hip` jobs to run a timing fixture (`tests/timing_test/dff_test_synth.gv`
-   + constraints) and assert the report matches Metal; add the timing VCD to
-   `backend-equivalence`.
+2. **#104 CI timing check — PARTIALLY DONE.** Added: `cuda`/`hip` jobs run the
+   `inv_chain_pnr` timed sim (`--timing-ir --timed --timing-report`) + a shared
+   `scripts/ci/validate_timing_report.py` shape check (also de-dups the Metal
+   job's old inline heredoc). This exercises the new CUDA/HIP Rust timed path
+   (timed launcher dispatch, EventBuffer FFI marshalling, drain, report finalize)
+   at runtime on the T4. **Deferred follow-ups:** (a) cross-backend timed-VCD
+   equivalence in `backend-equivalence` — needs artifact-flow restructuring (the
+   `metal-outputs` upload precedes the timing step; artifact names can't append);
+   (b) a **violating fixture** — `inv_chain_pnr` has 0 violations, so the
+   event-buffer *observe/drain* path (the part most specific to #104) is compiled
+   + run but produces an empty report. A fixture with real setup/hold violations
+   would exercise `write_event` → drain → `ReportBuilder.observe` end-to-end and
+   enable a cross-backend violation-count assertion.
 3. **Then cosim Phase 2** — checkpoints 2a (per-stage `simulate` + `state_prep`
    CUDA/HIP kernels, `CudaBackend`/`HipBackend` with managed memory + CPU
    peripherals, per-edge) then 2b (port the 3 GPU peripheral kernels for
