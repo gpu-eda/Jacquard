@@ -10,7 +10,7 @@ use jacquard::sim::setup::DesignArgs;
 /// `--timing-report` / `--timing-summary` plumbing for GPU sim entry
 /// points. The report is built whenever either flag is requested; the
 /// flags then choose whether to write JSON, print text, or both.
-#[cfg(feature = "metal")]
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
 struct TimingReportConfig<'a> {
     json_path: Option<&'a std::path::Path>,
     text_summary: bool,
@@ -19,10 +19,62 @@ struct TimingReportConfig<'a> {
     metadata: jacquard::timing_report::RunMetadata,
 }
 
-#[cfg(feature = "metal")]
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
 impl TimingReportConfig<'_> {
     fn requested(&self) -> bool {
         self.json_path.is_some() || self.text_summary
+    }
+
+    /// Build a `ReportBuilder` when a report was requested (else `None`).
+    /// Shared by every GPU sim backend so the construction stays in one place.
+    fn make_builder(&self) -> Option<jacquard::timing_report::ReportBuilder> {
+        // Top-N for worst-slack ranking; small constant per ADR 0008 § 4.
+        const WORST_SLACK_TOP_N: usize = 10;
+        self.requested().then(|| {
+            jacquard::timing_report::ReportBuilder::new(
+                self.metadata.clone(),
+                WORST_SLACK_TOP_N,
+                self.max_violations,
+            )
+        })
+    }
+
+    /// Finalize `builder` against `stats` and emit JSON / text per the flags.
+    /// `cycles_run` is the number of cycles whose violations were observed.
+    fn emit_report(
+        &self,
+        builder: jacquard::timing_report::ReportBuilder,
+        stats: &jacquard::event_buffer::SimStats,
+        cycles_run: u32,
+    ) {
+        let report_stats = jacquard::timing_report::ReportStats {
+            setup_violations: stats.setup_violations,
+            hold_violations: stats.hold_violations,
+            events_dropped: stats.events_dropped,
+            // `violations_truncated` is filled in by builder.finalize().
+            violations_truncated: 0,
+        };
+        let report = builder.finalize(cycles_run, report_stats);
+        if let Some(json_path) = self.json_path {
+            if let Err(e) = report.write_to_path(json_path) {
+                clilog::error!(
+                    "Failed to write timing report to {}: {}",
+                    json_path.display(),
+                    e
+                );
+            } else {
+                clilog::info!(
+                    "Timing report ({} violations) written to {}",
+                    report.violations.len(),
+                    json_path.display()
+                );
+            }
+        }
+        if self.text_summary {
+            // stdout (not stderr/clilog) so the summary stays separable
+            // from the violation/info noise that goes through clilog.
+            print!("{}", report.format_summary());
+        }
     }
 }
 
@@ -515,7 +567,7 @@ fn cmd_sim(args: SimArgs) {
         std::process::exit(1);
     }
 
-    #[cfg(feature = "metal")]
+    #[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
     let report_cfg = TimingReportConfig {
         json_path: args.timing_report.as_deref(),
         text_summary: args.timing_summary,
@@ -567,6 +619,7 @@ fn cmd_sim(args: SimArgs) {
             &input_states,
             &offsets_timestamps,
             &timing_constraints,
+            &report_cfg,
         )
     };
 
@@ -577,6 +630,7 @@ fn cmd_sim(args: SimArgs) {
             &input_states,
             &offsets_timestamps,
             &timing_constraints,
+            &report_cfg,
         )
     };
 
@@ -749,7 +803,6 @@ fn sim_metal(
         process_events, AssertConfig, EventBuffer, EventType, ReportingCtx, SimControl, SimStats,
         MAX_EVENTS,
     };
-    use jacquard::timing_report::{ReportBuilder, ReportStats};
     use metal::{Device as MTLDevice, MTLResourceOptions, MTLSize};
     use ulib::{AsUPtr, AsUPtrMut, Device, UVec};
 
@@ -765,15 +818,7 @@ fn sim_metal(
         );
     }
 
-    // Top-N for worst-slack ranking; small constant per ADR 0008 § 4.
-    const WORST_SLACK_TOP_N: usize = 10;
-    let mut report_builder = report_cfg.requested().then(|| {
-        ReportBuilder::new(
-            report_cfg.metadata.clone(),
-            WORST_SLACK_TOP_N,
-            report_cfg.max_violations,
-        )
-    });
+    let mut report_builder = report_cfg.make_builder();
 
     // Initialize Metal
     let mtl_device = MTLDevice::system_default().expect("No Metal device found");
@@ -1108,34 +1153,7 @@ fn sim_metal(
     }
 
     if let Some(builder) = report_builder {
-        let stats = ReportStats {
-            setup_violations: sim_stats.setup_violations,
-            hold_violations: sim_stats.hold_violations,
-            events_dropped: sim_stats.events_dropped,
-            // `violations_truncated` is filled in by builder.finalize().
-            violations_truncated: 0,
-        };
-        let report = builder.finalize(cycles_completed as u32, stats);
-        if let Some(json_path) = report_cfg.json_path {
-            if let Err(e) = report.write_to_path(json_path) {
-                clilog::error!(
-                    "Failed to write timing report to {}: {}",
-                    json_path.display(),
-                    e
-                );
-            } else {
-                clilog::info!(
-                    "Timing report ({} violations) written to {}",
-                    report.violations.len(),
-                    json_path.display()
-                );
-            }
-        }
-        if report_cfg.text_summary {
-            // stdout (not stderr/clilog) so the summary stays separable
-            // from the violation/info noise that goes through clilog.
-            print!("{}", report.format_summary());
-        }
+        report_cfg.emit_report(builder, &sim_stats, cycles_completed as u32);
     }
 
     // Clean up event buffer
@@ -1152,6 +1170,7 @@ fn sim_cuda(
     input_states: &[u32],
     offsets_timestamps: &[(usize, u64)],
     timing_constraints: &Option<Vec<u32>>,
+    report_cfg: &TimingReportConfig<'_>,
 ) -> Vec<u32> {
     use jacquard::aig::SimControlType;
     use jacquard::display::format_display_message;
@@ -1167,11 +1186,18 @@ fn sim_cuda(
     let num_cycles = offsets_timestamps.len();
 
     // When xprop is enabled, expand the value-only state buffer to include X-mask
-    let expanded_states = if script.xprop_enabled {
+    let mut expanded_states = if script.xprop_enabled {
         jacquard::sim::vcd_io::expand_states_for_xprop(input_states, script)
     } else {
         input_states.to_vec()
     };
+    // When timing arrivals are enabled, expand further to include the arrival
+    // section so the kernel's `arrival_state_offset` writes land in-bounds
+    // (mirrors `sim_metal`; previously missing on the CUDA path).
+    if script.timing_arrivals_enabled {
+        expanded_states =
+            jacquard::sim::vcd_io::expand_states_for_arrivals(&expanded_states, script);
+    }
     let mut input_states_uvec: UVec<_> = expanded_states.into();
     input_states_uvec.as_mut_uptr(device);
     let mut sram_storage = UVec::new_zeroed(script.sram_storage_size as usize, device);
@@ -1193,22 +1219,109 @@ fn sim_cuda(
     device.synchronize();
     let timer_sim = clilog::stimer!("simulation");
 
-    ucci::simulate_v1_noninteractive_simple_scan(
-        script.num_blocks,
-        script.num_major_stages,
-        &script.blocks_start,
-        &script.blocks_data,
-        &mut sram_storage,
-        &mut sram_xmask,
-        num_cycles,
-        script.effective_state_size() as usize,
-        &mut input_states_uvec,
-        script.arrival_state_offset as i32,
-        device,
-    );
+    // #104: when timing constraints are present, dispatch the *timed* launcher
+    // (event buffer + constraints) and drain setup/hold violations into the
+    // timing report. The CUDA path is a single bulk cooperative launch over all
+    // cycles, so unlike Metal's per-cycle loop the event buffer is drained once
+    // post-run (each event is stamped with its cycle by the kernel).
+    if let Some(tc) = timing_constraints.as_ref() {
+        use jacquard::event_buffer::{process_events, EventBuffer, ReportingCtx};
 
-    device.synchronize();
-    clilog::finish!(timer_sim);
+        // Symbolic violation messages (mirrors sim_metal).
+        let word_symbol_map = script.build_word_symbol_map(&design.netlistdb);
+        let word_resolver = word_symbol_map
+            .as_ref()
+            .map(|m| move |word_id: u32| m.describe_word(word_id, 4));
+        let mut report_builder = report_cfg.make_builder();
+
+        // Marshal the EventBuffer across the FFI as raw bytes: the generated
+        // binding takes `impl AsUPtrMut<u8>` and `EventBuffer` (atomics) is not
+        // `UniversalCopy`. The GPU overwrites the whole buffer, so we send a
+        // zeroed UVec and copy the result back into an aligned `Box` afterward
+        // for type-safe field access (no alignment assumptions on the backing).
+        let ev_size = std::mem::size_of::<EventBuffer>();
+        let mut event_uvec: UVec<u8> = UVec::new_zeroed(ev_size, device);
+        let mut tc_uvec: UVec<u32> = tc.clone().into();
+
+        ucci::simulate_v1_noninteractive_timed(
+            script.num_blocks,
+            script.num_major_stages,
+            &script.blocks_start,
+            &script.blocks_data,
+            &mut sram_storage,
+            &mut sram_xmask,
+            num_cycles,
+            script.effective_state_size() as usize,
+            &mut input_states_uvec,
+            &mut tc_uvec,
+            &mut event_uvec,
+            script.arrival_state_offset as i32,
+            device,
+        );
+        device.synchronize();
+        clilog::finish!(timer_sim);
+
+        // Copy the GPU-updated event buffer back into an aligned struct.
+        let mut event_box = Box::new(EventBuffer::new());
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                event_uvec[..].as_ptr(),
+                &mut *event_box as *mut EventBuffer as *mut u8,
+                ev_size,
+            );
+        }
+        if event_box.had_overflow() {
+            clilog::warn!("Timing event buffer overflowed; some violations dropped");
+        }
+
+        // Drain all accumulated violation events once. The bulk launch ran every
+        // cycle, so there is no mid-run control flow to react to; each event is
+        // cycle-stamped by the kernel.
+        let mut sim_stats = SimStats::default();
+        let assert_config = AssertConfig::default();
+        {
+            // Scoped so the `report_builder` borrow held by the observer closure
+            // is released before the `if let Some(builder)` move below.
+            let mut violation_observer_closure = report_builder
+                .as_mut()
+                .map(|b| move |v: jacquard::timing_report::ViolationRecord| b.observe(v));
+            let reporting = ReportingCtx {
+                word_resolver: word_resolver.as_ref().map(|f| f as &dyn Fn(u32) -> String),
+                violation_observer: violation_observer_closure
+                    .as_mut()
+                    .map(|f| f as &mut dyn FnMut(jacquard::timing_report::ViolationRecord)),
+            };
+            process_events(
+                &*event_box,
+                &assert_config,
+                &mut sim_stats,
+                reporting,
+                |_msg_id, _cycle, _data| {},
+            );
+        }
+
+        // The bulk launch always runs all cycles (no early `$finish`), so
+        // `num_cycles` is the correct observed-cycle count for the report.
+        if let Some(builder) = report_builder {
+            report_cfg.emit_report(builder, &sim_stats, num_cycles as u32);
+        }
+    } else {
+        ucci::simulate_v1_noninteractive_simple_scan(
+            script.num_blocks,
+            script.num_major_stages,
+            &script.blocks_start,
+            &script.blocks_data,
+            &mut sram_storage,
+            &mut sram_xmask,
+            num_cycles,
+            script.effective_state_size() as usize,
+            &mut input_states_uvec,
+            script.arrival_state_offset as i32,
+            device,
+        );
+        device.synchronize();
+        clilog::finish!(timer_sim);
+    }
 
     // Process display outputs (post-sim scan)
     if !script.display_positions.is_empty() {
@@ -1322,6 +1435,7 @@ fn sim_hip(
     input_states: &[u32],
     offsets_timestamps: &[(usize, u64)],
     timing_constraints: &Option<Vec<u32>>,
+    report_cfg: &TimingReportConfig<'_>,
 ) -> Vec<u32> {
     use jacquard::aig::SimControlType;
     use jacquard::display::format_display_message;
@@ -1337,11 +1451,18 @@ fn sim_hip(
     let num_cycles = offsets_timestamps.len();
 
     // When xprop is enabled, expand the value-only state buffer to include X-mask
-    let expanded_states = if script.xprop_enabled {
+    let mut expanded_states = if script.xprop_enabled {
         jacquard::sim::vcd_io::expand_states_for_xprop(input_states, script)
     } else {
         input_states.to_vec()
     };
+    // When timing arrivals are enabled, expand further to include the arrival
+    // section so the kernel's `arrival_state_offset` writes land in-bounds
+    // (mirrors `sim_metal`; previously missing on the HIP path).
+    if script.timing_arrivals_enabled {
+        expanded_states =
+            jacquard::sim::vcd_io::expand_states_for_arrivals(&expanded_states, script);
+    }
     let mut input_states_uvec: UVec<_> = expanded_states.into();
     input_states_uvec.as_mut_uptr(device);
     let mut sram_storage = UVec::new_zeroed(script.sram_storage_size as usize, device);
@@ -1362,22 +1483,133 @@ fn sim_hip(
     device.synchronize();
     let timer_sim = clilog::stimer!("simulation");
 
-    ucci_hip::simulate_v1_noninteractive_simple_scan(
-        script.num_blocks,
-        script.num_major_stages,
-        &script.blocks_start,
-        &script.blocks_data,
-        &mut sram_storage,
-        &mut sram_xmask,
-        num_cycles,
-        script.effective_state_size() as usize,
-        &mut input_states_uvec,
-        script.arrival_state_offset as i32,
-        device,
-    );
+    // #104: timed launcher (event buffer + constraints) when timing is on.
+    // See sim_cuda for the rationale (single bulk launch → drain events once).
+    if let Some(tc) = timing_constraints.as_ref() {
+        use jacquard::event_buffer::{
+            process_events, EventBuffer, ReportingCtx, SimControl, MAX_EVENTS,
+        };
+        use jacquard::timing_report::{ReportBuilder, ReportStats};
 
-    device.synchronize();
-    clilog::finish!(timer_sim);
+        let word_symbol_map = script.build_word_symbol_map(&design.netlistdb);
+        let word_resolver = word_symbol_map
+            .as_ref()
+            .map(|m| move |word_id: u32| m.describe_word(word_id, 4));
+        const WORST_SLACK_TOP_N: usize = 10;
+        let mut report_builder = report_cfg.requested().then(|| {
+            ReportBuilder::new(
+                report_cfg.metadata.clone(),
+                WORST_SLACK_TOP_N,
+                report_cfg.max_violations,
+            )
+        });
+
+        let mut event_box = Box::new(EventBuffer::new());
+        let ev_size = std::mem::size_of::<EventBuffer>();
+        let mut event_uvec: UVec<u8> = unsafe {
+            std::slice::from_raw_parts(&*event_box as *const EventBuffer as *const u8, ev_size)
+        }
+        .to_vec()
+        .into();
+        let mut tc_uvec: UVec<u32> = tc.clone().into();
+
+        ucci_hip::simulate_v1_noninteractive_timed(
+            script.num_blocks,
+            script.num_major_stages,
+            &script.blocks_start,
+            &script.blocks_data,
+            &mut sram_storage,
+            &mut sram_xmask,
+            num_cycles,
+            script.effective_state_size() as usize,
+            &mut input_states_uvec,
+            &mut tc_uvec,
+            &mut event_uvec,
+            script.arrival_state_offset as i32,
+            device,
+        );
+        device.synchronize();
+        clilog::finish!(timer_sim);
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                event_uvec[..].as_ptr(),
+                &mut *event_box as *mut EventBuffer as *mut u8,
+                ev_size,
+            );
+        }
+        if event_box.overflow.load(std::sync::atomic::Ordering::Acquire) != 0 {
+            clilog::warn!(
+                "Timing event buffer overflowed (>{} events); some violations dropped",
+                MAX_EVENTS
+            );
+        }
+
+        let mut sim_stats = SimStats::default();
+        let assert_config = AssertConfig::default();
+        {
+            let mut violation_observer_closure = report_builder
+                .as_mut()
+                .map(|b| move |v: jacquard::timing_report::ViolationRecord| b.observe(v));
+            let reporting = ReportingCtx {
+                word_resolver: word_resolver.as_ref().map(|f| f as &dyn Fn(u32) -> String),
+                violation_observer: violation_observer_closure
+                    .as_mut()
+                    .map(|f| f as &mut dyn FnMut(jacquard::timing_report::ViolationRecord)),
+            };
+            let _control: SimControl = process_events(
+                &*event_box,
+                &assert_config,
+                &mut sim_stats,
+                reporting,
+                |_msg_id, _cycle, _data| {},
+            );
+        }
+
+        if let Some(builder) = report_builder {
+            let stats = ReportStats {
+                setup_violations: sim_stats.setup_violations,
+                hold_violations: sim_stats.hold_violations,
+                events_dropped: sim_stats.events_dropped,
+                violations_truncated: 0,
+            };
+            let report = builder.finalize(num_cycles as u32, stats);
+            if let Some(json_path) = report_cfg.json_path {
+                if let Err(e) = report.write_to_path(json_path) {
+                    clilog::error!(
+                        "Failed to write timing report to {}: {}",
+                        json_path.display(),
+                        e
+                    );
+                } else {
+                    clilog::info!(
+                        "Timing report ({} violations) written to {}",
+                        report.violations.len(),
+                        json_path.display()
+                    );
+                }
+            }
+            if report_cfg.text_summary {
+                print!("{}", report.format_summary());
+            }
+        }
+    } else {
+        ucci_hip::simulate_v1_noninteractive_simple_scan(
+            script.num_blocks,
+            script.num_major_stages,
+            &script.blocks_start,
+            &script.blocks_data,
+            &mut sram_storage,
+            &mut sram_xmask,
+            num_cycles,
+            script.effective_state_size() as usize,
+            &mut input_states_uvec,
+            script.arrival_state_offset as i32,
+            device,
+        );
+        device.synchronize();
+        clilog::finish!(timer_sim);
+    }
 
     // Process display outputs (post-sim scan)
     if !script.display_positions.is_empty() {
