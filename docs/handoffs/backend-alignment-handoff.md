@@ -1,31 +1,63 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
-**Created:** 2026-06-07 (updated 2026-06-15, seventh session)
-**Branch:** `cosim-backend-seam-phase0` @ `e530f32` (**PHASE 1 COMPLETE — steps
-1–7 all pushed; PR #118 CI fully green incl. the new `cosim-cpu` Linux job**).
-PR title/description = "Phase 0 + Phase 1 complete". Holds Phase 0 + the Phase 1
-plan + ADR amendment + Phase 1 steps 1/2a/2b/2c/3/4/5a/5b/5c (`CpuBackend`
-functional parity — all 7 cosim fixtures byte-identical to the Metal golden on a
-no-GPU build; step 6 folded into 5a) + **step 7 (`e530f32`): Linux `cosim-cpu` CI
-job + 7 committed golden fixtures**. Working tree clean. **Next: Phase 2**
-(CUDA/HIP cosim backend + Tier-2 GPU peripherals) — not yet started.
+**Created:** 2026-06-07 (updated 2026-06-17, eighth session)
+**Branch:** `cuda-hip-parity` (PR #120, off `main`). **PHASE 1 MERGED TO MAIN**
+(#118 rebase-merged @ `main` `e77aab3`; Phase 0 + Phase 1 steps 1–7,
+`CpuBackend` functional parity, `cosim-cpu` Linux CI + 7 golden fixtures all in
+`main`). Now on the **CUDA/HIP parity track for release**: scope is **#104 (sim
+timing) + cosim Phase 2 (full batched, 2a+2b)** — decided with maintainer.
+**Track 0 (#104) code DONE + pushed** (commits `cf3ca15` plan, `69afd28` #104
+wiring), under first-ever T4 compile validation on PR #120. Working tree: clean
+after commit. Authoritative plan: `docs/plans/cosim-phase2-cuda-hip.md`.
 
 ## Goal & next-up
 
-**Goal:** bring CUDA/HIP up to Metal parity. Two tracks: (a) cross-backend
-*equivalence* of the `sim` kernel (done — guard in CI), (b) **cosim backend
-portability (#105)** — Phase 0 DONE, **Phase 1 DONE** (all 7 steps pushed, CI
-green incl. the Linux `cosim-cpu` job).
+**Goal:** bring CUDA/HIP up to Metal parity for release. Tracks: (a) `sim`
+kernel cross-backend *equivalence* (done — CI guard); (b) **cosim portability
+(#105)** — Phase 0+1 DONE & **merged to main**; (c) **#104 sim timing** —
+Track 0 code landed on `cuda-hip-parity`, validating on T4; (d) **cosim Phase 2**
+(CUDA/HIP cosim backend + Tier-2 GPU peripherals) — next.
 
-**Now (pick up here): Phase 2 — CUDA/HIP cosim backend + Tier-2 GPU peripherals.**
-With the `CosimBackend` trait seam proven on two backends (Metal GPU + CPU
-reference), the next track adds a CUDA/HIP backend (T4-testable in CI) carrying
-the Tier-2 on-GPU peripheral kernels. Authoritative design: ADR 0017 *Amendment
-2026-06-07* (Layer 1/2/3) + `docs/plans/cosim-backend-portability.md`. The CPU
-reference backend now serves as the equivalence oracle for any new backend (the
-`cosim-cpu` Linux job + the committed `tests/*/expected/` goldens are the
-regression gate). **Before starting Phase 2, scope it with the maintainer** —
-whether it lands in #118 (unlikely; that PR is Phase 0+1) or a fresh branch/PR.
+**Now (pick up here):**
+1. **Confirm PR #120 CI green on the T4** — the `cuda` + `hip-on-nvidia` jobs are
+   the first real `nvcc`/`hipcc` compile of the #104 Rust wiring (the binding
+   types + timed-launcher call were written blind; dev machine is Metal-only).
+   Watch run for the `cuda-hip-parity` push; run id in
+   `/tmp/claude/cudahip-runid.txt`. If red, fix the CUDA/HIP-specific compile
+   error and re-push.
+2. **Add the #104 CI timing-equivalence check** (Track 0 follow-up): extend the
+   `cuda`/`hip` jobs to run a timing fixture (`tests/timing_test/dff_test_synth.gv`
+   + constraints) and assert the report matches Metal; add the timing VCD to
+   `backend-equivalence`.
+3. **Then cosim Phase 2** — checkpoints 2a (per-stage `simulate` + `state_prep`
+   CUDA/HIP kernels, `CudaBackend`/`HipBackend` with managed memory + CPU
+   peripherals, per-edge) then 2b (port the 3 GPU peripheral kernels for
+   batching). Full checkpoint table + the authoritative Metal-cosim port spec are
+   in `docs/plans/cosim-phase2-cuda-hip.md`. CPU goldens (`tests/*/expected/`) +
+   the `cosim-cpu` job are the equivalence oracle.
+
+**#104 status (DONE locally, code on `cuda-hip-parity`):** `sim_cuda`/`sim_hip`
+were calling the untimed `simple_scan` launcher and dropping `timing_constraints`
+on the floor. The kernel-side timing logic is **already** in the shared
+`kernel_v1_impl.cuh` (arrival writeback :530, setup/hold `write_event` :546-553)
+and the timed C launchers (`simulate_v1_noninteractive_timed_{cuda,hip}`,
+`kernel_v1.cu:50`/`.hip.cpp:70`) already exist — `ucc::bindgen` auto-surfaces
+them as `simulate_v1_noninteractive_timed`. The fix is pure Rust (~120 lines):
+widened `TimingReportConfig`/`report_cfg` cfg-gates to any-GPU; timed branch in
+`sim_cuda`/`sim_hip` (EventBuffer marshalled as `UVec<u8>`, drained ONCE post-run
+since CUDA/HIP are a single bulk cooperative launch — events are cycle-stamped by
+the kernel); factored `TimingReportConfig::{make_builder,emit_report}` shared by
+all 3 backends. Local gates: default + Metal build clean, 298 Metal tests pass.
+
+**Phase-2 cosim kernel landscape (verified 2026-06-17):** CUDA/HIP have the
+`sim` cooperative scan only — **zero cosim kernels**. Metal has the full suite
+(`simulate_v1_stage`, `state_prep`, `gpu_apply_flash_din`,
+`gpu_flash_model_step`, `gpu_io_step`). `cmd_cosim` dispatches metal→MetalBackend,
+else→CpuBackend, so a `--features cuda` build today runs cosim on CPU. Build
+mechanism: add `extern "C"` `_cuda`/`_hip` launchers to `kernel_v1.cu`/`.hip.cpp`
+(+ `__global__` in shared `kernel_v1_impl.cuh`); `ucc::bindgen` auto-generates
+bindings, no build.rs change. Unified memory: Metal `StorageModeShared` → CUDA
+`cudaMallocManaged` (closest analog; keeps backend struct ≈ MetalBackend).
 
 **Step 7 — DONE (`e530f32`):** `scripts/ci/cosim_cpu_check.sh` builds the no-GPU
 binary (`cargo build -r --bin jacquard`, no features), runs all 7 cosim fixtures
