@@ -624,3 +624,114 @@ __global__ void simulate_v1_noninteractive_simple_scan(
     }
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// cosim kernels (CUDA/HIP port of the Metal cosim path; #105 Phase 2 / 2a)
+//
+// Unlike the `sim` scan above, cosim is reactive (inputs depend on outputs), so
+// the host drives one scheduler edge at a time over a 2-slot [input|output]
+// state. These kernels are NON-cooperative ordinary launches — the host loops
+// major stages and each launch is the grid-wide barrier — so cosim never needs
+// the cooperative grid.sync the scan relies on. They mirror Metal's `state_prep`
+// and `simulate_v1_stage` (csrc/kernel_v1.metal).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// state_prep: copy output slot → input slot, then apply this edge's bit ops.
+// `ops` is a flat array of `num_ops` (position, value) u32 pairs (the Rust
+// `BitOp` is #[repr(C)] { position: u32, value: u32 }, so a &[BitOp] reinterprets
+// directly as this flat u32 view). Single block of 256 threads.
+__global__ void cosim_state_prep(
+  u32 *__restrict__ states,
+  u32 state_size,
+  u32 num_ops,
+  u32 xmask_state_offset,  // X-mask word offset within a slot (0 = xprop off)
+  const u32 *__restrict__ ops
+  )
+{
+  // Step 1: copy output slot (states[state_size..2*state_size]) → input slot.
+  for (u32 i = threadIdx.x; i < state_size; i += 256) {
+    states[i] = states[state_size + i];
+  }
+
+  // Ensure the copy is globally visible before thread 0 modifies bits.
+  __threadfence();
+  __syncthreads();
+
+  // Step 2: apply bit ops to the input slot (thread 0 only).
+  if (threadIdx.x == 0) {
+    for (u32 i = 0; i < num_ops; i++) {
+      u32 pos = ops[2 * i];
+      u32 val = ops[2 * i + 1];
+      u32 word_idx = pos >> 5;
+      u32 bit_mask = 1u << (pos & 31u);
+      if (val != 0) {
+        states[word_idx] |= bit_mask;
+      } else {
+        states[word_idx] &= ~bit_mask;
+      }
+      // Driving a bit makes it known: clear its X-mask (#95 phase 3).
+      if (xmask_state_offset != 0u) {
+        states[xmask_state_offset + word_idx] &= ~bit_mask;
+      }
+    }
+  }
+}
+
+// cosim_simulate_stage: evaluate ONE major stage over the 2-slot state. Reads
+// the input slot (states[0..state_size]), writes the output slot
+// (states[state_size..2*state_size]). The host loops stages 0..num_major_stages,
+// each launch acting as the cross-stage barrier. Grid = num_blocks × 256.
+__global__ void cosim_simulate_stage(
+  usize num_blocks,
+  const usize *__restrict__ blocks_start,
+  const u32 *__restrict__ blocks_data,
+  u32 *__restrict__ sram_data,
+  u32 *__restrict__ sram_xmask,
+  usize state_size,
+  u32 *__restrict__ states,        // 2 slots: [input | output]
+  usize current_stage,
+  const u32 *__restrict__ timing_constraints,  // nullptr if timing off
+  EventBuffer *__restrict__ event_buffer,      // nullptr if timing off
+  i32 arrival_state_offset
+  )
+{
+  assert(num_blocks == gridDim.x);
+  assert(256 == blockDim.x);
+  __shared__ u32 shared_metadata[256];
+  __shared__ u32 shared_writeouts[256];
+  __shared__ u32 shared_state[256];
+  __shared__ u32 shared_writeouts_x[256];  // X-mask sideband for writeouts
+  __shared__ u32 shared_state_x[256];      // X-mask sideband for state
+  __shared__ u16 shared_arrival[256];
+  __shared__ u16 shared_writeout_arrival[256];
+  shared_writeout_arrival[threadIdx.x] = 0;
+  shared_writeouts_x[threadIdx.x] = 0;
+  shared_state_x[threadIdx.x] = 0;
+
+  u32 clock_period_ps = (timing_constraints != nullptr) ? timing_constraints[0] : 0;
+  const u32 *constraints_data =
+    (timing_constraints != nullptr) ? timing_constraints + 1 : nullptr;
+
+  u32 script_start = blocks_start[current_stage * num_blocks + blockIdx.x];
+  u32 script_size =
+    blocks_start[current_stage * num_blocks + blockIdx.x + 1] - script_start;
+  __syncthreads();
+
+  simulate_block_v1(
+    blocks_data + script_start,
+    script_size,
+    states,                 // input slot
+    states + state_size,    // output slot
+    sram_data,
+    sram_xmask,
+    shared_metadata, shared_writeouts, shared_state,
+    shared_writeouts_x, shared_state_x,
+    shared_arrival,
+    shared_writeout_arrival,
+    constraints_data,
+    clock_period_ps,
+    event_buffer,
+    0,                      // cycle_i: cosim advances one transition at a time
+    arrival_state_offset
+    );
+}

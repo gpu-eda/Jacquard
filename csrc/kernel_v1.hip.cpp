@@ -65,6 +65,47 @@ void simulate_v1_noninteractive_simple_scan_hip(
     ));
 }
 
+// ── cosim launchers (non-cooperative; #105 Phase 2) ──────────────────────────
+// Ordinary launches (no cooperative grid.sync); the host loops major stages.
+
+extern "C"
+void cosim_state_prep_hip(
+  u32 *states,
+  u32 state_size,
+  u32 num_ops,
+  u32 xmask_state_offset,
+  const u32 *ops
+  )
+{
+  validate_warp_size();
+  hipLaunchKernelGGL(cosim_state_prep, dim3(1), dim3(256), 0, (hipStream_t)0,
+                     states, state_size, num_ops, xmask_state_offset, ops);
+  checkHipErrors(hipGetLastError());
+}
+
+extern "C"
+void cosim_simulate_stage_hip(
+  usize num_blocks,
+  const usize *blocks_start,
+  const u32 *blocks_data,
+  u32 *sram_data,
+  u32 *sram_xmask,
+  usize state_size,
+  u32 *states,
+  usize current_stage,
+  const u32 *timing_constraints,
+  u8 *event_buffer,
+  i32 arrival_state_offset
+  )
+{
+  validate_warp_size();
+  hipLaunchKernelGGL(cosim_simulate_stage, dim3(num_blocks), dim3(256), 0, (hipStream_t)0,
+                     num_blocks, blocks_start, blocks_data, sram_data, sram_xmask,
+                     state_size, states, current_stage,
+                     timing_constraints, (EventBuffer *)event_buffer, arrival_state_offset);
+  checkHipErrors(hipGetLastError());
+}
+
 // Extended function with timing constraints and event buffer support.
 extern "C"
 void simulate_v1_noninteractive_timed_hip(
