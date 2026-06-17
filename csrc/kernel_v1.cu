@@ -76,3 +76,41 @@ void simulate_v1_noninteractive_timed_cuda(
     arg_ptrs, 0, (cudaStream_t)0
     ));
 }
+
+// ── cosim launchers (non-cooperative; #105 Phase 2) ──────────────────────────
+// Ordinary launches (no cooperative grid.sync); the host loops major stages.
+
+extern "C"
+void cosim_state_prep_cuda(
+  u32 *states,
+  u32 state_size,
+  u32 num_ops,
+  u32 xmask_state_offset,
+  const u32 *ops
+  )
+{
+  cosim_state_prep<<<1, 256>>>(states, state_size, num_ops, xmask_state_offset, ops);
+  checkCudaErrors(cudaGetLastError());
+}
+
+extern "C"
+void cosim_simulate_stage_cuda(
+  usize num_blocks,
+  const usize *blocks_start,
+  const u32 *blocks_data,
+  u32 *sram_data,
+  u32 *sram_xmask,
+  usize state_size,
+  u32 *states,
+  usize current_stage,
+  const u32 *timing_constraints,
+  u8 *event_buffer,
+  i32 arrival_state_offset
+  )
+{
+  cosim_simulate_stage<<<(unsigned int)num_blocks, 256>>>(
+    num_blocks, blocks_start, blocks_data, sram_data, sram_xmask,
+    state_size, states, current_stage,
+    timing_constraints, (EventBuffer *)event_buffer, arrival_state_offset);
+  checkCudaErrors(cudaGetLastError());
+}
