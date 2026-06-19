@@ -573,6 +573,15 @@ jobs:
           python3 scripts/ci/validate_timing_report.py \
             tests/timing_test/inv_chain_pnr/timing_report_cuda.json
 
+      # Phase 2 Stage A (#105): run the peripheral-free cosim fixtures on the
+      # CUDA backend and diff against the committed CPU/Metal goldens. Validates
+      # the GPU cosim design step (CudaBackend) end-to-end. dual_uart/apb_trace
+      # need GPU peripherals (Stage B/C), hence COSIM_SCOPE=logic.
+      - name: Run CUDA cosim — xprop_cosim (Stage A, #105)
+        run: |
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=logic \
+            bash scripts/ci/cosim_cpu_check.sh
+
       - name: Upload CUDA artifacts
         uses: actions/upload-artifact@v7
         if: always()
@@ -719,6 +728,13 @@ jobs:
         run: |
           python3 scripts/ci/validate_timing_report.py \
             tests/timing_test/inv_chain_pnr/timing_report_hip.json
+
+      # Phase 2 Stage A (#105): peripheral-free cosim fixtures on the HIP backend
+      # vs the committed CPU/Metal goldens (see the CUDA step for rationale).
+      - name: Run HIP cosim — xprop_cosim (Stage A, #105)
+        run: |
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=logic \
+            bash scripts/ci/cosim_cpu_check.sh
 
       - name: Upload HIP artifacts
         uses: actions/upload-artifact@v7
