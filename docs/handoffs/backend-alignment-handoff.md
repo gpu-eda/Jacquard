@@ -1,49 +1,55 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
-**Created:** 2026-06-07 (updated 2026-06-17, eighth session)
+**Created:** 2026-06-07 (updated 2026-06-19, eighth session)
 **Branch:** `cuda-hip-parity` (PR #120, off `main`). **PHASE 1 MERGED TO MAIN**
-(#118 rebase-merged @ `main` `e77aab3`; Phase 0 + Phase 1 steps 1–7,
-`CpuBackend` functional parity, `cosim-cpu` Linux CI + 7 golden fixtures all in
-`main`). Now on the **CUDA/HIP parity track for release**: scope is **#104 (sim
-timing) + cosim Phase 2 (full batched, 2a+2b)** — decided with maintainer.
-**Track 0 (#104) code DONE + pushed** (commits `cf3ca15` plan, `69afd28` #104
-wiring), under first-ever T4 compile validation on PR #120. Working tree: clean
-after commit. Authoritative plan: `docs/plans/cosim-phase2-cuda-hip.md`.
+(#118 @ `main` `e77aab3`; Phase 0 + Phase 1, `CpuBackend` parity, `cosim-cpu`
+Linux CI + 7 goldens). Now on the **CUDA/HIP parity track for release**: scope =
+**#104 sim timing + cosim Phase 2** (one batched GPU backend; the CPU-peripheral
+"2a" intermediate was **dropped** — ADR 0017 *Amendment 2026-06-19*). All work
+T4-validated (dev machine is Apple-Silicon/Metal-only; cuda/hip are CI-only).
+Authoritative plan: `docs/plans/cosim-phase2-cuda-hip.md`.
 
 ## Goal & next-up
 
-**Goal:** bring CUDA/HIP up to Metal parity for release. Tracks: (a) `sim`
-kernel cross-backend *equivalence* (done — CI guard); (b) **cosim portability
-(#105)** — Phase 0+1 DONE & **merged to main**; (c) **#104 sim timing** —
-Track 0 code landed on `cuda-hip-parity`, validating on T4; (d) **cosim Phase 2**
-(CUDA/HIP cosim backend + Tier-2 GPU peripherals) — next.
+**Goal:** bring CUDA/HIP up to Metal parity for release.
 
-**Now (pick up here):**
-1. **Confirm PR #120 CI green on the T4** — the `cuda` + `hip-on-nvidia` jobs are
-   the first real `nvcc`/`hipcc` compile of the #104 Rust wiring (the binding
-   types + timed-launcher call were written blind; dev machine is Metal-only).
-   Watch run for the `cuda-hip-parity` push; run id in
-   `/tmp/claude/cudahip-runid.txt`. If red, fix the CUDA/HIP-specific compile
-   error and re-push.
-2. **#104 CI timing check — PARTIALLY DONE.** Added: `cuda`/`hip` jobs run the
-   `inv_chain_pnr` timed sim (`--timing-ir --timed --timing-report`) + a shared
-   `scripts/ci/validate_timing_report.py` shape check (also de-dups the Metal
-   job's old inline heredoc). This exercises the new CUDA/HIP Rust timed path
-   (timed launcher dispatch, EventBuffer FFI marshalling, drain, report finalize)
-   at runtime on the T4. **Deferred follow-ups:** (a) cross-backend timed-VCD
-   equivalence in `backend-equivalence` — needs artifact-flow restructuring (the
-   `metal-outputs` upload precedes the timing step; artifact names can't append);
-   (b) a **violating fixture** — `inv_chain_pnr` has 0 violations, so the
-   event-buffer *observe/drain* path (the part most specific to #104) is compiled
-   + run but produces an empty report. A fixture with real setup/hold violations
-   would exercise `write_event` → drain → `ReportBuilder.observe` end-to-end and
-   enable a cross-backend violation-count assertion.
-3. **Then cosim Phase 2** — checkpoints 2a (per-stage `simulate` + `state_prep`
-   CUDA/HIP kernels, `CudaBackend`/`HipBackend` with managed memory + CPU
-   peripherals, per-edge) then 2b (port the 3 GPU peripheral kernels for
-   batching). Full checkpoint table + the authoritative Metal-cosim port spec are
-   in `docs/plans/cosim-phase2-cuda-hip.md`. CPU goldens (`tests/*/expected/`) +
-   the `cosim-cpu` job are the equivalence oracle.
+**Done on `cuda-hip-parity` (all T4-green):**
+- **Track 0 — #104 CUDA/HIP `sim` timing**: `sim_cuda`/`sim_hip` timed-launcher
+  wiring + shared `TimingReportConfig::{make_builder,emit_report}`; `cuda`/`hip`
+  CI run the `inv_chain_pnr` timed sim + `scripts/ci/validate_timing_report.py`.
+- **Docs/ADR**: skip-2a decision recorded (ADR 0017 Amendment 2026-06-19 + both
+  plan docs).
+- **T1.1 cosim kernels**: `cosim_state_prep` + `cosim_simulate_stage`
+  (non-cooperative per-stage) in `kernel_v1_impl.cuh` + `_cuda`/`_hip` launchers.
+- **Stage A — `CudaBackend`/`HipBackend`** (`src/sim/cosim/{cuda,hip}.rs`): GPU
+  design step (the two kernels), device-resident `UVec` state (sim_cuda pattern:
+  device copies up front, `synchronize()` per edge, read-back for VCD/accessors),
+  batched per-edge `run_edges`, `cmd_cosim` dispatch (metal>cuda>hip>cpu).
+  Peripherals are Stage-A stubs (empty drains, idle MISO). **CUDA + HIP
+  `xprop_cosim` cosim byte-identical to the CPU/Metal goldens on the T4** (CI:
+  "Run CUDA/HIP cosim — xprop_cosim (Stage A)" via `cosim_cpu_check.sh`
+  `COSIM_SCOPE=logic`). The blind backend ran correctly first try.
+
+**Now (pick up here): Stage B — `gpu_io_step` (UART + bus).**
+Port `gpu_io_step` (Metal shader :1170 — 4-state UART-TX decoder ×4 + APB3
+bus-trace beat extraction + legacy WB) to CUDA/HIP in `kernel_v1_impl.cuh` +
+`_cuda`/`_hip` launchers (replicate the GPU structs `UartParams`/`UartChannel`/
+`UartDecoderState`, `BusTraceParamsAll`/`BusTraceChannel` — layouts in the
+Phase-2 plan appendix / scout spec). Wire it into `CudaBackend`/`HipBackend`:
+build the IO params in `new` (mirror `MetalBackend::build_io_buffers` /
+`CpuBackend`'s `uart_configs`+`bus_positions`), call the kernel after `simulate`
+in `run_edges`, and switch `drain_uart_tx`/`drain_bus_beats` to read the GPU ring
+buffers. Validate by extending the CI cosim step (or a new scope) to run
+`dual_uart` + `apb_trace` on cuda/hip vs goldens. **Then Stage C** — flash
+kernels (`gpu_apply_flash_din`, `gpu_flash_model_step`) → flash/JTAG fixtures.
+
+**#104 deferred follow-ups** (low priority; #104 is functionally done): (a)
+cross-backend timed-VCD equivalence in `backend-equivalence` (needs artifact-flow
+restructuring — `metal-outputs` upload precedes the timing step, artifact names
+can't append); (b) a **violating fixture** — `inv_chain_pnr` has 0 violations, so
+the event observe/drain path runs empty; a fixture with real setup/hold
+violations would exercise `write_event`→drain→`observe` + enable a cross-backend
+violation-count assertion.
 
 **#104 status (DONE locally, code on `cuda-hip-parity`):** `sim_cuda`/`sim_hip`
 were calling the untimed `simple_scan` launcher and dropping `timing_constraints`
