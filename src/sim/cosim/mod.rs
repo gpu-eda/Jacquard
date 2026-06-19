@@ -4072,3 +4072,13 @@ pub fn run_cosim_cpu(
 mod metal;
 #[cfg(feature = "metal")]
 pub use metal::run_cosim;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::run_cosim_cuda;
+
+#[cfg(feature = "hip")]
+mod hip;
+#[cfg(feature = "hip")]
+pub use hip::run_cosim_hip;
