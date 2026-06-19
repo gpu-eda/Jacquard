@@ -395,6 +395,37 @@ prerequisite here.
   replay), where the per-edge tail is addressed later by the multi-clock
   plan's MC.3/MC.4, not by this seam.
 
+## Amendment 2026-06-19: no CPU-peripheral CUDA/HIP variant; stage on fixtures
+
+Refines the Layer-2/3 phasing above with an implementation decision (made while
+building Phase 2). There is **exactly one** CUDA/HIP cosim backend, and it
+mirrors `MetalBackend`: GPU design step + **GPU peripherals** + variable
+batching + managed memory (`cudaMallocManaged`/`hipMallocManaged`, the closest
+analog to Metal's unified `StorageModeShared`).
+
+- **No CPU-peripheral CUDA/HIP backend.** An earlier plan sketched a bring-up
+  "checkpoint 2a" — a CUDA backend running *all* peripherals on the CPU,
+  per-edge — as a stepping stone. That is **dropped**: no production backend
+  works that way (Metal never runs peripherals on the CPU), so it would
+  introduce a backend shape that exists nowhere else and obscure the
+  architecture. `CpuBackend` stays the pure-CPU reference oracle; Metal and
+  CUDA/HIP are the GPU backends with the same shape.
+- **"Per-edge fallback" means `batch=1` of the GPU backend**, not a
+  CPU-peripheral path. Model-driven-clock designs (JTAG) run the *same*
+  GPU-peripheral backend at `batch=1`; only a small output read-back per edge
+  feeds the CPU-side clock model. The Tier-1 CPU `PeripheralModel` remains the
+  per-*peripheral* fallback solely for a (backend, peripheral) pair that
+  genuinely lacks a GPU kernel (e.g. a future user-defined Tier-3 peripheral
+  before its kernel exists) — not for the core flash/UART/bus set, which get
+  Tier-2 GPU kernels on CUDA/HIP.
+- **Bisectability comes from staging on fixtures**, not from a throwaway
+  backend. Each fixture exercises a different kernel subset, so the single
+  backend is brought up in stages: A (design step only → `xprop_cosim`, no
+  peripherals), B (`gpu_io_step` → `dual_uart` + `apb_trace`), C (flash kernels
+  → flash/JTAG). Every stage is the real architecture, gated against the
+  committed CPU/Metal goldens on the T4. Staging detail:
+  [`docs/plans/cosim-phase2-cuda-hip.md`](../plans/cosim-phase2-cuda-hip.md).
+
 ## Cross-references
 
 - ADR 0012 — CDC jitter injection (uses the scheduler's edge

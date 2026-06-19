@@ -85,11 +85,33 @@ violations/report as Metal on the T4; `--timed` arrival VCD matches.
 
 ---
 
-## Track 1 — Phase 2a: CUDA/HIP cosim design-step backend (per-edge)
+## Decision (2026-06-19): one backend, no CPU-peripheral intermediate
 
-The permanent correctness/fallback path: GPU design step, **CPU peripherals**
-(Tier 1, reused as-is), per-edge orchestration (the proven Phase-1 path
-generalised). No batching yet.
+**The originally-planned checkpoint 2a (a CUDA backend with *CPU* peripherals,
+per-edge) is dropped.** No production backend works that way — Metal always runs
+peripherals on the GPU, falling to `batch=1` (not to CPU peripherals) for
+model-driven-clock designs (JTAG). A CPU-peripheral CUDA variant would be a
+bring-up crutch that exists nowhere else and muddies the architecture.
+
+**Target: a single `CudaBackend`/`HipBackend` that mirrors `MetalBackend`** —
+GPU design step + GPU peripherals + variable batching + managed memory.
+`CpuBackend` remains the pure-CPU reference oracle. Bisectability (2a's only real
+benefit) is recovered by **staging on the fixtures**, since each exercises a
+different kernel subset — no separate backend:
+
+- **Stage A** — `CudaBackend` with the design step only (`cosim_state_prep` +
+  `cosim_simulate_stage`, landed in T1.1) + batched orchestration + managed
+  memory + VCD ring. Validate against **`xprop_cosim`** (4 logic fixtures: no
+  flash/UART/bus). Proves the whole pipeline end-to-end with zero peripherals.
+- **Stage B** — port `gpu_io_step` (UART + bus). Validate **`dual_uart`** +
+  **`apb_trace`**.
+- **Stage C** — port the flash kernels (`gpu_apply_flash_din`,
+  `gpu_flash_model_step`). Validate the flash/JTAG fixtures.
+
+Every stage is the *real* architecture, gated against the committed CPU/Metal
+goldens on the T4.
+
+## Track 1 — CUDA/HIP cosim backend (mirrors MetalBackend)
 
 ### 1a. Kernels (shared `kernel_v1_impl.cuh`, two thin launchers)
 
@@ -140,16 +162,15 @@ New `src/sim/cosim/cuda.rs` (and `hip.rs`), `#[cfg(feature="cuda")]` /
 - `edge_ops_mut` — slice over the managed ops buffer (write = visible to GPU
   after the next launch in-stream; no explicit flush with managed memory, but
   add `cudaStreamSynchronize` discipline at the documented points).
-- `run_edges` — per edge: launch `state_prep` → (CPU peripherals: apply flash
-  d_i into `state_mut`) → loop `simulate_v1_stage × num_major_stages` →
-  read back output slot → run CPU `PeripheralModel`s (flash FSM via existing
-  `CppSpiFlash`, UART/bus via Tier-1 models) → snapshot to VCD ring. All on one
-  `cudaStream_t`; stream ordering gives sequential execution (no inter-kernel
-  barriers needed).
+- `run_edges` — batch `BATCH_SIZE` edges into one `cudaStream_t`, mirroring
+  Metal's `encode_and_commit_gpu_batch`. Per edge: `cosim_state_prep` →
+  `gpu_apply_flash_din` → `cosim_simulate_stage × num_major_stages` →
+  `gpu_flash_model_step` → `gpu_io_step` → memcpy output→VCD-ring slot. Stream
+  ordering gives sequential execution (no inter-kernel barriers). (Stage A wires
+  only state_prep + simulate; B adds `gpu_io_step`; C adds the flash kernels.)
 - `state`/`state_mut`/`sram` — direct managed-pointer slices.
-- `drain_uart_tx`/`drain_bus_beats`/`flash_d_i` — for 2a these come from the
-  **CPU** Tier-1 models (the `CpuBackend` already has working CPU ports — reuse
-  that decode logic, do not re-port).
+- `drain_uart_tx`/`drain_bus_beats`/`flash_d_i` — read the **GPU** ring buffers
+  (managed-memory cursors), exactly like `MetalBackend::drain_*` (Stages B/C).
 - `wait` — `cudaEvent_t` recorded at end-of-batch + `cudaEventSynchronize`
   (replaces Metal `SharedEvent`).
 
@@ -159,21 +180,20 @@ New `src/sim/cosim/cuda.rs` (and `hip.rs`), `#[cfg(feature="cuda")]` /
 Add `run_cosim_cuda`/`run_cosim_hip` shims (`run_cosim_generic::<CudaBackend>`)
 with the same priority order as `sim` (metal > cuda > hip > cpu).
 
-**Verification (2a exit):** add a `jacquard cosim` invocation to the `cuda`/`hip`
-CI jobs on a small fixture (e.g. `xprop_cosim`), output VCD **byte-identical** to
-the CPU golden in `tests/*/expected/` and to Metal. Telemetry shows `batch=1`
-(per-edge) — expected for 2a. JTAG-style CPU-driven-clock fixture also matches
-(this path stays per-edge permanently).
+**Verification:** add `jacquard cosim` invocations to the `cuda`/`hip` CI jobs,
+output VCD **byte-identical** to the CPU golden in `tests/*/expected/` and to
+Metal. Stage A: `xprop_cosim` (batched, no peripherals). Stage B: `dual_uart` +
+`apb_trace`. Stage C: flash/JTAG fixtures. Model-driven-clock designs (JTAG) run
+GPU peripherals at `batch=1` within the same backend — not a separate path.
 
 ---
 
-## Track 2 — Phase 2b: Tier-2 GPU peripherals → batched (the perf path)
+## Peripheral kernels (Stages B/C)
 
-Port the three peripheral kernels so peripherals run *inside* the batch,
-eliminating the per-edge PCIe round-trip. This is what makes CUDA/HIP cosim
-performant.
+Port the three GPU peripheral kernels so peripherals run *inside* the batch
+(eliminating any per-edge round-trip) — the same model as Metal.
 
-### 2b kernels (shared impl header + two launchers each)
+### peripheral kernels (shared impl header + two launchers each)
 
 - **`gpu_apply_flash_din`** (shader:904) — write `FlashState.d_i` → input state.
 - **`gpu_flash_model_step`** (shader:943) — SPI/QSPI flash FSM, dual-step setup
@@ -187,25 +207,16 @@ full GPU-struct ABI (`FlashState`, `FlashDinParams`, `FlashModelParams`,
 `UartParams`/`UartChannel`/`UartDecoderState`, `BusTraceParamsAll`/
 `BusTraceChannel`, etc.) — exhaustive field layouts captured in the appendix.
 
-### 2b backend changes
+As each peripheral kernel lands, wire it into `CudaBackend::run_edges` (Stage B
+= `gpu_io_step`; Stage C = the flash kernels) and switch the corresponding
+`drain_*`/`flash_d_i` accessors to read the **GPU** ring buffers. Define the
+`GpuPeripheral` seam (ADR 0017 Layer 3) here so Phase 3 (Tier-3 single-source)
+can slot in later. **`CpuBackend` (Tier-1) is the per-kernel equivalence
+oracle** — equivalence-test each GPU kernel against its CPU model.
 
-- `run_edges` batches `BATCH_SIZE` edges into one stream with no host
-  intervention: per edge `state_prep → gpu_apply_flash_din → simulate×N →
-  gpu_flash_model_step → gpu_io_step → (memcpy state→vcd_ring slot)`. One
-  `cudaEvent` at end-of-batch.
-- `drain_uart_tx`/`drain_bus_beats`/`flash_d_i` now read the **GPU** ring buffers
-  (managed-memory cursors), exactly like `MetalBackend::drain_*`.
-- Define the `GpuPeripheral` seam (ADR 0017 Layer 3) here so Phase 3 (Tier-3
-  single-source) can slot in later.
-- Keep the 2a CPU-peripheral path as the documented fallback for CPU-side-model
-  designs (JTAG replay) and as the per-kernel equivalence oracle.
-
-**Equivalence-test each kernel against its Tier-1 CPU model** (the CPU port from
-Phase 1 is ground truth) before wiring it into the batch.
-
-**Verification (2b exit):** `cosim --features cuda` on a GPU-peripheral fixture
-runs **batched** (telemetry `batch > 1`), output VCD matching all backends; the
-per-edge fallback fixture also matches. Gate on `tesla4-runner`.
+**Verification:** `cosim --features cuda` on each fixture (Stage B/C) runs
+**batched** (telemetry `batch > 1`), output VCD byte-identical to the CPU/Metal
+goldens on `tesla4-runner`. Model-driven-clock designs (JTAG) match at `batch=1`.
 
 ---
 
@@ -221,14 +232,14 @@ cosim is CI-covered on CPU only; sim equivalence covers GPU only.
 
 ## Sequencing & checkpoints (each = one reviewable PR-sized push, CI-gated)
 
-| # | Track | Deliverable | CI gate |
+| # | Stage | Deliverable | CI gate |
 |---|-------|-------------|---------|
-| T0 | #104 | CUDA/HIP sim timing wired (Rust-only) | timing report == Metal on T4 |
-| T1.1 | 2a | `simulate_v1_stage` + `state_prep` CUDA/HIP kernels + launchers compile | `cuda`/`hip` build green |
-| T1.2 | 2a | `CudaBackend`/`HipBackend` + cmd_cosim dispatch (managed mem, CPU peripherals) | cosim VCD == CPU golden, batch=1 |
-| T2.1 | 2b | `gpu_apply_flash_din` + `gpu_flash_model_step` ported, equivalence-tested | flash cosim == golden |
-| T2.2 | 2b | `gpu_io_step` ported; batched `run_edges`; GPU drains | batched cosim == golden, batch>1 |
-| T2.3 | 2b | `GpuPeripheral` seam + CI equivalence gate | backend-equivalence (cosim) green |
+| T0 | #104 | CUDA/HIP sim timing wired (Rust-only) | ✅ timing report == Metal on T4 |
+| T1.1 | — | `cosim_state_prep` + `cosim_simulate_stage` kernels + launchers compile | ✅ `cuda`/`hip` build green |
+| T1.2 | A | `CudaBackend`/`HipBackend` (managed mem, batched, design-step only) + cmd_cosim dispatch + cosim CI | `xprop_cosim` cosim VCD == CPU/Metal golden |
+| T2.1 | B | `gpu_io_step` ported + wired; GPU UART/bus drains | `dual_uart` + `apb_trace` == golden |
+| T2.2 | C | `gpu_apply_flash_din` + `gpu_flash_model_step` ported + wired; GPU flash drain | flash/JTAG cosim == golden |
+| T2.3 | — | `GpuPeripheral` seam + cross-backend cosim equivalence gate | backend-equivalence (cosim) green |
 
 CUDA and HIP land **together** at each step (shared `*_impl.cuh`; HIP = a thin
 second launcher + `mod ucci_hip`).
