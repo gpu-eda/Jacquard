@@ -152,36 +152,37 @@ leave Metal cosim bit-identical.
 **Exit:** `cargo run --bin jacquard -- cosim …` (no GPU features) runs the
 existing cosim fixtures on Linux CI and passes their checkers.
 
-### Phase 2 — Path B: `Cuda`/`HipBackend` with GPU peripherals (the perf path)
+### Phase 2 — Path B: `Cuda`/`HipBackend` mirroring Metal (GPU peripherals, batched)
 
-Lands the CUDA/HIP backend **and** its Tier-2 GPU peripherals together —
-*not* a per-edge-only intermediate first. Per-edge-only CUDA would be an
-unusably-slow artifact (PCIe round-trip per edge, potentially slower than
-`CpuBackend`), and Phase 1 already proves the per-edge orchestration path, so
-a separate per-edge milestone would re-validate known-good code and then
-rework the same `run_edges`/dispatch path to add batching. One phase, with an
-internal checkpoint:
+> **Refined 2026-06-19** (see ADR 0017 *Amendment 2026-06-19* and the detail doc
+> [`cosim-phase2-cuda-hip.md`](cosim-phase2-cuda-hip.md)): there is **one**
+> CUDA/HIP cosim backend, mirroring `MetalBackend` (GPU design step + GPU
+> peripherals + variable batching + managed memory). The earlier
+> "checkpoint 2a = CPU-peripheral CUDA backend" is **dropped** — no production
+> backend runs peripherals on the CPU, so it would be a confusing one-off.
+> `CpuBackend` stays the pure-CPU oracle; the "per-edge fallback" is `batch=1`
+> of the GPU backend, not a CPU-peripheral path.
 
-- **Checkpoint 2a — design step on GPU (per-edge correctness).** Implement the
-  backend over the existing CUDA/HIP `simulate` kernel + `init_schedule` /
-  `edge_ops_mut` (device buffers, dirty-edge upload) + device state with
-  per-edge read-back. Peripherals on the CPU (Tier 1), reusing Phase 1's
-  per-edge orchestration. Validate via cross-backend equivalence on the T4.
-  *This is the permanent fallback path*, not a throwaway — CPU-side models
-  (e.g. JTAG replay) always run here.
-- **Checkpoint 2b — Tier-2 GPU peripherals → batched.** Port the GPU
-  peripheral kernels (`gpu_apply_flash_din`, `gpu_flash_model_step`,
-  `gpu_io_step`) to CUDA/HIP so peripherals run *inside* the batch. Because
-  CUDA and HIP share `kernel_v1_impl.cuh`, each is **two impls** (shared
-  `*_impl.cuh` + the existing `.metal`). Define the `GpuPeripheral` seam here;
-  equivalence-test each kernel against its Tier-1 CPU model.
+Bisectability comes from **staging on fixtures** (each exercises a different
+kernel subset), not from a throwaway backend:
 
-Gate GPU-backed cosim CI on `tesla4-runner` (now available).
+- **Stage A — design step + batched orchestration.** `CudaBackend`/`HipBackend`
+  over the `cosim_state_prep` + `cosim_simulate_stage` kernels + `init_schedule`
+  / `edge_ops_mut` (managed buffers, dirty-edge upload) + the batched
+  `run_edges`/VCD-ring path. Validate against `xprop_cosim` (logic fixtures, no
+  peripherals).
+- **Stage B — `gpu_io_step`** (UART + bus). Validate `dual_uart` + `apb_trace`.
+- **Stage C — flash kernels** (`gpu_apply_flash_din`, `gpu_flash_model_step`).
+  Validate flash/JTAG fixtures.
 
-**Entry:** Phase 1 merged (seam + CPU reference + per-edge orchestration proven).
-**Exit:** `cosim --features cuda` on a GPU-peripheral fixture runs **batched**
-(telemetry shows `batch > 1`), output VCD matching all backends; the per-edge
-fallback (CPU-side-model fixture, e.g. JTAG) also matches.
+GPU peripheral kernels are **two impls** (shared `*_impl.cuh` for CUDA+HIP, plus
+the existing `.metal`). Define the `GpuPeripheral` seam in Stage B/C; the Tier-1
+`CpuBackend` is the per-kernel equivalence oracle. Gate GPU-backed cosim CI on
+`tesla4-runner`.
+
+**Entry:** Phase 1 merged (seam + CPU reference proven). **Exit:**
+`cosim --features cuda` on each fixture runs **batched** (`batch > 1`), output
+VCD byte-identical across CPU/Metal/CUDA/HIP; JTAG matches at `batch=1`.
 
 ### Phase 3 — (Future) single-source peripherals (Tier 3, user-extensible API)
 
