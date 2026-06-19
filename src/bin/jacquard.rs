@@ -2010,13 +2010,20 @@ fn cmd_cosim(args: CosimArgs) {
             bus_trace_csv: args.bus_trace_csv.clone(),
         };
 
-        // Backend selection: Metal when the GPU feature is built, otherwise the
+        // Backend selection (priority metal > cuda > hip > cpu, mirroring the
+        // `sim` dispatch): the highest-priority built GPU feature wins, else the
         // non-gated CpuBackend reference path (Phase 1 step 5a). An explicit
-        // `--backend cpu` override under Metal is deferred (optional, 5a).
+        // `--backend cpu` override under a GPU feature is deferred (optional, 5a).
         #[cfg(feature = "metal")]
         let result =
             jacquard::sim::cosim::run_cosim(&mut design, &config, &opts, &timing_constraints);
-        #[cfg(not(feature = "metal"))]
+        #[cfg(all(feature = "cuda", not(feature = "metal")))]
+        let result =
+            jacquard::sim::cosim::run_cosim_cuda(&mut design, &config, &opts, &timing_constraints);
+        #[cfg(all(feature = "hip", not(feature = "metal"), not(feature = "cuda")))]
+        let result =
+            jacquard::sim::cosim::run_cosim_hip(&mut design, &config, &opts, &timing_constraints);
+        #[cfg(not(any(feature = "metal", feature = "cuda", feature = "hip")))]
         let result =
             jacquard::sim::cosim::run_cosim_cpu(&mut design, &config, &opts, &timing_constraints);
         std::process::exit(if result.passed { 0 } else { 1 });
