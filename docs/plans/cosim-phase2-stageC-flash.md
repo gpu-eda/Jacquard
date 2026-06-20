@@ -111,20 +111,37 @@ reset behaviour to mirror the shader (`d_i=0x0F`, set prev_csn/prev_d_out, do no
 step) so `CppSpiFlash`'s internal `prev_csn_o` stays high through reset (csn idle
 high in `mcu_soc`).
 
-**Validation:** run a short `mcu_soc` cosim on the no-GPU `CpuBackend` build and on
-Metal; diff the flash-pin VCD (or decoded flash transactions). Byte-identical ⇒ the
-dual-step convention reproduces the GPU FSM, and the committed CpuBackend output is
-the Stage-C golden. (If they diverge, the C++↔shader port has a bug — investigate
-`flash_eval_commit_persistent` vs `eval()`/`commit()`.)
+**Validation (C2 — DONE, byte-identical):** reproducible recipe (the `/tmp` config
+is ephemeral — regenerate it):
+```bash
+python3 -c "import json,pathlib; c=json.loads(pathlib.Path('tests/mcu_soc/sim_config.json').read_text()); c['flash']['firmware']='tests/mcu_soc/software.bin'; pathlib.Path('/tmp/mcu_sc.json').write_text(json.dumps(c,indent=2))"
+cargo build -r --bin jacquard                      # no-feature → CpuBackend
+cargo build -r --features metal --bin jacquard
+for b in cpu metal; do f=$([ $b = metal ] && echo '--features metal'); \
+  ./target/release/jacquard cosim tests/mcu_soc/data/6_final.v --config /tmp/mcu_sc.json \
+  --top-module top --max-clock-edges 10000 --output-vcd /tmp/mcu_$b.vcd; done
+diff /tmp/mcu_cpu.vcd /tmp/mcu_metal.vcd            # byte-identical ⇒ FSMs match
+```
+~40s partitioning + ~4s sim per run. Flash is actively read by ~10k edges
+(`cmd 0x03 @ 0x100000`). This same comparison is the C3 gate for CUDA/HIP (vs the
+committed CpuBackend golden) and the C4 CI gate. (If a future port diverges, the
+C++↔shader bug is in `flash_eval_commit_persistent` vs `eval()`/`commit()`.)
 
 ## C3 — CUDA/HIP flash kernels (mirror Stage B mechanics)
 
 - Port `gpu_apply_flash_din` (shader:904 — write `FlashState.d_i` → input-state MISO
   bits at `d_in_pos`, clear their X-mask) and `gpu_flash_model_step` (shader:943 —
-  read clk/csn/d_out from output state, step the SPI/QSPI FSM, update `FlashState`)
-  to `kernel_v1_impl.cuh` + `extern "C"` `_cuda`/`_hip` launchers. Needs the 16 MiB
-  firmware `UVec<u8>` + persistent `FlashState` (`UVec<u8>`, the event-buffer FFI
-  pattern). Structs already shared (C1).
+  read clk/csn/d_out from output state, dual-step the SPI/QSPI FSM, update
+  `FlashState`) to `kernel_v1_impl.cuh` + `extern "C"` `_cuda`/`_hip` launchers.
+  **Also port the `flash_eval_commit_persistent` helper (shader:843)** — the
+  per-eval primitive `gpu_flash_model_step` calls twice (it is the shader port of
+  `spiflash_model.cc` `eval()`+`commit()`); it must live in the `.cuh` too.
+  Needs the 16 MiB firmware `UVec<u8>` (load from `config.flash.firmware` like
+  `CpuBackend::new` / `build_flash_buffers`'s `flash_data_buffer`) + persistent
+  `FlashState` (`UVec<u8>`, the event-buffer FFI pattern; init per
+  `build_flash_buffers`: `data_width=1, prev_csn=1, model_prev_csn=1, d_i=0x0F,
+  in_reset=1`). Structs already shared (C1). The launchers cross the struct/firmware
+  buffers as `u8*` and cast (Stage B convention).
 - Wire into `CudaBackend`/`HipBackend::run_edges` in the Metal order: `state_prep` →
   **`gpu_apply_flash_din`** → `simulate_stage × N` → **`gpu_flash_model_step`** →
   `gpu_io_step` → snapshot. Build the flash buffers in `new` (mirror
