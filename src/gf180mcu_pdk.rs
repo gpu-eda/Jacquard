@@ -359,8 +359,13 @@ pub fn is_filler_cell(cell_type: &str) -> bool {
         | "asig_5p0"
         // wafer.space power pads.
         | "dvdd" | "dvss"
-        // wafer.space empty IP stubs (id / logo are `module X; endmodule`).
+        // wafer.space empty IP stubs (`module X; endmodule`, no ports — pure
+        // layout die-marks contributing no logic). The pre-1.5.0 single `id`
+        // cell was split into four ID domains in project-template 1.5.0
+        // (marker / shuttle_id / project_id / qrcode_id); `id` is kept for
+        // pre-1.5.0 netlists.
         | "id" | "logo"
+        | "marker" | "shuttle_id" | "project_id" | "qrcode_id"
     )
 }
 
@@ -484,6 +489,11 @@ mod tests {
         assert!(is_filler_cell("dvss"));
         assert!(is_filler_cell("id"));
         assert!(is_filler_cell("logo"));
+        // Post-1.5.0 four-way ID split (replaces the single `id`).
+        assert!(is_filler_cell("marker"));
+        assert!(is_filler_cell("shuttle_id"));
+        assert!(is_filler_cell("project_id"));
+        assert!(is_filler_cell("qrcode_id"));
         // Negatives.
         assert!(!is_filler_cell("hold"));
         assert!(!is_filler_cell("buf"));
