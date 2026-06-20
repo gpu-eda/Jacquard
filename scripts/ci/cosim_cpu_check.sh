@@ -16,11 +16,11 @@
 #
 # Env:
 #   JACQUARD_BIN   path to the jacquard binary (default target/release/jacquard)
-#   COSIM_SCOPE    `all` (default) runs all 7 fixtures; `logic` runs only the
-#                  4 peripheral-free xprop_cosim fixtures. `logic` is for
-#                  backends that don't yet have GPU peripherals (CUDA/HIP
-#                  Phase 2 Stage A): the design step is validated without
-#                  flash/UART/bus decode.
+#   COSIM_SCOPE    `all` (default) runs all 7 fixtures (4 xprop_cosim + dual_uart
+#                  + apb_trace ±xprop); `logic` runs only the 4 peripheral-free
+#                  xprop_cosim fixtures. `logic` validates the design step alone
+#                  for a backend before its GPU UART/bus peripherals land (CUDA/
+#                  HIP used it for Phase 2 Stage A; Stage B uses `all`).
 set -euo pipefail
 
 BIN="${JACQUARD_BIN:-target/release/jacquard}"
