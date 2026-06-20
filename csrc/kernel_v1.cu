@@ -146,6 +146,44 @@ void gpu_io_step_cuda(
   checkCudaErrors(cudaGetLastError());
 }
 
+// gpu_apply_flash_din launcher (Stage C): inject FlashState.d_i → input-state
+// MISO bits. Single-block thread-0 kernel; runs after this edge's state_prep,
+// before simulate. FlashState/FlashDinParams cross FFI as untyped u8 (the
+// event_buffer pattern; ulib UVec<u8>) and are cast here. `states` stays u32.
+extern "C"
+void gpu_apply_flash_din_cuda(
+  u32 *states,
+  const u8 *flash_state,
+  const u8 *flash_din_params
+  )
+{
+  gpu_apply_flash_din<<<1, 256>>>(
+    states,
+    (const FlashState *)flash_state,
+    (const FlashDinParams *)flash_din_params);
+  checkCudaErrors(cudaGetLastError());
+}
+
+// gpu_flash_model_step launcher (Stage C): dual-step SPI/QSPI FSM over the output
+// state slot; updates persistent FlashState. Single-block thread-0 kernel; runs
+// after this edge's simulate stages. FlashState (mutable) + FlashModelParams +
+// 16 MiB firmware cross FFI as untyped u8 and are cast here.
+extern "C"
+void gpu_flash_model_step_cuda(
+  u32 *states,
+  u8 *flash_state,
+  const u8 *flash_model_params,
+  const u8 *flash_data
+  )
+{
+  gpu_flash_model_step<<<1, 256>>>(
+    states,
+    (FlashState *)flash_state,
+    (const FlashModelParams *)flash_model_params,
+    flash_data);
+  checkCudaErrors(cudaGetLastError());
+}
+
 // cosim_snapshot launcher (Stage B): device→device copy of the 2-slot state
 // (`two_slot_words` = 2*state_size u32s) into ring slot `edge_offset`, so each
 // batched edge's [input|output] snapshot survives the next edge overwriting

@@ -168,6 +168,44 @@ void gpu_io_step_hip(
   checkHipErrors(hipGetLastError());
 }
 
+// gpu_apply_flash_din launcher (Stage C): inject FlashState.d_i → input-state
+// MISO bits. Single-block thread-0 kernel; runs after state_prep, before
+// simulate. FlashState/FlashDinParams cross FFI as untyped u8 (event_buffer
+// pattern); cast here. Mirrors kernel_v1.cu gpu_apply_flash_din_cuda.
+extern "C"
+void gpu_apply_flash_din_hip(
+  u32 *states,
+  const u8 *flash_state,
+  const u8 *flash_din_params
+  )
+{
+  hipLaunchKernelGGL(gpu_apply_flash_din, dim3(1), dim3(256), 0, (hipStream_t)0,
+                     states,
+                     (const FlashState *)flash_state,
+                     (const FlashDinParams *)flash_din_params);
+  checkHipErrors(hipGetLastError());
+}
+
+// gpu_flash_model_step launcher (Stage C): dual-step SPI/QSPI FSM over the output
+// state slot; updates persistent FlashState. Single-block thread-0 kernel; runs
+// after simulate. FlashState (mutable) + FlashModelParams + 16 MiB firmware cross
+// FFI as untyped u8; cast here. Mirrors kernel_v1.cu gpu_flash_model_step_cuda.
+extern "C"
+void gpu_flash_model_step_hip(
+  u32 *states,
+  u8 *flash_state,
+  const u8 *flash_model_params,
+  const u8 *flash_data
+  )
+{
+  hipLaunchKernelGGL(gpu_flash_model_step, dim3(1), dim3(256), 0, (hipStream_t)0,
+                     states,
+                     (FlashState *)flash_state,
+                     (const FlashModelParams *)flash_model_params,
+                     flash_data);
+  checkHipErrors(hipGetLastError());
+}
+
 // cosim_snapshot launcher (Stage B): device→device copy of the 2-slot state
 // into ring slot `edge_offset`. Default-stream ordered with the kernels; host
 // syncs once at end-of-batch. Mirrors kernel_v1.cu cosim_snapshot_cuda.

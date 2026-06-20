@@ -1093,6 +1093,140 @@ pub(crate) fn channel_buf(slot_size: usize, n_slots: usize, cap: u32) -> Vec<u8>
     b
 }
 
+/// Flash firmware buffer size (16 MiB), matching the GPU `FlashModelParams`
+/// `flash_data_size` and the Metal `flash_data_buffer`.
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) const FLASH_DATA_SIZE: usize = 16 * 1024 * 1024;
+
+/// CUDA/HIP analog of `MetalBackend::build_flash_buffers` (cosim/metal.rs:956).
+/// Builds the persistent `FlashState`, the const `FlashDinParams`/`FlashModelParams`,
+/// and the 16 MiB firmware buffer as device-resident `UVec<u8>` (the event-buffer
+/// FFI pattern), loading `config.flash.firmware` at `firmware_offset`. Init is
+/// byte-identical to the Metal path (`data_width=1, prev_csn=1, model_prev_csn=1,
+/// d_i=0x0F, in_reset=1`, rest 0; firmware area pre-filled 0xFF for erased flash).
+/// Returns `(flash_state, flash_din_params, flash_model_params, flash_data)`.
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) fn build_flash_buffers_dev(
+    config: &TestbenchConfig,
+    script: &FlattenedScriptV1,
+    state_size: usize,
+    gpio_map: &GpioMapping,
+    device: ulib::Device,
+) -> (ulib::UVec<u8>, ulib::UVec<u8>, ulib::UVec<u8>, ulib::UVec<u8>) {
+    // FlashState (shared, persistent across edges) — mirror build_flash_buffers.
+    let mut fs: FlashState = unsafe { std::mem::zeroed() };
+    fs.data_width = 1; // SPI single-bit mode
+    fs.prev_csn = 1; // CSN starts high (deselected)
+    fs.model_prev_csn = 1; // model internal edge detection starts high
+    fs.d_i = 0x0F; // flash output starts high
+    fs.in_reset = 1; // start in reset
+    let flash_state = struct_to_dev(&fs, device);
+
+    // FlashDinParams (constant).
+    let mut din = FlashDinParams {
+        d_in_pos: [0xFFFFFFFF; 4],
+        has_flash: if config.flash.is_some() { 1 } else { 0 },
+        xmask_state_offset: script.xprop_state_offset,
+    };
+    for (i, slot) in din.d_in_pos.iter_mut().enumerate() {
+        *slot = config
+            .flash
+            .as_ref()
+            .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
+            .unwrap_or(0xFFFFFFFF);
+    }
+    let flash_din_params = struct_to_dev(&din, device);
+
+    // FlashModelParams (constant).
+    let mut model = FlashModelParams {
+        state_size: state_size as u32,
+        clk_out_pos: config
+            .flash
+            .as_ref()
+            .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
+            .unwrap_or(0),
+        csn_out_pos: config
+            .flash
+            .as_ref()
+            .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
+            .unwrap_or(0),
+        d_out_pos: [0xFFFFFFFF; 4],
+        flash_data_size: FLASH_DATA_SIZE as u32,
+    };
+    for (i, slot) in model.d_out_pos.iter_mut().enumerate() {
+        *slot = config
+            .flash
+            .as_ref()
+            .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
+            .unwrap_or(0xFFFFFFFF);
+    }
+    let flash_model_params = struct_to_dev(&model, device);
+
+    // Flash firmware buffer (16 MiB) — 0xFF (erased) then firmware overlaid.
+    let mut firmware = vec![0xFFu8; FLASH_DATA_SIZE];
+    if let Some(ref flash_cfg) = config.flash {
+        use std::io::Read;
+        let firmware_path = std::path::Path::new(&flash_cfg.firmware);
+        let mut file =
+            std::fs::File::open(firmware_path).expect("Failed to open firmware file");
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).expect("Failed to read firmware");
+        let offset = flash_cfg.firmware_offset;
+        assert!(
+            offset + data.len() <= FLASH_DATA_SIZE,
+            "Firmware too large for flash buffer"
+        );
+        firmware[offset..offset + data.len()].copy_from_slice(&data);
+        clilog::info!(
+            "Loaded {} bytes firmware into GPU flash buffer at offset 0x{:X}",
+            data.len(),
+            offset
+        );
+    }
+    let flash_data = host_bytes_to_dev(firmware, device);
+
+    (flash_state, flash_din_params, flash_model_params, flash_data)
+}
+
+// `FlashState` field byte offsets (mirror the `#[repr(C)]` layout above; the
+// `UVec<u8>` host backing is byte-aligned so we read via `rd_u32` / `b[off]`
+// rather than a `*const FlashState` cast, which would be UB).
+//   bit_count i32 @0, byte_count i32 @4, data_width u32 @8, addr u32 @12,
+//   curr_byte u8 @16, command u8 @17, out_buffer u8 @18, _pad1 @19,
+//   prev_clk u32 @20, prev_csn u32 @24, d_i u8 @28, _pad2[3] @29,
+//   prev_d_out u8 @32, _pad3[3] @33, in_reset u32 @36, last_error_cmd u32 @40,
+//   model_prev_csn u32 @44.
+// Offsets are derived from the `#[repr(C)] FlashState` definition via
+// `offset_of!` so any field reorder/resize that would break these raw-byte
+// reads is a compile error rather than silent ABI drift (the #1 CI failure
+// mode for this CI-only-validated port).
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) const FLASH_STATE_D_I_OFF: usize = std::mem::offset_of!(FlashState, d_i);
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) const FLASH_STATE_IN_RESET_OFF: usize = std::mem::offset_of!(FlashState, in_reset);
+
+/// Decode a `FlashDebug` snapshot from the device `FlashState` byte buffer.
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) fn read_flash_debug(b: &[u8]) -> FlashDebug {
+    use std::mem::offset_of;
+    FlashDebug {
+        d_i: b[FLASH_STATE_D_I_OFF],
+        data_width: rd_u32(b, offset_of!(FlashState, data_width)),
+        prev_csn: rd_u32(b, offset_of!(FlashState, prev_csn)),
+        in_reset: rd_u32(b, FLASH_STATE_IN_RESET_OFF),
+        bit_count: rd_u32(b, offset_of!(FlashState, bit_count)) as i32,
+        byte_count: rd_u32(b, offset_of!(FlashState, byte_count)) as i32,
+        addr: rd_u32(b, offset_of!(FlashState, addr)),
+        curr_byte: b[offset_of!(FlashState, curr_byte)],
+        command: b[offset_of!(FlashState, command)],
+        out_buffer: b[offset_of!(FlashState, out_buffer)],
+        prev_clk: rd_u32(b, offset_of!(FlashState, prev_clk)),
+        prev_d_out: b[offset_of!(FlashState, prev_d_out)],
+        last_error_cmd: rd_u32(b, offset_of!(FlashState, last_error_cmd)),
+        model_prev_csn: rd_u32(b, offset_of!(FlashState, model_prev_csn)),
+    }
+}
+
 fn write_bus_trace_csv(
     path: &std::path::Path,
     txns: &[(u32, crate::sim::models::bus_trace::BusTransaction)],
