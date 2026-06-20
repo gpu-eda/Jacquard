@@ -24,7 +24,11 @@ struct SpiFlashModel {
     bool p_clk_o = false;      // Clock output from controller
     bool p_csn_o = true;       // Chip select (active low) output from controller
     uint8_t p_d_o = 0;         // Data from controller (4 bits)
-    uint8_t p_d_i = 0;         // Data to controller (4 bits)
+    uint8_t p_d_i = 0x0F;      // Data to controller (4 bits); idle MISO high to
+                               // match the GPU FlashState.d_i=0x0F init, so the
+                               // CpuBackend flash oracle is byte-identical to the
+                               // GPU flash kernel during command/address phases
+                               // (d_i persists until a read command drives it).
 
     // Previous signal values for edge detection
     bool prev_clk_o = false;
