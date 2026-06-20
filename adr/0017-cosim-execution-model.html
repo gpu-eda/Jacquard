@@ -500,6 +500,36 @@ per-edge path remains as the fallback for CPU-side models (e.g. JTAG
 replay), where the per-edge tail is addressed later by the multi-clock
 plan's MC.3/MC.4, not by this seam.</li>
 </ul>
+<h2 id="amendment-2026-06-19-no-cpu-peripheral-cudahip-variant-stage-on-fixtures"><a class="header" href="#amendment-2026-06-19-no-cpu-peripheral-cudahip-variant-stage-on-fixtures">Amendment 2026-06-19: no CPU-peripheral CUDA/HIP variant; stage on fixtures</a></h2>
+<p>Refines the Layer-2/3 phasing above with an implementation decision (made while
+building Phase 2). There is <strong>exactly one</strong> CUDA/HIP cosim backend, and it
+mirrors <code>MetalBackend</code>: GPU design step + <strong>GPU peripherals</strong> + variable
+batching + managed memory (<code>cudaMallocManaged</code>/<code>hipMallocManaged</code>, the closest
+analog to Metal's unified <code>StorageModeShared</code>).</p>
+<ul>
+<li><strong>No CPU-peripheral CUDA/HIP backend.</strong> An earlier plan sketched a bring-up
+"checkpoint 2a" — a CUDA backend running <em>all</em> peripherals on the CPU,
+per-edge — as a stepping stone. That is <strong>dropped</strong>: no production backend
+works that way (Metal never runs peripherals on the CPU), so it would
+introduce a backend shape that exists nowhere else and obscure the
+architecture. <code>CpuBackend</code> stays the pure-CPU reference oracle; Metal and
+CUDA/HIP are the GPU backends with the same shape.</li>
+<li><strong>"Per-edge fallback" means <code>batch=1</code> of the GPU backend</strong>, not a
+CPU-peripheral path. Model-driven-clock designs (JTAG) run the <em>same</em>
+GPU-peripheral backend at <code>batch=1</code>; only a small output read-back per edge
+feeds the CPU-side clock model. The Tier-1 CPU <code>PeripheralModel</code> remains the
+per-<em>peripheral</em> fallback solely for a (backend, peripheral) pair that
+genuinely lacks a GPU kernel (e.g. a future user-defined Tier-3 peripheral
+before its kernel exists) — not for the core flash/UART/bus set, which get
+Tier-2 GPU kernels on CUDA/HIP.</li>
+<li><strong>Bisectability comes from staging on fixtures</strong>, not from a throwaway
+backend. Each fixture exercises a different kernel subset, so the single
+backend is brought up in stages: A (design step only → <code>xprop_cosim</code>, no
+peripherals), B (<code>gpu_io_step</code> → <code>dual_uart</code> + <code>apb_trace</code>), C (flash kernels
+→ flash/JTAG). Every stage is the real architecture, gated against the
+committed CPU/Metal goldens on the T4. Staging detail:
+<a href="../plans/cosim-phase2-cuda-hip.html"><code>docs/plans/cosim-phase2-cuda-hip.md</code></a>.</li>
+</ul>
 <h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
 <ul>
 <li>ADR 0012 — CDC jitter injection (uses the scheduler's edge
