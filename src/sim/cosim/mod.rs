@@ -302,6 +302,71 @@ const _: () = {
     assert!(size_of::<BusTraceChannel>() == 16);
 };
 
+// ── SPI-flash GPU structs (Stage C) ─────────────────────────────────────────
+//
+// Mirror `csrc/kernel_v1.metal` (FlashState :738, FlashDinParams :758,
+// FlashModelParams :764) and the device structs in `kernel_v1_impl.cuh`. The GPU
+// flash kernels (`gpu_apply_flash_din`, `gpu_flash_model_step`) are a GPU
+// reimplementation of the CPU `CppSpiFlash` FSM; these structs cross the FFI as
+// `UVec<u8>` byte buffers on CUDA/HIP. Lifted from `metal.rs` (Stage C) so all
+// three GPU backends share one ABI definition.
+
+/// GPU-side flash decode state (persistent across edges).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct FlashState {
+    bit_count: i32,
+    byte_count: i32,
+    data_width: u32,
+    addr: u32,
+    curr_byte: u8,
+    command: u8,
+    out_buffer: u8,
+    _pad1: u8,
+    prev_clk: u32,
+    prev_csn: u32,
+    d_i: u8,
+    _pad2: [u8; 3],
+    prev_d_out: u8,
+    _pad3: [u8; 3],
+    in_reset: u32,
+    last_error_cmd: u32,
+    model_prev_csn: u32,
+}
+
+/// Parameters for the `gpu_apply_flash_din` kernel.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct FlashDinParams {
+    d_in_pos: [u32; 4],
+    has_flash: u32,
+    // X-mask word offset (= reg_io_state_size); 0 when xprop off. The flash
+    // MISO bits are primary inputs driven here (not via state_prep's edge
+    // ops), so this kernel must clear their X-mask too, else they stay X
+    // (seeded by the cosim template) and the SPI read drowns in X (#95 ph3).
+    xmask_state_offset: u32,
+}
+
+/// Parameters for the `gpu_flash_model_step` kernel.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct FlashModelParams {
+    state_size: u32,
+    clk_out_pos: u32,
+    csn_out_pos: u32,
+    d_out_pos: [u32; 4],
+    flash_data_size: u32,
+}
+
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+const _: () = {
+    use std::mem::size_of;
+    assert!(size_of::<FlashState>() == 48);
+    assert!(size_of::<FlashDinParams>() == 24);
+    assert!(size_of::<FlashModelParams>() == 32);
+};
+
 /// Backend-agnostic per-bus pin positions resolved from the netlist. Plain
 /// Rust (no `repr(C)`, no `metal::`): the Metal backend packs these field-for-
 /// field into the GPU `BusTraceParams`; the CPU backend reads them directly in
