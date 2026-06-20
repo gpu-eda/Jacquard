@@ -573,13 +573,14 @@ jobs:
           python3 scripts/ci/validate_timing_report.py \
             tests/timing_test/inv_chain_pnr/timing_report_cuda.json
 
-      # Phase 2 Stage A (#105): run the peripheral-free cosim fixtures on the
-      # CUDA backend and diff against the committed CPU/Metal goldens. Validates
-      # the GPU cosim design step (CudaBackend) end-to-end. dual_uart/apb_trace
-      # need GPU peripherals (Stage B/C), hence COSIM_SCOPE=logic.
-      - name: Run CUDA cosim — xprop_cosim (Stage A, #105)
+      # Phase 2 Stage B (#105): run the logic + GPU-peripheral cosim fixtures on
+      # the CUDA backend and diff against the committed CPU/Metal goldens. Stage A
+      # validated the design step (xprop_cosim); Stage B adds the GPU UART/bus
+      # peripherals (dual_uart + apb_trace) via gpu_io_step. COSIM_SCOPE=all runs
+      # every UART/bus fixture (no flash/JTAG fixture exists yet — that is Stage C).
+      - name: Run CUDA cosim — logic + UART/bus (Stage B, #105)
         run: |
-          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=logic \
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=all \
             bash scripts/ci/cosim_cpu_check.sh
 
       - name: Upload CUDA artifacts
@@ -729,11 +730,12 @@ jobs:
           python3 scripts/ci/validate_timing_report.py \
             tests/timing_test/inv_chain_pnr/timing_report_hip.json
 
-      # Phase 2 Stage A (#105): peripheral-free cosim fixtures on the HIP backend
-      # vs the committed CPU/Metal goldens (see the CUDA step for rationale).
-      - name: Run HIP cosim — xprop_cosim (Stage A, #105)
+      # Phase 2 Stage B (#105): logic + GPU-peripheral (UART/bus) cosim fixtures
+      # on the HIP backend vs the committed CPU/Metal goldens (see the CUDA step
+      # for rationale).
+      - name: Run HIP cosim — logic + UART/bus (Stage B, #105)
         run: |
-          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=logic \
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=all \
             bash scripts/ci/cosim_cpu_check.sh
 
       - name: Upload HIP artifacts
