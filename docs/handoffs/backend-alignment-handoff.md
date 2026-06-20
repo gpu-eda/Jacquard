@@ -44,23 +44,35 @@ Authoritative plan: `docs/plans/cosim-phase2-cuda-hip.md`.
   CPU/Metal goldens on the T4, blind, first try.** Design spec:
   `docs/plans/cosim-phase2-stageB-io-port.md`.
 
-**Now (pick up here): Stage C — flash kernels.**
-Port `gpu_apply_flash_din` (shader:904 — write `FlashState.d_i` → input state)
-and `gpu_flash_model_step` (shader:943 — SPI/QSPI flash FSM, dual-step setup
-delay; needs the 16 MiB firmware buffer + persistent `FlashState`) to
-`kernel_v1_impl.cuh` + `_cuda`/`_hip` launchers (replicate `FlashState`/
-`FlashDinParams`/`FlashModelParams` — already in `metal.rs`, lift to the shared
-`mod.rs` gated region like the IO structs in Stage B). Wire into
-`CudaBackend`/`HipBackend::run_edges` (the flash kernels run *around* simulate:
-`gpu_apply_flash_din` before stages, `gpu_flash_model_step` after — see Metal's
-`encode_and_commit_gpu_batch` ordering), replace the Stage-B `flash_d_i`/
-`flash_debug_snapshot` stubs with GPU-ring reads, and switch `flash_in_reset`
-to drive the GPU FSM. **No flash/JTAG cosim fixture exists in
-`cosim_cpu_check.sh` yet** — add one (or a `JtagReplayModel` cosim fixture) so
-the Stage C CI gate has a golden; model-driven-clock (JTAG) runs the GPU
-peripherals at `batch=1` within the same backend (not a separate path). The
-Stage B shared-`mod.rs` lift + `UVec<u8>` FFI + batched `run_edges` are the
-template to follow.
+**Stage C — flash. Plan (a) chosen (CpuBackend oracle first). Spec:
+`docs/plans/cosim-phase2-stageC-flash.md`.**
+- **C1 done (`483cd69`):** lifted `FlashState`/`FlashDinParams`/`FlashModelParams`
+  to shared `mod.rs` (gated, ABI asserts 48/24/32). Metal bit-identical.
+- **C2 done + VALIDATED (feat commit + `spiflash_model.cc` p_d_i patch):** wired
+  `CppSpiFlash` into `CpuBackend::run_edges` as the pure-CPU flash oracle —
+  per-edge `apply_flash_din` (inject MISO before simulate) + dual-step
+  `flash_model_step` (delayed-CSN, after simulate); reset forces `d_i=0x0F`
+  without stepping. Patched `CppSpiFlash` `p_d_i` init 0→0x0F to match the GPU
+  `FlashState.d_i`. **A 10k-edge `mcu_soc` cosim (committed netlist+firmware) on
+  the no-GPU `CpuBackend` build is byte-identical to the Metal GPU flash kernel**
+  (flash actively read, cmd 0x03 @ 0x100000) — the C++↔shader FSM equivalence is
+  proven, so CpuBackend is a valid Stage-C golden source. Validation recipe:
+  `/tmp/claude/mcu_soc_selfcontained.json` (config w/ committed firmware), run
+  both backends `--max-clock-edges 10000 --output-vcd`, `diff`.
+
+**Now (pick up here): Stage C — C3 (CUDA/HIP flash kernels) + C4 (CI gate).**
+Port `gpu_apply_flash_din` (shader:904) + `gpu_flash_model_step` (shader:943) to
+`kernel_v1_impl.cuh` + `_cuda`/`_hip` launchers (structs already shared via C1;
+16 MiB firmware + `FlashState` cross FFI as `UVec<u8>` — the event-buffer
+pattern). Wire into `CudaBackend`/`HipBackend::run_edges` in the Metal order
+(`state_prep` → `gpu_apply_flash_din` → simulate → `gpu_flash_model_step` →
+`gpu_io_step` → snapshot); build the flash buffers in `new` (mirror
+`build_flash_buffers`); replace the Stage-B `flash_d_i`/`flash_debug_snapshot`
+stubs with GPU `FlashState` reads; `flash_set_in_reset` drives `FlashState.in_reset`.
+**C4:** add a short `mcu_soc` flash cosim to `cosim_cpu_check.sh` (commit the
+CpuBackend golden — already proven == Metal) + a new scope, and gate CUDA/HIP on
+the T4. Mind the 19.6 MB netlist's ~40s partitioning per CI run. The Stage B
+`UVec<u8>` FFI + batched `run_edges` are the template.
 
 **#104 deferred follow-ups** (low priority; #104 is functionally done): (a)
 cross-backend timed-VCD equivalence in `backend-equivalence` (needs artifact-flow
