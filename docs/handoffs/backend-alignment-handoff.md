@@ -1,6 +1,7 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
-**Created:** 2026-06-07 (updated 2026-06-20, ninth session — Stage B T4-green)
+**Created:** 2026-06-07 (updated 2026-06-21, tenth session — **Stage C C3+C4
+done; CUDA/HIP cosim flash parity COMPLETE**)
 **Branch:** `cuda-hip-parity` (PR #120, off `main`). **PHASE 1 MERGED TO MAIN**
 (#118 @ `main` `e77aab3`; Phase 0 + Phase 1, `CpuBackend` parity, `cosim-cpu`
 Linux CI + 7 goldens). Now on the **CUDA/HIP parity track for release**: scope =
@@ -60,19 +61,50 @@ Authoritative plan: `docs/plans/cosim-phase2-cuda-hip.md`.
   `/tmp/claude/mcu_soc_selfcontained.json` (config w/ committed firmware), run
   both backends `--max-clock-edges 10000 --output-vcd`, `diff`.
 
-**Now (pick up here): Stage C — C3 (CUDA/HIP flash kernels) + C4 (CI gate).**
-Port `gpu_apply_flash_din` (shader:904) + `gpu_flash_model_step` (shader:943) to
-`kernel_v1_impl.cuh` + `_cuda`/`_hip` launchers (structs already shared via C1;
-16 MiB firmware + `FlashState` cross FFI as `UVec<u8>` — the event-buffer
-pattern). Wire into `CudaBackend`/`HipBackend::run_edges` in the Metal order
-(`state_prep` → `gpu_apply_flash_din` → simulate → `gpu_flash_model_step` →
-`gpu_io_step` → snapshot); build the flash buffers in `new` (mirror
-`build_flash_buffers`); replace the Stage-B `flash_d_i`/`flash_debug_snapshot`
-stubs with GPU `FlashState` reads; `flash_set_in_reset` drives `FlashState.in_reset`.
-**C4:** add a short `mcu_soc` flash cosim to `cosim_cpu_check.sh` (commit the
-CpuBackend golden — already proven == Metal) + a new scope, and gate CUDA/HIP on
-the T4. Mind the 19.6 MB netlist's ~40s partitioning per CI run. The Stage B
-`UVec<u8>` FFI + batched `run_edges` are the template.
+- **C3 done (`86f8b08`, T4-GREEN):** ported `flash_eval_commit_persistent`
+  (shader:843) + `gpu_apply_flash_din` (:904) + `gpu_flash_model_step` (:943) to
+  `kernel_v1_impl.cuh` (`static_assert` 48/24/32) + `_cuda`/`_hip` launchers; 16
+  MiB firmware + `FlashState` cross FFI as `UVec<u8>` (event-buffer pattern,
+  firmware uploaded once in `new`, FlashState stays GPU-resident within a batch).
+  Wired into `Cuda/HipBackend::run_edges` in the Metal order (`state_prep` →
+  `gpu_apply_flash_din` → simulate×N → `gpu_flash_model_step` → `gpu_io_step` →
+  snapshot); built flash buffers in `new` via shared `build_flash_buffers_dev`
+  (`mod.rs`); replaced the Stage-B `flash_d_i`/`flash_debug_snapshot`/
+  `flash_set_in_reset` stubs with real GPU `FlashState` reads/writes. **Simplify
+  pass:** `FlashState` byte offsets derived via `std::mem::offset_of!` so field
+  drift is a compile error (hardens the #1 CI failure mode). T4 CI all-green
+  (CUDA Tests, HIP Tests, Backend Equivalence) — kernels compile + existing
+  fixtures still pass with flash wired in.
+- **C4 done (`610eb5b`):** flash CI gate. Committed 74 KB CpuBackend golden
+  `tests/mcu_soc/expected/mcu_flash.vcd` (10k-edge mcu_soc, top-level IO VCD,
+  proven == Metal in C2, deterministic, real flash activity cmd 0x03 @ 0x100000)
+  + self-contained `tests/mcu_soc/sim_config_selfcontained.json` (firmware →
+  committed `software.bin`). New `COSIM_SCOPE=flash` in `cosim_cpu_check.sh`
+  (separate from `all` — the 19.6 MB netlist costs ~40s partitioning). Wired the
+  flash gate into the Linux `cosim-cpu` job + CUDA/HIP T4 jobs. Local CpuBackend
+  gate passes. **C4 CI run (`27886460568`) GREEN** — all three flash-gate steps
+  ran and passed (CUDA Tests, HIP Tests, Cosim CpuBackend Linux), each diffing
+  its `mcu_soc` flash cosim VCD byte-for-byte against the committed golden. This
+  was the first CUDA/HIP flash-vs-golden diff on the T4 (C3's Backend-Equivalence
+  job predated the flash gate).
+
+**STAGE C COMPLETE — CUDA/HIP cosim at full flash parity with Metal (T4-green).** This
+was the last cosim stage of the CUDA/HIP parity track. Checkpoints T0 (#104 sim
+timing), T1.x (state_prep/simulate + Stage A), T2.1 (Stage B UART/bus), T2.2
+(Stage C flash) all done + T4-green.
+
+**Now (pick up here):** the CUDA/HIP parity track is functionally complete. The
+remaining T2.3 row in `docs/plans/cosim-phase2-cuda-hip.md` is the **`GpuPeripheral`
+seam + cross-backend cosim equivalence gate** (ADR 0017 Layer 3) — extend
+`backend-equivalence` with cosim comparisons (cuda vs hip vs metal vs the CPU
+golden) so cosim is GPU-CI-covered cross-backend (today the new flash gate
+diffs each backend vs the *committed* golden independently, which already
+achieves equivalence transitively; T2.3 would make it an explicit N-way diff +
+define the peripheral seam for Phase 3 Tier-3 single-source). Lower priority /
+optional for release. **Then:** consider merging `cuda-hip-parity` (PR #120) to
+`main` — the release-critical CUDA/HIP parity goal is met. See "deferred
+follow-ups" below for the #104 leftovers (cross-backend timed-VCD equivalence;
+a violating fixture).
 
 **#104 deferred follow-ups** (low priority; #104 is functionally done): (a)
 cross-backend timed-VCD equivalence in `backend-equivalence` (needs artifact-flow
