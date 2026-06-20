@@ -170,6 +170,16 @@ impl PdkVariant {
     pub fn classify(celltype: &str) -> Option<PdkVariant> {
         if is_sky130_cell(celltype) {
             Some(PdkVariant::Sky130)
+        } else if crate::gf180mcu::is_sram_macro(celltype) {
+            // SRAM IP macros (`gf180mcu_fd_ip_sram__*`) are compiled hard
+            // macros, not standard cells: they have no `.functional.v` and
+            // are modelled as RAM blocks via the runtime `--cell-library`
+            // (ADR 0010 / 0011). Return `None` so they fall through the
+            // std-cell decompose dispatch to the cell-library RAM path,
+            // instead of panicking in `load_pdk_models`'s functional.v
+            // lookup. They still satisfy `is_gf180mcu_cell`, so
+            // `detect_library` keeps reporting GF180MCU (not Mixed).
+            None
         } else if is_gf180mcu_cell(celltype) {
             Some(PdkVariant::Gf180Mcu)
         } else {
@@ -302,6 +312,21 @@ mod tests {
         );
         assert_eq!(PdkVariant::classify("AND2_00_0"), None);
         assert_eq!(PdkVariant::classify("DFF"), None);
+        // SRAM IP macros are GF180MCU cells (parser-accepted, GF180MCU-
+        // detected) but classify as `None` so they route to the
+        // cell-library RAM path rather than the std-cell functional.v
+        // decompose (which has no model for them — would panic).
+        assert!(crate::gf180mcu::is_gf180mcu_cell(
+            "gf180mcu_fd_ip_sram__sram512x8m8wm1"
+        ));
+        assert_eq!(
+            PdkVariant::classify("gf180mcu_fd_ip_sram__sram512x8m8wm1"),
+            None
+        );
+        assert_eq!(
+            PdkVariant::classify("gf180mcu_fd_ip_sram__sram256x8m8wm1"),
+            None
+        );
     }
 
     #[test]
