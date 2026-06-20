@@ -49,6 +49,13 @@ const GF180MCU_WS_PREFIX: &str = "gf180mcu_ws_";
 const SC_7T_PREFIX: &str = "gf180mcu_fd_sc_mcu7t5v0__";
 const SC_9T_PREFIX: &str = "gf180mcu_fd_sc_mcu9t5v0__";
 
+/// Prefix for the foundry SRAM IP macros (`gf180mcu_fd_ip_sram__sram512x8m8wm1`
+/// and friends). These are compiled hard macros, not standard cells — they
+/// have no `.functional.v` in the standard-cell submodule and are modelled
+/// as RAM blocks via the runtime `--cell-library` (ADR 0010 / 0011), so they
+/// must NOT route through the standard-cell decompose path.
+const IP_SRAM_PREFIX: &str = "gf180mcu_fd_ip_sram__";
+
 /// Prefixes for non-standard-cell families whose macro name *is* the
 /// base cell type (no drive-strength suffix). Strip these in
 /// [`extract_cell_type`] so [`crate::gf180mcu_pdk`]'s classifiers can
@@ -65,6 +72,18 @@ const NON_SC_PREFIXES: &[&str] = &[
 /// or wafer.space variant (`gf180mcu_ws_*`)?
 pub fn is_gf180mcu_cell(name: &str) -> bool {
     name.starts_with(GF180MCU_FD_PREFIX) || name.starts_with(GF180MCU_WS_PREFIX)
+}
+
+/// Is `name` a foundry SRAM IP macro (`gf180mcu_fd_ip_sram__*`)?
+///
+/// These are compiled hard macros with no standard-cell `.functional.v`;
+/// they are modelled as RAM blocks via the runtime `--cell-library`. They
+/// satisfy [`is_gf180mcu_cell`] (so the netlist parser accepts them and the
+/// library is detected as GF180MCU) but are excluded from the standard-cell
+/// decompose dispatch in [`crate::pdk::PdkVariant::classify`] so they reach
+/// the cell-library RAM path instead of the std-cell functional.v lookup.
+pub fn is_sram_macro(name: &str) -> bool {
+    name.starts_with(IP_SRAM_PREFIX)
 }
 
 /// Strip the GF180MCU library prefix and the trailing drive-strength
@@ -261,6 +280,20 @@ mod tests {
         assert!(is_gf180mcu_cell("gf180mcu_fd_io__bi_24t"));
         assert!(is_gf180mcu_cell("gf180mcu_fd_pr__nmos_3p3"));
         assert!(is_gf180mcu_cell("gf180mcu_fd_ip_sram__sram64x16m8wm1"));
+    }
+
+    #[test]
+    fn detects_sram_macros() {
+        // SRAM IP macros are GF180MCU cells but are also flagged as SRAM
+        // macros, so they bypass the std-cell decompose path (no
+        // functional.v) and route to the cell-library RAM model.
+        assert!(is_sram_macro("gf180mcu_fd_ip_sram__sram512x8m8wm1"));
+        assert!(is_sram_macro("gf180mcu_fd_ip_sram__sram256x8m8wm1"));
+        assert!(is_sram_macro("gf180mcu_fd_ip_sram__sram64x16m8wm1"));
+        // Standard cells / pads / primitives are not SRAM macros.
+        assert!(!is_sram_macro("gf180mcu_fd_sc_mcu7t5v0__nand2_1"));
+        assert!(!is_sram_macro("gf180mcu_fd_io__bi_24t"));
+        assert!(!is_sram_macro("sky130_fd_sc_hd__inv_2"));
     }
 
     #[test]
