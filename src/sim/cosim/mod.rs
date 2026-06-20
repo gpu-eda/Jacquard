@@ -101,6 +101,207 @@ pub(crate) const BUS_TRACE_MAX_ADR_BITS: usize = 32;
 /// Max data-bus width captured per beat.
 pub(crate) const BUS_TRACE_MAX_DAT_BITS: usize = 32;
 
+// ── Shared GPU peripheral `#[repr(C)]` ABI (Metal / CUDA / HIP) ──────────────
+//
+// These mirror the device structs in `csrc/kernel_v1.metal` (Metal) and
+// `csrc/kernel_v1_impl.cuh` (CUDA/HIP) field-for-field. They were originally
+// private to `metal.rs`; lifted here (Stage B B0) so all three GPU backends
+// share one ABI definition instead of triple-maintaining it. Items are
+// module-private to `mod.rs` (fields too) — the backend submodules are
+// descendants and can read them via `super::`. Gated to GPU builds; the
+// `CpuBackend` reference uses its own agnostic types (`CpuUartConfig`,
+// `BusTracePositions`).
+//
+// The `size_of` asserts below pin the Rust layout; matching `static_assert`s in
+// the device headers pin the C/Metal layout to the same byte counts. ABI drift
+// (field order/padding) silently corrupts cross-FFI buffers — these are the
+// compile-time guard. Keep both sides in lockstep.
+
+/// UART ring-buffer byte capacity (per channel).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+const UART_CHANNEL_CAP: usize = 4096;
+
+/// GPU-side UART decoder state (per channel, persistent across ticks).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct UartDecoderState {
+    state: u32, // 0=IDLE, 1=START, 2=DATA, 3=STOP
+    last_tx: u32,
+    start_cycle: u32,
+    bits_received: u32,
+    value: u32,
+    current_cycle: u32,
+}
+
+/// Per-channel config within `UartParams`.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct UartPerChannelConfig {
+    tx_out_pos: u32,
+    cycles_per_bit: u32,
+}
+
+/// Parameters for UART in the `gpu_io_step` kernel.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct UartParams {
+    state_size: u32,
+    n_uarts: u32,
+    _pad: [u32; 2],
+    channels: [UartPerChannelConfig; MAX_UARTS],
+}
+
+/// GPU→CPU UART byte ring buffer (one per channel).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct UartChannel {
+    write_head: u32,
+    capacity: u32,
+    _pad: [u32; 2],
+    data: [u8; UART_CHANNEL_CAP],
+}
+
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+const WB_TRACE_MAX_ADR_BITS: usize = 30;
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+const WB_TRACE_MAX_DAT_BITS: usize = 32;
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+const WB_TRACE_CHANNEL_CAP: usize = 16384;
+
+/// Parameters for the legacy Wishbone bus trace (`gpu_io_step`).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct WbTraceParams {
+    ibus_cyc_pos: u32,
+    ibus_stb_pos: u32,
+    ibus_adr_pos: [u32; WB_TRACE_MAX_ADR_BITS],
+    ibus_rdata_pos: [u32; WB_TRACE_MAX_DAT_BITS],
+    dbus_cyc_pos: u32,
+    dbus_stb_pos: u32,
+    dbus_we_pos: u32,
+    dbus_adr_pos: [u32; WB_TRACE_MAX_ADR_BITS],
+    spiflash_ack_pos: u32,
+    sram_ack_pos: u32,
+    csr_ack_pos: u32,
+    has_trace: u32,
+}
+
+/// Per-tick Wishbone bus snapshot.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct WbTraceEntry {
+    tick: u32,
+    flags: u32,
+    ibus_adr: u32,
+    ibus_rdata: u32,
+    dbus_adr: u32,
+}
+
+/// GPU→CPU Wishbone trace ring buffer header (entries follow at byte 16).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct WbTraceChannel {
+    write_head: u32,
+    capacity: u32,
+    current_tick: u32,
+    prev_flags: u32,
+    // entries[capacity] follow in memory
+}
+
+/// AHB/APB bus-trace ring-buffer entry capacity (ADR 0013).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+const BUS_TRACE_CHANNEL_CAP: usize = 16384;
+
+/// Per-bus signal positions (config-driven AHB/APB trace, ADR 0013).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct BusTraceParams {
+    protocol: u32,
+    addr_bits: u32,
+    data_bits: u32,
+    sel_pos: u32,
+    enable_pos: u32,
+    ready_pos: u32,
+    write_pos: u32,
+    resp_pos: u32,
+    addr_pos: [u32; BUS_TRACE_MAX_ADR_BITS],
+    wdata_pos: [u32; BUS_TRACE_MAX_DAT_BITS],
+    rdata_pos: [u32; BUS_TRACE_MAX_DAT_BITS],
+}
+
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+impl Default for BusTraceParams {
+    fn default() -> Self {
+        Self {
+            protocol: 0,
+            addr_bits: 0,
+            data_bits: 0,
+            sel_pos: 0xFFFFFFFF,
+            enable_pos: 0xFFFFFFFF,
+            ready_pos: 0xFFFFFFFF,
+            write_pos: 0xFFFFFFFF,
+            resp_pos: 0xFFFFFFFF,
+            addr_pos: [0xFFFFFFFF; BUS_TRACE_MAX_ADR_BITS],
+            wdata_pos: [0xFFFFFFFF; BUS_TRACE_MAX_DAT_BITS],
+            rdata_pos: [0xFFFFFFFF; BUS_TRACE_MAX_DAT_BITS],
+        }
+    }
+}
+
+/// All-bus params block bound to the `gpu_io_step` kernel.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct BusTraceParamsAll {
+    n_buses: u32,
+    _pad: [u32; 3],
+    buses: [BusTraceParams; MAX_BUS_TRACES],
+}
+
+/// Compact raw beat captured by the GPU on a bus's gating edge.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct BusTraceEntry {
+    tick: u32,
+    flags: u32,
+    addr: u32,
+    wdata: u32,
+    rdata: u32,
+}
+
+/// GPU→CPU bus-trace ring buffer header (entries follow at byte 16).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct BusTraceChannel {
+    write_head: u32,
+    capacity: u32,
+    current_tick: u32,
+    prev_gate: u32,
+    // entries[capacity] follow in memory
+}
+
+// ── ABI size guards: Rust side (matching `static_assert`s in the device
+// headers). Recompute if any struct changes; the device-side asserts must use
+// the same literals.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+const _: () = {
+    use std::mem::size_of;
+    assert!(size_of::<UartDecoderState>() == 24);
+    assert!(size_of::<UartPerChannelConfig>() == 8);
+    assert!(size_of::<UartParams>() == 48);
+    assert!(size_of::<UartChannel>() == 4112);
+    assert!(size_of::<WbTraceParams>() == 404);
+    assert!(size_of::<WbTraceEntry>() == 20);
+    assert!(size_of::<WbTraceChannel>() == 16);
+    assert!(size_of::<BusTraceParams>() == 416);
+    assert!(size_of::<BusTraceParamsAll>() == 1680);
+    assert!(size_of::<BusTraceEntry>() == 20);
+    assert!(size_of::<BusTraceChannel>() == 16);
+};
+
 /// Backend-agnostic per-bus pin positions resolved from the netlist. Plain
 /// Rust (no `repr(C)`, no `metal::`): the Metal backend packs these field-for-
 /// field into the GPU `BusTraceParams`; the CPU backend reads them directly in
@@ -596,6 +797,235 @@ fn resolve_signal_pos(
         }
     }
     0xFFFFFFFF
+}
+
+// ── Shared GPU param builders (WB / APB bus trace) ──────────────────────────
+//
+// Resolve netlist pin positions into the GPU `WbTraceParams` / `BusTraceParamsAll`
+// structs bound by `gpu_io_step`. Lifted from `metal.rs` (Stage B B2) so Metal
+// and CUDA/HIP share one resolution path; the GPU struct bytes are unchanged
+// from the pre-extraction Metal version. Gated to GPU builds (the structs are).
+
+/// Resolve a bus signal with bit index, e.g. "ibus__adr" with bit 5 → "ibus__adr[5]".
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+fn resolve_bus_signal(
+    aig: &AIG,
+    netlistdb: &NetlistDB,
+    script: &FlattenedScriptV1,
+    base_pattern: &str,
+    bit: usize,
+) -> u32 {
+    let pattern = format!("{}[{}]", base_pattern, bit);
+    resolve_signal_pos(aig, netlistdb, script, &pattern)
+}
+
+/// Build WbTraceParams by resolving all bus signal names to state positions.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+fn build_wb_trace_params(
+    aig: &AIG,
+    netlistdb: &NetlistDB,
+    script: &FlattenedScriptV1,
+) -> WbTraceParams {
+    let mut params = WbTraceParams {
+        ibus_cyc_pos: 0xFFFFFFFF,
+        ibus_stb_pos: 0xFFFFFFFF,
+        ibus_adr_pos: [0xFFFFFFFF; WB_TRACE_MAX_ADR_BITS],
+        ibus_rdata_pos: [0xFFFFFFFF; WB_TRACE_MAX_DAT_BITS],
+        dbus_cyc_pos: 0xFFFFFFFF,
+        dbus_stb_pos: 0xFFFFFFFF,
+        dbus_we_pos: 0xFFFFFFFF,
+        dbus_adr_pos: [0xFFFFFFFF; WB_TRACE_MAX_ADR_BITS],
+        spiflash_ack_pos: 0xFFFFFFFF,
+        sram_ack_pos: 0xFFFFFFFF,
+        csr_ack_pos: 0xFFFFFFFF,
+        has_trace: 0,
+    };
+
+    // ibus (instruction bus)
+    params.ibus_cyc_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.fetch.ibus__cyc");
+    params.ibus_stb_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.fetch.ibus__stb");
+    for i in 0..WB_TRACE_MAX_ADR_BITS {
+        params.ibus_adr_pos[i] =
+            resolve_bus_signal(aig, netlistdb, script, "cpu.fetch.ibus__adr", i);
+    }
+    for i in 0..WB_TRACE_MAX_DAT_BITS {
+        params.ibus_rdata_pos[i] =
+            resolve_bus_signal(aig, netlistdb, script, "cpu.fetch.ibus_rdata", i);
+    }
+
+    // dbus (data bus)
+    params.dbus_cyc_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.loadstore.dbus__cyc");
+    params.dbus_stb_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.loadstore.dbus__stb");
+    params.dbus_we_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.loadstore.dbus__we");
+    for i in 0..WB_TRACE_MAX_ADR_BITS {
+        params.dbus_adr_pos[i] =
+            resolve_bus_signal(aig, netlistdb, script, "cpu.loadstore.dbus__adr", i);
+    }
+
+    // peripheral acks
+    params.spiflash_ack_pos =
+        resolve_signal_pos(aig, netlistdb, script, "spiflash.ctrl.wb_bus__ack");
+    params.sram_ack_pos = resolve_signal_pos(aig, netlistdb, script, "sram.wb_bus__ack");
+    params.csr_ack_pos = resolve_signal_pos(aig, netlistdb, script, "wb_to_csr.wb_bus__ack");
+
+    // Check if we resolved any signals
+    let found = [
+        params.ibus_cyc_pos,
+        params.ibus_stb_pos,
+        params.dbus_cyc_pos,
+    ]
+    .iter()
+    .filter(|&&p| p != 0xFFFFFFFF)
+    .count();
+    if found > 0 {
+        params.has_trace = 1;
+        let ibus_adr_count = params
+            .ibus_adr_pos
+            .iter()
+            .filter(|&&p| p != 0xFFFFFFFF)
+            .count();
+        let ibus_rdata_count = params
+            .ibus_rdata_pos
+            .iter()
+            .filter(|&&p| p != 0xFFFFFFFF)
+            .count();
+        let dbus_adr_count = params
+            .dbus_adr_pos
+            .iter()
+            .filter(|&&p| p != 0xFFFFFFFF)
+            .count();
+        clilog::info!(
+            "WB trace: ibus_cyc={} ibus_stb={} ibus_adr={}/30 ibus_rdata={}/32",
+            params.ibus_cyc_pos != 0xFFFFFFFF,
+            params.ibus_stb_pos != 0xFFFFFFFF,
+            ibus_adr_count,
+            ibus_rdata_count
+        );
+        clilog::info!(
+            "WB trace: dbus_cyc={} dbus_stb={} dbus_we={} dbus_adr={}/30",
+            params.dbus_cyc_pos != 0xFFFFFFFF,
+            params.dbus_stb_pos != 0xFFFFFFFF,
+            params.dbus_we_pos != 0xFFFFFFFF,
+            dbus_adr_count
+        );
+        clilog::info!(
+            "WB trace: spiflash_ack={} sram_ack={} csr_ack={}",
+            params.spiflash_ack_pos != 0xFFFFFFFF,
+            params.sram_ack_pos != 0xFFFFFFFF,
+            params.csr_ack_pos != 0xFFFFFFFF
+        );
+    } else {
+        clilog::info!("WB trace: no bus signals found in netlist, tracing disabled");
+    }
+
+    params
+}
+
+/// Build the bus-trace GPU params block and the parallel CPU decoder
+/// lanes from the configured bus traces. The Vec index of each returned
+/// lane equals the GPU `bus_id` packed into entry flags, so the drain
+/// loop can route each beat to the right decoder.
+///
+/// Only APB3 is wired in Phase 1; AHB-Lite / AHB5 entries are skipped
+/// with a warning (see `docs/plans/bus-transaction-tracing.md`).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+fn build_bus_trace_params(
+    aig: &AIG,
+    netlistdb: &NetlistDB,
+    script: &FlattenedScriptV1,
+    configs: &[crate::testbench::BusTraceConfig],
+) -> (BusTraceParamsAll, Vec<BusTraceLane>) {
+    // Resolve pin positions + build the CPU decoder lanes agnostically (shared
+    // with the CPU backend), then pack the positions field-for-field into the
+    // GPU `BusTraceParams`. The packing below is the *only* GPU-specific step;
+    // the resolve/warn/lane logic lives in `build_bus_trace`, so the GPU struct
+    // bytes are unchanged from the pre-extraction inline version.
+    let (positions, lanes) = build_bus_trace(aig, netlistdb, script, configs);
+
+    let mut all = BusTraceParamsAll {
+        n_buses: 0,
+        _pad: [0; 3],
+        buses: [BusTraceParams::default(); MAX_BUS_TRACES],
+    };
+    for pos in positions.iter() {
+        // Only APB3 buses reach here (others are skipped in build_bus_trace),
+        // so the GPU `protocol` field is always 0 == BUS_PROTO_APB3.
+        debug_assert!(pos.protocol_apb3);
+        let p = BusTraceParams {
+            protocol: 0,
+            addr_bits: pos.addr_bits as u32,
+            data_bits: pos.data_bits as u32,
+            sel_pos: pos.sel_pos,
+            enable_pos: pos.enable_pos,
+            ready_pos: pos.ready_pos,
+            write_pos: pos.write_pos,
+            resp_pos: pos.resp_pos,
+            addr_pos: pos.addr_pos,
+            wdata_pos: pos.wdata_pos,
+            rdata_pos: pos.rdata_pos,
+        };
+        let idx = all.n_buses as usize;
+        all.buses[idx] = p;
+        all.n_buses += 1;
+    }
+
+    (all, lanes)
+}
+
+// ── Shared CUDA/HIP device-byte-buffer helpers ──────────────────────────────
+//
+// The GPU IO `#[repr(C)]` structs cross the FFI as untyped `UVec<u8>` byte
+// buffers (the event-buffer pattern): ulib `UVec<T>` requires `T: UniversalCopy`,
+// which the IO structs are not. These helpers build/read those buffers and are
+// identical for both `CudaBackend` and `HipBackend`, so they live here (gated to
+// the two CUDA/HIP backends; Metal uses `metal::Buffer` directly, not `UVec<u8>`).
+
+/// Read a native-endian u32 from a byte slice at `off` (alignment-safe — the
+/// `UVec<u8>` host backing is byte-aligned, so a `*const T` cast would be UB).
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) fn rd_u32(b: &[u8], off: usize) -> u32 {
+    u32::from_ne_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
+}
+
+/// Upload a fully-initialised host byte buffer to a device-resident `UVec<u8>`.
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) fn host_bytes_to_dev(bytes: Vec<u8>, device: ulib::Device) -> ulib::UVec<u8> {
+    use ulib::AsUPtrMut;
+    let mut u: ulib::UVec<u8> = bytes.into();
+    u.as_mut_uptr(device);
+    u
+}
+
+/// Copy a slice of `#[repr(C)]` POD values to a `Vec<u8>` of their raw bytes.
+#[cfg(any(feature = "cuda", feature = "hip"))]
+fn pod_slice_bytes<T>(v: &[T]) -> Vec<u8> {
+    // SAFETY: `T` is a `#[repr(C)]` POD struct; reading the slice bytes is sound.
+    unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }.to_vec()
+}
+
+/// Serialize a host `#[repr(C)]` value's raw bytes into a device `UVec<u8>`.
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) fn struct_to_dev<T>(v: &T, device: ulib::Device) -> ulib::UVec<u8> {
+    slice_to_dev(std::slice::from_ref(v), device)
+}
+
+/// Serialize a host slice of `#[repr(C)]` values into a device `UVec<u8>`.
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) fn slice_to_dev<T>(v: &[T], device: ulib::Device) -> ulib::UVec<u8> {
+    host_bytes_to_dev(pod_slice_bytes(v), device)
+}
+
+/// Build a zeroed host byte buffer for `n_slots` GPU ring-buffer channels of
+/// `slot_size` bytes each, writing `cap` into each channel's `capacity` field
+/// (the u32 at byte offset 4 in `UartChannel` / `WbTraceChannel` /
+/// `BusTraceChannel`). Shared by the UART/WB/bus channel allocations in `new`.
+#[cfg(any(feature = "cuda", feature = "hip"))]
+pub(crate) fn channel_buf(slot_size: usize, n_slots: usize, cap: u32) -> Vec<u8> {
+    let mut b = vec![0u8; n_slots * slot_size];
+    for i in 0..n_slots {
+        b[i * slot_size + 4..i * slot_size + 8].copy_from_slice(&cap.to_ne_bytes());
+    }
+    b
 }
 
 fn write_bus_trace_csv(

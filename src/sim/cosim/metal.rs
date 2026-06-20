@@ -22,8 +22,15 @@ use netlistdb::NetlistDB;
 use ulib::{AsUPtr, Device};
 
 use super::{
-    resolve_signal_pos, run_cosim_generic, BitOp, BusTraceLane, CosimBackend, CosimOpts,
-    CosimResult, FlashDebug, GpioMapping, BATCH_SIZE, MAX_UARTS,
+    build_bus_trace_params, build_wb_trace_params, run_cosim_generic, BitOp, BusTraceLane,
+    CosimBackend, CosimOpts, CosimResult, FlashDebug, GpioMapping, BATCH_SIZE, MAX_UARTS,
+};
+// GPU peripheral `#[repr(C)]` IO structs + constants, lifted to the parent
+// module (gated to GPU builds) so Metal/CUDA/HIP share one ABI (Stage B B0).
+use super::{
+    BusTraceChannel, BusTraceEntry, BusTraceParamsAll, UartChannel, UartDecoderState, UartParams,
+    UartPerChannelConfig, WbTraceChannel, WbTraceEntry, WbTraceParams, BUS_TRACE_CHANNEL_CAP,
+    UART_CHANNEL_CAP, WB_TRACE_CHANNEL_CAP,
 };
 
 // ── Simulation Parameters (must match Metal shader) ──────────────────────────
@@ -97,159 +104,10 @@ struct FlashModelParams {
     flash_data_size: u32,
 }
 
-const UART_CHANNEL_CAP: usize = 4096;
-
-/// GPU-side UART decoder state (must match Metal UartDecoderState).
-#[repr(C)]
-struct UartDecoderState {
-    state: u32, // 0=IDLE, 1=START, 2=DATA, 3=STOP
-    last_tx: u32,
-    start_cycle: u32,
-    bits_received: u32,
-    value: u32,
-    current_cycle: u32,
-}
-
-/// Per-channel config within UartParams (must match Metal UartPerChannelConfig).
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-struct UartPerChannelConfig {
-    tx_out_pos: u32,
-    cycles_per_bit: u32,
-}
-
-/// Parameters for UART in gpu_io_step kernel (must match Metal UartParams).
-#[repr(C)]
-struct UartParams {
-    state_size: u32,
-    n_uarts: u32,
-    _pad: [u32; 2],
-    channels: [UartPerChannelConfig; MAX_UARTS],
-}
-
-/// GPU-side UART channel (must match Metal UartChannel).
-#[repr(C)]
-struct UartChannel {
-    write_head: u32,
-    capacity: u32,
-    _pad: [u32; 2],
-    data: [u8; UART_CHANNEL_CAP],
-}
-
-const WB_TRACE_MAX_ADR_BITS: usize = 30;
-const WB_TRACE_MAX_DAT_BITS: usize = 32;
-const WB_TRACE_CHANNEL_CAP: usize = 16384;
-
-/// Parameters for Wishbone bus trace (must match Metal WbTraceParams).
-#[repr(C)]
-struct WbTraceParams {
-    ibus_cyc_pos: u32,
-    ibus_stb_pos: u32,
-    ibus_adr_pos: [u32; WB_TRACE_MAX_ADR_BITS],
-    ibus_rdata_pos: [u32; WB_TRACE_MAX_DAT_BITS],
-    dbus_cyc_pos: u32,
-    dbus_stb_pos: u32,
-    dbus_we_pos: u32,
-    dbus_adr_pos: [u32; WB_TRACE_MAX_ADR_BITS],
-    spiflash_ack_pos: u32,
-    sram_ack_pos: u32,
-    csr_ack_pos: u32,
-    has_trace: u32,
-}
-
-/// Per-tick bus snapshot (must match Metal WbTraceEntry).
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-struct WbTraceEntry {
-    tick: u32,
-    flags: u32,
-    ibus_adr: u32,
-    ibus_rdata: u32,
-    dbus_adr: u32,
-}
-
-/// GPU→CPU bus trace ring buffer header (must match Metal WbTraceChannel).
-#[repr(C)]
-struct WbTraceChannel {
-    write_head: u32,
-    capacity: u32,
-    current_tick: u32,
-    prev_flags: u32,
-    // entries[capacity] follow in memory
-}
-
-// ── Config-driven AHB/APB bus transaction trace (ADR 0013) ──────────────────
-
-// Bus-trace widths are defined agnostically in the parent module (shared with
-// the CPU backend); re-export under the names the GPU structs use.
-use super::{BUS_TRACE_MAX_ADR_BITS, BUS_TRACE_MAX_DAT_BITS, MAX_BUS_TRACES};
-const BUS_TRACE_CHANNEL_CAP: usize = 16384;
-
-/// Per-bus signal positions (must match Metal BusTraceParams).
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct BusTraceParams {
-    protocol: u32,
-    addr_bits: u32,
-    data_bits: u32,
-    sel_pos: u32,
-    enable_pos: u32,
-    ready_pos: u32,
-    write_pos: u32,
-    resp_pos: u32,
-    addr_pos: [u32; BUS_TRACE_MAX_ADR_BITS],
-    wdata_pos: [u32; BUS_TRACE_MAX_DAT_BITS],
-    rdata_pos: [u32; BUS_TRACE_MAX_DAT_BITS],
-}
-
-impl Default for BusTraceParams {
-    fn default() -> Self {
-        Self {
-            protocol: 0,
-            addr_bits: 0,
-            data_bits: 0,
-            sel_pos: 0xFFFFFFFF,
-            enable_pos: 0xFFFFFFFF,
-            ready_pos: 0xFFFFFFFF,
-            write_pos: 0xFFFFFFFF,
-            resp_pos: 0xFFFFFFFF,
-            addr_pos: [0xFFFFFFFF; BUS_TRACE_MAX_ADR_BITS],
-            wdata_pos: [0xFFFFFFFF; BUS_TRACE_MAX_DAT_BITS],
-            rdata_pos: [0xFFFFFFFF; BUS_TRACE_MAX_DAT_BITS],
-        }
-    }
-}
-
-/// All-bus params block (must match Metal BusTraceParamsAll).
-#[repr(C)]
-struct BusTraceParamsAll {
-    n_buses: u32,
-    _pad: [u32; 3],
-    buses: [BusTraceParams; MAX_BUS_TRACES],
-}
-
-/// Compact raw beat captured by the GPU (must match Metal BusTraceEntry).
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-struct BusTraceEntry {
-    tick: u32,
-    flags: u32,
-    addr: u32,
-    wdata: u32,
-    rdata: u32,
-}
-
-/// GPU→CPU bus trace ring buffer header (must match Metal BusTraceChannel).
-#[repr(C)]
-struct BusTraceChannel {
-    write_head: u32,
-    capacity: u32,
-    current_tick: u32,
-    prev_gate: u32,
-    // entries[capacity] follow in memory
-}
-
-
+// The GPU peripheral `#[repr(C)]` IO structs (UART / Wishbone / AHB-APB bus
+// trace) + their constants live in the parent module (`super::`, gated to GPU
+// builds) so Metal, CUDA, and HIP share one ABI. Imported via the `use super::`
+// block at the top of this file. See `mod.rs` "Shared GPU peripheral ABI".
 
 /// Pre-allocated Metal buffers for each scheduler edge's ops.
 ///
@@ -1001,170 +859,9 @@ impl MetalSimulator {
     }
 }
 
-// ── GPIO ↔ State Buffer Mapping ──────────────────────────────────────────────
-
-/// Resolve a bus signal with bit index, e.g. "ibus__adr" with bit 5 → "ibus__adr[5]".
-fn resolve_bus_signal(
-    aig: &AIG,
-    netlistdb: &NetlistDB,
-    script: &FlattenedScriptV1,
-    base_pattern: &str,
-    bit: usize,
-) -> u32 {
-    let pattern = format!("{}[{}]", base_pattern, bit);
-    resolve_signal_pos(aig, netlistdb, script, &pattern)
-}
-
-/// Build WbTraceParams by resolving all bus signal names to state positions.
-fn build_wb_trace_params(
-    aig: &AIG,
-    netlistdb: &NetlistDB,
-    script: &FlattenedScriptV1,
-) -> WbTraceParams {
-    let mut params = WbTraceParams {
-        ibus_cyc_pos: 0xFFFFFFFF,
-        ibus_stb_pos: 0xFFFFFFFF,
-        ibus_adr_pos: [0xFFFFFFFF; WB_TRACE_MAX_ADR_BITS],
-        ibus_rdata_pos: [0xFFFFFFFF; WB_TRACE_MAX_DAT_BITS],
-        dbus_cyc_pos: 0xFFFFFFFF,
-        dbus_stb_pos: 0xFFFFFFFF,
-        dbus_we_pos: 0xFFFFFFFF,
-        dbus_adr_pos: [0xFFFFFFFF; WB_TRACE_MAX_ADR_BITS],
-        spiflash_ack_pos: 0xFFFFFFFF,
-        sram_ack_pos: 0xFFFFFFFF,
-        csr_ack_pos: 0xFFFFFFFF,
-        has_trace: 0,
-    };
-
-    // ibus (instruction bus)
-    params.ibus_cyc_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.fetch.ibus__cyc");
-    params.ibus_stb_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.fetch.ibus__stb");
-    for i in 0..WB_TRACE_MAX_ADR_BITS {
-        params.ibus_adr_pos[i] =
-            resolve_bus_signal(aig, netlistdb, script, "cpu.fetch.ibus__adr", i);
-    }
-    for i in 0..WB_TRACE_MAX_DAT_BITS {
-        params.ibus_rdata_pos[i] =
-            resolve_bus_signal(aig, netlistdb, script, "cpu.fetch.ibus_rdata", i);
-    }
-
-    // dbus (data bus)
-    params.dbus_cyc_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.loadstore.dbus__cyc");
-    params.dbus_stb_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.loadstore.dbus__stb");
-    params.dbus_we_pos = resolve_signal_pos(aig, netlistdb, script, "cpu.loadstore.dbus__we");
-    for i in 0..WB_TRACE_MAX_ADR_BITS {
-        params.dbus_adr_pos[i] =
-            resolve_bus_signal(aig, netlistdb, script, "cpu.loadstore.dbus__adr", i);
-    }
-
-    // peripheral acks
-    params.spiflash_ack_pos =
-        resolve_signal_pos(aig, netlistdb, script, "spiflash.ctrl.wb_bus__ack");
-    params.sram_ack_pos = resolve_signal_pos(aig, netlistdb, script, "sram.wb_bus__ack");
-    params.csr_ack_pos = resolve_signal_pos(aig, netlistdb, script, "wb_to_csr.wb_bus__ack");
-
-    // Check if we resolved any signals
-    let found = [
-        params.ibus_cyc_pos,
-        params.ibus_stb_pos,
-        params.dbus_cyc_pos,
-    ]
-    .iter()
-    .filter(|&&p| p != 0xFFFFFFFF)
-    .count();
-    if found > 0 {
-        params.has_trace = 1;
-        let ibus_adr_count = params
-            .ibus_adr_pos
-            .iter()
-            .filter(|&&p| p != 0xFFFFFFFF)
-            .count();
-        let ibus_rdata_count = params
-            .ibus_rdata_pos
-            .iter()
-            .filter(|&&p| p != 0xFFFFFFFF)
-            .count();
-        let dbus_adr_count = params
-            .dbus_adr_pos
-            .iter()
-            .filter(|&&p| p != 0xFFFFFFFF)
-            .count();
-        clilog::info!(
-            "WB trace: ibus_cyc={} ibus_stb={} ibus_adr={}/30 ibus_rdata={}/32",
-            params.ibus_cyc_pos != 0xFFFFFFFF,
-            params.ibus_stb_pos != 0xFFFFFFFF,
-            ibus_adr_count,
-            ibus_rdata_count
-        );
-        clilog::info!(
-            "WB trace: dbus_cyc={} dbus_stb={} dbus_we={} dbus_adr={}/30",
-            params.dbus_cyc_pos != 0xFFFFFFFF,
-            params.dbus_stb_pos != 0xFFFFFFFF,
-            params.dbus_we_pos != 0xFFFFFFFF,
-            dbus_adr_count
-        );
-        clilog::info!(
-            "WB trace: spiflash_ack={} sram_ack={} csr_ack={}",
-            params.spiflash_ack_pos != 0xFFFFFFFF,
-            params.sram_ack_pos != 0xFFFFFFFF,
-            params.csr_ack_pos != 0xFFFFFFFF
-        );
-    } else {
-        clilog::info!("WB trace: no bus signals found in netlist, tracing disabled");
-    }
-
-    params
-}
-
-/// Build the bus-trace GPU params block and the parallel CPU decoder
-/// lanes from the configured bus traces. The Vec index of each returned
-/// lane equals the GPU `bus_id` packed into entry flags, so the drain
-/// loop can route each beat to the right decoder.
-///
-/// Only APB3 is wired in Phase 1; AHB-Lite / AHB5 entries are skipped
-/// with a warning (see `docs/plans/bus-transaction-tracing.md`).
-fn build_bus_trace_params(
-    aig: &AIG,
-    netlistdb: &NetlistDB,
-    script: &FlattenedScriptV1,
-    configs: &[crate::testbench::BusTraceConfig],
-) -> (BusTraceParamsAll, Vec<BusTraceLane>) {
-    // Resolve pin positions + build the CPU decoder lanes agnostically (shared
-    // with the CPU backend), then pack the positions field-for-field into the
-    // GPU `BusTraceParams`. The packing below is the *only* GPU-specific step;
-    // the resolve/warn/lane logic lives in `super::build_bus_trace`, so the
-    // GPU struct bytes are unchanged from the pre-extraction inline version.
-    let (positions, lanes) = super::build_bus_trace(aig, netlistdb, script, configs);
-
-    let mut all = BusTraceParamsAll {
-        n_buses: 0,
-        _pad: [0; 3],
-        buses: [BusTraceParams::default(); MAX_BUS_TRACES],
-    };
-    for pos in positions.iter() {
-        // Only APB3 buses reach here (others are skipped in build_bus_trace),
-        // so the GPU `protocol` field is always 0 == BUS_PROTO_APB3.
-        debug_assert!(pos.protocol_apb3);
-        let p = BusTraceParams {
-            protocol: 0,
-            addr_bits: pos.addr_bits as u32,
-            data_bits: pos.data_bits as u32,
-            sel_pos: pos.sel_pos,
-            enable_pos: pos.enable_pos,
-            ready_pos: pos.ready_pos,
-            write_pos: pos.write_pos,
-            resp_pos: pos.resp_pos,
-            addr_pos: pos.addr_pos,
-            wdata_pos: pos.wdata_pos,
-            rdata_pos: pos.rdata_pos,
-        };
-        let idx = all.n_buses as usize;
-        all.buses[idx] = p;
-        all.n_buses += 1;
-    }
-
-    (all, lanes)
-}
+// `resolve_bus_signal`, `build_wb_trace_params`, and `build_bus_trace_params`
+// live in the parent module (`super::`, gated to GPU builds) so Metal and
+// CUDA/HIP share the WB/APB param-resolution logic. Imported via `use super::`.
 
 /// Write decoded bus transactions to a CSV file (ADR 0013). Columns:
 /// `tick,bus,protocol,dir,addr,data,resp,burst`. Addresses and data are

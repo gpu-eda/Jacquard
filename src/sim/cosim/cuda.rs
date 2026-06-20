@@ -1,24 +1,34 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-//! CUDA GPU backend for co-simulation (Stage A — design step only, no
+//! CUDA GPU backend for co-simulation (Stage B — design step + GPU UART/bus
 //! peripherals): `CudaBackend` + the `run_cosim_cuda` shim. Gated
 //! `#[cfg(feature = "cuda")]` via the `mod cuda;` declaration in the parent.
 //!
-//! `CudaBackend` is `CpuBackend` (see `mod.rs`) with three changes:
-//!   1. State/SRAM storage is device-resident `UVec<u32>` instead of `Vec<u32>`.
-//!   2. `run_edges` runs the design step on the GPU via the `cosim_state_prep` /
-//!      `cosim_simulate_stage` launchers (one launch per stage, host-driven
-//!      major-stage loop) instead of `cpu_reference::simulate_block_v1`.
-//!   3. Stage A carries NO peripherals: the UART/bus/flash decode methods are
-//!      contract stubs (empty drains, idle MISO nibble, zeroed FlashDebug).
+//! `CudaBackend` mirrors `MetalBackend`:
+//!   1. State/SRAM/IO storage is device-resident `UVec` instead of `metal::Buffer`.
+//!   2. `run_edges` runs a *batched* launch — all edges' kernels enqueued on the
+//!      default stream with a single end-of-batch `synchronize()` (mirrors
+//!      Metal's `encode_and_commit_gpu_batch`), not a per-edge sync. Per edge:
+//!      `cosim_state_prep` → `cosim_simulate_stage × num_major_stages` →
+//!      `gpu_io_step` (UART + bus capture) → `cosim_snapshot` (VCD ring).
+//!   3. UART/bus peripherals run on the GPU (`gpu_io_step`); `drain_uart_tx` /
+//!      `drain_bus_beats` read the device ring buffers. Flash is still a Stage-C
+//!      stub (idle MISO, zeroed FlashDebug).
+//!
+//! Batching note: the per-edge ops buffers are pre-uploaded once and cached
+//! (`ops_uvecs`), re-uploaded only when `edge_ops_mut` marks them dirty (the
+//! reset stimulus, once). This avoids a blocking host→device copy per edge —
+//! ulib's CUDA H2D path (`cust` `copy_from`) is synchronous, so re-uploading
+//! fresh ops each edge would serialise the batch. Mirrors Metal's
+//! build-schedule-once `ScheduleBuffers`.
 //!
 //! The backend keeps the `UnsafeCell` interior-mutability pattern from
 //! CpuBackend so `run_edges(&self)` can mutate its device buffers; cosim
 //! dispatch is strictly sequential, so no concurrent borrow ever exists.
 //!
-//! Backend-agnostic items (`CosimBackend`, `BitOp`, `FlashDebug`,
-//! `BusTraceLane`, `run_cosim_generic`, `build_bus_trace`, the GPIO/flash
-//! const-param helpers) are imported from the parent via `super::`.
+//! IO `#[repr(C)]` structs cross the FFI as untyped `UVec<u8>` byte buffers
+//! (the event-buffer pattern): ulib `UVec<T>` requires `T: UniversalCopy`, which
+//! the IO structs are not, so the launchers take `u8*` and cast.
 
 use std::cell::UnsafeCell;
 
@@ -31,15 +41,16 @@ use crate::testbench::TestbenchConfig;
 use netlistdb::NetlistDB;
 
 use super::{
-    build_bus_trace, run_cosim_generic, BitOp, BusTraceLane, CosimBackend, CosimOpts, CosimResult,
-    FlashDebug, GpioMapping,
+    build_bus_trace_params, build_wb_trace_params, channel_buf, host_bytes_to_dev, rd_u32,
+    run_cosim_generic, slice_to_dev, struct_to_dev, BitOp, BusTraceEntry, BusTraceLane,
+    CosimBackend, CosimOpts, CosimResult, FlashDebug, GpioMapping, UartChannel, UartDecoderState,
+    UartParams, UartPerChannelConfig, WbTraceEntry, BUS_TRACE_CHANNEL_CAP, MAX_UARTS,
+    UART_CHANNEL_CAP, WB_TRACE_CHANNEL_CAP,
 };
 
-// ucc-generated universal bindings for the cosim launchers in `csrc/kernel_v1.cu`
-// (`cosim_state_prep_cuda` → `cosim_state_prep`, `cosim_simulate_stage_cuda` →
-// `cosim_simulate_stage`; ucc strips the `_cuda` suffix and appends a trailing
-// `device: ulib::Device` arg). Same include pattern as `sim_cuda` in
-// `src/bin/jacquard.rs`.
+// ucc-generated universal bindings for the launchers in `csrc/kernel_v1.cu`
+// (`*_cuda` suffix stripped; a trailing `device: ulib::Device` arg appended).
+// Same include pattern as `sim_cuda` in `src/bin/jacquard.rs`.
 mod ucci {
     include!(concat!(env!("OUT_DIR"), "/uccbind/kernel_v1.rs"));
 }
@@ -47,7 +58,7 @@ mod ucci {
 /// The CUDA device this backend runs on. Single-GPU like `sim_cuda`.
 const DEVICE: Device = Device::CUDA(0);
 
-/// CUDA cosim backend — design step on the GPU, no peripherals (Stage A).
+/// CUDA cosim backend — design step + GPU UART/bus peripherals (Stage B).
 struct CudaBackend {
     /// Full design state `[input_state | output_state]`, `2 × state_size`
     /// words, device-resident. `state_prep` reads the output slot and writes
@@ -58,20 +69,23 @@ struct CudaBackend {
     /// returns the `[..sram_len]` view. Device-resident.
     sram: UnsafeCell<UVec<u32>>,
     /// SRAM X-mask shadow (xprop); sized like `sram` when xprop is on, else 1.
-    /// Device-resident. (Stage A asserts `!(xprop && sram>0)`, so a real SRAM
-    /// X-mask is never exercised; carried for layout parity with `sim_cuda`.)
     sram_xmask: UnsafeCell<UVec<u32>>,
-    /// Per-edge schedule: one `Vec<BitOp>` per scheduler edge (host-resident;
-    /// each edge's ops are uploaded as a fresh UVec at launch time).
+    /// Per-edge schedule (host source of truth): one `Vec<BitOp>` per edge.
     schedule: Vec<Vec<BitOp>>,
+    /// Cached device ops buffers, one per scheduler edge — pre-uploaded so the
+    /// batch runs without a per-edge blocking H2D. Rebuilt lazily in `run_edges`
+    /// when the matching `ops_dirty` flag is set (by `edge_ops_mut`).
+    ops_uvecs: UnsafeCell<Vec<UVec<u32>>>,
+    /// Per-edge dirty flags; `edge_ops_mut` sets one, `run_edges` clears it
+    /// after re-uploading. All true after `init_schedule` (lazy first upload).
+    ops_dirty: UnsafeCell<Vec<bool>>,
     edges_per_period: usize,
     gcd_ps: u64,
     /// Words per state slot (`effective_state_size()`).
     state_size: usize,
     /// True SRAM word count (`sram_storage_size`); `sram()` view length.
     sram_len: usize,
-    /// Device-resident block program (copied from `script`), passed to every
-    /// `simulate_stage` launch. `blocks_start` indexes per `(stage, block)`.
+    /// Device-resident block program (copied from `script`).
     blocks_start: UVec<usize>,
     blocks_data: UVec<u32>,
     num_blocks: usize,
@@ -79,12 +93,36 @@ struct CudaBackend {
     /// X-mask word offset within a slot (`reg_io_state_size` when xprop on,
     /// else 0). Mirrors the GPU `state_prep` `xmask_state_offset` sentinel.
     xmask_state_offset: usize,
-    /// Flash reset line (logic fixtures have no flash; carried for the
-    /// contract, no effect in Stage A).
+    /// Flash reset line (Stage C; no effect in Stage B — no flash kernels).
     flash_in_reset: bool,
-    /// Per-edge `[input | output]` host snapshots for the most recent
-    /// `run_edges`, one slot per edge in the batch (N=1 per edge). `None`
-    /// until enabled. Read back from the device after each edge's synchronize.
+    // ── GPU peripheral IO buffers (Stage B), device-resident `UVec<u8>` ──────
+    /// `UartDecoderState[MAX_UARTS]`, persistent across edges.
+    uart_state: UnsafeCell<UVec<u8>>,
+    /// `UartParams` (const after `new`).
+    uart_params: UVec<u8>,
+    /// `UartChannel[MAX_UARTS]` byte ring buffers (GPU writes, host drains).
+    uart_channel: UnsafeCell<UVec<u8>>,
+    /// `WbTraceParams` (const after `new`).
+    wb_params: UVec<u8>,
+    /// `WbTraceChannel` header + entries (legacy Wishbone; no Stage-B fixture).
+    wb_channel: UnsafeCell<UVec<u8>>,
+    /// `BusTraceParamsAll` (const after `new`).
+    bus_params: UVec<u8>,
+    /// `BusTraceChannel` header + entries (AHB/APB, GPU writes, host drains).
+    bus_channel: UnsafeCell<UVec<u8>>,
+    /// Number of active UART channels (`uart_configs.len()`).
+    n_uarts: usize,
+    /// Per-UART ring read cursors; `drain_uart_tx` advances each to `write_head`.
+    uart_read_heads: Vec<u32>,
+    /// AHB/APB bus-trace ring read cursor.
+    bus_trace_read_head: u32,
+    /// Device-resident VCD snapshot ring (`batch × 2×state_size` u32s); each
+    /// edge's `[input|output]` slot is copied here by `cosim_snapshot`. Grown
+    /// lazily to the largest batch seen.
+    vcd_ring_dev: UnsafeCell<UVec<u32>>,
+    /// Host-side per-edge `[input | output]` snapshots for the most recent
+    /// `run_edges`, read back from `vcd_ring_dev` after the batch sync. `None`
+    /// until `enable_vcd_ring`.
     vcd_ring: UnsafeCell<Option<Vec<Vec<u32>>>>,
     enable_vcd: bool,
 }
@@ -104,35 +142,34 @@ impl CosimBackend for CudaBackend {
         netlistdb: &NetlistDB,
         script: &FlattenedScriptV1,
         config: &TestbenchConfig,
-        _gpio_map: &GpioMapping,
-        _uart_configs: &[(String, usize, usize, u32)],
-        _sched_ticks_per_sys_clk_cycle: u64,
+        gpio_map: &GpioMapping,
+        uart_configs: &[(String, usize, usize, u32)],
+        sched_ticks_per_sys_clk_cycle: u64,
         state_size: usize,
         num_blocks: usize,
         num_major_stages: usize,
         _arrival_state_offset: u32,
         _timing_constraints: &Option<Vec<u32>>,
     ) -> (Self, Vec<BusTraceLane>) {
-        // Stage A scope guards (mirror CpuBackend): timed cosim rides the GPU
+        // Stage B scope guards (mirror CpuBackend): timed cosim rides the GPU
         // arrival ring (not wired here), and the shared `simulate_block_v1`
         // path the cosim stage kernel calls would read SRAM as always-known
         // under xprop without a real SRAM X-mask exercise.
         assert!(
             !script.timing_arrivals_enabled,
-            "CudaBackend: timed cosim not supported (Stage A) — arrival readback \
-             rides the GPU ring; use the Metal backend for --timing-vcd cosim."
+            "CudaBackend: timed cosim not supported — arrival readback rides the \
+             GPU ring; use the Metal backend for --timing-vcd cosim."
         );
         assert!(
             !(script.xprop_enabled && script.sram_storage_size > 0),
-            "CudaBackend: --xprop with SRAM not supported (Stage A) — the cosim \
-             stage kernel has no SRAM X-mask exercise, so SRAM cells would read \
-             as always-known; use the Metal backend."
+            "CudaBackend: --xprop with SRAM not supported — the cosim stage \
+             kernel has no SRAM X-mask exercise, so SRAM cells would read as \
+             always-known; use the Metal backend."
         );
 
         // Design state: [input | output], zeroed, with the xprop X-mask seed
         // mirroring CpuBackend::new / build_state_buffers (both slots seeded so
-        // edge-0 state_prep's output→input copy doesn't wipe the seed). Built
-        // on the host, then uploaded as a device-resident UVec.
+        // edge-0 state_prep's output→input copy doesn't wipe the seed).
         let mut state = vec![0u32; 2 * state_size];
         if script.xprop_enabled {
             let rio = script.reg_io_state_size as usize;
@@ -147,8 +184,7 @@ impl CosimBackend for CudaBackend {
         }
         let mut state_uvec: UVec<u32> = state.into();
         // Force the device copy to materialise up front (mirrors `sim_cuda`'s
-        // `input_states_uvec.as_mut_uptr(device)`); all subsequent launches
-        // share this device buffer.
+        // `input_states_uvec.as_mut_uptr(device)`); all launches share it.
         state_uvec.as_mut_uptr(DEVICE);
 
         // SRAM backing store (sized max(1) like Metal; sliced to the real len).
@@ -205,22 +241,82 @@ impl CosimBackend for CudaBackend {
 
         // Device-resident block program (copied from `script` so the backend
         // owns its storage). Materialise the device copies up front.
-        let mut blocks_start: UVec<usize> = script.blocks_start.iter().copied().collect::<Vec<_>>().into();
+        let mut blocks_start: UVec<usize> =
+            script.blocks_start.iter().copied().collect::<Vec<_>>().into();
         blocks_start.as_mut_uptr(DEVICE);
-        let mut blocks_data: UVec<u32> = script.blocks_data.iter().copied().collect::<Vec<_>>().into();
+        let mut blocks_data: UVec<u32> =
+            script.blocks_data.iter().copied().collect::<Vec<_>>().into();
         blocks_data.as_mut_uptr(DEVICE);
 
-        // Stage A has no peripherals: still resolve bus-trace lanes so the
-        // orchestration's CSV path stays wired (the GPU decode is a no-op here;
-        // `drain_bus_beats` returns empty). The CPU lanes are owned by Layer 1.
-        let (_bus_positions, bus_lanes) =
-            build_bus_trace(aig, netlistdb, script, config.effective_bus_traces());
+        // ── GPU peripheral IO buffers (mirror MetalBackend::build_io_buffers) ──
+        let n_uarts = uart_configs.len();
+
+        // UartDecoderState[MAX_UARTS] — IDLE, TX line idle high (last_tx = 1).
+        let uart_decoder_states: Vec<UartDecoderState> = (0..MAX_UARTS)
+            .map(|_| UartDecoderState {
+                state: 0,
+                last_tx: 1,
+                start_cycle: 0,
+                bits_received: 0,
+                value: 0,
+                current_cycle: 0,
+            })
+            .collect();
+        let uart_state = slice_to_dev(&uart_decoder_states, DEVICE);
+
+        // UartParams (const). cycles_per_bit counts scheduler edges (not clock
+        // cycles), mirroring build_io_buffers.
+        let mut up = UartParams {
+            state_size: state_size as u32,
+            n_uarts: n_uarts as u32,
+            _pad: [0; 2],
+            channels: [UartPerChannelConfig::default(); MAX_UARTS],
+        };
+        for (i, (_, tx_gpio, _, cpb)) in uart_configs.iter().enumerate() {
+            up.channels[i].tx_out_pos = gpio_map.output_bits.get(tx_gpio).copied().unwrap_or(0);
+            up.channels[i].cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle as u32;
+        }
+        let uart_params = struct_to_dev(&up, DEVICE);
+
+        // UartChannel[MAX_UARTS] — zeroed header with capacity set per channel.
+        let uart_channel = host_bytes_to_dev(
+            channel_buf(std::mem::size_of::<UartChannel>(), MAX_UARTS, UART_CHANNEL_CAP as u32),
+            DEVICE,
+        );
+
+        // WbTraceParams (const) + WbTraceChannel (header + entries). No Stage-B
+        // fixture exercises WB, but the kernel binds the buffers unconditionally.
+        let wb = build_wb_trace_params(aig, netlistdb, script);
+        let wb_params = struct_to_dev(&wb, DEVICE);
+        let wb_channel = host_bytes_to_dev(
+            channel_buf(
+                16 + WB_TRACE_CHANNEL_CAP * std::mem::size_of::<WbTraceEntry>(),
+                1,
+                WB_TRACE_CHANNEL_CAP as u32,
+            ),
+            DEVICE,
+        );
+
+        // BusTraceParamsAll (const) + BusTraceChannel + CPU decoder lanes.
+        let (bus_all, bus_lanes) =
+            build_bus_trace_params(aig, netlistdb, script, config.effective_bus_traces());
+        let bus_params = struct_to_dev(&bus_all, DEVICE);
+        let bus_channel = host_bytes_to_dev(
+            channel_buf(
+                16 + BUS_TRACE_CHANNEL_CAP * std::mem::size_of::<BusTraceEntry>(),
+                1,
+                BUS_TRACE_CHANNEL_CAP as u32,
+            ),
+            DEVICE,
+        );
 
         let backend = CudaBackend {
             state: UnsafeCell::new(state_uvec),
             sram: UnsafeCell::new(sram_uvec),
             sram_xmask: UnsafeCell::new(sram_xmask_uvec),
             schedule: Vec::new(),
+            ops_uvecs: UnsafeCell::new(Vec::new()),
+            ops_dirty: UnsafeCell::new(Vec::new()),
             edges_per_period: 0,
             gcd_ps: 0,
             state_size,
@@ -231,6 +327,17 @@ impl CosimBackend for CudaBackend {
             num_major_stages,
             xmask_state_offset: 0,
             flash_in_reset: false,
+            uart_state: UnsafeCell::new(uart_state),
+            uart_params,
+            uart_channel: UnsafeCell::new(uart_channel),
+            wb_params,
+            wb_channel: UnsafeCell::new(wb_channel),
+            bus_params,
+            bus_channel: UnsafeCell::new(bus_channel),
+            n_uarts,
+            uart_read_heads: vec![0u32; n_uarts],
+            bus_trace_read_head: 0,
+            vcd_ring_dev: UnsafeCell::new(UVec::default()),
             vcd_ring: UnsafeCell::new(None),
             enable_vcd: false,
         };
@@ -244,14 +351,21 @@ impl CosimBackend for CudaBackend {
         xmask_state_offset: u32,
         gcd_ps: u64,
     ) {
-        self.edges_per_period = per_edge_ops.len();
+        let n = per_edge_ops.len();
+        self.edges_per_period = n;
         self.schedule = per_edge_ops;
         self.gcd_ps = gcd_ps;
         self.xmask_state_offset = xmask_state_offset as usize;
+        // Pre-size the device ops cache; all dirty so the first run_edges
+        // uploads each edge's (post-reset-patch) ops exactly once.
+        *self.ops_uvecs.get_mut() = (0..n).map(|_| UVec::default()).collect();
+        *self.ops_dirty.get_mut() = vec![true; n];
     }
 
     #[inline]
     fn edge_ops_mut(&mut self, edge_idx: usize) -> &mut [BitOp] {
+        // Mutating the host ops invalidates the cached device copy.
+        self.ops_dirty.get_mut()[edge_idx] = true;
         &mut self.schedule[edge_idx]
     }
     #[inline]
@@ -269,8 +383,7 @@ impl CosimBackend for CudaBackend {
 
     fn state(&self) -> &[u32] {
         // SAFETY: sequential dispatch. After `run_edges` the device buffer was
-        // synchronized and read back to host; before any launch the host copy
-        // is authoritative. Indexing a UVec returns the host-visible slice.
+        // synchronized; indexing a UVec returns the host-visible slice (D2H).
         let state: &UVec<u32> = unsafe { &*self.state.get() };
         &state[..]
     }
@@ -291,7 +404,6 @@ impl CosimBackend for CudaBackend {
 
     fn enable_vcd_ring(&mut self) {
         self.enable_vcd = true;
-        // Lazily fill on first run_edges; N=1 → one slot per edge.
         *self.vcd_ring.get_mut() = Some(Vec::new());
     }
 
@@ -304,13 +416,12 @@ impl CosimBackend for CudaBackend {
     }
 
     fn flash_d_i(&self) -> u8 {
-        // Stage A has no flash; idle MISO nibble is all-high (matches CpuBackend).
+        // Stage B has no flash; idle MISO nibble is all-high (matches CpuBackend).
         0x0F
     }
 
     fn flash_debug_snapshot(&self) -> FlashDebug {
-        // No flash FSM on the Stage A GPU design path; report a zeroed snapshot
-        // (matches CpuBackend).
+        // No flash FSM on the Stage B GPU design path; report a zeroed snapshot.
         FlashDebug {
             d_i: 0x0F,
             data_width: 0,
@@ -330,73 +441,115 @@ impl CosimBackend for CudaBackend {
     }
 
     fn drain_uart_tx(&mut self) -> Vec<(usize, u8)> {
-        // Stage A: no peripherals — nothing decoded.
-        vec![]
+        let mut out = Vec::new();
+        let ch = self.uart_channel.get_mut();
+        // Indexing forces the device→host copy of the post-batch ring.
+        let bytes = &ch[..];
+        let sz = std::mem::size_of::<UartChannel>();
+        for i in 0..self.n_uarts {
+            let base = i * sz;
+            let write_head = rd_u32(bytes, base);
+            let cap = rd_u32(bytes, base + 4);
+            while self.uart_read_heads[i] < write_head {
+                // data[] starts at byte offset 16 within each UartChannel.
+                let data_off = base + 16 + (self.uart_read_heads[i] % cap) as usize;
+                out.push((i, bytes[data_off]));
+                self.uart_read_heads[i] += 1;
+            }
+        }
+        out
     }
 
     fn drain_bus_beats(&mut self) -> Vec<crate::sim::models::bus_trace::RawBeat> {
-        // Stage A: no peripherals — nothing decoded.
-        vec![]
+        use crate::sim::models::bus_trace::RawBeat;
+        let mut out = Vec::new();
+        let ch = self.bus_channel.get_mut();
+        let bytes = &ch[..];
+        // BusTraceChannel header: write_head(0), capacity(4); entries at 16.
+        let write_head = rd_u32(bytes, 0);
+        let cap = rd_u32(bytes, 4);
+        let esz = std::mem::size_of::<BusTraceEntry>();
+        while self.bus_trace_read_head < write_head {
+            let idx = (self.bus_trace_read_head % cap) as usize;
+            let eoff = 16 + idx * esz;
+            // BusTraceEntry: tick(0), flags(4), addr(8), wdata(12), rdata(16).
+            let tick = rd_u32(bytes, eoff);
+            let flags = rd_u32(bytes, eoff + 4);
+            let addr = rd_u32(bytes, eoff + 8);
+            let wdata = rd_u32(bytes, eoff + 12);
+            let rdata = rd_u32(bytes, eoff + 16);
+            let bus_id = (flags >> 8) & 0xFF;
+            out.push(RawBeat {
+                tick: tick as u64,
+                bus_id,
+                write: (flags & 1) != 0,
+                err: (flags >> 1) & 1 != 0,
+                addr: addr as u64,
+                wdata: wdata as u64,
+                rdata: rdata as u64,
+            });
+            self.bus_trace_read_head += 1;
+        }
+        out
     }
 
     fn run_edges(&self, batch: usize, schedule_offset: usize) -> u64 {
         let state_size = self.state_size;
+        let two_slot = 2 * state_size;
         let state = self.state_inner_mut();
-        // SAFETY: sequential dispatch — sram/sram_xmask/vcd_ring are only
-        // touched here and in &mut-self methods, never concurrently.
+        // SAFETY: sequential dispatch — these buffers are only touched here and
+        // in &mut-self methods, never concurrently.
         let sram = unsafe { &mut *self.sram.get() };
         let sram_xmask = unsafe { &mut *self.sram_xmask.get() };
-        let ring = unsafe { &mut *self.vcd_ring.get() };
-
-        if let Some(r) = ring.as_mut() {
-            r.clear();
-        }
+        let ring_host = unsafe { &mut *self.vcd_ring.get() };
+        let ops_uvecs = unsafe { &mut *self.ops_uvecs.get() };
+        let ops_dirty = unsafe { &mut *self.ops_dirty.get() };
+        let uart_state = unsafe { &mut *self.uart_state.get() };
+        let uart_channel = unsafe { &mut *self.uart_channel.get() };
+        let wb_channel = unsafe { &mut *self.wb_channel.get() };
+        let bus_channel = unsafe { &mut *self.bus_channel.get() };
+        let vcd_dev = unsafe { &mut *self.vcd_ring_dev.get() };
 
         let xmask_off = self.xmask_state_offset as u32;
+
+        // Grow the VCD device ring to hold this batch's per-edge snapshots.
+        if self.enable_vcd && vcd_dev.len() < batch * two_slot {
+            *vcd_dev = UVec::<u32>::new_zeroed(batch * two_slot, DEVICE);
+        }
 
         for e in 0..batch {
             let sched_idx = (schedule_offset + e) % self.edges_per_period;
 
-            // ── GPU state_prep (kernel `cosim_state_prep`) ─────────────────
-            // Copies output slot → input slot, then applies this edge's BitOps
-            // to the input slot (driving a bit clears its X-mask when
-            // `xmask_off != 0`). Build a flat u32 ops UVec from the edge's
-            // BitOps: BitOp is `#[repr(C)] { position: u32, value: u32 }`, so a
-            // `&[BitOp]` reinterprets as `&[u32]` of length `2 * num_ops`
-            // (position, value pairs) — exactly what the kernel expects.
-            let ops = &self.schedule[sched_idx];
-            let num_ops = ops.len() as u32;
-            let ops_flat: Vec<u32> = {
-                // SAFETY: BitOp is #[repr(C)] of two u32 fields, so the slice
-                // reinterprets bit-for-bit as 2*len u32s.
-                let raw = unsafe {
+            // (Re)upload this edge's ops to the device only if dirty — a
+            // one-time cost after the reset patch, so the batch stays async.
+            if ops_dirty[sched_idx] {
+                let ops = &self.schedule[sched_idx];
+                // SAFETY: BitOp is #[repr(C)] of two u32 fields → 2*len u32s.
+                let flat: Vec<u32> = unsafe {
                     std::slice::from_raw_parts(ops.as_ptr() as *const u32, ops.len() * 2)
-                };
-                raw.to_vec()
-            };
-            let mut ops_uvec: UVec<u32> = ops_flat.into();
+                }
+                .to_vec();
+                let mut u: UVec<u32> = flat.into();
+                u.as_mut_uptr(DEVICE);
+                ops_uvecs[sched_idx] = u;
+                ops_dirty[sched_idx] = false;
+            }
+            let num_ops = self.schedule[sched_idx].len() as u32;
 
+            // ── GPU state_prep ─────────────────────────────────────────────
             ucci::cosim_state_prep(
                 &mut *state,
                 state_size as u32,
                 num_ops,
                 xmask_off,
-                &mut ops_uvec,
+                &mut ops_uvecs[sched_idx],
                 DEVICE,
             );
 
-            // ── Simulate every major stage for this edge ───────────────────
-            // One launch per stage; the host drives the major-stage loop (the
-            // cosim launchers are non-cooperative). Timing is OFF in Stage A:
-            // pass null `timing_constraints` / `event_buffer` (the kernel
-            // checks `timing_constraints != nullptr` internally) and
-            // `arrival_state_offset = 0`. The whole `states` slot is passed
-            // (not split value/xmask) — the shared `simulate_block_v1` handles
-            // xprop via the packed slot + `sram_xmask`, mirroring `sim_cuda`.
+            // ── Simulate every major stage (timing OFF in cosim Stage B) ────
             for stage in 0..self.num_major_stages {
-                // SAFETY: NullUPtr yields a null device pointer for both the
-                // const and mut argument positions; the kernel treats a null
-                // `timing_constraints` as "timing off".
+                // SAFETY: NullUPtr yields a null device pointer; the kernel
+                // treats a null `timing_constraints` as "timing off".
                 let tc_null = unsafe { NullUPtr::new_ref() };
                 let ev_null = unsafe { NullUPtr::new_mut() };
                 ucci::cosim_simulate_stage(
@@ -415,33 +568,53 @@ impl CosimBackend for CudaBackend {
                 );
             }
 
-            // Ensure this edge's output slot is ready on the device before the
-            // next edge's state_prep reads it (and before any host read-back).
-            DEVICE.synchronize();
+            // ── GPU peripherals: UART + bus capture for this edge ───────────
+            ucci::gpu_io_step(
+                &mut *state,
+                &mut *uart_state,
+                &self.uart_params,
+                &mut *uart_channel,
+                &mut *wb_channel,
+                &self.wb_params,
+                &mut *bus_channel,
+                &self.bus_params,
+                DEVICE,
+            );
 
-            // ── VCD snapshot: full [input | output] slot for this edge ─────
-            // Read the device buffer back to host (synchronize above guarantees
-            // it is complete) and stash a host copy in the ring.
+            // ── VCD snapshot: copy this edge's [input|output] slot into the
+            // device ring (so it survives the next edge overwriting `state`).
             if self.enable_vcd {
-                if let Some(r) = ring.as_mut() {
-                    r.push(state[..].to_vec());
+                ucci::cosim_snapshot(&*state, &mut *vcd_dev, two_slot, e, DEVICE);
+            }
+        }
+
+        // Single end-of-batch barrier (mirrors Metal's one signal/commit).
+        DEVICE.synchronize();
+
+        // Read the device ring back once (D2H) and slice into per-edge host
+        // snapshots for `vcd_snapshot`.
+        if self.enable_vcd {
+            if let Some(r) = ring_host.as_mut() {
+                r.clear();
+                let host = &vcd_dev[..batch * two_slot];
+                for e in 0..batch {
+                    r.push(host[e * two_slot..(e + 1) * two_slot].to_vec());
                 }
             }
         }
 
-        // The device was synchronized inline per edge, so `wait` is a no-op and
-        // the token is unused (mirrors CpuBackend).
+        // The device was synchronized inline; `wait` is a no-op, token unused.
         0
     }
 
     fn wait(&self, _token: u64) {
-        // run_edges synchronizes inline per edge; nothing left to await.
+        // run_edges synchronizes at end-of-batch; nothing left to await.
     }
 }
 
-/// Public CUDA-backend cosim entry point (Stage A). Drives the same agnostic
+/// Public CUDA-backend cosim entry point (Stage B). Drives the same agnostic
 /// `run_cosim_generic<B>` orchestration as the Metal/CPU shims, with the CUDA
-/// design-step backend. Gated `#[cfg(feature = "cuda")]`.
+/// GPU backend. Gated `#[cfg(feature = "cuda")]`.
 pub fn run_cosim_cuda(
     design: &mut LoadedDesign,
     config: &TestbenchConfig,
