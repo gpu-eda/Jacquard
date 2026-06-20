@@ -102,6 +102,15 @@ jobs:
       - name: Run cosim CpuBackend regression
         run: bash scripts/ci/cosim_cpu_check.sh
 
+      # Phase 2 Stage C (#105): the mcu_soc flash cosim. Separate step/scope
+      # because the 19.6 MB netlist costs ~40s of partitioning per run — kept
+      # out of the fast `all` fixtures. The committed golden was captured on
+      # CpuBackend and is byte-identical to the Metal flash kernel (C2), so this
+      # locks in CpuBackend flash regression on the no-GPU runner.
+      - name: Run cosim CpuBackend flash regression (Stage C, #105)
+        run: |
+          COSIM_SCOPE=flash bash scripts/ci/cosim_cpu_check.sh
+
   # opensta-to-ir crate is outside the root workspace; the unit-tests job
   # above only covers `cargo test --lib`, so the corpus regression test
   # (WS4), the CLI tests, and the OpenSTA-driven integration tests need a
@@ -583,6 +592,16 @@ jobs:
           JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=all \
             bash scripts/ci/cosim_cpu_check.sh
 
+      # Phase 2 Stage C (#105): the mcu_soc flash cosim on the CUDA backend vs
+      # the committed CpuBackend golden (== Metal flash kernel, C2). Separate
+      # scope because the 19.6 MB netlist costs ~40s of partitioning per run —
+      # kept out of `all`; 10k edges is the minimal run that still reaches a real
+      # flash read (cmd 0x03 @ 0x100000). Gates the CUDA flash kernels (C3).
+      - name: Run CUDA cosim — flash (Stage C, #105)
+        run: |
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=flash \
+            bash scripts/ci/cosim_cpu_check.sh
+
       - name: Upload CUDA artifacts
         uses: actions/upload-artifact@v7
         if: always()
@@ -736,6 +755,14 @@ jobs:
       - name: Run HIP cosim — logic + UART/bus (Stage B, #105)
         run: |
           JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=all \
+            bash scripts/ci/cosim_cpu_check.sh
+
+      # Phase 2 Stage C (#105): mcu_soc flash cosim on the HIP backend vs the
+      # committed CpuBackend golden (see the CUDA step for rationale). Gates the
+      # HIP flash kernels (C3); ~40s partitioning, 10k edges.
+      - name: Run HIP cosim — flash (Stage C, #105)
+        run: |
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=flash \
             bash scripts/ci/cosim_cpu_check.sh
 
       - name: Upload HIP artifacts
