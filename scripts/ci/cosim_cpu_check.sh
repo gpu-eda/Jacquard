@@ -18,9 +18,13 @@
 #   JACQUARD_BIN   path to the jacquard binary (default target/release/jacquard)
 #   COSIM_SCOPE    `all` (default) runs all 7 fixtures (4 xprop_cosim + dual_uart
 #                  + apb_trace ±xprop); `logic` runs only the 4 peripheral-free
-#                  xprop_cosim fixtures. `logic` validates the design step alone
-#                  for a backend before its GPU UART/bus peripherals land (CUDA/
-#                  HIP used it for Phase 2 Stage A; Stage B uses `all`).
+#                  xprop_cosim fixtures; `flash` runs only the mcu_soc flash
+#                  fixture. `logic` validates the design step alone for a backend
+#                  before its GPU UART/bus peripherals land (CUDA/HIP used it for
+#                  Phase 2 Stage A; Stage B uses `all`). `flash` is a separate
+#                  opt-in scope because the 19.6 MB mcu_soc netlist costs ~40s of
+#                  partitioning per run — kept out of `all` so the fast UART/bus
+#                  fixtures aren't slowed (Stage C, #105).
 set -euo pipefail
 
 BIN="${JACQUARD_BIN:-target/release/jacquard}"
@@ -31,8 +35,8 @@ if [ ! -x "$BIN" ]; then
     exit 2
 fi
 case "$SCOPE" in
-    all|logic) ;;
-    *) echo "error: COSIM_SCOPE must be 'all' or 'logic' (got '$SCOPE')" >&2; exit 2 ;;
+    all|logic|flash) ;;
+    *) echo "error: COSIM_SCOPE must be 'all', 'logic', or 'flash' (got '$SCOPE')" >&2; exit 2 ;;
 esac
 
 OUT="$(mktemp -d)"
@@ -72,25 +76,28 @@ check() {
 }
 
 # --- xprop_cosim: xprop / 2state / reg-init variants (peripheral-free) ----
-run xprop_xprop "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
-    --config tests/xprop_cosim/sim_config.json --top-module xprop_demo \
-    --max-clock-edges 40 --xprop --output-vcd "$OUT/xprop.vcd" || true
-check xprop "$OUT/xprop.vcd" tests/xprop_cosim/expected/xprop.vcd
+# `all` and `logic` run these; `flash` skips straight to the mcu_soc fixture.
+if [ "$SCOPE" != flash ]; then
+    run xprop_xprop "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
+        --config tests/xprop_cosim/sim_config.json --top-module xprop_demo \
+        --max-clock-edges 40 --xprop --output-vcd "$OUT/xprop.vcd" || true
+    check xprop "$OUT/xprop.vcd" tests/xprop_cosim/expected/xprop.vcd
 
-run xprop_2state "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
-    --config tests/xprop_cosim/sim_config.json --top-module xprop_demo \
-    --max-clock-edges 40 --output-vcd "$OUT/2state.vcd" || true
-check 2state "$OUT/2state.vcd" tests/xprop_cosim/expected/2state.vcd
+    run xprop_2state "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
+        --config tests/xprop_cosim/sim_config.json --top-module xprop_demo \
+        --max-clock-edges 40 --output-vcd "$OUT/2state.vcd" || true
+    check 2state "$OUT/2state.vcd" tests/xprop_cosim/expected/2state.vcd
 
-run xprop_noreg "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
-    --config tests/xprop_cosim/sim_config.json \
-    --output-vcd "$OUT/noreginit.vcd" --max-clock-edges 100 || true
-check noreginit "$OUT/noreginit.vcd" tests/xprop_cosim/expected/noreginit.vcd
+    run xprop_noreg "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
+        --config tests/xprop_cosim/sim_config.json \
+        --output-vcd "$OUT/noreginit.vcd" --max-clock-edges 100 || true
+    check noreginit "$OUT/noreginit.vcd" tests/xprop_cosim/expected/noreginit.vcd
 
-run xprop_reg "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
-    --config tests/xprop_cosim/sim_config_reginit.json \
-    --output-vcd "$OUT/reginit.vcd" --max-clock-edges 100 || true
-check reginit "$OUT/reginit.vcd" tests/xprop_cosim/expected/reginit.vcd
+    run xprop_reg "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
+        --config tests/xprop_cosim/sim_config_reginit.json \
+        --output-vcd "$OUT/reginit.vcd" --max-clock-edges 100 || true
+    check reginit "$OUT/reginit.vcd" tests/xprop_cosim/expected/reginit.vcd
+fi
 
 # --- peripheral fixtures (flash/UART/bus) — `all` scope only -------------
 if [ "$SCOPE" = all ]; then
@@ -111,6 +118,23 @@ if [ "$SCOPE" = all ]; then
         --config tests/apb_trace/sim_config.json --top-module apb_trace \
         --max-clock-edges 200 --xprop --bus-trace-csv "$OUT/apb_trace_xprop.csv" || true
     check apb_trace_xprop "$OUT/apb_trace_xprop.csv" tests/apb_trace/expected/apb_trace_xprop.csv
+fi
+
+# --- flash fixture (mcu_soc) — `flash` scope only ------------------------
+# mcu_soc is a whole SoC: the committed 19.6 MB netlist + 3.6 KB self-contained
+# firmware (tests/mcu_soc/{data/6_final.v,software.bin}) boot through the SPI
+# flash. sim_config_selfcontained.json points flash.firmware at the committed
+# software.bin so this runs on a fresh checkout (no chipflow build). 10k edges
+# reaches a real flash read (cmd 0x03 @ 0x100000) — the boot sequence is
+# deterministic, so the output VCD is byte-identical run-to-run. This golden was
+# captured on CpuBackend and is byte-identical to the Metal flash kernel (C2,
+# #105), so it gates CUDA/HIP/CpuBackend alike. Cost: ~40s partitioning + ~4s
+# sim per run — heavy, hence a dedicated opt-in scope (Stage C, #105).
+if [ "$SCOPE" = flash ]; then
+    run mcu_flash "$BIN" cosim tests/mcu_soc/data/6_final.v \
+        --config tests/mcu_soc/sim_config_selfcontained.json --top-module top \
+        --max-clock-edges 10000 --output-vcd "$OUT/mcu_flash.vcd" || true
+    check mcu_flash "$OUT/mcu_flash.vcd" tests/mcu_soc/expected/mcu_flash.vcd
 fi
 
 echo

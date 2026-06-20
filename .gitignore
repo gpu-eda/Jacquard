@@ -27,6 +27,8 @@ __pycache__/
 *.vcd
 # Committed cosim regression goldens (CpuBackend CI diffs against these).
 !tests/xprop_cosim/expected/*.vcd
+# Stage C flash cosim golden (mcu_soc; CpuBackend == Metal, #105).
+!tests/mcu_soc/expected/*.vcd
 *.tar.gz
 debug_trace.csv
 *_watchlist.json
