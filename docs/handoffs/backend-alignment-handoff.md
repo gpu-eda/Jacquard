@@ -1,6 +1,6 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
-**Created:** 2026-06-07 (updated 2026-06-19, eighth session)
+**Created:** 2026-06-07 (updated 2026-06-20, ninth session — Stage B T4-green)
 **Branch:** `cuda-hip-parity` (PR #120, off `main`). **PHASE 1 MERGED TO MAIN**
 (#118 @ `main` `e77aab3`; Phase 0 + Phase 1, `CpuBackend` parity, `cosim-cpu`
 Linux CI + 7 goldens). Now on the **CUDA/HIP parity track for release**: scope =
@@ -30,18 +30,37 @@ Authoritative plan: `docs/plans/cosim-phase2-cuda-hip.md`.
   "Run CUDA/HIP cosim — xprop_cosim (Stage A)" via `cosim_cpu_check.sh`
   `COSIM_SCOPE=logic`). The blind backend ran correctly first try.
 
-**Now (pick up here): Stage B — `gpu_io_step` (UART + bus).**
-Port `gpu_io_step` (Metal shader :1170 — 4-state UART-TX decoder ×4 + APB3
-bus-trace beat extraction + legacy WB) to CUDA/HIP in `kernel_v1_impl.cuh` +
-`_cuda`/`_hip` launchers (replicate the GPU structs `UartParams`/`UartChannel`/
-`UartDecoderState`, `BusTraceParamsAll`/`BusTraceChannel` — layouts in the
-Phase-2 plan appendix / scout spec). Wire it into `CudaBackend`/`HipBackend`:
-build the IO params in `new` (mirror `MetalBackend::build_io_buffers` /
-`CpuBackend`'s `uart_configs`+`bus_positions`), call the kernel after `simulate`
-in `run_edges`, and switch `drain_uart_tx`/`drain_bus_beats` to read the GPU ring
-buffers. Validate by extending the CI cosim step (or a new scope) to run
-`dual_uart` + `apb_trace` on cuda/hip vs goldens. **Then Stage C** — flash
-kernels (`gpu_apply_flash_din`, `gpu_flash_model_step`) → flash/JTAG fixtures.
+- **Stage B — `gpu_io_step` (UART + bus)** (commits `ae8d35f` feat + `5bc4234`
+  ci; **T4-green**): ported `gpu_io_step` (Metal shader :1170 — 4-state UART-TX
+  decoder ×4 + APB3 bus-trace + legacy WB) to `kernel_v1_impl.cuh` +
+  `cosim_snapshot` D2D launcher + `_cuda`/`_hip` wrappers. Lifted the GPU IO
+  `#[repr(C)]` structs + WB/APB param builders into agnostic `mod.rs` (shared by
+  metal/cuda/hip, `size_of`/`static_assert` ABI guards). `CudaBackend`/
+  `HipBackend` build the IO buffers in `new`, **batched `run_edges`** (one
+  end-of-batch sync; per-edge ops pre-uploaded + dirty-flag cached because ulib's
+  CUDA/HIP H2D `copy_from`/`hipMemcpy` is *synchronous* — re-uploading per edge
+  would serialise the batch), GPU ring drains. CI step flipped to
+  `COSIM_SCOPE=all`. **CUDA + HIP `dual_uart` + `apb_trace` byte-identical to the
+  CPU/Metal goldens on the T4, blind, first try.** Design spec:
+  `docs/plans/cosim-phase2-stageB-io-port.md`.
+
+**Now (pick up here): Stage C — flash kernels.**
+Port `gpu_apply_flash_din` (shader:904 — write `FlashState.d_i` → input state)
+and `gpu_flash_model_step` (shader:943 — SPI/QSPI flash FSM, dual-step setup
+delay; needs the 16 MiB firmware buffer + persistent `FlashState`) to
+`kernel_v1_impl.cuh` + `_cuda`/`_hip` launchers (replicate `FlashState`/
+`FlashDinParams`/`FlashModelParams` — already in `metal.rs`, lift to the shared
+`mod.rs` gated region like the IO structs in Stage B). Wire into
+`CudaBackend`/`HipBackend::run_edges` (the flash kernels run *around* simulate:
+`gpu_apply_flash_din` before stages, `gpu_flash_model_step` after — see Metal's
+`encode_and_commit_gpu_batch` ordering), replace the Stage-B `flash_d_i`/
+`flash_debug_snapshot` stubs with GPU-ring reads, and switch `flash_in_reset`
+to drive the GPU FSM. **No flash/JTAG cosim fixture exists in
+`cosim_cpu_check.sh` yet** — add one (or a `JtagReplayModel` cosim fixture) so
+the Stage C CI gate has a golden; model-driven-clock (JTAG) runs the GPU
+peripherals at `batch=1` within the same backend (not a separate path). The
+Stage B shared-`mod.rs` lift + `UVec<u8>` FFI + batched `run_edges` are the
+template to follow.
 
 **#104 deferred follow-ups** (low priority; #104 is functionally done): (a)
 cross-backend timed-VCD equivalence in `backend-equivalence` (needs artifact-flow
