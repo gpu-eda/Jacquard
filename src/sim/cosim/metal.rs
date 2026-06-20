@@ -28,9 +28,9 @@ use super::{
 // GPU peripheral `#[repr(C)]` IO structs + constants, lifted to the parent
 // module (gated to GPU builds) so Metal/CUDA/HIP share one ABI (Stage B B0).
 use super::{
-    BusTraceChannel, BusTraceEntry, BusTraceParamsAll, UartChannel, UartDecoderState, UartParams,
-    UartPerChannelConfig, WbTraceChannel, WbTraceEntry, WbTraceParams, BUS_TRACE_CHANNEL_CAP,
-    UART_CHANNEL_CAP, WB_TRACE_CHANNEL_CAP,
+    BusTraceChannel, BusTraceEntry, BusTraceParamsAll, FlashDinParams, FlashModelParams,
+    FlashState, UartChannel, UartDecoderState, UartParams, UartPerChannelConfig, WbTraceChannel,
+    WbTraceEntry, WbTraceParams, BUS_TRACE_CHANNEL_CAP, UART_CHANNEL_CAP, WB_TRACE_CHANNEL_CAP,
 };
 
 // ── Simulation Parameters (must match Metal shader) ──────────────────────────
@@ -59,55 +59,11 @@ struct StatePrepParams {
     xmask_state_offset: u32,
 }
 
-/// GPU-side flash state (must match Metal FlashState struct exactly).
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct FlashState {
-    bit_count: i32,
-    byte_count: i32,
-    data_width: u32,
-    addr: u32,
-    curr_byte: u8,
-    command: u8,
-    out_buffer: u8,
-    _pad1: u8,
-    prev_clk: u32,
-    prev_csn: u32,
-    d_i: u8,
-    _pad2: [u8; 3],
-    prev_d_out: u8,
-    _pad3: [u8; 3],
-    in_reset: u32,
-    last_error_cmd: u32,
-    model_prev_csn: u32,
-}
-
-/// Parameters for gpu_apply_flash_din kernel (must match Metal FlashDinParams).
-#[repr(C)]
-struct FlashDinParams {
-    d_in_pos: [u32; 4],
-    has_flash: u32,
-    // X-mask word offset (= reg_io_state_size); 0 when xprop off. The flash
-    // MISO bits are primary inputs driven here (not via state_prep's edge
-    // ops), so this kernel must clear their X-mask too, else they stay X
-    // (seeded by the cosim template) and the SPI read drowns in X (#95 ph3).
-    xmask_state_offset: u32,
-}
-
-/// Parameters for gpu_flash_model_step kernel (must match Metal FlashModelParams).
-#[repr(C)]
-struct FlashModelParams {
-    state_size: u32,
-    clk_out_pos: u32,
-    csn_out_pos: u32,
-    d_out_pos: [u32; 4],
-    flash_data_size: u32,
-}
-
-// The GPU peripheral `#[repr(C)]` IO structs (UART / Wishbone / AHB-APB bus
-// trace) + their constants live in the parent module (`super::`, gated to GPU
-// builds) so Metal, CUDA, and HIP share one ABI. Imported via the `use super::`
-// block at the top of this file. See `mod.rs` "Shared GPU peripheral ABI".
+// The GPU peripheral `#[repr(C)]` IO + flash structs (UART / Wishbone / AHB-APB
+// bus trace / SPI flash) + their constants live in the parent module (`super::`,
+// gated to GPU builds) so Metal, CUDA, and HIP share one ABI. Imported via the
+// `use super::` block at the top of this file. See `mod.rs` "Shared GPU
+// peripheral ABI" / "SPI-flash GPU structs".
 
 /// Pre-allocated Metal buffers for each scheduler edge's ops.
 ///
