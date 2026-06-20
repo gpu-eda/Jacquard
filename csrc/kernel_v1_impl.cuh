@@ -1058,3 +1058,315 @@ __global__ void gpu_io_step(
 
   #undef READ_OUT_BIT
 }
+
+// ─── Cosim GPU peripheral: SPI flash (gpu_apply_flash_din + gpu_flash_model_step) ─
+//
+// Ported from csrc/kernel_v1.metal (FlashState :738, FlashDinParams :758,
+// FlashModelParams :764, flash_process_byte :775, flash_eval_commit_persistent
+// :843, gpu_apply_flash_din :904, gpu_flash_model_step :943). Direct GPU
+// reimplementation of the CPU `CppSpiFlash` FSM (spiflash_model.cc). The structs
+// below mirror the shared Rust `#[repr(C)]` ABI in src/sim/cosim/mod.rs (FlashState
+// :318 / FlashDinParams :341 / FlashModelParams :354) field-for-field; the
+// static_asserts pin the byte counts to the same 48/24/32 literals the Rust
+// `size_of` asserts use. Any field-order/padding drift between these three
+// definitions silently corrupts the cross-FFI buffers — keep them in lockstep.
+//
+// Metal→CUDA primitive translations: Metal `uchar`→`u8`, `uint`→`u32`,
+// `device`/`thread`/`constant` address spaces collapse to plain pointers/refs.
+// These are single-thread (thread 0) kernels like gpu_io_step, so no __threadfence
+// is needed (no cross-thread visibility within a kernel).
+
+struct FlashState {
+  i32 bit_count;       // bits received in current byte
+  i32 byte_count;      // bytes in current transaction
+  u32 data_width;      // 1 (SPI) or 4 (QSPI)
+  u32 addr;            // 24-bit read address
+  u8  curr_byte;       // byte accumulator
+  u8  command;         // current command (0x03, 0xEB, etc.)
+  u8  out_buffer;      // MISO shift register
+  u8  _pad1;
+  u32 prev_clk;        // model internal: last clk seen by flash_eval_commit
+  u32 prev_csn;        // delayed csn: output csn from previous tick
+  u8  d_i;             // current MISO output nibble (4 bits)
+  u8  _pad2[3];
+  u8  prev_d_out;      // previous MOSI for setup delay
+  u8  _pad3[3];
+  u32 in_reset;        // 1 = reset active, forces d_i=0x0F
+  u32 last_error_cmd;  // nonzero if unknown command encountered
+  u32 model_prev_csn;  // model internal: last csn seen by flash_eval_commit
+};
+static_assert(sizeof(FlashState) == 48, "FlashState ABI");
+
+struct FlashDinParams {
+  u32 d_in_pos[4];        // input state bit positions for d0..d3
+  u32 has_flash;          // 0 = skip
+  u32 xmask_state_offset; // X-mask word offset (0 = xprop off)
+};
+static_assert(sizeof(FlashDinParams) == 24, "FlashDinParams ABI");
+
+struct FlashModelParams {
+  u32 state_size;      // words per state slot
+  u32 clk_out_pos;     // output state bit position: flash_clk
+  u32 csn_out_pos;     // output state bit position: flash_csn
+  u32 d_out_pos[4];    // output state bit positions: d0..d3
+  u32 flash_data_size; // firmware size in bytes
+};
+static_assert(sizeof(FlashModelParams) == 32, "FlashModelParams ABI");
+
+// Process a completed byte (command decode + address accumulation + data lookup).
+// Port of kernel_v1.metal:775. All "thread&" refs become plain device-local refs.
+__device__ __forceinline__ void flash_process_byte(
+  i32 &bit_count,
+  i32 &byte_count,
+  u32 &data_width,
+  u32 &addr,
+  u8 &curr_byte,
+  u8 &command,
+  u8 &out_buffer,
+  u32 &last_error_cmd,
+  const u8 *flash_data,
+  u32 flash_data_size
+  )
+{
+  out_buffer = 0;
+  if (byte_count == 0) {
+    addr = 0;
+    data_width = 1;
+    command = curr_byte;
+    if (command == 0xab) {
+      // power up - nothing to do
+    } else if (command == 0x03 || command == 0x9f || command == 0xff
+        || command == 0x35 || command == 0x31 || command == 0x50
+        || command == 0x05 || command == 0x01 || command == 0x06) {
+      // nothing to do
+    } else if (command == 0xeb) {
+      data_width = 4;
+    } else {
+      last_error_cmd = command;
+    }
+  } else {
+    if (command == 0x03) {
+      // Single read
+      if (byte_count <= 3) {
+        addr |= ((u32)curr_byte << ((3 - byte_count) * 8));
+      }
+      if (byte_count >= 3) {
+        u32 idx = addr & 0x00FFFFFFu;
+        if (idx < flash_data_size) {
+          out_buffer = flash_data[idx];
+        } else {
+          out_buffer = 0xFF;
+        }
+        addr = (addr + 1) & 0x00FFFFFFu;
+      }
+    } else if (command == 0xeb) {
+      // Quad read
+      if (byte_count <= 3) {
+        addr |= ((u32)curr_byte << ((3 - byte_count) * 8));
+      }
+      if (byte_count >= 6) { // 1 mode, 2 dummy clocks
+        u32 idx = addr & 0x00FFFFFFu;
+        if (idx < flash_data_size) {
+          out_buffer = flash_data[idx];
+        } else {
+          out_buffer = 0xFF;
+        }
+        addr = (addr + 1) & 0x00FFFFFFu;
+      }
+    }
+  }
+  if (command == 0x9f) {
+    // Read ID
+    const u8 flash_id[4] = {0xCA, 0x7C, 0xA7, 0xFF};
+    out_buffer = flash_id[byte_count % 4];
+  }
+}
+
+// Single eval+commit step with persistent d_i (matching C++ p_d_i member
+// behavior). d_i is only modified on negedge_clk; otherwise retains its previous
+// value. Port of kernel_v1.metal:843.
+__device__ __forceinline__ void flash_eval_commit_persistent(
+  u32 clk,
+  u32 csn,
+  u8 d_out,
+  // State (read/write):
+  i32 &bit_count,
+  i32 &byte_count,
+  u32 &data_width,
+  u32 &addr,
+  u8 &curr_byte,
+  u8 &command,
+  u8 &out_buffer,
+  u32 &prev_clk,
+  u32 &prev_csn,
+  u32 &last_error_cmd,
+  u8 &d_i,  // persistent: only updated on negedge
+  // Flash data:
+  const u8 *flash_data,
+  u32 flash_data_size
+  )
+{
+  // Edge detection
+  bool posedge_clk = (clk != 0) && (prev_clk == 0);
+  bool negedge_clk = (clk == 0) && (prev_clk != 0);
+  bool posedge_csn = (csn != 0) && (prev_csn == 0);
+
+  if (posedge_csn) {
+    bit_count = 0;
+    byte_count = 0;
+    data_width = 1;
+  } else if (posedge_clk && csn == 0) {
+    if (data_width == 4) {
+      curr_byte = (curr_byte << 4U) | (d_out & 0xF);
+    } else {
+      curr_byte = (curr_byte << 1U) | (d_out & 0x1);
+    }
+    out_buffer = out_buffer << data_width;
+    bit_count += data_width;
+    if ((u32)bit_count >= 8) {
+      flash_process_byte(bit_count, byte_count, data_width, addr,
+          curr_byte, command, out_buffer, last_error_cmd,
+          flash_data, flash_data_size);
+      ++byte_count;
+      bit_count = 0;
+    }
+  } else if (negedge_clk && csn == 0) {
+    // Only update d_i on negedge (matching C++ p_d_i behavior)
+    if (data_width == 4) {
+      d_i = (out_buffer >> 4U) & 0xFU;
+    } else {
+      d_i = ((out_buffer >> 7U) & 0x1U) << 1U;
+    }
+  }
+  prev_clk = clk;
+  prev_csn = csn;
+}
+
+// gpu_apply_flash_din: write FlashState.d_i → input state MISO bits. Trivial
+// single-thread kernel; runs after each state_prep, before simulate. Port of
+// kernel_v1.metal:904. Single block of 256 threads (thread 0 works).
+__global__ void gpu_apply_flash_din(
+  u32 *__restrict__ states,
+  const FlashState *__restrict__ flash_state,
+  const FlashDinParams *__restrict__ params
+  )
+{
+  if (threadIdx.x != 0 || params->has_flash == 0) return;
+
+  u8 d_i = flash_state->d_i;
+  u32 xmask_off = params->xmask_state_offset;
+
+  for (u32 i = 0; i < 4; i++) {
+    u32 pos = params->d_in_pos[i];
+    if (pos == 0xFFFFFFFFu) continue;
+    u32 word_idx = pos >> 5;
+    u32 bit_mask = 1u << (pos & 31u);
+    if ((d_i >> i) & 1) {
+      states[word_idx] |= bit_mask;
+    } else {
+      states[word_idx] &= ~bit_mask;
+    }
+    // These MISO bits are driven (known) here, bypassing state_prep's edge ops —
+    // clear their X-mask so they don't stay X-seeded (#95 phase 3).
+    if (xmask_off != 0u) {
+      states[xmask_off + word_idx] &= ~bit_mask;
+    }
+  }
+}
+
+// gpu_flash_model_step: SPI flash FSM (dual-step with setup delay). Direct port
+// of SpiFlashModel from spiflash_model.cc via kernel_v1.metal:943. Reads
+// flash_clk/flash_csn/d_out from the OUTPUT state slot, performs the dual-step
+// (delayed-CSN setup model), stores d_i in FlashState for next gpu_apply_flash_din.
+// Runs TWICE per tick (after the falling-edge simulate and after the rising-edge
+// simulate). Single block of 256 threads (thread 0 works).
+__global__ void gpu_flash_model_step(
+  u32 *__restrict__ states,
+  FlashState *__restrict__ flash_state,
+  const FlashModelParams *__restrict__ params,
+  const u8 *__restrict__ flash_data
+  )
+{
+  if (threadIdx.x != 0) return;
+
+  u32 state_size = params->state_size;
+
+  // Read current output state signals.
+  u32 clk_word = params->clk_out_pos >> 5;
+  u32 clk_bit = params->clk_out_pos & 31u;
+  u32 clk = (states[state_size + clk_word] >> clk_bit) & 1u;
+
+  u32 csn_word = params->csn_out_pos >> 5;
+  u32 csn_bit = params->csn_out_pos & 31u;
+  u32 csn = (states[state_size + csn_word] >> csn_bit) & 1u;
+
+  // Read d_out nibble from output state.
+  u8 d_out = 0;
+  for (u32 i = 0; i < 4; i++) {
+    u32 pos = params->d_out_pos[i];
+    if (pos == 0xFFFFFFFFu) continue;
+    u32 w = pos >> 5;
+    u32 b = pos & 31u;
+    d_out |= (u8)(((states[state_size + w] >> b) & 1u) << i);
+  }
+
+  // If in reset, force d_i high and update prev values (do not step the model).
+  if (flash_state->in_reset) {
+    flash_state->d_i = 0x0F;
+    flash_state->prev_clk = clk;
+    flash_state->prev_csn = csn;
+    flash_state->model_prev_csn = csn;
+    flash_state->prev_d_out = d_out;
+    return;
+  }
+
+  // Load state into locals for eval_commit.
+  i32 bit_count = flash_state->bit_count;
+  i32 byte_count = flash_state->byte_count;
+  u32 data_width = flash_state->data_width;
+  u32 addr = flash_state->addr;
+  u8 curr_byte = flash_state->curr_byte;
+  u8 command = flash_state->command;
+  u8 out_buffer = flash_state->out_buffer;
+  u32 prev_clk = flash_state->prev_clk;
+  u32 prev_csn = flash_state->prev_csn;
+  u32 last_error_cmd = flash_state->last_error_cmd;
+  u8 prev_d_out = flash_state->prev_d_out;
+
+  // Dual-step for setup delay (matches old GPU sim CPU callback behavior):
+  // model_prev_csn tracks the model's internal edge detection state (the CSN
+  // value the model last saw). prev_csn holds the delayed CSN (previous tick's
+  // output).
+  u32 model_prev_csn = flash_state->model_prev_csn;
+
+  // d_i persists across steps (matching C++ p_d_i member behavior); only updated
+  // on negedge_clk inside flash_eval_commit.
+  u8 d_i = flash_state->d_i;
+
+  // Step 1: eval with prev_csn + prev_d_out (processes posedge, samples old data).
+  flash_eval_commit_persistent(clk, prev_csn, prev_d_out,
+      bit_count, byte_count, data_width, addr,
+      curr_byte, command, out_buffer, prev_clk, model_prev_csn,
+      last_error_cmd, d_i, flash_data, params->flash_data_size);
+
+  // Step 2: eval with prev_csn + current d_out.
+  flash_eval_commit_persistent(clk, prev_csn, d_out,
+      bit_count, byte_count, data_width, addr,
+      curr_byte, command, out_buffer, prev_clk, model_prev_csn,
+      last_error_cmd, d_i, flash_data, params->flash_data_size);
+
+  // Write state back.
+  flash_state->bit_count = bit_count;
+  flash_state->byte_count = byte_count;
+  flash_state->data_width = data_width;
+  flash_state->addr = addr;
+  flash_state->curr_byte = curr_byte;
+  flash_state->command = command;
+  flash_state->out_buffer = out_buffer;
+  flash_state->prev_clk = clk;
+  flash_state->prev_csn = csn;  // store current output csn → next tick's delayed csn
+  flash_state->model_prev_csn = model_prev_csn;  // model's edge detection state
+  flash_state->d_i = d_i;
+  flash_state->prev_d_out = d_out;
+  flash_state->last_error_cmd = last_error_cmd;
+}

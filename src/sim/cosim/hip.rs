@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-//! HIP GPU backend for co-simulation (Stage B — design step + GPU UART/bus
-//! peripherals): `HipBackend` + the `run_cosim_hip` shim. Gated
+//! HIP GPU backend for co-simulation (Stage B/C — design step + GPU UART/bus +
+//! SPI flash peripherals): `HipBackend` + the `run_cosim_hip` shim. Gated
 //! `#[cfg(feature = "hip")]` via the `mod hip;` declaration in the parent.
 //!
 //! `HipBackend` mirrors `MetalBackend`/`CudaBackend`:
@@ -9,11 +9,14 @@
 //!   2. `run_edges` runs a *batched* launch — all edges' kernels enqueued on the
 //!      default stream with a single end-of-batch `synchronize()` (mirrors
 //!      Metal's `encode_and_commit_gpu_batch`), not a per-edge sync. Per edge:
-//!      `cosim_state_prep` → `cosim_simulate_stage × num_major_stages` →
+//!      `cosim_state_prep` → `gpu_apply_flash_din` →
+//!      `cosim_simulate_stage × num_major_stages` → `gpu_flash_model_step` →
 //!      `gpu_io_step` (UART + bus capture) → `cosim_snapshot` (VCD ring).
-//!   3. UART/bus peripherals run on the GPU (`gpu_io_step`); `drain_uart_tx` /
-//!      `drain_bus_beats` read the device ring buffers. Flash is still a Stage-C
-//!      stub (idle MISO, zeroed FlashDebug).
+//!   3. UART/bus peripherals run on the GPU (`gpu_io_step`); the SPI flash FSM
+//!      runs on the GPU (`gpu_apply_flash_din` + `gpu_flash_model_step`, Stage C),
+//!      with the persistent `FlashState` device-resident. `drain_uart_tx` /
+//!      `drain_bus_beats` read the device ring buffers; `flash_d_i` /
+//!      `flash_debug_snapshot` read the device `FlashState`.
 //!
 //! Batching note: the per-edge ops buffers are pre-uploaded once and cached
 //! (`ops_uvecs`), re-uploaded only when `edge_ops_mut` marks them dirty (the
@@ -41,10 +44,11 @@ use crate::testbench::TestbenchConfig;
 use netlistdb::NetlistDB;
 
 use super::{
-    build_bus_trace_params, build_wb_trace_params, channel_buf, host_bytes_to_dev, rd_u32,
-    run_cosim_generic, slice_to_dev, struct_to_dev, BitOp, BusTraceEntry, BusTraceLane,
-    CosimBackend, CosimOpts, CosimResult, FlashDebug, GpioMapping, UartChannel, UartDecoderState,
-    UartParams, UartPerChannelConfig, WbTraceEntry, BUS_TRACE_CHANNEL_CAP, MAX_UARTS,
+    build_bus_trace_params, build_flash_buffers_dev, build_wb_trace_params, channel_buf,
+    host_bytes_to_dev, rd_u32, read_flash_debug, run_cosim_generic, slice_to_dev, struct_to_dev,
+    BitOp, BusTraceEntry, BusTraceLane, CosimBackend, CosimOpts, CosimResult, FlashDebug,
+    GpioMapping, UartChannel, UartDecoderState, UartParams, UartPerChannelConfig, WbTraceEntry,
+    BUS_TRACE_CHANNEL_CAP, FLASH_STATE_D_I_OFF, FLASH_STATE_IN_RESET_OFF, MAX_UARTS,
     UART_CHANNEL_CAP, WB_TRACE_CHANNEL_CAP,
 };
 
@@ -93,8 +97,16 @@ struct HipBackend {
     /// X-mask word offset within a slot (`reg_io_state_size` when xprop on,
     /// else 0). Mirrors the GPU `state_prep` `xmask_state_offset` sentinel.
     xmask_state_offset: usize,
-    /// Flash reset line (Stage C; no effect in Stage B — no flash kernels).
-    flash_in_reset: bool,
+    // ── GPU SPI-flash buffers (Stage C), device-resident `UVec<u8>` ──────────
+    /// Persistent `FlashState` (decode FSM state across edges). `in_reset` is
+    /// updated host-side by `flash_set_in_reset`; `d_i` is read by `flash_d_i`.
+    flash_state: UnsafeCell<UVec<u8>>,
+    /// `FlashDinParams` (const after `new`): MISO input positions + xmask offset.
+    flash_din_params: UVec<u8>,
+    /// `FlashModelParams` (const after `new`): clk/csn/d_out output positions.
+    flash_model_params: UVec<u8>,
+    /// 16 MiB firmware image (const after `new`); read by `gpu_flash_model_step`.
+    flash_data: UVec<u8>,
     // ── GPU peripheral IO buffers (Stage B), device-resident `UVec<u8>` ──────
     /// `UartDecoderState[MAX_UARTS]`, persistent across edges.
     uart_state: UnsafeCell<UVec<u8>>,
@@ -310,6 +322,13 @@ impl CosimBackend for HipBackend {
             DEVICE,
         );
 
+        // ── GPU SPI-flash buffers (Stage C; mirror build_flash_buffers) ────────
+        // FlashState (persistent) + const FlashDinParams/FlashModelParams + the
+        // 16 MiB firmware, loaded from config.flash. No-flash configs get
+        // has_flash=0 (gpu_apply_flash_din early-returns), so this is unconditional.
+        let (flash_state, flash_din_params, flash_model_params, flash_data) =
+            build_flash_buffers_dev(config, script, state_size, gpio_map, DEVICE);
+
         let backend = HipBackend {
             state: UnsafeCell::new(state_uvec),
             sram: UnsafeCell::new(sram_uvec),
@@ -326,7 +345,10 @@ impl CosimBackend for HipBackend {
             num_blocks,
             num_major_stages,
             xmask_state_offset: 0,
-            flash_in_reset: false,
+            flash_state: UnsafeCell::new(flash_state),
+            flash_din_params,
+            flash_model_params,
+            flash_data,
             uart_state: UnsafeCell::new(uart_state),
             uart_params,
             uart_channel: UnsafeCell::new(uart_channel),
@@ -399,7 +421,12 @@ impl CosimBackend for HipBackend {
     }
 
     fn flash_set_in_reset(&mut self, in_reset: bool) {
-        self.flash_in_reset = in_reset;
+        // Write FlashState.in_reset host-side; the mutated host copy uploads on
+        // the next `as_mut_uptr(DEVICE)` in `run_edges`.
+        let fs = self.flash_state.get_mut();
+        let v = u32::from(in_reset);
+        fs[FLASH_STATE_IN_RESET_OFF..FLASH_STATE_IN_RESET_OFF + 4]
+            .copy_from_slice(&v.to_ne_bytes());
     }
 
     fn enable_vcd_ring(&mut self) {
@@ -416,28 +443,18 @@ impl CosimBackend for HipBackend {
     }
 
     fn flash_d_i(&self) -> u8 {
-        // Stage B has no flash; idle MISO nibble is all-high (matches CpuBackend).
-        0x0F
+        // Read FlashState.d_i (u8 @ offset 28) from the device buffer. Indexing
+        // forces the post-batch device→host copy (sequential dispatch → safe).
+        // SAFETY: cosim dispatch is sequential; no concurrent borrow.
+        let fs = unsafe { &*self.flash_state.get() };
+        fs[FLASH_STATE_D_I_OFF]
     }
 
     fn flash_debug_snapshot(&self) -> FlashDebug {
-        // No flash FSM on the Stage B GPU design path; report a zeroed snapshot.
-        FlashDebug {
-            d_i: 0x0F,
-            data_width: 0,
-            prev_csn: 0,
-            in_reset: self.flash_in_reset as u32,
-            bit_count: 0,
-            byte_count: 0,
-            addr: 0,
-            curr_byte: 0,
-            command: 0,
-            out_buffer: 0,
-            prev_clk: 0,
-            prev_d_out: 0,
-            last_error_cmd: 0,
-            model_prev_csn: 0,
-        }
+        // Decode the real FlashState fields from the device buffer (Stage C).
+        // SAFETY: sequential dispatch; the host copy reflects the last sync.
+        let fs = unsafe { &*self.flash_state.get() };
+        read_flash_debug(&fs[..])
     }
 
     fn drain_uart_tx(&mut self) -> Vec<(usize, u8)> {
@@ -508,6 +525,7 @@ impl CosimBackend for HipBackend {
         let uart_channel = unsafe { &mut *self.uart_channel.get() };
         let wb_channel = unsafe { &mut *self.wb_channel.get() };
         let bus_channel = unsafe { &mut *self.bus_channel.get() };
+        let flash_state = unsafe { &mut *self.flash_state.get() };
         let vcd_dev = unsafe { &mut *self.vcd_ring_dev.get() };
 
         let xmask_off = self.xmask_state_offset as u32;
@@ -546,7 +564,16 @@ impl CosimBackend for HipBackend {
                 DEVICE,
             );
 
-            // ── Simulate every major stage (timing OFF in cosim Stage B) ────
+            // ── Inject flash MISO (FlashState.d_i → input state) before sim ──
+            // Mirrors the Metal order: state_prep → apply_flash_din → simulate.
+            ucci_hip::gpu_apply_flash_din(
+                &mut *state,
+                &*flash_state,
+                &self.flash_din_params,
+                DEVICE,
+            );
+
+            // ── Simulate every major stage (timing OFF in cosim) ────────────
             for stage in 0..self.num_major_stages {
                 // SAFETY: NullUPtr yields a null device pointer; the kernel
                 // treats a null `timing_constraints` as "timing off".
@@ -567,6 +594,16 @@ impl CosimBackend for HipBackend {
                     DEVICE,
                 );
             }
+
+            // ── GPU flash model step (dual-step SPI FSM; sees SPI CLK after
+            // this edge). Mirrors the Metal order: simulate → flash_model_step.
+            ucci_hip::gpu_flash_model_step(
+                &mut *state,
+                &mut *flash_state,
+                &self.flash_model_params,
+                &self.flash_data,
+                DEVICE,
+            );
 
             // ── GPU peripherals: UART + bus capture for this edge ───────────
             ucci_hip::gpu_io_step(
