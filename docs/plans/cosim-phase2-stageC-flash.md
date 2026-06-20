@@ -95,6 +95,22 @@ MISO `d_in_pos`, clear X-mask) *before* `simulate_block_v1`; **flash_model_step*
 (the dual-step above) *after*. `flash_d_i()` returns `self.flash_d_i` (drop the
 `0x0F` stub); `flash_set_in_reset` stores the flag.
 
+**Init-state equivalence hazard (confirmed).** The GPU inits `FlashState`
+(`build_flash_buffers`): `data_width=1, prev_csn=1, model_prev_csn=1, d_i=0x0F,
+in_reset=1`, rest 0. The C++ `SpiFlashModel` constructs `State{data_width=1,…0}`
+(matches) **but** `p_d_i = 0` (`spiflash_model.cc:27`) vs the GPU's `d_i = 0x0F`.
+`d_i`/`p_d_i` is a *persistent* output (only written on negedge_clk during a read
+command's data phase), so during command/address phases `CppSpiFlash` would carry
+MISO=0 while the GPU carries 0x0F. The design doesn't sample MISO outside the
+read-data phase (functionally harmless), but a raw flash-pin VCD diff would flag
+it. **Fix:** change `spiflash_model.cc:27` to `uint8_t p_d_i = 0x0F;` to match the
+GPU init — safe, `CppSpiFlash` has no live callers (verify with a repo-wide grep
+first). The reset branch already forces `flash_d_i = 0x0F` without stepping, so
+the pre-reset-release values align once this init is fixed. Also force the CPU
+reset behaviour to mirror the shader (`d_i=0x0F`, set prev_csn/prev_d_out, do not
+step) so `CppSpiFlash`'s internal `prev_csn_o` stays high through reset (csn idle
+high in `mcu_soc`).
+
 **Validation:** run a short `mcu_soc` cosim on the no-GPU `CpuBackend` build and on
 Metal; diff the flash-pin VCD (or decoded flash transactions). Byte-identical ⇒ the
 dual-step convention reproduces the GPU FSM, and the committed CpuBackend output is
