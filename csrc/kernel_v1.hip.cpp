@@ -140,3 +140,49 @@ void simulate_v1_noninteractive_timed_hip(
     arg_ptrs, 0, (hipStream_t)0
     ));
 }
+
+// gpu_io_step launcher (Stage B): UART + bus-trace capture for one edge.
+// Non-cooperative single-block launch (thread-0 work), mirrors kernel_v1.cu.
+// IO struct buffers cross FFI as untyped u8 (event_buffer pattern); cast here.
+extern "C"
+void gpu_io_step_hip(
+  u32 *states,
+  u8 *uart_state,
+  const u8 *uart_params,
+  u8 *uart_channel,
+  u8 *wb_channel,
+  const u8 *wb_params,
+  u8 *bus_channel,
+  const u8 *bus_params
+  )
+{
+  hipLaunchKernelGGL(gpu_io_step, dim3(1), dim3(256), 0, (hipStream_t)0,
+                     states,
+                     (UartDecoderState *)uart_state,
+                     (const UartParams *)uart_params,
+                     (UartChannel *)uart_channel,
+                     (WbTraceChannel *)wb_channel,
+                     (const WbTraceParams *)wb_params,
+                     (BusTraceChannel *)bus_channel,
+                     (const BusTraceParamsAll *)bus_params);
+  checkHipErrors(hipGetLastError());
+}
+
+// cosim_snapshot launcher (Stage B): device→device copy of the 2-slot state
+// into ring slot `edge_offset`. Default-stream ordered with the kernels; host
+// syncs once at end-of-batch. Mirrors kernel_v1.cu cosim_snapshot_cuda.
+extern "C"
+void cosim_snapshot_hip(
+  const u32 *states,
+  u32 *ring,
+  usize two_slot_words,
+  usize edge_offset
+  )
+{
+  checkHipErrors(hipMemcpyAsync(
+    ring + edge_offset * two_slot_words,
+    states,
+    two_slot_words * sizeof(u32),
+    hipMemcpyDeviceToDevice,
+    (hipStream_t)0));
+}

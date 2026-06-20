@@ -735,3 +735,326 @@ __global__ void cosim_simulate_stage(
     arrival_state_offset
     );
 }
+
+// ─── Cosim GPU peripherals: gpu_io_step (UART + bus trace) ───────────────────
+//
+// Ported from csrc/kernel_v1.metal (Metal `gpu_io_step`, struct catalogue
+// :1041-1163, kernel :1170). The structs below mirror the shared Rust
+// `#[repr(C)]` ABI in src/sim/cosim/mod.rs ("Shared GPU peripheral ABI") field-
+// for-field; the static_asserts pin the byte counts to the same literals the
+// Rust `size_of` asserts use. Any field-order/padding drift between these three
+// definitions silently corrupts the cross-FFI buffers — keep them in lockstep.
+//
+// The CPU equivalence oracle is `CpuBackend`'s UART/bus FSM (mod.rs); these
+// kernels must produce byte-identical drains to it (and to Metal).
+
+#define COSIM_MAX_UARTS 4
+#define COSIM_UART_CHANNEL_CAP 4096
+
+#define COSIM_WB_TRACE_MAX_ADR_BITS 30
+#define COSIM_WB_TRACE_MAX_DAT_BITS 32
+#define COSIM_WB_TRACE_CHANNEL_CAP 16384
+
+#define COSIM_MAX_BUS_TRACES 4
+#define COSIM_BUS_TRACE_MAX_ADR_BITS 32
+#define COSIM_BUS_TRACE_MAX_DAT_BITS 32
+#define COSIM_BUS_TRACE_CHANNEL_CAP 16384
+
+#define COSIM_BUS_PROTO_APB3 0u
+#define COSIM_BUS_PROTO_AHB_LITE 1u
+#define COSIM_BUS_PROTO_AHB5 2u
+
+struct UartDecoderState {
+  u32 state;          // 0=IDLE, 1=START, 2=DATA, 3=STOP
+  u32 last_tx;
+  u32 start_cycle;
+  u32 bits_received;
+  u32 value;
+  u32 current_cycle;  // incremented each call
+};
+static_assert(sizeof(UartDecoderState) == 24, "UartDecoderState ABI");
+
+struct UartPerChannelConfig {
+  u32 tx_out_pos;
+  u32 cycles_per_bit;
+};
+static_assert(sizeof(UartPerChannelConfig) == 8, "UartPerChannelConfig ABI");
+
+struct UartParams {
+  u32 state_size;
+  u32 n_uarts;          // 0 = skip, up to COSIM_MAX_UARTS
+  u32 _pad[2];
+  UartPerChannelConfig channels[COSIM_MAX_UARTS];
+};
+static_assert(sizeof(UartParams) == 48, "UartParams ABI");
+
+struct UartChannel {
+  u32 write_head;       // CPU reads this to know how many bytes are available
+  u32 capacity;
+  u32 _pad[2];
+  unsigned char data[COSIM_UART_CHANNEL_CAP];
+};
+static_assert(sizeof(UartChannel) == 4112, "UartChannel ABI");
+
+struct WbTraceParams {
+  u32 ibus_cyc_pos;
+  u32 ibus_stb_pos;
+  u32 ibus_adr_pos[COSIM_WB_TRACE_MAX_ADR_BITS];
+  u32 ibus_rdata_pos[COSIM_WB_TRACE_MAX_DAT_BITS];
+  u32 dbus_cyc_pos;
+  u32 dbus_stb_pos;
+  u32 dbus_we_pos;
+  u32 dbus_adr_pos[COSIM_WB_TRACE_MAX_ADR_BITS];
+  u32 spiflash_ack_pos;
+  u32 sram_ack_pos;
+  u32 csr_ack_pos;
+  u32 has_trace;        // 0 = skip
+};
+static_assert(sizeof(WbTraceParams) == 404, "WbTraceParams ABI");
+
+struct WbTraceEntry {
+  u32 tick;
+  u32 flags;
+  u32 ibus_adr;
+  u32 ibus_rdata;
+  u32 dbus_adr;
+};
+static_assert(sizeof(WbTraceEntry) == 20, "WbTraceEntry ABI");
+
+struct WbTraceChannel {
+  u32 write_head;
+  u32 capacity;
+  u32 current_tick;
+  u32 prev_flags;
+  // entries[capacity] follow immediately in memory (at byte offset 16)
+};
+static_assert(sizeof(WbTraceChannel) == 16, "WbTraceChannel ABI");
+
+struct BusTraceParams {
+  u32 protocol;
+  u32 addr_bits;
+  u32 data_bits;
+  u32 sel_pos;     // APB psel
+  u32 enable_pos;  // APB penable
+  u32 ready_pos;   // APB pready (0xFFFFFFFF → treated as 1)
+  u32 write_pos;   // APB pwrite
+  u32 resp_pos;    // APB pslverr
+  u32 addr_pos[COSIM_BUS_TRACE_MAX_ADR_BITS];
+  u32 wdata_pos[COSIM_BUS_TRACE_MAX_DAT_BITS];
+  u32 rdata_pos[COSIM_BUS_TRACE_MAX_DAT_BITS];
+};
+static_assert(sizeof(BusTraceParams) == 416, "BusTraceParams ABI");
+
+struct BusTraceParamsAll {
+  u32 n_buses;
+  u32 _pad[3];
+  BusTraceParams buses[COSIM_MAX_BUS_TRACES];
+};
+static_assert(sizeof(BusTraceParamsAll) == 1680, "BusTraceParamsAll ABI");
+
+struct BusTraceEntry {
+  u32 tick;
+  u32 flags;   // [0]=write [1]=err [8..15]=bus_id
+  u32 addr;
+  u32 wdata;
+  u32 rdata;
+};
+static_assert(sizeof(BusTraceEntry) == 20, "BusTraceEntry ABI");
+
+struct BusTraceChannel {
+  u32 write_head;
+  u32 capacity;
+  u32 current_tick;
+  u32 prev_gate;   // bit i = bus i's gate level last tick (rising-edge detect)
+  // entries[capacity] follow immediately in memory (at byte offset 16)
+};
+static_assert(sizeof(BusTraceChannel) == 16, "BusTraceChannel ABI");
+
+// gpu_io_step: combined UART-TX decoder + Wishbone + AHB/APB bus trace. Runs
+// once per scheduler edge (thread 0 only), reading the OUTPUT state slot. Direct
+// transliteration of kernel_v1.metal:1170; cross-checked against the CpuBackend
+// FSM (mod.rs:3923). `current_cycle`/`current_tick` advance one per call —
+// the host loops edges, so the kernel never sees the batch.
+__global__ void gpu_io_step(
+  u32 *__restrict__ states,
+  UartDecoderState *__restrict__ uart_state,
+  const UartParams *__restrict__ uart_params,
+  UartChannel *__restrict__ uart_channel,
+  WbTraceChannel *__restrict__ wb_channel,
+  const WbTraceParams *__restrict__ wb_params,
+  BusTraceChannel *__restrict__ bus_channel,
+  const BusTraceParamsAll *__restrict__ bus_params
+  )
+{
+  if (threadIdx.x != 0) return;
+
+  u32 state_size = uart_params->state_size;
+
+  // Read a bit from the OUTPUT state slot (0xFFFFFFFF position → 0).
+  #define READ_OUT_BIT(pos) \
+      (((pos) != 0xFFFFFFFFu) ? ((states[state_size + ((pos) >> 5)] >> ((pos) & 31u)) & 1u) : 0u)
+
+  // ── UART TX decoder (multi-instance) ──────────────────────────────────
+  for (u32 ui = 0; ui < uart_params->n_uarts && ui < COSIM_MAX_UARTS; ui++) {
+    u32 cycles_per_bit = uart_params->channels[ui].cycles_per_bit;
+    u32 tx = READ_OUT_BIT(uart_params->channels[ui].tx_out_pos);
+
+    UartDecoderState *us = &uart_state[ui];
+    UartChannel *uc = &uart_channel[ui];
+
+    u32 cycle = us->current_cycle;
+    u32 st = us->state;
+    u32 last_tx = us->last_tx;
+    u32 start_cycle = us->start_cycle;
+    u32 bits_received = us->bits_received;
+    u32 value = us->value;
+
+    if (st == 0) {
+      if (last_tx == 1 && tx == 0) {
+        st = 1;
+        start_cycle = cycle;
+      }
+    } else if (st == 1) {
+      if (cycle >= start_cycle + cycles_per_bit / 2) {
+        if (tx == 0) {
+          st = 2;
+          start_cycle = start_cycle + cycles_per_bit;
+          bits_received = 0;
+          value = 0;
+        } else {
+          st = 0;
+        }
+      }
+    } else if (st == 2) {
+      u32 bit_center = start_cycle + bits_received * cycles_per_bit + cycles_per_bit / 2;
+      if (cycle >= bit_center) {
+        value = value | (tx << bits_received);
+        if (bits_received >= 7) {
+          st = 3;
+          start_cycle = start_cycle + 8 * cycles_per_bit;
+        } else {
+          bits_received = bits_received + 1;
+        }
+      }
+    } else if (st == 3) {
+      if (cycle >= start_cycle + cycles_per_bit / 2) {
+        if (tx == 1) {
+          u32 head = uc->write_head;
+          u32 cap = uc->capacity;
+          uc->data[head % cap] = (unsigned char)(value & 0xFF);
+          uc->write_head = head + 1;
+        }
+        st = 0;
+      }
+    }
+
+    us->state = st;
+    us->last_tx = tx;
+    us->start_cycle = start_cycle;
+    us->bits_received = bits_received;
+    us->value = value;
+    us->current_cycle = cycle + 1;
+  }
+
+  // ── Wishbone bus trace ─────────────────────────────────────────────────
+  if (wb_params->has_trace != 0) {
+    u32 ibus_cyc = READ_OUT_BIT(wb_params->ibus_cyc_pos);
+    u32 ibus_stb = READ_OUT_BIT(wb_params->ibus_stb_pos);
+    u32 dbus_cyc = READ_OUT_BIT(wb_params->dbus_cyc_pos);
+    u32 dbus_stb = READ_OUT_BIT(wb_params->dbus_stb_pos);
+    u32 dbus_we  = READ_OUT_BIT(wb_params->dbus_we_pos);
+    u32 spi_ack  = READ_OUT_BIT(wb_params->spiflash_ack_pos);
+    u32 sram_ack = READ_OUT_BIT(wb_params->sram_ack_pos);
+    u32 csr_ack  = READ_OUT_BIT(wb_params->csr_ack_pos);
+
+    u32 flags = (ibus_cyc) | (ibus_stb << 1) | (dbus_cyc << 2) | (dbus_stb << 3)
+              | (dbus_we << 4) | (spi_ack << 5) | (sram_ack << 6) | (csr_ack << 7);
+
+    u32 tick = wb_channel->current_tick;
+    bool active = (ibus_cyc && ibus_stb) || (dbus_cyc && dbus_stb);
+    bool changed = (flags != wb_channel->prev_flags);
+
+    if (active || changed) {
+      u32 ibus_adr = 0;
+      for (u32 i = 0; i < COSIM_WB_TRACE_MAX_ADR_BITS; i++) {
+        ibus_adr |= READ_OUT_BIT(wb_params->ibus_adr_pos[i]) << i;
+      }
+      u32 ibus_rdata = 0;
+      for (u32 i = 0; i < COSIM_WB_TRACE_MAX_DAT_BITS; i++) {
+        ibus_rdata |= READ_OUT_BIT(wb_params->ibus_rdata_pos[i]) << i;
+      }
+      u32 dbus_adr = 0;
+      for (u32 i = 0; i < COSIM_WB_TRACE_MAX_ADR_BITS; i++) {
+        dbus_adr |= READ_OUT_BIT(wb_params->dbus_adr_pos[i]) << i;
+      }
+
+      u32 head = wb_channel->write_head;
+      u32 cap = wb_channel->capacity;
+      if (head < cap) {
+        WbTraceEntry *entries = (WbTraceEntry *)((unsigned char *)wb_channel + 16);
+        WbTraceEntry *e = &entries[head % cap];
+        e->tick = tick;
+        e->flags = flags;
+        e->ibus_adr = ibus_adr;
+        e->ibus_rdata = ibus_rdata;
+        e->dbus_adr = dbus_adr;
+        wb_channel->write_head = head + 1;
+      }
+    }
+
+    wb_channel->prev_flags = flags;
+    wb_channel->current_tick = tick + 1;
+  }
+
+  // ── Bus transaction trace (AHB/APB, ADR 0013) ──────────────────────────
+  // Rising-edge detection records exactly one entry per completed transfer.
+  if (bus_params->n_buses != 0u) {
+    u32 btick = bus_channel->current_tick;
+    u32 prev = bus_channel->prev_gate;
+    u32 new_gate = 0u;
+    for (u32 b = 0u; b < bus_params->n_buses && b < COSIM_MAX_BUS_TRACES; b++) {
+      const BusTraceParams *bp = &bus_params->buses[b];
+      u32 gate = 0u;
+      if (bp->protocol == COSIM_BUS_PROTO_APB3) {
+        u32 sel = READ_OUT_BIT(bp->sel_pos);
+        u32 en  = READ_OUT_BIT(bp->enable_pos);
+        u32 rdy = (bp->ready_pos == 0xFFFFFFFFu) ? 1u : READ_OUT_BIT(bp->ready_pos);
+        gate = (sel & en & rdy);
+      }
+      // AHB-Lite / AHB5 gating: Phase 2.
+      new_gate |= (gate << b);
+
+      bool rising = (gate != 0u) && (((prev >> b) & 1u) == 0u);
+      if (rising) {
+        u32 write = READ_OUT_BIT(bp->write_pos);
+        u32 err   = READ_OUT_BIT(bp->resp_pos);
+        u32 addr = 0u;
+        for (u32 i = 0u; i < COSIM_BUS_TRACE_MAX_ADR_BITS && i < bp->addr_bits; i++) {
+          addr |= READ_OUT_BIT(bp->addr_pos[i]) << i;
+        }
+        u32 wdata = 0u;
+        u32 rdata = 0u;
+        for (u32 i = 0u; i < COSIM_BUS_TRACE_MAX_DAT_BITS && i < bp->data_bits; i++) {
+          wdata |= READ_OUT_BIT(bp->wdata_pos[i]) << i;
+          rdata |= READ_OUT_BIT(bp->rdata_pos[i]) << i;
+        }
+        u32 head = bus_channel->write_head;
+        u32 cap = bus_channel->capacity;
+        if (head < cap) {
+          BusTraceEntry *entries = (BusTraceEntry *)((unsigned char *)bus_channel + 16);
+          BusTraceEntry *e = &entries[head % cap];
+          e->tick = btick;
+          e->flags = (write & 1u) | ((err & 1u) << 1) | (b << 8);
+          e->addr = addr;
+          e->wdata = wdata;
+          e->rdata = rdata;
+          bus_channel->write_head = head + 1u;
+        }
+      }
+    }
+    bus_channel->prev_gate = new_gate;
+    bus_channel->current_tick = btick + 1u;
+  }
+
+  #undef READ_OUT_BIT
+}

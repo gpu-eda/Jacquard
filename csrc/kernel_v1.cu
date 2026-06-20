@@ -114,3 +114,56 @@ void cosim_simulate_stage_cuda(
     timing_constraints, (EventBuffer *)event_buffer, arrival_state_offset);
   checkCudaErrors(cudaGetLastError());
 }
+
+// gpu_io_step launcher (Stage B): UART + bus-trace capture for one edge. Single
+// block, thread-0 work like the Metal encode_io_step. Default-stream ordered
+// after this edge's cosim_simulate_stage launches.
+// IO struct buffers cross FFI as untyped u8 (the proven event_buffer pattern):
+// ulib `UVec<T>` requires `T: UniversalCopy`, which the IO structs are not, so
+// the Rust side passes `UVec<u8>` byte buffers and the launcher casts to the
+// struct types here. `states` stays u32 (the design-state UVec<u32>).
+extern "C"
+void gpu_io_step_cuda(
+  u32 *states,
+  u8 *uart_state,
+  const u8 *uart_params,
+  u8 *uart_channel,
+  u8 *wb_channel,
+  const u8 *wb_params,
+  u8 *bus_channel,
+  const u8 *bus_params
+  )
+{
+  gpu_io_step<<<1, 256>>>(
+    states,
+    (UartDecoderState *)uart_state,
+    (const UartParams *)uart_params,
+    (UartChannel *)uart_channel,
+    (WbTraceChannel *)wb_channel,
+    (const WbTraceParams *)wb_params,
+    (BusTraceChannel *)bus_channel,
+    (const BusTraceParamsAll *)bus_params);
+  checkCudaErrors(cudaGetLastError());
+}
+
+// cosim_snapshot launcher (Stage B): device→device copy of the 2-slot state
+// (`two_slot_words` = 2*state_size u32s) into ring slot `edge_offset`, so each
+// batched edge's [input|output] snapshot survives the next edge overwriting
+// `states`. The CUDA analog of Metal's per-edge blit (cosim/metal.rs blit copy).
+// Default-stream (stream 0) ordered with the kernel launches; the host syncs
+// once at end-of-batch.
+extern "C"
+void cosim_snapshot_cuda(
+  const u32 *states,
+  u32 *ring,
+  usize two_slot_words,
+  usize edge_offset
+  )
+{
+  checkCudaErrors(cudaMemcpyAsync(
+    ring + edge_offset * two_slot_words,
+    states,
+    two_slot_words * sizeof(u32),
+    cudaMemcpyDeviceToDevice,
+    0));
+}
