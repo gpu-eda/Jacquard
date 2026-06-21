@@ -1274,9 +1274,11 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-jtag-server-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          # Share the replay job's cache key so both Metal jtag jobs reuse the
+          # same warm `target/` instead of each paying for a cold build.
+          key: ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-jtag-server-llvm${{ env.LLVM_VERSION }}-
+            ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-
 
       - name: Build jacquard (metal)
         run: cargo build --release --features metal --bin jacquard

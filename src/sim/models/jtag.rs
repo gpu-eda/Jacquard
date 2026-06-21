@@ -168,11 +168,6 @@ impl JtagSource {
             JtagSource::Live { consumed, .. } => *consumed,
         }
     }
-
-    /// `true` for the interactive live socket, `false` for replay.
-    fn is_live(&self) -> bool {
-        matches!(self, JtagSource::Live { .. })
-    }
 }
 
 /// CPU-side state for one JTAG `remote_bitbang` peripheral.
