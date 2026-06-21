@@ -356,7 +356,8 @@ pub struct GpioConfig {
 /// JTAG replay peripheral configuration.
 ///
 /// Pin mappings only — the byte source is supplied at the CLI via
-/// `--jtag-replay <PATH>`. See `src/sim/models/jtag.rs` and
+/// `--jtag-replay <PATH>` (recorded stream) or `--jtag-server <PORT>`
+/// (live `remote_bitbang` socket). See `src/sim/models/jtag.rs` and
 /// [discussion #77](https://github.com/ChipFlow/Jacquard/discussions/77).
 #[derive(Debug, Clone, Deserialize)]
 pub struct JtagConfig {
@@ -371,6 +372,14 @@ pub struct JtagConfig {
     /// matching the dominant RV32-Debug TAP convention.
     #[serde(default = "default_true")]
     pub trst_active_low: bool,
+    /// Optional TDO *output* pin. Unlike the other three, TDO is a
+    /// design output the model reads back: the interactive
+    /// `--jtag-server` path samples it on each `R` (read-TDO) command
+    /// and writes the ASCII bit to the connected `remote_bitbang`
+    /// client. The replay path ignores it (`R` is counted, never
+    /// answered), so it stays optional.
+    #[serde(default)]
+    pub tdo_gpio: Option<usize>,
 }
 
 fn default_true() -> bool {
