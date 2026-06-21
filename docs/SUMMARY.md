@@ -10,6 +10,7 @@
 - [Timing Model Extensions](timing-model-extensions.md)
 - [Signal Tracing](signal-tracing.md)
 - [Bus Transaction Tracing](bus-tracing.md)
+- [Interactive JTAG Debug](jtag-debug.md)
 - [Adding a New PDK](adding-a-pdk.md)
 - [Troubleshooting VCD](troubleshooting-vcd.md)
 - [Handoff Discipline](handoff-discipline.md)
