@@ -1,7 +1,8 @@
 # Handoff — backend alignment (CUDA/HIP/Metal) + cosim portability
 
 **Created:** 2026-06-07 (updated 2026-06-21, tenth session — **Stage C C3+C4
-done; CUDA/HIP cosim flash parity COMPLETE**)
+done; PR #120 MERGED to `main`; CUDA/HIP cosim flash parity COMPLETE. Active next
+thread: cosim performance measurement, issue #122**)
 **Branch:** `cuda-hip-parity` (PR #120, off `main`). **PHASE 1 MERGED TO MAIN**
 (#118 @ `main` `e77aab3`; Phase 0 + Phase 1, `CpuBackend` parity, `cosim-cpu`
 Linux CI + 7 goldens). Now on the **CUDA/HIP parity track for release**: scope =
@@ -93,18 +94,57 @@ was the last cosim stage of the CUDA/HIP parity track. Checkpoints T0 (#104 sim
 timing), T1.x (state_prep/simulate + Stage A), T2.1 (Stage B UART/bus), T2.2
 (Stage C flash) all done + T4-green.
 
-**Now (pick up here):** the CUDA/HIP parity track is functionally complete. The
-remaining T2.3 row in `docs/plans/cosim-phase2-cuda-hip.md` is the **`GpuPeripheral`
-seam + cross-backend cosim equivalence gate** (ADR 0017 Layer 3) — extend
-`backend-equivalence` with cosim comparisons (cuda vs hip vs metal vs the CPU
-golden) so cosim is GPU-CI-covered cross-backend (today the new flash gate
-diffs each backend vs the *committed* golden independently, which already
-achieves equivalence transitively; T2.3 would make it an explicit N-way diff +
-define the peripheral seam for Phase 3 Tier-3 single-source). Lower priority /
-optional for release. **Then:** consider merging `cuda-hip-parity` (PR #120) to
-`main` — the release-critical CUDA/HIP parity goal is met. See "deferred
-follow-ups" below for the #104 leftovers (cross-backend timed-VCD equivalence;
-a violating fixture).
+**PR #120 MERGED to `main`** (2026-06-21, rebase-merge; main tip was `83ad55d`
+post-rebase: C3 `a071326`, C4 `7c54448`, this handoff `83ad55d`). The
+release-critical CUDA/HIP **functional** parity goal is met. The track closed on
+*correctness* (byte-identical across all backends, T4-green); **performance was
+deliberately deferred to a measurement-driven follow-up — that is the active
+next thread.**
+
+**Now (pick up here): CUDA/HIP cosim performance — profile + tune managed memory
+(issue [#122]).** Decided sequence with the maintainer: merge first (done), then
+address performance *with measurement*, not speculative tuning.
+
+*Data motivating it (correctness-CI byproduct timing — NOT a benchmark; 3
+different machines, single trial, 100%-batched on both backends so per-edge time
+is pure kernel+memory+sync efficiency):*
+- `dual_uart` 10k edges (light design): **CUDA-T4 19.2 µs vs Metal-CI 48.8 µs**
+  (~2.5× CUDA — launch/sync-dominated, CUDA's stream model wins).
+- `mcu_soc` flash 10k edges (heavy, 19.6 MB netlist): **CUDA-T4 64.9 µs vs
+  Metal-local 67.3 µs (≈ parity)** — per-edge dominated by `simulate_stage` over
+  many blocks/stages; CUDA's launch-efficiency lead vanishes here.
+
+*Hypothesis:* the CUDA backend's **`cudaMallocManaged` page-migration is the tax**
+that erases CUDA's lead on heavy designs (every batch touches the 16 MiB firmware
++ `FlashState` + large state/sram buffers). Managed memory was chosen as the
+closest analog to Metal `StorageModeShared`; **pinned-host + explicit-mirror is
+the documented fallback**, isolated behind the `CosimBackend` trait (only the
+backend struct changes — see `docs/plans/cosim-phase2-cuda-hip.md` §1b).
+
+*Approach (the measurement plan — do this next):*
+1. **Profile on the T4** (`nsys`/`ncu`) on the heavy `mcu_soc` fixture —
+   characterize the per-edge kernel sequence (`state_prep → apply_flash_din →
+   simulate×N → flash_model_step → gpu_io_step → snapshot`) and the
+   managed-memory page-fault / migration traffic. Establish a real repeated-trial
+   baseline (NOT the CI byproduct timing above — warmup + multiple trials).
+2. **A/B the memory model** — managed vs pinned-host + explicit mirror, same
+   fixture, isolated behind the trait so it A/Bs cleanly.
+3. **Decide + document** — land the change only if measurement justifies it;
+   record in an ADR / perf doc.
+
+*Constraint:* CI/T4-bound (dev box is Metal-only), same as the whole track. Mind
+the $200/mo Actions budget; the 19.6 MB `mcu_soc` netlist costs ~40s
+partitioning/run. Start in a fresh branch. Full issue body + data table: #122.
+
+**Lower-priority / optional threads (not blocking release):**
+- **T2.3** (`docs/plans/cosim-phase2-cuda-hip.md`): **`GpuPeripheral` seam +
+  cross-backend cosim equivalence gate** (ADR 0017 Layer 3) — extend
+  `backend-equivalence` with cosim comparisons (cuda vs hip vs metal vs the CPU
+  golden). Today the flash gate diffs each backend vs the *committed* golden
+  independently (equivalence transitively); T2.3 makes it an explicit N-way diff
+  + defines the peripheral seam for Phase 3 Tier-3 single-source.
+- **#104 deferred follow-ups** — see below.
+- **`v0.1.0` still untagged** — see "Carry-forward" (maintainer-triggered).
 
 **#104 deferred follow-ups** (low priority; #104 is functionally done): (a)
 cross-backend timed-VCD equivalence in `backend-equivalence` (needs artifact-flow
