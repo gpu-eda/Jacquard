@@ -119,6 +119,7 @@ jobs:
             perf_out/nsys_profile.log
             perf_out/ncu_profile.log
             perf_out/ncu_summary.txt
+            perf_out/ncu_import.err
             perf_out/baseline_trial_*.txt
             perf_out/flash_nsys.nsys-rep
             perf_out/flash_ncu.ncu-rep
