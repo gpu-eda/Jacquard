@@ -41,7 +41,15 @@ BIN="${JACQUARD_BIN:-target/release/jacquard}"
 EDGES="${EDGES:-10000}"
 TRIALS="${TRIALS:-3}"
 NCU="${NCU:-0}"
-NCU_EDGES="${NCU_EDGES:-200}"
+NCU_EDGES="${NCU_EDGES:-20}"
+# ncu replays each profiled kernel launch once per metric pass, so an unbounded
+# `--set full` over every kernel × every edge blows the CI job timeout (the first
+# attempt hit the 60-min cap). Keep ncu bounded and targeted: `basic` metric set
+# (Speed-of-Light + occupancy + launch), filter to the hotspot kernel only, and
+# cap the number of profiled launches. All overridable for a deeper manual run.
+NCU_SET="${NCU_SET:-basic}"
+NCU_KERNEL="${NCU_KERNEL:-cosim_simulate_stage}"
+NCU_LAUNCH_COUNT="${NCU_LAUNCH_COUNT:-20}"
 OUTDIR="${OUTDIR:-perf_out}"
 
 if [ ! -x "$BIN" ]; then
@@ -203,21 +211,26 @@ if [ "$NCU" != 1 ]; then
 elif ! command -v ncu >/dev/null 2>&1; then
     echo "WARNING: ncu not on PATH — skipping kernel-detail profile." | tee -a "$SUMMARY"
 else
-    echo "=== Phase 3: ncu kernel profile ($NCU_EDGES edges) ==="
+    echo "=== Phase 3: ncu kernel profile ($NCU_EDGES edges, set=$NCU_SET, kernel~$NCU_KERNEL, launch-count=$NCU_LAUNCH_COUNT) ==="
     ncu_rep="$OUTDIR/flash_ncu"
-    # Kernel replay is slow → tiny edge count. Cloud GPUs restrict the HW
-    # counters to root (ERR_NVGPUCTRPERM), so run ncu via passwordless sudo when
-    # available — root can read the counters. `-E` preserves PATH/CUDA env so the
-    # profiled jacquard child still resolves the CUDA runtime; CUDA libs resolve
-    # via the system ldconfig cache that root shares. If sudo isn't passwordless
-    # (interactive use), fall back to a direct run and degrade gracefully.
+    # Cloud GPUs restrict the HW counters to root (ERR_NVGPUCTRPERM), so run ncu
+    # via passwordless sudo when available — root can read the counters. `-E`
+    # preserves PATH/CUDA env so the profiled jacquard child still resolves the
+    # CUDA runtime; CUDA libs resolve via the system ldconfig cache that root
+    # shares. If sudo isn't passwordless (interactive use), fall back to a direct
+    # run and degrade gracefully.
     ncu_bin="$(command -v ncu)"
     ncu_cmd=("$ncu_bin")
     if sudo -n true 2>/dev/null; then
         ncu_cmd=(sudo -E "$ncu_bin")
         echo "  (running ncu via sudo -E to access GPU performance counters)"
     fi
-    "${ncu_cmd[@]}" --set full --target-processes all \
+    # Bounded + targeted (see NCU_* rationale above): only the hotspot kernel,
+    # only the first N launches, basic metric set. `--print-summary per-kernel`
+    # emits a compact aggregate (Speed-of-Light, occupancy) to stdout.
+    "${ncu_cmd[@]}" --set "$NCU_SET" --target-processes all \
+        --kernel-name "regex:$NCU_KERNEL" --launch-count "$NCU_LAUNCH_COUNT" \
+        --print-summary per-kernel \
         --export "$ncu_rep" -f \
         "$BIN" "${COSIM_ARGS[@]}" \
         --max-clock-edges "$NCU_EDGES" --output-vcd "$OUTDIR/mcu_flash_ncu.vcd" \
@@ -225,14 +238,23 @@ else
 
     {
         if grep -q 'ERR_NVGPUCTRPERM' "$OUTDIR/ncu_profile.log" 2>/dev/null; then
-            echo "ncu could not read HW counters on this runner (ERR_NVGPUCTRPERM)."
-            echo "The GPU needs profiling enabled for non-root users — set the kernel-module"
-            echo "param \`NVreg_RestrictProfilingToAdminUsers=0\` (or run ncu as root)."
+            echo "ncu could not read HW counters on this runner (ERR_NVGPUCTRPERM)"
+            echo "even via sudo. The GPU needs profiling enabled — set the kernel-module"
+            echo "param \`NVreg_RestrictProfilingToAdminUsers=0\` (or run the runner as root)."
+        elif [ ! -f "$ncu_rep.ncu-rep" ]; then
+            echo "ncu produced no report — check ncu_profile.log (no kernel matched"
+            echo "\`$NCU_KERNEL\`, or the run errored)."
         else
-            echo "Report: \`$(basename "$ncu_rep").ncu-rep\` (uploaded as artifact)."
+            echo "Report: \`$(basename "$ncu_rep").ncu-rep\` (uploaded). Kernel: \`$NCU_KERNEL\`,"
+            echo "$NCU_LAUNCH_COUNT launches, \`$NCU_SET\` metric set."
+            echo
+            echo "Per-kernel summary (Speed-of-Light / occupancy / duration):"
             echo
             echo '```'
-            ncu --import "$ncu_rep.ncu-rep" --page details 2>/dev/null | head -80 || echo "(ncu import produced no output)"
+            # The per-kernel aggregate ncu prints to stdout — the actionable bit.
+            sed -n '/Section: GPU Speed Of Light/,/^$/p;/Duration/p;/Compute (SM)/p;/Memory Throughput/p;/Achieved Occupancy/p;/Achieved Active Warps/p' \
+                "$OUTDIR/ncu_profile.log" 2>/dev/null | head -80 \
+                || echo "(no summary parsed — see ncu_profile.log / the .ncu-rep)"
             echo '```'
         fi
     } >> "$SUMMARY"

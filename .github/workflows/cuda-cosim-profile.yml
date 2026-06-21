@@ -26,9 +26,9 @@ on:
         required: false
         default: false
       ncu_edges:
-        description: '--max-clock-edges for the ncu run (keep small — kernel replay is slow)'
+        description: '--max-clock-edges for the ncu run (keep small — kernel replay is slow; ncu is bounded to the hotspot kernel + capped launch count regardless)'
         required: false
-        default: '200'
+        default: '20'
 
 permissions:
   contents: read
