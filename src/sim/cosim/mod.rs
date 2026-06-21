@@ -2436,6 +2436,17 @@ fn run_cosim_generic<B: CosimBackend>(
                 // Interactive live server (issue #124). Bind + block for
                 // one client *before* the main loop — D5 in the plan.
                 (None, Some(port)) => {
+                    // Warn about a missing TDO mapping *before* blocking on
+                    // accept(), so the operator sees it while the client is
+                    // still being set up rather than after connecting.
+                    if tdo.is_none() {
+                        clilog::warn!(
+                            "jtag server: no `tdo_gpio` in sim_config.json; TDO \
+                             reads (R) will all return 0 — the debugger cannot \
+                             read the design back. Add `tdo_gpio` to the `jtag` \
+                             config."
+                        );
+                    }
                     let listener = std::net::TcpListener::bind(("127.0.0.1", port))
                         .unwrap_or_else(|e| {
                             panic!("jtag server: cannot bind 127.0.0.1:{port}: {e}")
@@ -2454,14 +2465,6 @@ fn run_cosim_generic<B: CosimBackend>(
                         clilog::warn!("jtag server: could not set TCP_NODELAY: {e}");
                     }
                     clilog::info!("JTAG server `jtag_0`: client connected from {peer}");
-                    if tdo.is_none() {
-                        clilog::warn!(
-                            "jtag server: no `tdo_gpio` in sim_config.json; TDO \
-                             reads (R) will all return 0 — the debugger cannot \
-                             read the design back. Add `tdo_gpio` to the `jtag` \
-                             config."
-                        );
-                    }
                     let model = crate::sim::models::jtag::JtagReplayModel::new_live(
                         "jtag_0".to_string(),
                         tck,
@@ -3047,6 +3050,14 @@ fn run_cosim_generic<B: CosimBackend>(
             let mut emitted_events: Vec<crate::sim::models::EmittedEvent> = Vec::new();
             let mut any_change = false;
 
+            // Output half of the design state (`[input | output]`,
+            // `2 × state_size`) produced by the previous edge's `run_edges`.
+            // The first CPU model that reads it is the interactive JTAG
+            // server, which samples TDO from it to answer `R` (ADR 0017 / 0013
+            // `output_state` wiring; resolves the standing `&[]` placeholder).
+            // The immutable borrow is dropped before `patch_*` re-borrows
+            // `backend` mutably after the loop.
+            let output_state = &backend.state()[state_size..];
             for model in models.iter_mut() {
                 let prev_active = model.is_active();
                 if let Some(d) = input_dispatcher.as_mut() {
@@ -3059,15 +3070,7 @@ fn run_cosim_generic<B: CosimBackend>(
                     }
                 }
                 // step_edge contributes overrides itself (default impl) and
-                // pushes any emitted events. The output half of the design
-                // state (`[input | output]`, `2 × state_size`) is the value
-                // produced by the previous edge's `run_edges` — the first CPU
-                // model that reads it is the interactive JTAG server, which
-                // samples TDO from it to answer `R`. Re-borrowed per iteration
-                // so the immutable borrow ends before `patch_*` re-borrows
-                // `backend` mutably below (ADR 0017 / 0013 `output_state`
-                // wiring; resolves the standing `&[]` placeholder TODO).
-                let output_state = &backend.state()[state_size..];
+                // pushes any emitted events.
                 model.step_edge(output_state, &mut overrides, &mut emitted_events);
                 if prev_active || model.is_active() {
                     any_change = true;
