@@ -47,6 +47,12 @@ pub struct CosimOpts {
     /// instantiates a `JtagReplayModel` driving the configured pins
     /// from this file. Discussion #77 stage 1.
     pub jtag_replay: Option<std::path::PathBuf>,
+    /// TCP port for an interactive `remote_bitbang` JTAG server. When
+    /// set alongside a `jtag` peripheral, cosim binds the port, blocks
+    /// for one client (OpenOCD), and drives the configured pins live —
+    /// the interactive sibling of `jtag_replay`. Mutually exclusive with
+    /// `jtag_replay`. Issue #124.
+    pub jtag_server: Option<u16>,
     /// Cosim edges per JTAG stream byte. Default 4; see
     /// `JtagReplayModel` for the rationale.
     pub jtag_hold_cycles: u32,
@@ -2357,73 +2363,134 @@ fn run_cosim_generic<B: CosimBackend>(
     // pass the stream); CLI without config hard-fails (the operator
     // expected JTAG to work and it didn't).
     if let Some(jtag_cfg) = config.jtag.as_ref() {
-        if let Some(replay_path) = opts.jtag_replay.as_ref() {
-            let bytes = std::fs::read(replay_path).unwrap_or_else(|e| {
+        // Pin resolution is shared by both byte sources (replay file and
+        // live `--jtag-server` socket); only the source differs. TCK/TMS/
+        // TDI/TRST are design *inputs* (resolved against `input_bits`);
+        // TDO is a design *output* (resolved against `output_bits`).
+        let resolve_pin = |gpio: usize, label: &str| -> u32 {
+            *gpio_map.input_bits.get(&gpio).unwrap_or_else(|| {
                 panic!(
-                    "jtag: cannot read --jtag-replay {}: {e}",
-                    replay_path.display()
+                    "jtag: {label}_gpio={gpio} not in input mapping; \
+                     check sim_config.json against design pin layout"
                 )
-            });
-            let resolve_pin = |gpio: usize, label: &str| -> u32 {
-                *gpio_map.input_bits.get(&gpio).unwrap_or_else(|| {
-                    panic!(
-                        "jtag: {label}_gpio={gpio} not in input mapping; \
-                         check sim_config.json against design pin layout"
-                    )
-                })
+            })
+        };
+        let tck = resolve_pin(jtag_cfg.tck_gpio, "tck");
+        let tms = resolve_pin(jtag_cfg.tms_gpio, "tms");
+        let tdi = resolve_pin(jtag_cfg.tdi_gpio, "tdi");
+        let trst = jtag_cfg.trst_gpio.map(|g| crate::sim::models::jtag::TrstPin {
+            position: resolve_pin(g, "trst"),
+            active_low: jtag_cfg.trst_active_low,
+        });
+        let tdo = jtag_cfg.tdo_gpio.map(|g| {
+            *gpio_map.output_bits.get(&g).unwrap_or_else(|| {
+                panic!(
+                    "jtag: tdo_gpio={g} not in output mapping; \
+                     check sim_config.json against design pin layout"
+                )
+            })
+        });
+        let pins = format!(
+            "tck_gpio={}, tms_gpio={}, tdi_gpio={}, trst_gpio={:?}, tdo_gpio={:?}",
+            jtag_cfg.tck_gpio,
+            jtag_cfg.tms_gpio,
+            jtag_cfg.tdi_gpio,
+            jtag_cfg.trst_gpio,
+            jtag_cfg.tdo_gpio
+        );
+
+        let model: Option<Box<dyn PeripheralModel>> =
+            match (opts.jtag_replay.as_ref(), opts.jtag_server) {
+                // `conflicts_with` in clap normally rejects this at parse
+                // time; keep a defensive guard for non-CLI callers.
+                (Some(_), Some(_)) => panic!(
+                    "jtag: --jtag-replay and --jtag-server are mutually exclusive"
+                ),
+                // Deterministic file replay (discussion #77 stage 1).
+                (Some(replay_path), None) => {
+                    let bytes = std::fs::read(replay_path).unwrap_or_else(|e| {
+                        panic!(
+                            "jtag: cannot read --jtag-replay {}: {e}",
+                            replay_path.display()
+                        )
+                    });
+                    let stream_len = bytes.len();
+                    let model = crate::sim::models::jtag::JtagReplayModel::new(
+                        "jtag_0".to_string(),
+                        tck,
+                        tms,
+                        tdi,
+                        trst,
+                        tdo,
+                        opts.jtag_hold_cycles,
+                        bytes,
+                    );
+                    clilog::info!(
+                        "JTAG replay `jtag_0`: {stream_len} stream bytes from {}, \
+                         hold_edges={} ({pins})",
+                        replay_path.display(),
+                        opts.jtag_hold_cycles
+                    );
+                    Some(Box::new(model))
+                }
+                // Interactive live server (issue #124). Bind + block for
+                // one client *before* the main loop — D5 in the plan.
+                (None, Some(port)) => {
+                    let listener = std::net::TcpListener::bind(("127.0.0.1", port))
+                        .unwrap_or_else(|e| {
+                            panic!("jtag server: cannot bind 127.0.0.1:{port}: {e}")
+                        });
+                    clilog::info!(
+                        "JTAG server `jtag_0`: listening on 127.0.0.1:{port}, \
+                         hold_edges={} ({pins}); waiting for a remote_bitbang \
+                         client (e.g. OpenOCD)…",
+                        opts.jtag_hold_cycles
+                    );
+                    let (stream, peer) = listener.accept().unwrap_or_else(|e| {
+                        panic!("jtag server: accept on 127.0.0.1:{port} failed: {e}")
+                    });
+                    // Single-byte TDO replies must not wait on Nagle.
+                    if let Err(e) = stream.set_nodelay(true) {
+                        clilog::warn!("jtag server: could not set TCP_NODELAY: {e}");
+                    }
+                    clilog::info!("JTAG server `jtag_0`: client connected from {peer}");
+                    if tdo.is_none() {
+                        clilog::warn!(
+                            "jtag server: no `tdo_gpio` in sim_config.json; TDO \
+                             reads (R) will all return 0 — the debugger cannot \
+                             read the design back. Add `tdo_gpio` to the `jtag` \
+                             config."
+                        );
+                    }
+                    let model = crate::sim::models::jtag::JtagReplayModel::new_live(
+                        "jtag_0".to_string(),
+                        tck,
+                        tms,
+                        tdi,
+                        trst,
+                        tdo,
+                        opts.jtag_hold_cycles,
+                        stream,
+                    );
+                    Some(Box::new(model))
+                }
+                // Config present, no source flag: inputs would float.
+                (None, None) => {
+                    clilog::warn!(
+                        "sim_config.json declares a `jtag` peripheral but neither \
+                         --jtag-replay <PATH> nor --jtag-server <PORT> was \
+                         supplied; JTAG inputs will float"
+                    );
+                    None
+                }
             };
-            let tck = resolve_pin(jtag_cfg.tck_gpio, "tck");
-            let tms = resolve_pin(jtag_cfg.tms_gpio, "tms");
-            let tdi = resolve_pin(jtag_cfg.tdi_gpio, "tdi");
-            let trst = jtag_cfg.trst_gpio.map(|g| crate::sim::models::jtag::TrstPin {
-                position: resolve_pin(g, "trst"),
-                active_low: jtag_cfg.trst_active_low,
-            });
-            // TDO is a design *output*, so it resolves against
-            // `output_bits` (not `input_bits`). Optional: replay never
-            // answers `R`, so an unmapped TDO is harmless there.
-            let tdo = jtag_cfg.tdo_gpio.map(|g| {
-                *gpio_map.output_bits.get(&g).unwrap_or_else(|| {
-                    panic!(
-                        "jtag: tdo_gpio={g} not in output mapping; \
-                         check sim_config.json against design pin layout"
-                    )
-                })
-            });
-            let stream_len = bytes.len();
-            let model = crate::sim::models::jtag::JtagReplayModel::new(
-                "jtag_0".to_string(),
-                tck,
-                tms,
-                tdi,
-                trst,
-                tdo,
-                opts.jtag_hold_cycles,
-                bytes,
-            );
-            clilog::info!(
-                "JTAG replay `jtag_0`: {} stream bytes from {}, hold_edges={} \
-                 (tck_gpio={}, tms_gpio={}, tdi_gpio={}, trst_gpio={:?}, tdo_gpio={:?})",
-                stream_len,
-                replay_path.display(),
-                opts.jtag_hold_cycles,
-                jtag_cfg.tck_gpio,
-                jtag_cfg.tms_gpio,
-                jtag_cfg.tdi_gpio,
-                jtag_cfg.trst_gpio,
-                jtag_cfg.tdo_gpio
-            );
-            register_model(Box::new(model), &mut models, &mut model_driven_positions);
-        } else {
-            clilog::warn!(
-                "sim_config.json declares a `jtag` peripheral but no \
-                 --jtag-replay <PATH> was supplied; JTAG inputs will float"
-            );
+        if let Some(model) = model {
+            register_model(model, &mut models, &mut model_driven_positions);
         }
-    } else if opts.jtag_replay.is_some() {
+    } else if opts.jtag_replay.is_some() || opts.jtag_server.is_some() {
         panic!(
-            "--jtag-replay supplied but sim_config.json has no `jtag` \
-             peripheral entry to bind it to"
+            "--jtag-replay/--jtag-server supplied but sim_config.json has no \
+             `jtag` peripheral entry to bind it to"
         );
     }
     let _ = register_model;

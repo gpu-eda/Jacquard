@@ -17,7 +17,8 @@
         "tms_gpio": 3,
         "tdi_gpio": 4,
         "trst_gpio": 5,
-        "trst_active_low": true
+        "trst_active_low": true,
+        "tdo_gpio": 6
     },
     "port_mapping": {
         "inputs": {

@@ -1232,6 +1232,92 @@ jobs:
             jtag_minimal_cosim.log
             tests/jtag_minimal/data/cosim_trace.vcd
 
+  # Interactive `--jtag-server` loopback gate (V1 in
+  # docs/plans/jtag-debug-server.md). Same design + same recorded
+  # `bitbang.rec`, but driven over a LIVE remote_bitbang socket by a
+  # Python client instead of file replay. Asserts the live path reaches
+  # the same `data0_obs == 0xCAFEBABE`, pinning live-vs-replay
+  # equivalence (socket → TDO read-back → drive) with zero external
+  # tooling. Mirrors jtag-minimal-cosim's cost (per-edge dispatch while
+  # the session is live); runs in parallel as an independent signal.
+  jtag-minimal-cosim-server:
+    name: JTAG Minimal Cosim Server (live remote_bitbang)
+    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
+    timeout-minutes: 45
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: true
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM (for OpenMP)
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          brew install llvm
+          LLVM_PREFIX=$(brew --prefix llvm)
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> $GITHUB_ENV
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
+          LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
+          echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-jtag-server-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-jtag-server-llvm${{ env.LLVM_VERSION }}-
+
+      - name: Build jacquard (metal)
+        run: cargo build --release --features metal --bin jacquard
+
+      - name: Run live --jtag-server cosim + bitbang client
+        # The server binds the port and blocks on accept() during setup;
+        # the Python client retry-connects, then streams bitbang.rec and
+        # drains every R reply. The server free-runs to completion after
+        # the stream's Q, then writes the VCD we assert on.
+        timeout-minutes: 40
+        run: |
+          set -o pipefail
+          ./target/release/jacquard cosim \
+            tests/jtag_minimal/data/top.pnl.v \
+            --config tests/jtag_minimal/sim_config.json \
+            --top-module top \
+            --jtag-server 9999 \
+            --jtag-hold-cycles 8 \
+            --trace-signals tests/jtag_minimal/trace_signals.txt \
+            --output-vcd tests/jtag_minimal/data/cosim_server_trace.vcd \
+            --max-clock-edges 4000000 \
+            > jtag_minimal_server.log 2>&1 &
+          SERVER_PID=$!
+          python3 tests/jtag_minimal/scripts/bitbang_client.py \
+            127.0.0.1 9999 tests/jtag_minimal/data/bitbang.rec
+          wait $SERVER_PID
+
+      - name: Assert data0_obs == 0xCAFEBABE (live server)
+        run: |
+          python3 tests/jtag_minimal/scripts/check_pass.py \
+            tests/jtag_minimal/data/cosim_server_trace.vcd
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: jtag-minimal-server-results
+          path: |
+            jtag_minimal_server.log
+            tests/jtag_minimal/data/cosim_server_trace.vcd
+
   # Build documentation (cargo doc + mdbook) and deploy to GitHub Pages
   docs:
     name: Documentation

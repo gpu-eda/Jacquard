@@ -51,6 +51,8 @@ use crate::sim::input_stim::QueuedAction;
 use crate::sim::models::{
     read_bit, warn_unhandled, EmittedEvent, ModelOverrides, PeripheralModel,
 };
+use std::io::{ErrorKind, Read, Write};
+use std::net::TcpStream;
 
 /// Optional pin position + polarity for the design's TRST input.
 ///
@@ -72,13 +74,26 @@ pub struct TrstPin {
 enum JtagSource {
     /// Deterministic replay of a recorded stream (`--jtag-replay`).
     Replay { bytes: Vec<u8>, cursor: usize },
+    /// Live `remote_bitbang` socket from an accepted client
+    /// (`--jtag-server`). The client (OpenOCD) paces the session, so a
+    /// byte read blocks until it sends one, and `R` (read-TDO) commands
+    /// are answered back over the same stream.
+    Live {
+        stream: TcpStream,
+        /// Set once the socket reaches EOF or errors — `finished()`
+        /// then lets the sim free-run instead of blocking forever.
+        closed: bool,
+        /// Bytes consumed so far (diagnostics; Replay derives this from
+        /// its cursor).
+        consumed: usize,
+    },
 }
 
 impl JtagSource {
     /// Yield the next protocol byte, or `None` when the source is
-    /// exhausted. Replay returns `None` at end-of-buffer; the J3 live
-    /// arm performs a *blocking* socket read (the connected client
-    /// paces the session) and returns `None` on EOF.
+    /// exhausted. Replay returns `None` at end-of-buffer; the live arm
+    /// performs a *blocking* socket read (the connected client paces
+    /// the session) and returns `None` on EOF or a fatal socket error.
     fn next_byte_blocking(&mut self) -> Option<u8> {
         match self {
             JtagSource::Replay { bytes, cursor } => {
@@ -88,6 +103,53 @@ impl JtagSource {
                 }
                 b
             }
+            JtagSource::Live {
+                stream,
+                closed,
+                consumed,
+            } => {
+                if *closed {
+                    return None;
+                }
+                let mut buf = [0u8; 1];
+                loop {
+                    match stream.read(&mut buf) {
+                        Ok(0) => {
+                            // Orderly client disconnect.
+                            *closed = true;
+                            clilog::info!("jtag server: client disconnected (EOF)");
+                            return None;
+                        }
+                        Ok(_) => {
+                            *consumed += 1;
+                            return Some(buf[0]);
+                        }
+                        Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                        Err(e) => {
+                            *closed = true;
+                            clilog::warn!(
+                                "jtag server: socket read error: {e}; ending session"
+                            );
+                            return None;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Answer an `R` (read-TDO) command by writing one ASCII bit back to
+    /// the client. No-op for replay (the recorded path never answers).
+    fn write_tdo(&mut self, bit: u8) {
+        if let JtagSource::Live { stream, closed, .. } = self {
+            if *closed {
+                return;
+            }
+            let ascii = if bit != 0 { b'1' } else { b'0' };
+            if let Err(e) = stream.write_all(&[ascii]) {
+                *closed = true;
+                clilog::warn!("jtag server: TDO write failed: {e}; ending session");
+            }
         }
     }
 
@@ -95,6 +157,7 @@ impl JtagSource {
     fn is_exhausted(&self) -> bool {
         match self {
             JtagSource::Replay { bytes, cursor } => *cursor >= bytes.len(),
+            JtagSource::Live { closed, .. } => *closed,
         }
     }
 
@@ -102,7 +165,13 @@ impl JtagSource {
     fn consumed(&self) -> usize {
         match self {
             JtagSource::Replay { cursor, .. } => *cursor,
+            JtagSource::Live { consumed, .. } => *consumed,
         }
+    }
+
+    /// `true` for the interactive live socket, `false` for replay.
+    fn is_live(&self) -> bool {
+        matches!(self, JtagSource::Live { .. })
     }
 }
 
@@ -156,6 +225,11 @@ pub struct JtagReplayModel {
     srst_toggles: u64,
     /// Set true when the stream's `'Q'` (quit) command is reached.
     quit: bool,
+    /// Set when the just-consumed byte was an `'R'` (read-TDO) command.
+    /// The `PeripheralModel::step_edge` impl checks this after stepping
+    /// and, in live-server mode, samples TDO from `output_state` and
+    /// writes the ASCII bit back to the client. Cleared each edge.
+    pending_tdo_read: bool,
 }
 
 impl JtagReplayModel {
@@ -172,6 +246,60 @@ impl JtagReplayModel {
         tdo_pos: Option<u32>,
         hold_edges: u32,
         bytes: Vec<u8>,
+    ) -> Self {
+        Self::with_source(
+            name,
+            tck_pos,
+            tms_pos,
+            tdi_pos,
+            trst,
+            tdo_pos,
+            hold_edges,
+            JtagSource::Replay { bytes, cursor: 0 },
+        )
+    }
+
+    /// Build a live-server model driven by an accepted `remote_bitbang`
+    /// client over `stream`. Identical to [`new`](Self::new) except the
+    /// byte feed is the socket and `R` commands are answered with the
+    /// design's live TDO. `tdo_pos` should be `Some` (resolved from
+    /// `JtagConfig.tdo_gpio`); a `None` here means `R` always reads `0`.
+    pub fn new_live(
+        name: String,
+        tck_pos: u32,
+        tms_pos: u32,
+        tdi_pos: u32,
+        trst: Option<TrstPin>,
+        tdo_pos: Option<u32>,
+        hold_edges: u32,
+        stream: TcpStream,
+    ) -> Self {
+        Self::with_source(
+            name,
+            tck_pos,
+            tms_pos,
+            tdi_pos,
+            trst,
+            tdo_pos,
+            hold_edges,
+            JtagSource::Live {
+                stream,
+                closed: false,
+                consumed: 0,
+            },
+        )
+    }
+
+    /// Shared constructor body for both byte sources.
+    fn with_source(
+        name: String,
+        tck_pos: u32,
+        tms_pos: u32,
+        tdi_pos: u32,
+        trst: Option<TrstPin>,
+        tdo_pos: Option<u32>,
+        hold_edges: u32,
+        source: JtagSource,
     ) -> Self {
         assert!(
             hold_edges > 0,
@@ -192,7 +320,7 @@ impl JtagReplayModel {
             tdo_pos,
             driven_positions_arr: driven,
             hold_edges,
-            source: JtagSource::Replay { bytes, cursor: 0 },
+            source,
             // Pre-loaded so the first `step_edge` immediately
             // consumes the stream's first byte. Subsequent bytes
             // are spaced `hold_edges` apart.
@@ -207,6 +335,7 @@ impl JtagReplayModel {
             tdo_read_requests: 0,
             srst_toggles: 0,
             quit: false,
+            pending_tdo_read: false,
         }
     }
 
@@ -236,9 +365,14 @@ impl JtagReplayModel {
                 self.trst_active = true;
                 self.srst_toggles += 1;
             }
-            // TDO read — silently counted, response not sent (stage 1
-            // is deterministic replay; stage 2 sends back to socket).
-            b'R' => self.tdo_read_requests += 1,
+            // TDO read. Always counted; in live-server mode the
+            // `PeripheralModel::step_edge` impl sees `pending_tdo_read`
+            // and writes the sampled TDO bit back to the client.
+            // Replay leaves it counted-only (no socket to answer).
+            b'R' => {
+                self.tdo_read_requests += 1;
+                self.pending_tdo_read = true;
+            }
             // Blink LED commands — no-op.
             b'B' | b'b' => {}
             // Quit — treat as end-of-stream.
@@ -353,11 +487,21 @@ impl PeripheralModel for JtagReplayModel {
 
     fn step_edge(
         &mut self,
-        _output_state: &[u32],
+        output_state: &[u32],
         overrides: &mut ModelOverrides,
         _emitted: &mut Vec<EmittedEvent>,
     ) {
         JtagReplayModel::step_edge(self);
+        // Answer a just-consumed `R` (read-TDO). `output_state` is the
+        // design output produced by the previous edge's `run_edges` —
+        // i.e. the TDO the TAP drove in response to the TCK the client
+        // just clocked. `write_tdo` is a no-op for the replay source, so
+        // replay stays unaffected; only the live socket is written.
+        if self.pending_tdo_read {
+            self.pending_tdo_read = false;
+            let bit = self.sample_tdo(output_state).unwrap_or(0);
+            self.source.write_tdo(bit);
+        }
         self.contribute_overrides(overrides);
     }
 
@@ -636,5 +780,61 @@ mod tests {
             vec![],
         );
         assert_eq!(m.sample_tdo(&[0xFFFF_FFFF]), None);
+    }
+
+    /// End-to-end live-socket loopback: a real `TcpStream` client drives
+    /// the FSM through `JtagSource::Live`, and an `R` is answered with
+    /// the sampled TDO bit written back over the socket. This is the
+    /// deterministic, GPU-free core of the V1 gate — the full-design
+    /// `--jtag-server` equivalence run lives in CI (jtag-minimal-cosim
+    /// server job).
+    #[test]
+    fn live_source_loops_back_tdo_over_socket() {
+        use std::net::TcpListener;
+        use std::thread;
+        use std::time::Duration;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        // Client: drive zeros (`0`), then request TDO (`R`), then quit
+        // (`Q`). Expect exactly one ASCII response byte for the `R`.
+        let client = thread::spawn(move || {
+            let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            s.write_all(b"0").unwrap();
+            s.write_all(b"R").unwrap();
+            let mut resp = [0u8; 1];
+            s.read_exact(&mut resp).unwrap();
+            s.write_all(b"Q").unwrap();
+            resp[0]
+        });
+
+        let (stream, _) = listener.accept().unwrap();
+        // Bound any wait so a logic bug fails the test instead of hanging
+        // CI; the production server intentionally has no read timeout.
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut m = JtagReplayModel::new_live(
+            "jtag_0".into(),
+            10, 11, 12, None,
+            Some(33), // TDO at output-state bit 33 (word 1, bit 1)
+            1,
+            stream,
+        );
+        // Output state with TDO high.
+        let out = vec![0u32, 1u32 << 1];
+        let mut ov = ModelOverrides::new();
+        let mut ev = Vec::new();
+        // Steps: consume '0', consume 'R' (writes TDO), consume 'Q'.
+        // Extra steps are no-ops once finished.
+        for _ in 0..8 {
+            PeripheralModel::step_edge(&mut m, &out, &mut ov, &mut ev);
+        }
+        let got = client.join().unwrap();
+        assert_eq!(got, b'1', "R must read back TDO=1 from output_state");
+        assert_eq!(m.diagnostics().tdo_read_requests, 1);
+        assert!(m.finished(), "client 'Q' ends the session");
     }
 }

@@ -367,6 +367,18 @@ struct CosimArgs {
     #[clap(long = "jtag-replay", value_name = "PATH")]
     jtag_replay: Option<PathBuf>,
 
+    /// Open an interactive `remote_bitbang` JTAG server on this TCP
+    /// port instead of replaying a file. cosim binds the port and
+    /// blocks for one client (e.g. OpenOCD's `remote_bitbang` driver)
+    /// before the run starts, then drives the configured
+    /// TCK/TMS/TDI/(TRST) pins live and answers TDO reads from the
+    /// design's `tdo_gpio` output. The interactive sibling of
+    /// `--jtag-replay` (mutually exclusive with it). Attach a debugger
+    /// to inspect the design's RISC-V Debug Module exactly as on
+    /// silicon — see `docs/jtag-debug.md`. Issue #124.
+    #[clap(long = "jtag-server", value_name = "PORT", conflicts_with = "jtag_replay")]
+    jtag_server: Option<u16>,
+
     /// Cosim edges per JTAG stream byte. Default 4 — chosen against
     /// the "chip-clock ≥ 2× TCK" assumption that holds by construction
     /// in any chipflow design running a debug TAP. Bump for designs
@@ -2005,6 +2017,7 @@ fn cmd_cosim(args: CosimArgs) {
             dump_dff: args.dump_dff.clone(),
             dump_dff_cycles: args.dump_dff_cycles,
             jtag_replay: args.jtag_replay.clone(),
+            jtag_server: args.jtag_server,
             jtag_hold_cycles: args.jtag_hold_cycles,
             run_params: args.run_params.clone(),
             bus_trace_csv: args.bus_trace_csv.clone(),
