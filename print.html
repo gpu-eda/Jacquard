@@ -4599,6 +4599,37 @@ future <code>cosim_common.rs</code>).</p>
 </div>
 <p>Plan docs: <a href="adr/../plans/multi-peripheral-cosim.html"><code>../plans/multi-peripheral-cosim.md</code></a>,
 <a href="adr/../plans/bus-transaction-tracing.html"><code>../plans/bus-transaction-tracing.md</code></a>.</p>
+<h2 id="amendment-2026-06-21-interactive-jtag-debug-server-config-surface"><a class="header" href="#amendment-2026-06-21-interactive-jtag-debug-server-config-surface">Amendment 2026-06-21: interactive JTAG debug server config surface</a></h2>
+<p>The interactive JTAG/DM debug server (<code>--jtag-server</code>,
+<a href="https://github.com/gpu-eda/Jacquard/issues/124">#124</a>) is the live-socket
+sibling of <code>--jtag-replay</code>. Its config additions follow this ADR's conventions;
+the execution-model decisions are in
+<a href="adr/0017-cosim-execution-model.html">ADR 0017's 2026-06-21 amendment</a>. Recorded here:</p>
+<ul>
+<li>
+<p><strong><code>JtagConfig</code> gains <code>tdo_gpio: Option&lt;usize&gt;</code></strong> (<code>src/testbench.rs</code>). TDO is
+a design <strong>output</strong>, so unlike the existing <code>tck/tms/tdi/trst_gpio</code> (inputs,
+resolved via <code>input_bits</code>) it resolves via the <strong>output-bit</strong> map. It is the
+first JTAG pin that the model <em>observes</em> rather than <em>drives</em> — added
+<code>Option</code> so replay configs without it keep working.</p>
+</li>
+<li>
+<p><strong>Resolves the "<code>output_state</code> readback not yet wired" note above</strong> for the
+JTAG case. The interactive server is the first CPU-side <code>PeripheralModel</code> that
+must read a design output (TDO, to answer <code>remote_bitbang</code> <code>R</code>), so it wires
+the real output slice into <code>step_edge</code> — the same plumbing the scaffolded
+I²C/SPI models were noted as needing. See ADR 0017's amendment for the
+execution-model detail.</p>
+</li>
+<li>
+<p><strong>New CLI flag <code>--jtag-server &lt;PORT&gt;</code></strong>, mutually exclusive with
+<code>--jtag-replay</code>. Reuses the same <code>jtag</code> peripheral pin mapping and
+<code>--jtag-hold-cycles</code> semantics; opens a <code>remote_bitbang</code> TCP server and drives
+the configured pins live from the connected OpenOCD/gdb client. JTAG stays in
+the "Not yet" plural column (TAP daisy-chain suffices — single instance).</p>
+</li>
+</ul>
+<p>Plan: <a href="adr/../plans/jtag-debug-server.html"><code>../plans/jtag-debug-server.md</code></a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0014--aig-as-simulation-intermediate-representation"><a class="header" href="#adr-0014--aig-as-simulation-intermediate-representation">ADR 0014 — AIG as simulation intermediate representation</a></h1>
 <p><strong>Status:</strong> Accepted</p>
 <h2 id="context-13"><a class="header" href="#context-13">Context</a></h2>
@@ -5517,6 +5548,50 @@ peripherals), B (<code>gpu_io_step</code> → <code>dual_uart</code> + <code>apb
 committed CPU/Metal goldens on the T4. Staging detail:
 <a href="adr/../plans/cosim-phase2-cuda-hip.html"><code>docs/plans/cosim-phase2-cuda-hip.md</code></a>.</li>
 </ul>
+<h2 id="amendment-2026-06-21-interactive-externally-paced-peripheral-models"><a class="header" href="#amendment-2026-06-21-interactive-externally-paced-peripheral-models">Amendment 2026-06-21: interactive (externally-paced) peripheral models</a></h2>
+<p>The execution model above assumes the peripheral <em>pace</em> is internal: the loop
+drives time and models react each edge (recorded JTAG replay, queued stimulus,
+GPU peripherals). The interactive JTAG debug server (<code>--jtag-server</code>,
+<a href="https://github.com/gpu-eda/Jacquard/issues/124">#124</a>) introduces the inverse:
+an <strong>external client (OpenOCD/gdb) drives the pace</strong>, one <code>remote_bitbang</code>
+transaction at a time. This amendment records how that fits the model without
+new machinery — and the one latent contract gap it forces closed. It does
+<strong>not</strong> change the batch loop or scheduler.</p>
+<ul>
+<li>
+<p><strong>An interactive peripheral is a Tier-1 CPU <code>PeripheralModel</code> that blocks on
+external I/O.</strong> Its <code>step_edge</code> blocks reading the next bitbang byte from the
+socket; because the client is the clock source, this blocking <em>is</em> the
+synchronisation. <strong><code>is_active()</code> stays <code>true</code> while a client is connected</strong>, so
+the existing <code>force_single_edge</code> gate drives the design at <code>batch=1</code> for the
+session's duration — the same mechanism JTAG <em>replay</em> already uses. <strong>No async
+executor and no background thread are needed for a single connection</strong>; the
+blocking accept happens once before the main loop. The batched fast path is
+unaffected when no client is attached.</p>
+</li>
+<li>
+<p><strong>This makes the contract's "observe" half real.</strong> The Decision section and
+ADR 0013 both note <code>step_edge</code> is handed an <strong>empty <code>output_state</code></strong> today
+(<code>cosim/mod.rs:2987</code> passes <code>&amp;[]</code>) because no CPU-side model yet reads a design
+output. An interactive debugger <em>must</em> answer <code>remote_bitbang</code> <code>R</code> (read-TDO)
+with the live TDO bit, so <code>output_state</code> must carry the real design-output
+slice (<code>&amp;backend.state()[state_size..]</code>). This generalises beyond JTAG — it is
+the same wiring the scaffolded I²C/SPI observation models need — so it is a
+closure of the standing TODO, not a JTAG special case.</p>
+</li>
+<li>
+<p><strong>TDO read-back is the contract's "emit" half pointed at an external client.</strong>
+The peripheral contract is <em>observe → advance FSM → drive and/or emit</em>. A live
+debug server adds one I/O direction: it <strong>emits a response to an external
+socket mid-edge</strong> (the <code>R</code> reply) rather than into a ring buffer or VCD. The
+observe/drive halves (TDO sample, TCK/TMS/TDI drive via the usual
+<code>overrides → BitOps → state_prep</code> path) are unchanged.</p>
+</li>
+</ul>
+<p>Per-backend: the interactive path is the CPU-side model plus <code>batch=1</code> of the
+GPU backend (the "per-edge fallback" of the 2026-06-19 amendment), so it works
+on any cosim backend once the host-side plumbing lands — no kernel work.
+Implementation staging: <a href="adr/../plans/jtag-debug-server.html"><code>docs/plans/jtag-debug-server.md</code></a>.</p>
 <h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
 <ul>
 <li>ADR 0012 — CDC jitter injection (uses the scheduler's edge

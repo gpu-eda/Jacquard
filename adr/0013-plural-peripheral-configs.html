@@ -354,6 +354,37 @@ future <code>cosim_common.rs</code>).</p>
 </div>
 <p>Plan docs: <a href="../plans/multi-peripheral-cosim.html"><code>../plans/multi-peripheral-cosim.md</code></a>,
 <a href="../plans/bus-transaction-tracing.html"><code>../plans/bus-transaction-tracing.md</code></a>.</p>
+<h2 id="amendment-2026-06-21-interactive-jtag-debug-server-config-surface"><a class="header" href="#amendment-2026-06-21-interactive-jtag-debug-server-config-surface">Amendment 2026-06-21: interactive JTAG debug server config surface</a></h2>
+<p>The interactive JTAG/DM debug server (<code>--jtag-server</code>,
+<a href="https://github.com/gpu-eda/Jacquard/issues/124">#124</a>) is the live-socket
+sibling of <code>--jtag-replay</code>. Its config additions follow this ADR's conventions;
+the execution-model decisions are in
+<a href="0017-cosim-execution-model.html">ADR 0017's 2026-06-21 amendment</a>. Recorded here:</p>
+<ul>
+<li>
+<p><strong><code>JtagConfig</code> gains <code>tdo_gpio: Option&lt;usize&gt;</code></strong> (<code>src/testbench.rs</code>). TDO is
+a design <strong>output</strong>, so unlike the existing <code>tck/tms/tdi/trst_gpio</code> (inputs,
+resolved via <code>input_bits</code>) it resolves via the <strong>output-bit</strong> map. It is the
+first JTAG pin that the model <em>observes</em> rather than <em>drives</em> — added
+<code>Option</code> so replay configs without it keep working.</p>
+</li>
+<li>
+<p><strong>Resolves the "<code>output_state</code> readback not yet wired" note above</strong> for the
+JTAG case. The interactive server is the first CPU-side <code>PeripheralModel</code> that
+must read a design output (TDO, to answer <code>remote_bitbang</code> <code>R</code>), so it wires
+the real output slice into <code>step_edge</code> — the same plumbing the scaffolded
+I²C/SPI models were noted as needing. See ADR 0017's amendment for the
+execution-model detail.</p>
+</li>
+<li>
+<p><strong>New CLI flag <code>--jtag-server &lt;PORT&gt;</code></strong>, mutually exclusive with
+<code>--jtag-replay</code>. Reuses the same <code>jtag</code> peripheral pin mapping and
+<code>--jtag-hold-cycles</code> semantics; opens a <code>remote_bitbang</code> TCP server and drives
+the configured pins live from the connected OpenOCD/gdb client. JTAG stays in
+the "Not yet" plural column (TAP daisy-chain suffices — single instance).</p>
+</li>
+</ul>
+<p>Plan: <a href="../plans/jtag-debug-server.html"><code>../plans/jtag-debug-server.md</code></a>.</p>
 
                     </main>
 
