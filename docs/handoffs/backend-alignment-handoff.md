@@ -15,12 +15,28 @@ Track 0 (#104 sim timing) + cosim Phase 2 Stages A/B/C. The track closed on
 
 **Next session should pick up: issue #122 — CUDA/HIP cosim performance
 (measurement-driven).** Maintainer-agreed sequence was *merge first, then tune
-with measurement* — first half done. The concrete first action is a **profiling
-pass on the T4** (`nsys`/`ncu`) against the heavy `mcu_soc` flash fixture, to test
-whether `cudaMallocManaged` page-migration is the per-edge tax (see hypothesis +
-data below). Then A/B managed vs pinned-host + explicit mirror. Full plan + data
-table live in **issue #122**; the memory-model decision + documented fallback are
-in [`cosim-phase2-cuda-hip.md`](../plans/cosim-phase2-cuda-hip.md) §1b.
+with measurement* — first half done. **The profiling harness is now built**
+(`scripts/ci/cuda_cosim_profile.sh` + `.github/workflows/cuda-cosim-profile.yml`,
+both untracked/uncommitted on `main` — commit before use). The concrete next
+action is to **trigger the `CUDA Cosim Profile` workflow** (Actions tab →
+manual `workflow_dispatch`; budget-safe, never runs on push) against the heavy
+`mcu_soc` flash fixture, then **read the nsys unified-memory page-fault tables**
+to confirm/refute the `cudaMallocManaged` page-migration hypothesis (see data
+below). Only then A/B managed vs pinned-host + explicit mirror, and record the
+result in an ADR/perf doc. Full plan + data table live in **issue #122** (harness
+described in the latest comment); the memory-model decision + documented fallback
+are in [`cosim-phase2-cuda-hip.md`](../plans/cosim-phase2-cuda-hip.md) §1b.
+
+**Profiling harness (built this session, not yet committed/run):**
+- `scripts/ci/cuda_cosim_profile.sh` — 3 phases: (1) repeated-trial warm
+  baseline parsing the cosim `TOTAL (instrumented)` µs/edge summary; (2) nsys
+  with `--cuda-um-{cpu,gpu}-page-faults` (the migration-tax test) + kernel/mem
+  time tables; (3) optional ncu (`NCU=1`, best-effort — T4 may block counters).
+  Env-configured (`JACQUARD_BIN`/`EDGES`/`TRIALS`/`NCU`/`NCU_EDGES`/`OUTDIR`);
+  runs in CI or by hand in an interactive T4 session.
+- `.github/workflows/cuda-cosim-profile.yml` — `workflow_dispatch`-only; inputs
+  `edges`/`trials`/`ncu`/`ncu_edges`; mirrors the `cuda` job + reuses its cargo
+  cache; uploads `.nsys-rep`/`.ncu-rep` + a markdown summary. actionlint-clean.
 
 **Verification command (confirm the shipped state):**
 ```sh

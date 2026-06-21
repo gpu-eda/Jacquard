@@ -1,0 +1,122 @@
+name: CUDA Cosim Profile
+
+# Measurement-driven performance baseline for the CUDA cosim backend on the
+# heavy mcu_soc SPI-flash fixture (issue #122). Tests the central hypothesis —
+# that cudaMallocManaged page migration is the per-edge tax on the heavy design
+# — via nsys unified-memory page-fault tracing, plus a real repeated-trial warm
+# baseline (vs. the single-shot CI-byproduct timing #122 was opened from).
+#
+# MANUAL DISPATCH ONLY. This burns the billed T4 runner ($200/mo Actions
+# budget) and the mcu_soc netlist costs ~40s partitioning per run, so it never
+# runs on push/PR — trigger it from the Actions tab when you want fresh data.
+on:
+  workflow_dispatch:
+    inputs:
+      edges:
+        description: '--max-clock-edges for the baseline + nsys run'
+        required: false
+        default: '10000'
+      trials:
+        description: 'Repeated-trial count for the warm baseline (trial 1 = warmup; ~40s each on the billed runner)'
+        required: false
+        default: '3'
+      ncu:
+        description: 'Also run the Nsight Compute kernel profile (slow; counters often restricted on cloud GPUs)'
+        type: boolean
+        required: false
+        default: false
+      ncu_edges:
+        description: '--max-clock-edges for the ncu run (keep small — kernel replay is slow)'
+        required: false
+        default: '200'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cuda-cosim-profile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  profile:
+    name: CUDA Cosim Profile (mcu_soc flash)
+    runs-on: tesla4-runner
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init required submodules
+        run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+
+      - name: Install CUDA Toolkit (driver already present on GPU runner)
+        run: |
+          nvidia-smi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cuda-toolkit-12-8
+          echo "PATH=/usr/local/cuda-12.8/bin:$PATH" >> "$GITHUB_ENV"
+          echo "CUDA_PATH=/usr/local/cuda-12.8" >> "$GITHUB_ENV"
+          /usr/local/cuda-12.8/bin/nvcc --version
+
+      # nsys/ncu usually ship with cuda-toolkit-12-8, but the metapackage's
+      # Nsight components are occasionally split out — install the standalone
+      # CLIs if the binaries aren't already on PATH (best-effort for ncu).
+      - name: Ensure Nsight CLIs present
+        run: |
+          export PATH=/usr/local/cuda-12.8/bin:$PATH
+          if ! command -v nsys >/dev/null 2>&1; then
+            sudo apt-get install -y --no-install-recommends nsight-systems-cli || true
+          fi
+          if ! command -v ncu >/dev/null 2>&1; then
+            sudo apt-get install -y --no-install-recommends nsight-compute || true
+          fi
+          echo "nsys: $(command -v nsys || echo MISSING)"
+          echo "ncu:  $(command -v ncu  || echo MISSING)"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Share the cuda job's cache key so this reuses its warm build artifacts.
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-cuda-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-cuda-
+
+      - name: Build jacquard (CUDA)
+        run: cargo build --release --features cuda --bin jacquard
+
+      - name: Profile CUDA cosim (mcu_soc flash)
+        env:
+          JACQUARD_BIN: target/release/jacquard
+          EDGES: ${{ github.event.inputs.edges }}
+          TRIALS: ${{ github.event.inputs.trials }}
+          NCU: ${{ github.event.inputs.ncu == 'true' && '1' || '0' }}
+          NCU_EDGES: ${{ github.event.inputs.ncu_edges }}
+          OUTDIR: perf_out
+        run: bash scripts/ci/cuda_cosim_profile.sh
+
+      - name: Append summary to job step summary
+        if: always()
+        run: cat perf_out/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload profile artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: cuda-cosim-profile
+          path: |
+            perf_out/summary.md
+            perf_out/nsys_stats.txt
+            perf_out/nsys_profile.log
+            perf_out/ncu_profile.log
+            perf_out/baseline_trial_*.txt
+            perf_out/flash_nsys.nsys-rep
+            perf_out/flash_ncu.ncu-rep
