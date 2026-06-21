@@ -426,6 +426,48 @@ analog to Metal's unified `StorageModeShared`).
   committed CPU/Metal goldens on the T4. Staging detail:
   [`docs/plans/cosim-phase2-cuda-hip.md`](../plans/cosim-phase2-cuda-hip.md).
 
+## Amendment 2026-06-21: interactive (externally-paced) peripheral models
+
+The execution model above assumes the peripheral *pace* is internal: the loop
+drives time and models react each edge (recorded JTAG replay, queued stimulus,
+GPU peripherals). The interactive JTAG debug server (`--jtag-server`,
+[#124](https://github.com/gpu-eda/Jacquard/issues/124)) introduces the inverse:
+an **external client (OpenOCD/gdb) drives the pace**, one `remote_bitbang`
+transaction at a time. This amendment records how that fits the model without
+new machinery — and the one latent contract gap it forces closed. It does
+**not** change the batch loop or scheduler.
+
+- **An interactive peripheral is a Tier-1 CPU `PeripheralModel` that blocks on
+  external I/O.** Its `step_edge` blocks reading the next bitbang byte from the
+  socket; because the client is the clock source, this blocking *is* the
+  synchronisation. **`is_active()` stays `true` while a client is connected**, so
+  the existing `force_single_edge` gate drives the design at `batch=1` for the
+  session's duration — the same mechanism JTAG *replay* already uses. **No async
+  executor and no background thread are needed for a single connection**; the
+  blocking accept happens once before the main loop. The batched fast path is
+  unaffected when no client is attached.
+
+- **This makes the contract's "observe" half real.** The Decision section and
+  ADR 0013 both note `step_edge` is handed an **empty `output_state`** today
+  (`cosim/mod.rs:2987` passes `&[]`) because no CPU-side model yet reads a design
+  output. An interactive debugger *must* answer `remote_bitbang` `R` (read-TDO)
+  with the live TDO bit, so `output_state` must carry the real design-output
+  slice (`&backend.state()[state_size..]`). This generalises beyond JTAG — it is
+  the same wiring the scaffolded I²C/SPI observation models need — so it is a
+  closure of the standing TODO, not a JTAG special case.
+
+- **TDO read-back is the contract's "emit" half pointed at an external client.**
+  The peripheral contract is *observe → advance FSM → drive and/or emit*. A live
+  debug server adds one I/O direction: it **emits a response to an external
+  socket mid-edge** (the `R` reply) rather than into a ring buffer or VCD. The
+  observe/drive halves (TDO sample, TCK/TMS/TDI drive via the usual
+  `overrides → BitOps → state_prep` path) are unchanged.
+
+Per-backend: the interactive path is the CPU-side model plus `batch=1` of the
+GPU backend (the "per-edge fallback" of the 2026-06-19 amendment), so it works
+on any cosim backend once the host-side plumbing lands — no kernel work.
+Implementation staging: [`docs/plans/jtag-debug-server.md`](../plans/jtag-debug-server.md).
+
 ## Cross-references
 
 - ADR 0012 — CDC jitter injection (uses the scheduler's edge

@@ -240,3 +240,32 @@ future `cosim_common.rs`).
 
 Plan docs: [`../plans/multi-peripheral-cosim.md`](../plans/multi-peripheral-cosim.md),
 [`../plans/bus-transaction-tracing.md`](../plans/bus-transaction-tracing.md).
+
+## Amendment 2026-06-21: interactive JTAG debug server config surface
+
+The interactive JTAG/DM debug server (`--jtag-server`,
+[#124](https://github.com/gpu-eda/Jacquard/issues/124)) is the live-socket
+sibling of `--jtag-replay`. Its config additions follow this ADR's conventions;
+the execution-model decisions are in
+[ADR 0017's 2026-06-21 amendment](0017-cosim-execution-model.md). Recorded here:
+
+- **`JtagConfig` gains `tdo_gpio: Option<usize>`** (`src/testbench.rs`). TDO is
+  a design **output**, so unlike the existing `tck/tms/tdi/trst_gpio` (inputs,
+  resolved via `input_bits`) it resolves via the **output-bit** map. It is the
+  first JTAG pin that the model *observes* rather than *drives* — added
+  `Option` so replay configs without it keep working.
+
+- **Resolves the "`output_state` readback not yet wired" note above** for the
+  JTAG case. The interactive server is the first CPU-side `PeripheralModel` that
+  must read a design output (TDO, to answer `remote_bitbang` `R`), so it wires
+  the real output slice into `step_edge` — the same plumbing the scaffolded
+  I²C/SPI models were noted as needing. See ADR 0017's amendment for the
+  execution-model detail.
+
+- **New CLI flag `--jtag-server <PORT>`**, mutually exclusive with
+  `--jtag-replay`. Reuses the same `jtag` peripheral pin mapping and
+  `--jtag-hold-cycles` semantics; opens a `remote_bitbang` TCP server and drives
+  the configured pins live from the connected OpenOCD/gdb client. JTAG stays in
+  the "Not yet" plural column (TAP daisy-chain suffices — single instance).
+
+Plan: [`../plans/jtag-debug-server.md`](../plans/jtag-debug-server.md).
