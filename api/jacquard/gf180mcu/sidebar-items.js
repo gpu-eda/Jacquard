@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["extract_cell_type","is_gf180mcu_cell"],"struct":["GF180MCULeafPins"]};
+window.SIDEBAR_ITEMS = {"fn":["extract_cell_type","is_gf180mcu_cell","is_sram_macro"],"struct":["GF180MCULeafPins"]};
