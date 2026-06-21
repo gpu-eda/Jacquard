@@ -238,17 +238,6 @@ else
         --max-clock-edges "$NCU_EDGES" --output-vcd "$OUTDIR/mcu_flash_ncu.vcd" \
         2>&1 | tee "$OUTDIR/ncu_profile.log" >/dev/null || true
 
-    # ncu ran as root, so several root-owned paths must be handed back to the
-    # invoking user, or the non-root steps that follow break:
-    #   - $OUTDIR (report + child VCD)        → else the artifact upload aborts (EACCES)
-    #   - ncu's deployed Sections cache under $HOME → else `ncu --import` below
-    #     throws "Permission denied .../Sections/version.txt" (root created it).
-    if [ "$used_sudo" = 1 ]; then
-        sudo chown -R "$(id -u):$(id -g)" "$OUTDIR" 2>/dev/null || true
-        sudo chown -R "$(id -u):$(id -g)" "$HOME/Documents/NVIDIA Nsight Compute" 2>/dev/null || true
-        sudo chown -R "$(id -u):$(id -g)" "$HOME/.local/share/NVIDIA Nsight Compute" 2>/dev/null || true
-    fi
-
     {
         if grep -q 'ERR_NVGPUCTRPERM' "$OUTDIR/ncu_profile.log" 2>/dev/null; then
             echo "ncu could not read HW counters on this runner (ERR_NVGPUCTRPERM)"
@@ -258,10 +247,13 @@ else
             echo "ncu produced no report — check ncu_profile.log (no kernel matched"
             echo "\`$NCU_KERNEL\`, or the run errored)."
         else
-            # Extract metrics from the binary report (host-side, no GPU). The exact
-            # `ncu --import` display form varies by version, so try several and
-            # keep the first that yields non-empty output; capture stderr to a
-            # diagnostic file so a failure is debuggable (not silently swallowed).
+            # Extract metrics from the binary report (host-side, no GPU). Run the
+            # import under the SAME ncu_cmd (sudo when used): collection ran as root
+            # and deployed ncu's Sections cache under $HOME as root, so a non-root
+            # import throws "Permission denied .../Sections/version.txt". Importing
+            # as root reads its own cache. The exact --import display form varies by
+            # version, so try several and keep the first non-empty result; capture
+            # stderr for debuggability.
             ncu_sum="$OUTDIR/ncu_summary.txt"
             ncu_err="$OUTDIR/ncu_import.err"
             : > "$ncu_sum"; : > "$ncu_err"
@@ -270,13 +262,19 @@ else
                 "--import $ncu_rep.ncu-rep --page details" \
                 "--import $ncu_rep.ncu-rep" \
                 "--csv --import $ncu_rep.ncu-rep --page raw" ; do
-                echo ">>> trying: ncu $form" >> "$ncu_err"
+                echo ">>> trying: ${ncu_cmd[*]} $form" >> "$ncu_err"
                 # shellcheck disable=SC2086
-                if ncu $form > "$ncu_sum" 2>>"$ncu_err" && [ -s "$ncu_sum" ]; then
-                    echo ">>> OK: ncu $form" >> "$ncu_err"
+                if "${ncu_cmd[@]}" $form > "$ncu_sum" 2>>"$ncu_err" && [ -s "$ncu_sum" ]; then
+                    echo ">>> OK: ${ncu_cmd[*]} $form" >> "$ncu_err"
                     break
                 fi
             done
+            # Collection + import ran as root, so the report, child VCD, and
+            # ncu_summary.txt are root-owned. Hand $OUTDIR back so the grep below
+            # and the non-root artifact upload can read them (else upload aborts).
+            if [ "$used_sudo" = 1 ]; then
+                sudo chown -R "$(id -u):$(id -g)" "$OUTDIR" 2>/dev/null || true
+            fi
             echo "Report: \`$(basename "$ncu_rep").ncu-rep\` + \`ncu_summary.txt\` (uploaded)."
             echo "Kernel: \`$NCU_KERNEL\`, $NCU_LAUNCH_COUNT launches, \`$NCU_SET\` metric set."
             echo
