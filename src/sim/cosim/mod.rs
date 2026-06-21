@@ -2379,6 +2379,17 @@ fn run_cosim_generic<B: CosimBackend>(
                 position: resolve_pin(g, "trst"),
                 active_low: jtag_cfg.trst_active_low,
             });
+            // TDO is a design *output*, so it resolves against
+            // `output_bits` (not `input_bits`). Optional: replay never
+            // answers `R`, so an unmapped TDO is harmless there.
+            let tdo = jtag_cfg.tdo_gpio.map(|g| {
+                *gpio_map.output_bits.get(&g).unwrap_or_else(|| {
+                    panic!(
+                        "jtag: tdo_gpio={g} not in output mapping; \
+                         check sim_config.json against design pin layout"
+                    )
+                })
+            });
             let stream_len = bytes.len();
             let model = crate::sim::models::jtag::JtagReplayModel::new(
                 "jtag_0".to_string(),
@@ -2386,19 +2397,21 @@ fn run_cosim_generic<B: CosimBackend>(
                 tms,
                 tdi,
                 trst,
+                tdo,
                 opts.jtag_hold_cycles,
                 bytes,
             );
             clilog::info!(
                 "JTAG replay `jtag_0`: {} stream bytes from {}, hold_edges={} \
-                 (tck_gpio={}, tms_gpio={}, tdi_gpio={}, trst_gpio={:?})",
+                 (tck_gpio={}, tms_gpio={}, tdi_gpio={}, trst_gpio={:?}, tdo_gpio={:?})",
                 stream_len,
                 replay_path.display(),
                 opts.jtag_hold_cycles,
                 jtag_cfg.tck_gpio,
                 jtag_cfg.tms_gpio,
                 jtag_cfg.tdi_gpio,
-                jtag_cfg.trst_gpio
+                jtag_cfg.trst_gpio,
+                jtag_cfg.tdo_gpio
             );
             register_model(Box::new(model), &mut models, &mut model_driven_positions);
         } else {
@@ -2979,15 +2992,16 @@ fn run_cosim_generic<B: CosimBackend>(
                     }
                 }
                 // step_edge contributes overrides itself (default impl) and
-                // pushes any emitted events.
-                model.step_edge(
-                    // GPU output state — currently unused by GPIO/UART RX,
-                    // needed by I²C/SPI once wired. Provide an empty slice
-                    // for now (placeholder; wiring follow-up).
-                    &[],
-                    &mut overrides,
-                    &mut emitted_events,
-                );
+                // pushes any emitted events. The output half of the design
+                // state (`[input | output]`, `2 × state_size`) is the value
+                // produced by the previous edge's `run_edges` — the first CPU
+                // model that reads it is the interactive JTAG server, which
+                // samples TDO from it to answer `R`. Re-borrowed per iteration
+                // so the immutable borrow ends before `patch_*` re-borrows
+                // `backend` mutably below (ADR 0017 / 0013 `output_state`
+                // wiring; resolves the standing `&[]` placeholder TODO).
+                let output_state = &backend.state()[state_size..];
+                model.step_edge(output_state, &mut overrides, &mut emitted_events);
                 if prev_active || model.is_active() {
                     any_change = true;
                 }

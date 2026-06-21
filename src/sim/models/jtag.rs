@@ -1,16 +1,23 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 ChipFlow
 // SPDX-License-Identifier: Apache-2.0
-//! JTAG replay peripheral model — consumes a recorded
-//! `remote_bitbang` byte stream (the protocol OpenOCD uses to drive
-//! an external JTAG bridge) and drives the design's TCK/TMS/TDI/TRST
-//! input pins from it.
+//! JTAG `remote_bitbang` peripheral model — consumes a `remote_bitbang`
+//! byte stream (the protocol OpenOCD uses to drive an external JTAG
+//! bridge) and drives the design's TCK/TMS/TDI/TRST input pins from it.
 //!
-//! Stage 1 of the JTAG cosim plan from
-//! [discussion #77](https://github.com/ChipFlow/Jacquard/discussions/77):
-//! deterministic file-replay. The recorded stream is assumed valid
-//! and the design's TDO output is not read back — that lands in
-//! stage 2 alongside the TCP-listener mode where TDO has to be
-//! routed back over the socket to OpenOCD.
+//! Two byte sources share one FSM (see [`JtagSource`]):
+//!
+//! - **Replay** (`--jtag-replay <PATH>`, discussion #77 stage 1):
+//!   deterministic file-replay of a recorded stream. `R` (read-TDO)
+//!   commands are counted but never answered — the playback is
+//!   one-directional.
+//! - **Live** (`--jtag-server <PORT>`, stage 2): an accepted
+//!   `remote_bitbang` TCP client drives the same FSM in lock-step, and
+//!   each `R` is answered with the design's live TDO output sampled at
+//!   `tdo_pos` and written back over the socket as ASCII `'0'`/`'1'`.
+//!
+//! Only the byte feed and the `R` response differ; the TCK/TMS/TDI/TRST
+//! decode, IEEE 1149.1 TCK deferral, and override contribution are
+//! identical, so replay stays byte-for-byte unchanged.
 //!
 //! ## `remote_bitbang` byte alphabet
 //!
@@ -23,7 +30,7 @@
 //! | `'s'`          | TRST off, SRST on                      |
 //! | `'t'`          | TRST on,  SRST off                     |
 //! | `'u'`          | TRST on,  SRST on                      |
-//! | `'R'`          | Read TDO (ignored in stage 1)          |
+//! | `'R'`          | Read TDO (replay: counted; live: answered) |
 //! | `'B'` / `'b'`  | Blink on / off (no-op)                 |
 //! | `'Q'`          | Quit (treated as end-of-stream)        |
 //!
@@ -41,7 +48,9 @@
 //! corner case.
 
 use crate::sim::input_stim::QueuedAction;
-use crate::sim::models::{warn_unhandled, EmittedEvent, ModelOverrides, PeripheralModel};
+use crate::sim::models::{
+    read_bit, warn_unhandled, EmittedEvent, ModelOverrides, PeripheralModel,
+};
 
 /// Optional pin position + polarity for the design's TRST input.
 ///
@@ -66,6 +75,11 @@ pub struct JtagReplayModel {
     /// Optional TRST input. Some chips reset the TAP via a five-cycle
     /// TMS=1 sequence instead of a dedicated pin.
     trst: Option<TrstPin>,
+    /// Optional state-buffer position for the design's TDO *output*.
+    /// Sampled on each `R` (read-TDO) command in live-server mode and
+    /// written back to the connected client. `None` for replay (which
+    /// never answers `R`) or designs whose TDO isn't mapped.
+    tdo_pos: Option<u32>,
     /// Returned by `driven_positions()`. Built once at construction
     /// since `PeripheralModel::driven_positions` returns `&[u32]`.
     driven_positions_arr: Vec<u32>,
@@ -113,6 +127,7 @@ impl JtagReplayModel {
         tms_pos: u32,
         tdi_pos: u32,
         trst: Option<TrstPin>,
+        tdo_pos: Option<u32>,
         hold_edges: u32,
         bytes: Vec<u8>,
     ) -> Self {
@@ -120,6 +135,8 @@ impl JtagReplayModel {
             hold_edges > 0,
             "jtag {name}: hold_edges must be > 0 (got 0)"
         );
+        // Only the *input* pins the model drives go in driven_positions;
+        // `tdo_pos` is a design output the model reads, not drives.
         let mut driven = vec![tck_pos, tms_pos, tdi_pos];
         if let Some(t) = trst {
             driven.push(t.position);
@@ -130,6 +147,7 @@ impl JtagReplayModel {
             tms_pos,
             tdi_pos,
             trst,
+            tdo_pos,
             driven_positions_arr: driven,
             hold_edges,
             bytes,
@@ -201,6 +219,17 @@ impl JtagReplayModel {
     /// idle on its own.
     pub fn finished(&self) -> bool {
         self.quit || self.cursor >= self.bytes.len()
+    }
+
+    /// Sample the design's current TDO bit from the GPU output state.
+    ///
+    /// `output_state` is the *output* half of the design state
+    /// (`&backend.state()[state_size..]`); `tdo_pos` indexes it
+    /// directly. Returns `None` when no TDO pin is configured (replay,
+    /// or a design that doesn't map TDO) — callers answering an `R`
+    /// command treat that as a low (`'0'`) read.
+    pub fn sample_tdo(&self, output_state: &[u32]) -> Option<u8> {
+        self.tdo_pos.map(|pos| read_bit(output_state, pos))
     }
 
     /// Diagnostics counters surfaced at end-of-run.
@@ -326,7 +355,7 @@ mod tests {
         // Bit assignment per OpenOCD: TDI=bit0, TMS=bit1, TCK=bit2.
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10, 11, 12, None, None,
             4,
             vec![],
         );
@@ -346,6 +375,7 @@ mod tests {
             "jtag_0".into(),
             10, 11, 12,
             Some(TrstPin { position: 13, active_low: true }),
+            None,
             4,
             vec![],
         );
@@ -365,7 +395,7 @@ mod tests {
     fn consume_byte_counts_tdo_reads_and_quit() {
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10, 11, 12, None, None,
             4,
             vec![],
         );
@@ -382,7 +412,7 @@ mod tests {
     fn consume_byte_blink_is_noop() {
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10, 11, 12, None, None,
             4,
             vec![],
         );
@@ -404,7 +434,7 @@ mod tests {
         // edge applies the new TCK.
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10, 11, 12, None, None,
             2,
             b"07".to_vec(),
         );
@@ -431,7 +461,7 @@ mod tests {
     fn step_edge_stops_at_quit() {
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10, 11, 12, None, None,
             1,
             b"05Q07".to_vec(),
         );
@@ -452,7 +482,7 @@ mod tests {
         // Stream: '2' (TCK=0,TMS=1) '0' (TCK=0,TMS=0) '4' (TCK=1,TMS=0)
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10, 11, 12, None, None,
             1,
             b"204".to_vec(),
         );
@@ -477,7 +507,7 @@ mod tests {
         // Stream: '0' (TCK=0) '2' (TCK=0,TMS=1) — TCK stays 0.
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10, 11, 12, None, None,
             1,
             b"02".to_vec(),
         );
@@ -494,6 +524,7 @@ mod tests {
             "jtag_0".into(),
             10, 11, 12,
             Some(TrstPin { position: 13, active_low: true }),
+            None,
             4,
             vec![],
         );
@@ -514,7 +545,7 @@ mod tests {
     fn diagnostics_counts_match_stream() {
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10, 11, 12, None, None,
             1,
             b"05R7RsuQ".to_vec(),
         );
@@ -525,5 +556,39 @@ mod tests {
         assert_eq!(diag.tdo_read_requests, 2);
         assert_eq!(diag.srst_toggles, 2); // 's' + 'u'
         assert!(diag.quit);
+    }
+
+    #[test]
+    fn sample_tdo_reads_configured_output_bit() {
+        // tdo_pos = 33 → word 1, bit 1 of the output-state slice.
+        let m = JtagReplayModel::new(
+            "jtag_0".into(),
+            10, 11, 12, None,
+            Some(33),
+            4,
+            vec![],
+        );
+        // bit 33 set → sample 1.
+        let mut out = vec![0u32, 0u32];
+        out[1] = 1 << 1;
+        assert_eq!(m.sample_tdo(&out), Some(1));
+        // bit 33 clear → sample 0.
+        out[1] = 0;
+        assert_eq!(m.sample_tdo(&out), Some(0));
+        // Out-of-range position reads as 0 (read_bit contract), not a panic.
+        let short: Vec<u32> = vec![];
+        assert_eq!(m.sample_tdo(&short), Some(0));
+    }
+
+    #[test]
+    fn sample_tdo_none_without_configured_pin() {
+        let m = JtagReplayModel::new(
+            "jtag_0".into(),
+            10, 11, 12, None,
+            None,
+            4,
+            vec![],
+        );
+        assert_eq!(m.sample_tdo(&[0xFFFF_FFFF]), None);
     }
 }
