@@ -3,6 +3,14 @@ name: CI
 on:
   push:
     branches: [main, staged-aig-release]
+    # Docs-only pushes (e.g. handoff updates pushed straight to main) skip the
+    # full matrix — a push is ignored only when ALL changed files match. NOT
+    # applied to `pull_request` on purpose: the matrix jobs are required status
+    # checks, so a paths-ignored docs PR would never report them and could
+    # never merge (GitHub's required-checks-never-run deadlock).
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   # No base-branch filter: run CI on every PR regardless of its base, so
   # stacked PRs (based on other feature branches) get CI automatically.
   pull_request:
