@@ -221,8 +221,10 @@ else
     # run and degrade gracefully.
     ncu_bin="$(command -v ncu)"
     ncu_cmd=("$ncu_bin")
+    used_sudo=0
     if sudo -n true 2>/dev/null; then
         ncu_cmd=(sudo -E "$ncu_bin")
+        used_sudo=1
         echo "  (running ncu via sudo -E to access GPU performance counters)"
     fi
     # Bounded + targeted (see NCU_* rationale above): only the hotspot kernel,
@@ -235,6 +237,13 @@ else
         "$BIN" "${COSIM_ARGS[@]}" \
         --max-clock-edges "$NCU_EDGES" --output-vcd "$OUTDIR/mcu_flash_ncu.vcd" \
         2>&1 | tee "$OUTDIR/ncu_profile.log" >/dev/null || true
+
+    # ncu ran as root, so its report + the child's VCD are root-owned. Hand the
+    # whole output dir back to the invoking user or the (non-root) artifact
+    # upload can't read them and the upload aborts.
+    if [ "$used_sudo" = 1 ]; then
+        sudo chown -R "$(id -u):$(id -g)" "$OUTDIR" 2>/dev/null || true
+    fi
 
     {
         if grep -q 'ERR_NVGPUCTRPERM' "$OUTDIR/ncu_profile.log" 2>/dev/null; then
