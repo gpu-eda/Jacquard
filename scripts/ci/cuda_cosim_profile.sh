@@ -149,23 +149,44 @@ else
         --max-clock-edges "$EDGES" --output-vcd "$OUTDIR/mcu_flash_nsys.vcd" \
         2>&1 | tee "$OUTDIR/nsys_profile.log" >/dev/null || true
 
-    # Summarise: kernel time, GPU mem-op time, and the two UM page-fault reports.
+    # The UM page-fault report NAMES differ between nsys versions (the hardcoded
+    # cuda_um_{cpu,gpu}_page_faults_sum errored on nsys 2024.6.2 — "could not be
+    # found"). So capture this nsys's report catalogue and DISCOVER the UM /
+    # page-fault reports dynamically instead of guessing. Always-present summary
+    # reports (kernel time, GPU mem-op time + size) are queried unconditionally.
+    avail="$OUTDIR/nsys_reports_available.txt"
+    nsys stats --help-reports 2>&1 | tee "$avail" >/dev/null || true
+    reports=(cuda_gpu_kern_sum cuda_gpu_mem_time_sum cuda_gpu_mem_size_sum)
+    # First token of each catalogue line is the report name. Match UM/page-fault
+    # reports by name token, avoiding the "um" inside "...._sum" (preceded by 's',
+    # not '_'/start, so (^|_)um($|_) won't match it).
+    um_found=()
+    while IFS= read -r r; do
+        [ -n "$r" ] && { reports+=("$r"); um_found+=("$r"); }
+    done < <(awk '{print $1}' "$avail" 2>/dev/null \
+        | grep -iE 'page_fault|unified|(^|_)um($|_)' | sort -u || true)
+    if [ "${#um_found[@]}" -eq 0 ]; then
+        echo "NOTE: no UM/page-fault nsys report found in this version's catalogue" \
+             "($(basename "$avail")) — migration volume is inferred from the mem-op" \
+             "summaries (UM migrations surface there as '[CUDA Unified Memory memcpy]')." \
+             | tee -a "$OUTDIR/nsys_profile.log"
+    fi
+
     stats_txt="$OUTDIR/nsys_stats.txt"
-    nsys stats \
-        --report cuda_gpu_kern_sum \
-        --report cuda_gpu_mem_time_sum \
-        --report cuda_um_cpu_page_faults_sum \
-        --report cuda_um_gpu_page_faults_sum \
-        "$rep.nsys-rep" 2>&1 | tee "$stats_txt" >/dev/null || true
+    report_args=()
+    for r in "${reports[@]}"; do report_args+=(--report "$r"); done
+    nsys stats "${report_args[@]}" "$rep.nsys-rep" 2>&1 | tee "$stats_txt" >/dev/null || true
 
     {
         echo "Report: \`$(basename "$rep").nsys-rep\` (full timeline, uploaded as artifact)."
         echo
-        echo "Key \`nsys stats\` tables (kernel time, GPU mem-op time, UM CPU/GPU page faults):"
+        echo "UM/page-fault reports discovered in this nsys: ${um_found[*]:-none (see nsys_reports_available.txt)}"
+        echo
+        echo "Key \`nsys stats\` tables (kernel time, GPU mem-op time + size, any UM reports):"
         echo
         echo '```'
         # Trim to keep the step summary readable; full text in nsys_stats.txt.
-        head -120 "$stats_txt" 2>/dev/null || echo "(nsys stats produced no output)"
+        head -200 "$stats_txt" 2>/dev/null || echo "(nsys stats produced no output)"
         echo '```'
     } >> "$SUMMARY"
 fi

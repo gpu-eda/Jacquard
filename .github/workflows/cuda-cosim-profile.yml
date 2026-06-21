@@ -115,6 +115,7 @@ jobs:
           path: |
             perf_out/summary.md
             perf_out/nsys_stats.txt
+            perf_out/nsys_reports_available.txt
             perf_out/nsys_profile.log
             perf_out/ncu_profile.log
             perf_out/baseline_trial_*.txt
