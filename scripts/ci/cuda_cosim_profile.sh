@@ -238,11 +238,15 @@ else
         --max-clock-edges "$NCU_EDGES" --output-vcd "$OUTDIR/mcu_flash_ncu.vcd" \
         2>&1 | tee "$OUTDIR/ncu_profile.log" >/dev/null || true
 
-    # ncu ran as root, so its report + the child's VCD are root-owned. Hand the
-    # whole output dir back to the invoking user or the (non-root) artifact
-    # upload can't read them and the upload aborts.
+    # ncu ran as root, so several root-owned paths must be handed back to the
+    # invoking user, or the non-root steps that follow break:
+    #   - $OUTDIR (report + child VCD)        → else the artifact upload aborts (EACCES)
+    #   - ncu's deployed Sections cache under $HOME → else `ncu --import` below
+    #     throws "Permission denied .../Sections/version.txt" (root created it).
     if [ "$used_sudo" = 1 ]; then
         sudo chown -R "$(id -u):$(id -g)" "$OUTDIR" 2>/dev/null || true
+        sudo chown -R "$(id -u):$(id -g)" "$HOME/Documents/NVIDIA Nsight Compute" 2>/dev/null || true
+        sudo chown -R "$(id -u):$(id -g)" "$HOME/.local/share/NVIDIA Nsight Compute" 2>/dev/null || true
     fi
 
     {
