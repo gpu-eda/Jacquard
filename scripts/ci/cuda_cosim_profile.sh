@@ -228,11 +228,11 @@ else
         echo "  (running ncu via sudo -E to access GPU performance counters)"
     fi
     # Bounded + targeted (see NCU_* rationale above): only the hotspot kernel,
-    # only the first N launches, basic metric set. `--print-summary per-kernel`
-    # emits a compact aggregate (Speed-of-Light, occupancy) to stdout.
+    # only the first N launches, basic metric set. Metrics land in the binary
+    # .ncu-rep; they are extracted for display via `ncu --import` below (the
+    # collection run does not print them to stdout).
     "${ncu_cmd[@]}" --set "$NCU_SET" --target-processes all \
         --kernel-name "regex:$NCU_KERNEL" --launch-count "$NCU_LAUNCH_COUNT" \
-        --print-summary per-kernel \
         --export "$ncu_rep" -f \
         "$BIN" "${COSIM_ARGS[@]}" \
         --max-clock-edges "$NCU_EDGES" --output-vcd "$OUTDIR/mcu_flash_ncu.vcd" \
@@ -254,16 +254,23 @@ else
             echo "ncu produced no report — check ncu_profile.log (no kernel matched"
             echo "\`$NCU_KERNEL\`, or the run errored)."
         else
-            echo "Report: \`$(basename "$ncu_rep").ncu-rep\` (uploaded). Kernel: \`$NCU_KERNEL\`,"
-            echo "$NCU_LAUNCH_COUNT launches, \`$NCU_SET\` metric set."
+            # Extract the metrics from the binary report (host-side, no GPU): the
+            # per-kernel aggregate, then grep the actionable Speed-of-Light /
+            # occupancy / duration lines. Full text is uploaded as ncu_summary.txt.
+            ncu_sum="$OUTDIR/ncu_summary.txt"
+            ncu --import "$ncu_rep.ncu-rep" --page details --print-summary per-kernel \
+                > "$ncu_sum" 2>/dev/null \
+              || ncu --import "$ncu_rep.ncu-rep" --page details > "$ncu_sum" 2>/dev/null \
+              || true
+            echo "Report: \`$(basename "$ncu_rep").ncu-rep\` + \`ncu_summary.txt\` (uploaded)."
+            echo "Kernel: \`$NCU_KERNEL\`, $NCU_LAUNCH_COUNT launches, \`$NCU_SET\` metric set."
             echo
-            echo "Per-kernel summary (Speed-of-Light / occupancy / duration):"
+            echo "Speed-of-Light / occupancy / duration (from the per-kernel summary):"
             echo
             echo '```'
-            # The per-kernel aggregate ncu prints to stdout — the actionable bit.
-            sed -n '/Section: GPU Speed Of Light/,/^$/p;/Duration/p;/Compute (SM)/p;/Memory Throughput/p;/Achieved Occupancy/p;/Achieved Active Warps/p' \
-                "$OUTDIR/ncu_profile.log" 2>/dev/null | head -80 \
-                || echo "(no summary parsed — see ncu_profile.log / the .ncu-rep)"
+            grep -E 'Duration|DRAM Frequency|SM Frequency|Memory Throughput|Compute \(SM\) Throughput|DRAM Throughput|Achieved Occupancy|Achieved Active Warps|Registers Per Thread|Block Limit|Theoretical Occupancy|Waves Per SM|L2 Cache Throughput|L1/TEX' \
+                "$ncu_sum" 2>/dev/null | sort -u | head -40 \
+                || echo "(no metrics parsed — see ncu_summary.txt / the .ncu-rep)"
             echo '```'
         fi
     } >> "$SUMMARY"
