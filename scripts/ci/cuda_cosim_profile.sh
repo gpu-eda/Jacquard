@@ -159,11 +159,14 @@ else
     reports=(cuda_gpu_kern_sum cuda_gpu_mem_time_sum cuda_gpu_mem_size_sum)
     # First token of each catalogue line is the report name. Match UM/page-fault
     # reports by name token, avoiding the "um" inside "...._sum" (preceded by 's',
-    # not '_'/start, so (^|_)um($|_) won't match it).
+    # not '_'/start, so (^|_)um($|_) won't match it). Strip the catalogue's
+    # option-suffix annotations (e.g. `um_sum[:rows=<limit>]` -> `um_sum`) so the
+    # bare report name reaches nsys.
     um_found=()
     while IFS= read -r r; do
         [ -n "$r" ] && { reports+=("$r"); um_found+=("$r"); }
     done < <(awk '{print $1}' "$avail" 2>/dev/null \
+        | sed -e 's/\[.*//' -e 's/:.*//' \
         | grep -iE 'page_fault|unified|(^|_)um($|_)' | sort -u || true)
     if [ "${#um_found[@]}" -eq 0 ]; then
         echo "NOTE: no UM/page-fault nsys report found in this version's catalogue" \
@@ -202,9 +205,19 @@ elif ! command -v ncu >/dev/null 2>&1; then
 else
     echo "=== Phase 3: ncu kernel profile ($NCU_EDGES edges) ==="
     ncu_rep="$OUTDIR/flash_ncu"
-    # Kernel replay is slow → tiny edge count. Cloud GPU runners frequently
-    # block the HW counters (ERR_NVGPUCTRPERM); this is best-effort.
-    ncu --set full --target-processes all \
+    # Kernel replay is slow → tiny edge count. Cloud GPUs restrict the HW
+    # counters to root (ERR_NVGPUCTRPERM), so run ncu via passwordless sudo when
+    # available — root can read the counters. `-E` preserves PATH/CUDA env so the
+    # profiled jacquard child still resolves the CUDA runtime; CUDA libs resolve
+    # via the system ldconfig cache that root shares. If sudo isn't passwordless
+    # (interactive use), fall back to a direct run and degrade gracefully.
+    ncu_bin="$(command -v ncu)"
+    ncu_cmd=("$ncu_bin")
+    if sudo -n true 2>/dev/null; then
+        ncu_cmd=(sudo -E "$ncu_bin")
+        echo "  (running ncu via sudo -E to access GPU performance counters)"
+    fi
+    "${ncu_cmd[@]}" --set full --target-processes all \
         --export "$ncu_rep" -f \
         "$BIN" "${COSIM_ARGS[@]}" \
         --max-clock-edges "$NCU_EDGES" --output-vcd "$OUTDIR/mcu_flash_ncu.vcd" \
