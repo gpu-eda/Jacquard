@@ -62,7 +62,51 @@ pub struct TrstPin {
     pub active_low: bool,
 }
 
-/// CPU-side state for one JTAG replay peripheral.
+/// Where a [`JtagReplayModel`] pulls its `remote_bitbang` bytes from.
+///
+/// The model's FSM (TCK/TMS/TDI/TRST decode, IEEE 1149.1 TCK deferral,
+/// override contribution) is identical regardless of source — only the
+/// byte feed differs. J3 adds a `Live` arm wrapping an accepted
+/// `TcpStream` for the interactive `--jtag-server`; replay stays the
+/// deterministic recorded path.
+enum JtagSource {
+    /// Deterministic replay of a recorded stream (`--jtag-replay`).
+    Replay { bytes: Vec<u8>, cursor: usize },
+}
+
+impl JtagSource {
+    /// Yield the next protocol byte, or `None` when the source is
+    /// exhausted. Replay returns `None` at end-of-buffer; the J3 live
+    /// arm performs a *blocking* socket read (the connected client
+    /// paces the session) and returns `None` on EOF.
+    fn next_byte_blocking(&mut self) -> Option<u8> {
+        match self {
+            JtagSource::Replay { bytes, cursor } => {
+                let b = bytes.get(*cursor).copied();
+                if b.is_some() {
+                    *cursor += 1;
+                }
+                b
+            }
+        }
+    }
+
+    /// True once the source can yield no more bytes.
+    fn is_exhausted(&self) -> bool {
+        match self {
+            JtagSource::Replay { bytes, cursor } => *cursor >= bytes.len(),
+        }
+    }
+
+    /// Bytes consumed so far — surfaced in end-of-run diagnostics.
+    fn consumed(&self) -> usize {
+        match self {
+            JtagSource::Replay { cursor, .. } => *cursor,
+        }
+    }
+}
+
+/// CPU-side state for one JTAG `remote_bitbang` peripheral.
 pub struct JtagReplayModel {
     /// Peripheral name (e.g. `jtag_0`).
     name: String,
@@ -85,10 +129,8 @@ pub struct JtagReplayModel {
     driven_positions_arr: Vec<u32>,
     /// Cosim edges between consuming successive stream bytes.
     hold_edges: u32,
-    /// Pre-recorded byte stream.
-    bytes: Vec<u8>,
-    /// Next byte to consume.
-    cursor: usize,
+    /// Byte feed — recorded replay or (J3) a live socket.
+    source: JtagSource,
     /// Cosim edges spent on the current drive. Resets to 0 when a
     /// new byte is consumed.
     edges_held: u32,
@@ -150,8 +192,7 @@ impl JtagReplayModel {
             tdo_pos,
             driven_positions_arr: driven,
             hold_edges,
-            bytes,
-            cursor: 0,
+            source: JtagSource::Replay { bytes, cursor: 0 },
             // Pre-loaded so the first `step_edge` immediately
             // consumes the stream's first byte. Subsequent bytes
             // are spaced `hold_edges` apart.
@@ -218,7 +259,7 @@ impl JtagReplayModel {
     /// off the end. Cosim doesn't gate on this — replay just goes
     /// idle on its own.
     pub fn finished(&self) -> bool {
-        self.quit || self.cursor >= self.bytes.len()
+        self.quit || self.source.is_exhausted()
     }
 
     /// Sample the design's current TDO bit from the GPU output state.
@@ -235,7 +276,7 @@ impl JtagReplayModel {
     /// Diagnostics counters surfaced at end-of-run.
     pub fn diagnostics(&self) -> JtagDiagnostics {
         JtagDiagnostics {
-            bytes_consumed: self.cursor,
+            bytes_consumed: self.source.consumed(),
             tdo_read_requests: self.tdo_read_requests,
             srst_toggles: self.srst_toggles,
             quit: self.quit,
@@ -264,8 +305,12 @@ impl JtagReplayModel {
             return;
         }
         if self.edges_held >= self.hold_edges {
-            let byte = self.bytes[self.cursor];
-            self.cursor += 1;
+            let Some(byte) = self.source.next_byte_blocking() else {
+                // Source drained between the `finished()` guard and the
+                // read — for the J3 live arm this is a socket EOF mid-
+                // session. Nothing to apply this edge.
+                return;
+            };
             let old_tck = self.tck;
             self.consume_byte(byte);
             let new_tck = self.tck;
@@ -470,7 +515,8 @@ mod tests {
         }
         assert!(m.finished());
         // Should have stopped before consuming the post-Q bytes.
-        assert!(m.cursor <= 3, "stopped on Q, cursor={}", m.cursor);
+        let consumed = m.source.consumed();
+        assert!(consumed <= 3, "stopped on Q, consumed={consumed}");
     }
 
     #[test]
