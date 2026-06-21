@@ -1,18 +1,38 @@
 # Stage C (T2.2) port spec — CUDA/HIP flash kernels + (optional) CpuBackend oracle
 
-**Status:** Spec / scoping — C1 done, C2+ open. Sibling to
+**Status:** ✅ **DONE** (C1–C4 complete, merged in PR #120, 2026-06-21,
+T4-green). Plan A was taken (CpuBackend oracle first). Sibling to
 [`cosim-phase2-cuda-hip.md`](cosim-phase2-cuda-hip.md) (Stage C = checkpoint
 **T2.2**) and [`cosim-phase2-stageB-io-port.md`](cosim-phase2-stageB-io-port.md).
+The C2/C3/C4 sections below are kept as the as-built record. Performance tuning
+of the managed-memory backend is a separate follow-up (issue #122).
 
 **Goal:** bring CUDA/HIP cosim to flash parity — the last stage of the CUDA/HIP
 cosim track. Port `gpu_apply_flash_din` + `gpu_flash_model_step`, wire into the
 batched `run_edges`, gate against a golden.
 
-## Done
+## Done (all merged in PR #120; main SHAs)
 
-- **C1 (`483cd69`):** lifted `FlashState`/`FlashDinParams`/`FlashModelParams` from
-  `metal.rs` to the shared `mod.rs` GPU-struct region (gated, `size_of` asserts
-  48/24/32). Metal bit-identical; no-feature + Metal builds green.
+- **C1:** lifted `FlashState`/`FlashDinParams`/`FlashModelParams` from `metal.rs`
+  to the shared `mod.rs` GPU-struct region (gated, `size_of` asserts 48/24/32).
+  Metal bit-identical.
+- **C2 (`CpuBackend` oracle):** wired `CppSpiFlash` into `CpuBackend::run_edges`
+  (per-edge `apply_flash_din` + dual-step `flash_model_step`); patched
+  `spiflash_model.cc` `p_d_i` init 0→0x0F to match the GPU `FlashState.d_i`. A
+  10k-edge `mcu_soc` cosim on the no-GPU `CpuBackend` is byte-identical to the
+  Metal GPU flash kernel → C++↔shader FSM equivalence proven, CpuBackend is a
+  valid golden source. (Detail: the C2 section below.)
+- **C3 (`a071326`):** ported `flash_eval_commit_persistent` + `gpu_apply_flash_din`
+  + `gpu_flash_model_step` to `kernel_v1_impl.cuh` + `_cuda`/`_hip` launchers;
+  wired into `Cuda/HipBackend::run_edges` (Metal order); flash buffers built in
+  `new` via shared `build_flash_buffers_dev`; stubs replaced with real
+  `FlashState` reads. `FlashState` byte offsets derived via `std::mem::offset_of!`
+  (ABI drift → compile error). T4-green.
+- **C4 (`7c54448`):** flash CI gate — 74 KB `CpuBackend` golden
+  `tests/mcu_soc/expected/mcu_flash.vcd` (== Metal, deterministic), self-contained
+  `tests/mcu_soc/sim_config_selfcontained.json`, `COSIM_SCOPE=flash` in
+  `cosim_cpu_check.sh`, wired into Linux + CUDA/HIP T4 jobs. All three flash-gate
+  steps T4-green (byte-identical vs golden).
 
 ## Scoping findings (the part that changes the plan)
 

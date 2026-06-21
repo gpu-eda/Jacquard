@@ -1,6 +1,10 @@
 # CUDA/HIP Parity for Release — cosim Phase 2 + #104 sim timing
 
-**Status:** Active — planned 2026-06-17, not yet started.
+**Status:** ✅ **SHIPPED** — merged to `main` in PR #120 (2026-06-21,
+rebase). Track 0 (#104 sim timing) + Stages A/B/C (T1.1–T2.2) all done and
+T4-green. Remaining: T2.3 (optional, below) + the performance follow-up
+(issue #122 — managed-memory profiling/tuning; the track closed on
+*correctness*, performance is untuned).
 **Goal (maintainer):** "close off CUDA and HIP before release" — bring both GPU
 backends to Metal parity on the two paths that lag today:
 1. **#104** — `sim` setup/hold timing-violation detection (Metal-only today).
@@ -236,10 +240,15 @@ cosim is CI-covered on CPU only; sim equivalence covers GPU only.
 |---|-------|-------------|---------|
 | T0 | #104 | CUDA/HIP sim timing wired (Rust-only) | ✅ timing report == Metal on T4 |
 | T1.1 | — | `cosim_state_prep` + `cosim_simulate_stage` kernels + launchers compile | ✅ `cuda`/`hip` build green |
-| T1.2 | A | `CudaBackend`/`HipBackend` (managed mem, batched, design-step only) + cmd_cosim dispatch + cosim CI | `xprop_cosim` cosim VCD == CPU/Metal golden |
-| T2.1 | B | `gpu_io_step` ported + wired; GPU UART/bus drains | `dual_uart` + `apb_trace` == golden |
-| T2.2 | C | `gpu_apply_flash_din` + `gpu_flash_model_step` ported + wired; GPU flash drain | flash/JTAG cosim == golden |
-| T2.3 | — | `GpuPeripheral` seam + cross-backend cosim equivalence gate | backend-equivalence (cosim) green |
+| T1.2 | A | `CudaBackend`/`HipBackend` (managed mem, batched, design-step only) + cmd_cosim dispatch + cosim CI | ✅ `xprop_cosim` cosim VCD == CPU/Metal golden |
+| T2.1 | B | `gpu_io_step` ported + wired; GPU UART/bus drains | ✅ `dual_uart` + `apb_trace` == golden |
+| T2.2 | C | `gpu_apply_flash_din` + `gpu_flash_model_step` ported + wired; GPU flash drain | ✅ `mcu_soc` flash cosim == golden (T4) |
+| T2.3 | — | `GpuPeripheral` seam + cross-backend cosim equivalence gate | ⬜ optional/not started — backend-equivalence (cosim) green |
+
+**T0–T2.2 all ✅ merged in PR #120 (2026-06-21).** Only T2.3 remains (optional;
+the flash gate already achieves cross-backend equivalence transitively by diffing
+each backend against the same committed golden). Performance tuning of the v1
+managed-memory backend is tracked separately in **issue #122**.
 
 CUDA and HIP land **together** at each step (shared `*_impl.cuh`; HIP = a thin
 second launcher + `mod ucci_hip`).
