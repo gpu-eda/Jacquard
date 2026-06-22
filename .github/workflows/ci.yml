@@ -1377,27 +1377,38 @@ jobs:
         run: cargo build --release --features metal --bin jacquard
 
       - name: Attach with real OpenOCD and assert IDCODE + DMI read-back
-        # The server binds the port and blocks on accept() during setup;
-        # OpenOCD retries the connect, examines the DTM (reading TDO), then
-        # the driver script writes+reads DATA0 and asserts the values.
+        # Self-hosted runners persist between jobs, so a `jacquard` server
+        # orphaned by an earlier failed run can still hold the port. Free
+        # it first (else the new server can't bind and OpenOCD connects to
+        # the stale socket), then start a fresh server. The driver script
+        # waits for *this* server's LISTEN before launching OpenOCD; a trap
+        # guarantees cleanup even on failure.
         timeout-minutes: 40
         run: |
+          PORT=9824
+          STALE=$(lsof -ti tcp:$PORT 2>/dev/null || true)
+          if [ -n "$STALE" ]; then
+            echo "killing stale process(es) on :$PORT — $STALE"
+            kill -9 $STALE 2>/dev/null || true
+            sleep 2
+          fi
           ./target/release/jacquard cosim \
             tests/jtag_minimal/data/top.pnl.v \
             --config tests/jtag_minimal/sim_config.json \
             --top-module top \
-            --jtag-server 9824 \
+            --jtag-server $PORT \
             --jtag-hold-cycles 8 \
             --output-vcd tests/jtag_minimal/data/cosim_openocd_trace.vcd \
             --max-clock-edges 8000000 \
             > jtag_minimal_openocd_server.log 2>&1 &
           SERVER_PID=$!
-          # Give OpenOCD up to ~3 min to retry-connect while setup runs.
+          trap 'kill -9 $SERVER_PID 2>/dev/null || true' EXIT
+          # openocd_debug.sh waits for the port to LISTEN (cosim setup runs
+          # first) before launching OpenOCD, then asserts IDCODE + DMI.
           OPENOCD_LOG=openocd_debug.log \
-            bash tests/jtag_minimal/scripts/openocd_debug.sh 9824
+            bash tests/jtag_minimal/scripts/openocd_debug.sh $PORT
           STATUS=$?
-          kill $SERVER_PID 2>/dev/null || true
-          wait $SERVER_PID 2>/dev/null || true
+          kill -9 $SERVER_PID 2>/dev/null || true
           exit $STATUS
 
       - name: Upload artefacts
