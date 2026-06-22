@@ -26,6 +26,27 @@ PORT="${1:?usage: openocd_debug.sh <port> [openocd.cfg]}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 CFG="${2:-$HERE/openocd.cfg}"
 LOG="${OPENOCD_LOG:-/tmp/openocd_debug_${PORT}.log}"
+# Seconds to wait for the server to start listening (cosim setup —
+# netlist parse + partitioning — runs before it binds).
+WAIT_LISTEN="${WAIT_LISTEN:-240}"
+
+# OpenOCD's remote_bitbang driver connects exactly once and does not
+# retry, so the server MUST be listening first. Poll the LISTEN state
+# without opening a connection (a probe connection would be consumed as
+# the single v1 client). `lsof` checks the listening socket directly.
+echo "waiting up to ${WAIT_LISTEN}s for 127.0.0.1:${PORT} to listen…"
+ready=0
+for _ in $(seq 1 "$WAIT_LISTEN"); do
+  if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+if [ "$ready" != 1 ]; then
+  echo "FAIL: nothing listening on 127.0.0.1:${PORT} after ${WAIT_LISTEN}s"
+  exit 1
+fi
 
 openocd -f "$CFG" \
   -c "remote_bitbang port $PORT" \
