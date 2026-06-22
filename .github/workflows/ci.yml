@@ -1320,6 +1320,91 @@ jobs:
             jtag_minimal_server.log
             tests/jtag_minimal/data/cosim_server_trace.vcd
 
+  # Real-OpenOCD attach gate (V2 in docs/plans/jtag-debug-server.md). The
+  # replay / bitbang_client gates reach data0_obs via a DMI *write* and
+  # never depend on a correct TDO *read*. This drives the live
+  # `--jtag-server` with stock OpenOCD: examine reads IDCODE/DTMCS back
+  # over TDO, then we write+read-back DATA0. It is the only gate that
+  # guards the live TDO read path (and the power-on TRST-pulse fix that
+  # lets a real debugger attach). The fixture's fake hart means full
+  # examination stops at MISA; the script asserts IDCODE=0xdeadbeef and
+  # DMI read-back=0xcafebabe instead.
+  jtag-minimal-openocd:
+    name: JTAG Minimal OpenOCD (real remote_bitbang attach)
+    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
+    timeout-minutes: 45
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: true
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM (for OpenMP) and OpenOCD
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          brew install llvm open-ocd
+          LLVM_PREFIX=$(brew --prefix llvm)
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> $GITHUB_ENV
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
+          LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
+          echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
+          openocd --version
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          # Share the replay job's warm target cache.
+          key: ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-
+
+      - name: Build jacquard (metal)
+        run: cargo build --release --features metal --bin jacquard
+
+      - name: Attach with real OpenOCD and assert IDCODE + DMI read-back
+        # The server binds the port and blocks on accept() during setup;
+        # OpenOCD retries the connect, examines the DTM (reading TDO), then
+        # the driver script writes+reads DATA0 and asserts the values.
+        timeout-minutes: 40
+        run: |
+          ./target/release/jacquard cosim \
+            tests/jtag_minimal/data/top.pnl.v \
+            --config tests/jtag_minimal/sim_config.json \
+            --top-module top \
+            --jtag-server 9824 \
+            --jtag-hold-cycles 8 \
+            --output-vcd tests/jtag_minimal/data/cosim_openocd_trace.vcd \
+            --max-clock-edges 8000000 \
+            > jtag_minimal_openocd_server.log 2>&1 &
+          SERVER_PID=$!
+          # Give OpenOCD up to ~3 min to retry-connect while setup runs.
+          OPENOCD_LOG=openocd_debug.log \
+            bash tests/jtag_minimal/scripts/openocd_debug.sh 9824
+          STATUS=$?
+          kill $SERVER_PID 2>/dev/null || true
+          wait $SERVER_PID 2>/dev/null || true
+          exit $STATUS
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: jtag-minimal-openocd-results
+          path: |
+            jtag_minimal_openocd_server.log
+            openocd_debug.log
+
   # Build documentation (cargo doc + mdbook) and deploy to GitHub Pages
   docs:
     name: Documentation

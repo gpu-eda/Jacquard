@@ -48,8 +48,13 @@ reads:
 }
 ```
 
-- `trst_gpio` is optional — TAPs that reset via a five-cycle `TMS=1`
-  sequence omit it.
+- `trst_gpio` should be set for a RISC-V Debug TAP: the DTM resets on
+  `negedge trst_n`, and the server injects a one-shot power-on TRST pulse
+  at startup so a debugger that never asserts TRST (stock OpenOCD with
+  `reset_config none`) still resets the DTM — mirroring a real chip's
+  power-on TAP reset. (Tunable/disable via the `JACQUARD_JTAG_TRST_PULSE`
+  env var; see *How it works*.) TAPs that genuinely reset via a
+  five-cycle `TMS=1` sequence can omit it.
 - `tdo_gpio` is optional for `--jtag-replay` (replay never answers `R`)
   but **required for useful `--jtag-server` use**: without it, every TDO
   read returns `0` and the debugger cannot read the design back. cosim
@@ -153,6 +158,19 @@ correct synchronisation — no async executor, no background thread.
   requires.
 - TCK/TMS/TDI/TRST drive through the usual
   `overrides → BitOps → state_prep` path, unchanged from replay.
+- **Power-on TRST pulse.** A RISC-V DTM resets on `negedge trst_n`. On
+  real silicon the power-on reset supplies that edge; in a recorded
+  capture the harness pulses TRST before the debugger runs. But stock
+  OpenOCD with `reset_config none` never asserts TRST — so without help
+  the DTM would never reset and examine would fail with "dtmcontrol is
+  0" / "scan chain interrogation: all zeroes". The live server therefore
+  injects one brief TRST pulse at startup (deasserted → asserted →
+  released, timed in cosim edges), reproducing the recorded stream's
+  leading `u…r`. Replay is unaffected (it drives TRST from the stream),
+  and an explicit client TRST assertion still wins after the pulse. The
+  window is `[hold_edges, 5·hold_edges)` by default; override or disable
+  it with `JACQUARD_JTAG_TRST_PULSE="<from>,<to>"` / `="off"` (edges) if
+  a design needs different timing.
 
 The batched fast path is untouched when no client is attached: a design
 with a `jtag` config but no `--jtag-server`/`--jtag-replay` flag simply
@@ -183,7 +201,7 @@ for the `tdo_gpio` config surface.
 
 ## Validation
 
-The live path is pinned equivalent to the deterministic replay path:
+Three layers, increasing in fidelity:
 
 - A **model-level loopback unit test**
   (`live_source_loops_back_tdo_over_socket` in `src/sim/models/jtag.rs`)
@@ -192,9 +210,28 @@ The live path is pinned equivalent to the deterministic replay path:
 - The **`jtag-minimal-cosim-server` CI job** streams the *same*
   `bitbang.rec` the `--jtag-replay` gate uses over the live socket (via
   `tests/jtag_minimal/scripts/bitbang_client.py`) and asserts the design
-  reaches the same `data0_obs == 0xCAFEBABE`. This exercises the full
-  live socket → TDO read-back → drive path end-to-end with zero external
-  tooling.
+  reaches the same `data0_obs == 0xCAFEBABE`. This pins live-vs-replay
+  *drive* equivalence with zero external tooling — but reaches
+  `0xCAFEBABE` via a DMI *write*, so it does not exercise a correct TDO
+  *read*.
+- The **`jtag-minimal-openocd` CI job** drives the live server with
+  **real OpenOCD** (`tests/jtag_minimal/scripts/openocd_debug.sh`):
+  examine reads IDCODE/DTMCS back over TDO, then it writes *and reads
+  back* DATA0, asserting `IDCODE == 0xdeadbeef` and the DMI read-back
+  `== 0xcafebabe`. This is the only gate that exercises the live **TDO
+  read** path (and the power-on TRST-pulse fix). Run it locally with any
+  port:
+
+  ```bash
+  jacquard cosim … --jtag-server 9824 &
+  bash tests/jtag_minimal/scripts/openocd_debug.sh 9824
+  ```
+
+  > **Fake hart.** `jtag_minimal` is a bare DTM+DM with no real CPU, so
+  > full RISC-V target examination stops at `Failed to read MISA` and
+  > OpenOCD exits non-zero — expected. DMI access (write/read DATA0) is
+  > the contract the gate checks. A design with a real hart examines
+  > fully.
 
 ## References
 
