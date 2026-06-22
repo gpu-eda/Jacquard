@@ -231,7 +231,14 @@ else
     # only the first N launches, basic metric set. Metrics land in the binary
     # .ncu-rep; they are extracted for display via `ncu --import` below (the
     # collection run does not print them to stdout).
-    "${ncu_cmd[@]}" --set "$NCU_SET" --target-processes all \
+    # #122 warp-stall confirmation: add the Warp State + Scheduler sections so the
+    # report carries the per-stall-reason breakdown (Long/Short Scoreboard, Wait,
+    # Barrier, …) and the scheduler eligibility stats. Stable section IDs (no
+    # explicit --metrics, which would abort the whole run on a single typo). A few
+    # extra metric passes over the bounded launch count stays within the timeout.
+    "${ncu_cmd[@]}" --set "$NCU_SET" \
+        --section WarpStateStats --section SchedulerStats \
+        --target-processes all \
         --kernel-name "regex:$NCU_KERNEL" --launch-count "$NCU_LAUNCH_COUNT" \
         --export "$ncu_rep" -f \
         "$BIN" "${COSIM_ARGS[@]}" \
@@ -285,6 +292,12 @@ else
                 grep -E 'Duration|DRAM Frequency|SM Frequency|Memory Throughput|Compute \(SM\) Throughput|DRAM Throughput|Achieved Occupancy|Achieved Active Warps|Registers Per Thread|Block Limit|Theoretical Occupancy|Waves Per SM|L2 Cache Throughput|L1/TEX' \
                     "$ncu_sum" 2>/dev/null | sort -u | head -40 \
                     || echo "(report parsed but no metric lines matched — see ncu_summary.txt)"
+                echo
+                echo "Warp state / scheduler (the #122 dependency-stall confirmation):"
+                echo
+                grep -E 'Stall|Warp Cycles Per|Active Threads Per Warp|Issued Warp Per Scheduler|Eligible Warps Per Scheduler|No Eligible|One or More Eligible|Issued Ipc|Issue Slot' \
+                    "$ncu_sum" 2>/dev/null | sort -u | head -40 \
+                    || echo "(no warp-state lines matched — read the full ncu_summary.txt artifact)"
             else
                 echo "ncu --import produced no output. Diagnostic (ncu_import.err):"
                 echo
