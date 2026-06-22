@@ -225,6 +225,17 @@ pub struct JtagReplayModel {
     /// and, in live-server mode, samples TDO from `output_state` and
     /// writes the ASCII bit back to the client. Cleared each edge.
     pending_tdo_read: bool,
+    /// Cosim edges elapsed since construction (one per `step_edge`),
+    /// used to time the power-on TRST pulse.
+    edges_elapsed: u64,
+    /// Power-on TRST pulse window `[assert_from, deassert_at)` in edges,
+    /// or `None` to never force TRST. The DTM resets on `negedge
+    /// trst_n`; a live `remote_bitbang` client (OpenOCD with the common
+    /// `reset_config none`) never asserts TRST, so the model injects one
+    /// brief assertion at startup — mirroring the recorded stream's
+    /// leading `u` and a real chip's power-on reset of the TAP. Replay
+    /// leaves this `None` (the recorded stream drives TRST itself).
+    trst_power_on: Option<(u64, u64)>,
 }
 
 impl JtagReplayModel {
@@ -250,6 +261,8 @@ impl JtagReplayModel {
             trst,
             tdo_pos,
             hold_edges,
+            // Replay drives TRST from the recorded stream — no injection.
+            None,
             JtagSource::Replay { bytes, cursor: 0 },
         )
     }
@@ -269,6 +282,27 @@ impl JtagReplayModel {
         hold_edges: u32,
         stream: TcpStream,
     ) -> Self {
+        // Default power-on TRST pulse: hold TRST deasserted for a few
+        // edges (so the assertion is a clean `negedge`), then assert it
+        // for ~4 bitbang-bytes' worth of edges before releasing to the
+        // client — the same shape as the recorded stream's leading `u…r`.
+        // Only meaningful when a TRST pin is configured.
+        let trst_power_on = trst.map(|_| {
+            let from = hold_edges as u64;
+            let to = from + 4 * hold_edges as u64;
+            (from, to)
+        });
+        // Escape hatch for tuning / disabling without a rebuild:
+        //   JACQUARD_JTAG_TRST_PULSE="off"        → no injected pulse
+        //   JACQUARD_JTAG_TRST_PULSE="<from>,<to>" → custom window (edges)
+        let trst_power_on = match std::env::var("JACQUARD_JTAG_TRST_PULSE") {
+            Ok(v) if v.trim() == "off" => None,
+            Ok(v) => v
+                .split_once(',')
+                .and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)))
+                .or(trst_power_on),
+            Err(_) => trst_power_on,
+        };
         Self::with_source(
             name,
             tck_pos,
@@ -277,6 +311,7 @@ impl JtagReplayModel {
             trst,
             tdo_pos,
             hold_edges,
+            trst_power_on,
             JtagSource::Live {
                 stream,
                 closed: false,
@@ -294,6 +329,7 @@ impl JtagReplayModel {
         trst: Option<TrstPin>,
         tdo_pos: Option<u32>,
         hold_edges: u32,
+        trst_power_on: Option<(u64, u64)>,
         source: JtagSource,
     ) -> Self {
         assert!(
@@ -331,7 +367,14 @@ impl JtagReplayModel {
             srst_toggles: 0,
             quit: false,
             pending_tdo_read: false,
+            edges_elapsed: 0,
+            trst_power_on,
         }
+    }
+
+    /// True while the injected power-on TRST pulse is asserting TRST.
+    fn power_on_trst_asserted(&self) -> bool {
+        matches!(self.trst_power_on, Some((from, to)) if self.edges_elapsed >= from && self.edges_elapsed < to)
     }
 
     /// Consume one byte from the stream, updating the driven values.
@@ -426,6 +469,9 @@ impl JtagReplayModel {
     /// for at least one full cosim edge before TCK transitions,
     /// preventing the TAP from sampling a stale TMS on the rising edge.
     pub fn step_edge(&mut self) {
+        // Count every edge (including deferral/idle edges) so the
+        // power-on TRST pulse is timed in cosim edges.
+        self.edges_elapsed = self.edges_elapsed.saturating_add(1);
         if let Some(tck_val) = self.pending_tck.take() {
             self.tck = tck_val;
             return;
@@ -505,13 +551,17 @@ impl PeripheralModel for JtagReplayModel {
         overrides.insert(self.tms_pos, self.tms);
         overrides.insert(self.tdi_pos, self.tdi);
         if let Some(trst) = self.trst {
+            // Assert TRST when the client drives it *or* during the
+            // injected power-on pulse (live server only — `trst_power_on`
+            // is `None` for replay).
+            let asserted = self.trst_active || self.power_on_trst_asserted();
             let driven = if trst.active_low {
-                if self.trst_active {
+                if asserted {
                     0
                 } else {
                     1
                 }
-            } else if self.trst_active {
+            } else if asserted {
                 1
             } else {
                 0
@@ -775,6 +825,58 @@ mod tests {
             vec![],
         );
         assert_eq!(m.sample_tdo(&[0xFFFF_FFFF]), None);
+    }
+
+    #[test]
+    fn replay_never_injects_power_on_trst() {
+        // Replay drives TRST from the recorded stream; the model must
+        // not inject a pulse (would corrupt a byte-exact replay).
+        let m = JtagReplayModel::new(
+            "jtag_0".into(),
+            10, 11, 12,
+            Some(TrstPin { position: 13, active_low: true }),
+            None,
+            4,
+            vec![],
+        );
+        assert!(m.trst_power_on.is_none());
+        assert!(!m.power_on_trst_asserted());
+    }
+
+    #[test]
+    fn power_on_trst_pulse_forces_a_negedge_then_releases() {
+        // The DTM resets on `negedge trst_n`; the live server injects one
+        // pulse so a debugger that never asserts TRST still resets the
+        // TAP. Drive the window logic directly (socket-free).
+        let mut m = JtagReplayModel::new(
+            "jtag_0".into(),
+            10, 11, 12,
+            Some(TrstPin { position: 13, active_low: true }),
+            None,
+            4,
+            vec![],
+        );
+        m.trst_power_on = Some((2, 5)); // assert for edges [2, 5)
+
+        let trst_drive = |m: &JtagReplayModel| {
+            let mut ov = ModelOverrides::new();
+            m.contribute_overrides(&mut ov);
+            *ov.get(&13).unwrap()
+        };
+        // Before the window: deasserted → active-low drives HIGH.
+        m.edges_elapsed = 1;
+        assert_eq!(trst_drive(&m), 1, "high before pulse (sets up the negedge)");
+        // Inside the window: asserted → drives LOW (the negedge edge).
+        m.edges_elapsed = 2;
+        assert_eq!(trst_drive(&m), 0);
+        m.edges_elapsed = 4;
+        assert_eq!(trst_drive(&m), 0);
+        // After the window: released back HIGH (client controls it).
+        m.edges_elapsed = 5;
+        assert_eq!(trst_drive(&m), 1, "released after pulse");
+        // A client TRST assertion still wins outside the window.
+        m.consume_byte(b't');
+        assert_eq!(trst_drive(&m), 0);
     }
 
     /// End-to-end live-socket loopback: a real `TcpStream` client drives
