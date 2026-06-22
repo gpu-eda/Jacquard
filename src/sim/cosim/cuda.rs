@@ -575,7 +575,26 @@ impl CosimBackend for CudaBackend {
             }
         }
 
-        // The first batch runs eagerly to materialise every device buffer (a
+        // Force-materialise every mutable device buffer the captured loop touches
+        // BEFORE capture: a lazy H2D inside a graph capture region is illegal, and
+        // buffers get re-dirtied on the host between batches (e.g. `flash_state`
+        // via `flash_set_in_reset`, design state on reset). `as_mut_uptr` flushes
+        // any pending upload here and is a no-op once resident. The const-param
+        // buffers (blocks/flash params/firmware) are never host-dirtied after
+        // construction, so the first (eager) batch materialises them for good.
+        state.as_mut_uptr(DEVICE);
+        sram.as_mut_uptr(DEVICE);
+        sram_xmask.as_mut_uptr(DEVICE);
+        flash_state.as_mut_uptr(DEVICE);
+        uart_state.as_mut_uptr(DEVICE);
+        uart_channel.as_mut_uptr(DEVICE);
+        wb_channel.as_mut_uptr(DEVICE);
+        bus_channel.as_mut_uptr(DEVICE);
+        if self.enable_vcd {
+            vcd_dev.as_mut_uptr(DEVICE);
+        }
+
+        // The first batch runs eagerly to materialise the const-param buffers (a
         // lazy H2D would be illegal inside a capture); subsequent batches capture
         // the structurally-identical per-edge launch chain into a CUDA graph and
         // replay it, removing per-launch host overhead (the #122 latency /
