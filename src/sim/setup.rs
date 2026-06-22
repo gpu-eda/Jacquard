@@ -572,7 +572,14 @@ fn generate_partitions(
             let mut parts_good: Vec<(Vec<usize>, Partition)> = Vec::new();
             let mut unrealized_endpoints =
                 (0..staged.num_endpoint_groups()).collect::<Vec<_>>();
-            let mut division = 600;
+            // [#122 occupancy probe] `division` = target endpoints/partition. Lower
+            // → more, smaller partitions (more parallel blocks, more RepCut
+            // replication). Overridable to sweep the replication curve.
+            let mut division = std::env::var("JACQUARD_PART_DIVISION")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(600);
+            clilog::info!("[#122] initial division = {}", division);
 
             while !unrealized_endpoints.is_empty() {
                 division = (division / 2).max(1);
@@ -621,15 +628,60 @@ fn generate_partitions(
 
             let (parts_indices_good, prebuilt): (Vec<_>, Vec<_>) =
                 parts_good.into_iter().unzip();
-            let effective_parts = process_partitions(
-                aig,
-                staged,
-                parts_indices_good,
-                Some(prebuilt),
-                max_stage_degrad,
-            )
-            .unwrap();
+            // [#122 occupancy probe] Skip merging to sample the replication curve
+            // at the raw (pre-merge) partition count — merging only consolidates
+            // toward the min-replication floor, so this isolates the trade.
+            let effective_parts = if std::env::var("JACQUARD_NO_MERGE").is_ok() {
+                prebuilt
+            } else {
+                process_partitions(
+                    aig,
+                    staged,
+                    parts_indices_good,
+                    Some(prebuilt),
+                    max_stage_degrad,
+                )
+                .unwrap()
+            };
             clilog::info!("after merging: {} parts.", effective_parts.len());
+            // [#122 occupancy probe] Per-partition footprint + aggregate work
+            // metrics. T(P) ≈ max(max_stages, Σstages/E): max_stages is the
+            // critical-block floor, Σstages the total work (grows with P via
+            // RepCut replication). Σ(fill·stages) is the fill-weighted variant.
+            let mut sum_stages = 0usize;
+            let mut max_stages = 0usize;
+            let mut sum_fill_stages = 0.0f64;
+            for (pi, part) in effective_parts.iter().enumerate() {
+                let peak_lanes = part
+                    .stages
+                    .iter()
+                    .map(|s| {
+                        s.hier
+                            .first()
+                            .map_or(0, |h0| h0.iter().filter(|&&x| x != usize::MAX).count())
+                    })
+                    .max()
+                    .unwrap_or(0);
+                let nstages = part.stages.len();
+                sum_stages += nstages;
+                max_stages = max_stages.max(nstages);
+                sum_fill_stages += nstages as f64 * peak_lanes as f64 / 8192.0;
+                clilog::debug!(
+                    "  [#122] part {}: {} endpoints, {} stage(s), peak base fill {}/8192 ({:.1}%)",
+                    pi,
+                    part.endpoints.len(),
+                    nstages,
+                    peak_lanes,
+                    100.0 * peak_lanes as f64 / 8192.0
+                );
+            }
+            clilog::info!(
+                "  [#122-CURVE] P={} sum_stages={} max_stages={} sum_fill_stages={:.1}",
+                effective_parts.len(),
+                sum_stages,
+                max_stages,
+                sum_fill_stages
+            );
             effective_parts
         })
         .collect::<Vec<_>>()

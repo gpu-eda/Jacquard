@@ -90,6 +90,50 @@ mean_batch() {
     grep -oE 'mean batch=[0-9]+\.[0-9]+' "$1" | grep -oE '[0-9]+\.[0-9]+' | head -1
 }
 
+# ── Phase 0 (optional, PSWEEP=1): T(P) partition-count sweep ──────────────────
+# Forces several working-partition counts P (JACQUARD_PART_DIVISION +
+# JACQUARD_NO_MERGE, the #122 probes) and measures warm µs/edge at each, to test
+# the makespan model T(P)=max(max_stages, Σstages/E) and the barrier-hiding
+# hypothesis (P≈80 → 2 blocks/SM on the 40-SM T4). `--num-blocks 256` so every
+# partition gets its own block (working blocks = P; the default 64 would cap P).
+# Baseline timing only — skips nsys/ncu — then exits.
+if [ "${PSWEEP:-0}" = "1" ]; then
+    echo "=== Phase 0: T(P) partition-count sweep ($TRIALS trials, $EDGES edges, --num-blocks 256) ==="
+    {
+        echo "# CUDA cosim T(P) sweep — mcu_soc flash (#122)"
+        echo
+        echo "Warm µs/edge vs forced working-partition count P (\`--num-blocks 256\`)."
+        echo
+        echo "| config | division | no_merge | working P | µs/edge (mean) | mean batch |"
+        echo "|---|---|---|---|---|---|"
+    } >> "$SUMMARY"
+    # label:division:no_merge  (merged baseline ≈ P8; no-merge points scale P up)
+    for spec in "merged:600:0" "P40:190:1" "P80:94:1" "P127:60:1"; do
+        IFS=: read -r label div nomerge <<< "$spec"
+        echo "--- sweep $label (division=$div no_merge=$nomerge) ---"
+        export JACQUARD_PART_DIVISION="$div"
+        if [ "$nomerge" = "1" ]; then export JACQUARD_NO_MERGE=1; else unset JACQUARD_NO_MERGE; fi
+        declare -a ss=(); Pval=""; mb=""
+        for t in $(seq 1 "$TRIALS"); do
+            log="$OUTDIR/sweep_${label}_trial_${t}.txt"
+            flash_cosim "$EDGES" --num-blocks 256 2>&1 | tee "$log" >/dev/null
+            us="$(per_edge_us "$log" || true)"
+            [ -z "$Pval" ] && Pval="$(grep -oE 'CURVE\] P=[0-9]+' "$log" | grep -oE '[0-9]+' | head -1)"
+            [ -z "$mb" ] && mb="$(mean_batch "$log" || true)"
+            echo "  trial $t: ${us:-?} µs/edge"
+            if [ "$t" -gt 1 ] && [ -n "$us" ]; then ss+=("$us"); fi
+        done
+        mean="$(printf '%s\n' "${ss[@]}" | awk '{s+=$1;n++} END{if(n)printf "%.2f",s/n}')"
+        printf '| %s | %s | %s | %s | %s | %s |\n' \
+            "$label" "$div" "$nomerge" "${Pval:-?}" "${mean:-?}" "${mb:-?}" >> "$SUMMARY"
+        echo "  => working P=${Pval:-?}  mean=${mean:-?} µs/edge"
+    done
+    unset JACQUARD_PART_DIVISION JACQUARD_NO_MERGE
+    echo >> "$SUMMARY"
+    echo "=== T(P) sweep complete (nsys/ncu skipped) ==="
+    exit 0
+fi
+
 {
     echo "# CUDA cosim profile — mcu_soc flash (#122)"
     echo

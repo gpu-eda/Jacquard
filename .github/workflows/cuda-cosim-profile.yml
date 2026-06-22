@@ -29,6 +29,11 @@ on:
         description: '--max-clock-edges for the ncu run (keep small — kernel replay is slow; ncu is bounded to the hotspot kernel + capped launch count regardless)'
         required: false
         default: '20'
+      psweep:
+        description: 'T(P) partition-count sweep: warm µs/edge at forced P ∈ {8,40,80,127} (baseline only, skips nsys/ncu)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -100,6 +105,7 @@ jobs:
           TRIALS: ${{ github.event.inputs.trials }}
           NCU: ${{ github.event.inputs.ncu == 'true' && '1' || '0' }}
           NCU_EDGES: ${{ github.event.inputs.ncu_edges }}
+          PSWEEP: ${{ github.event.inputs.psweep == 'true' && '1' || '0' }}
           OUTDIR: perf_out
         run: bash scripts/ci/cuda_cosim_profile.sh
 

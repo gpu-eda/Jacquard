@@ -1230,6 +1230,19 @@ fn build_flattened_script_v1(
             i,
             tot_nstages_blocks.iter().copied().max().unwrap()
         );
+        // [#122 occupancy probe] How many of the launched `num_blocks` actually
+        // carry a partition. Idle blocks are dummy no-ops in the GPU grid, so a
+        // large idle count means the grid's `<<<num_blocks,256>>>` width
+        // over-reports real occupancy (ncu Waves/SM 0.80 vs ~8 working blocks).
+        let working_blocks = blocks_parts.iter().filter(|b| !b.is_empty()).count();
+        clilog::info!(
+            "  [#122] major stage {}: {} partitions packed into {} blocks → {} working, {} idle",
+            i,
+            init_parts.len(),
+            num_blocks,
+            working_blocks,
+            num_blocks - working_blocks
+        );
 
         // the intermediates for parts being flattened
         let mut flattening_parts: Vec<FlatteningPart> = vec![Default::default(); init_parts.len()];
