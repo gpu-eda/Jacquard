@@ -62,7 +62,10 @@ fn main() {
             .debug(false)
             .opt_level(3)
             .include(&csrc_headers)
-            .files(["csrc/kernel_v1.cu"]);
+            // cosim_cuda_graph.cu: CUDA Graphs capture/replay for the cosim
+            // per-edge launch chain (#122). The cosim launchers in kernel_v1.cu
+            // target cudaStreamPerThread explicitly so they are capturable.
+            .files(["csrc/kernel_v1.cu", "csrc/cosim_cuda_graph.cu"]);
         cl_cuda.compile("gemcu");
         println!("cargo:rustc-link-lib=static=gemcu");
         println!("cargo:rustc-link-lib=dylib=cudart");

@@ -62,6 +62,18 @@ mod ucci {
 /// The CUDA device this backend runs on. Single-GPU like `sim_cuda`.
 const DEVICE: Device = Device::CUDA(0);
 
+// CUDA Graphs capture/replay helpers (csrc/cosim_cuda_graph.cu). Declared by
+// hand rather than via ucc::bindgen: they take no UVec arguments, so the
+// bindgen convention (map pointers -> UVec, append a Device arg) does not apply.
+// The cosim launchers in kernel_v1.cu target cudaStreamPerThread explicitly, so
+// the per-edge chain records on that stream, which these capture and replay.
+extern "C" {
+    fn cosim_graph_begin_capture();
+    fn cosim_graph_end_capture() -> *mut std::ffi::c_void;
+    fn cosim_graph_launch(exec: *mut std::ffi::c_void);
+    fn cosim_graph_exec_destroy(exec: *mut std::ffi::c_void);
+}
+
 /// CUDA cosim backend — design step + GPU UART/bus peripherals (Stage B).
 struct CudaBackend {
     /// Full design state `[input_state | output_state]`, `2 × state_size`
@@ -137,6 +149,11 @@ struct CudaBackend {
     /// until `enable_vcd_ring`.
     vcd_ring: UnsafeCell<Option<Vec<Vec<u32>>>>,
     enable_vcd: bool,
+    /// False until the first `run_edges` batch has run eagerly. The first batch
+    /// runs eager to materialise every device buffer (a lazy H2D inside a CUDA
+    /// graph capture is illegal); subsequent batches capture + replay the
+    /// per-edge launch chain as a graph. See `run_edges`.
+    graph_warmed: UnsafeCell<bool>,
 }
 
 impl CudaBackend {
@@ -362,6 +379,7 @@ impl CosimBackend for CudaBackend {
             vcd_ring_dev: UnsafeCell::new(UVec::default()),
             vcd_ring: UnsafeCell::new(None),
             enable_vcd: false,
+            graph_warmed: UnsafeCell::new(false),
         };
         (backend, bus_lanes)
     }
@@ -531,15 +549,18 @@ impl CosimBackend for CudaBackend {
         let xmask_off = self.xmask_state_offset as u32;
 
         // Grow the VCD device ring to hold this batch's per-edge snapshots.
+        // Done BEFORE capture — buffer allocation is not legal inside a graph
+        // capture region.
         if self.enable_vcd && vcd_dev.len() < batch * two_slot {
             *vcd_dev = UVec::<u32>::new_zeroed(batch * two_slot, DEVICE);
         }
 
+        // Pre-flush any dirty per-edge ops to the device BEFORE capture: the H2D
+        // upload + UVec (re)allocation are not capture-legal, and a captured
+        // graph would otherwise bake a since-freed ops pointer. Dirty only right
+        // after a reset/model patch (all edges on the first batch); ~zero after.
         for e in 0..batch {
             let sched_idx = (schedule_offset + e) % self.edges_per_period;
-
-            // (Re)upload this edge's ops to the device only if dirty — a
-            // one-time cost after the reset patch, so the batch stays async.
             if ops_dirty[sched_idx] {
                 let ops = &self.schedule[sched_idx];
                 // SAFETY: BitOp is #[repr(C)] of two u32 fields → 2*len u32s.
@@ -552,6 +573,26 @@ impl CosimBackend for CudaBackend {
                 ops_uvecs[sched_idx] = u;
                 ops_dirty[sched_idx] = false;
             }
+        }
+
+        // The first batch runs eagerly to materialise every device buffer (a
+        // lazy H2D would be illegal inside a capture); subsequent batches capture
+        // the structurally-identical per-edge launch chain into a CUDA graph and
+        // replay it, removing per-launch host overhead (the #122 latency /
+        // under-utilisation finding). The launches below target cudaStreamPerThread
+        // (kernel_v1.cu), exactly the stream captured here.
+        //
+        // `capture` is false on the first batch (warmup) and true thereafter:
+        // fetch-and-set graph_warmed in one step.
+        // SAFETY: sequential dispatch; sole accessor of graph_warmed.
+        let capture = unsafe { std::mem::replace(&mut *self.graph_warmed.get(), true) };
+        if capture {
+            // SAFETY: FFI to csrc/cosim_cuda_graph.cu; balanced by end_capture.
+            unsafe { cosim_graph_begin_capture() };
+        }
+
+        for e in 0..batch {
+            let sched_idx = (schedule_offset + e) % self.edges_per_period;
             let num_ops = self.schedule[sched_idx].len() as u32;
 
             // ── GPU state_prep ─────────────────────────────────────────────
@@ -625,7 +666,23 @@ impl CosimBackend for CudaBackend {
             }
         }
 
-        // Single end-of-batch barrier (mirrors Metal's one signal/commit).
+        if capture {
+            // End capture -> instantiate -> replay -> free. No-cache (instantiate
+            // per batch): correct by construction, the graph always reflects the
+            // current pointers/offsets. Caching keyed on (batch, phase) is the
+            // follow-up if instantiate cost proves material.
+            // SAFETY: FFI; `exec` is freshly instantiated here and freed after
+            // the single replay below.
+            let exec = unsafe { cosim_graph_end_capture() };
+            unsafe {
+                cosim_graph_launch(exec);
+                cosim_graph_exec_destroy(exec);
+            }
+        }
+
+        // Single end-of-batch barrier (mirrors Metal's one signal/commit) — the
+        // only synchronize for both the eager warmup batch and the captured
+        // replay (cosim_graph_launch only enqueues, it does not block).
         DEVICE.synchronize();
 
         // Read the device ring back once (D2H) and slice into per-edge host

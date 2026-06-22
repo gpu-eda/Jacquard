@@ -79,6 +79,10 @@ void simulate_v1_noninteractive_timed_cuda(
 
 // ── cosim launchers (non-cooperative; #105 Phase 2) ──────────────────────────
 // Ordinary launches (no cooperative grid.sync); the host loops major stages.
+// All cosim launches below target cudaStreamPerThread explicitly so the per-edge
+// chain is capturable into a CUDA graph (csrc/cosim_cuda_graph.cu, #122
+// launch-overhead work). The `sim` cooperative launchers above are untouched —
+// they keep the legacy default stream.
 
 extern "C"
 void cosim_state_prep_cuda(
@@ -89,7 +93,8 @@ void cosim_state_prep_cuda(
   const u32 *ops
   )
 {
-  cosim_state_prep<<<1, 256>>>(states, state_size, num_ops, xmask_state_offset, ops);
+  cosim_state_prep<<<1, 256, 0, cudaStreamPerThread>>>(
+    states, state_size, num_ops, xmask_state_offset, ops);
   checkCudaErrors(cudaGetLastError());
 }
 
@@ -108,7 +113,7 @@ void cosim_simulate_stage_cuda(
   i32 arrival_state_offset
   )
 {
-  cosim_simulate_stage<<<(unsigned int)num_blocks, 256>>>(
+  cosim_simulate_stage<<<(unsigned int)num_blocks, 256, 0, cudaStreamPerThread>>>(
     num_blocks, blocks_start, blocks_data, sram_data, sram_xmask,
     state_size, states, current_stage,
     timing_constraints, (EventBuffer *)event_buffer, arrival_state_offset);
@@ -116,8 +121,8 @@ void cosim_simulate_stage_cuda(
 }
 
 // gpu_io_step launcher (Stage B): UART + bus-trace capture for one edge. Single
-// block, thread-0 work like the Metal encode_io_step. Default-stream ordered
-// after this edge's cosim_simulate_stage launches.
+// block, thread-0 work like the Metal encode_io_step. On cudaStreamPerThread,
+// ordered after this edge's cosim_simulate_stage launches.
 // IO struct buffers cross FFI as untyped u8 (the proven event_buffer pattern):
 // ulib `UVec<T>` requires `T: UniversalCopy`, which the IO structs are not, so
 // the Rust side passes `UVec<u8>` byte buffers and the launcher casts to the
@@ -134,7 +139,7 @@ void gpu_io_step_cuda(
   const u8 *bus_params
   )
 {
-  gpu_io_step<<<1, 256>>>(
+  gpu_io_step<<<1, 256, 0, cudaStreamPerThread>>>(
     states,
     (UartDecoderState *)uart_state,
     (const UartParams *)uart_params,
@@ -157,7 +162,7 @@ void gpu_apply_flash_din_cuda(
   const u8 *flash_din_params
   )
 {
-  gpu_apply_flash_din<<<1, 256>>>(
+  gpu_apply_flash_din<<<1, 256, 0, cudaStreamPerThread>>>(
     states,
     (const FlashState *)flash_state,
     (const FlashDinParams *)flash_din_params);
@@ -176,7 +181,7 @@ void gpu_flash_model_step_cuda(
   const u8 *flash_data
   )
 {
-  gpu_flash_model_step<<<1, 256>>>(
+  gpu_flash_model_step<<<1, 256, 0, cudaStreamPerThread>>>(
     states,
     (FlashState *)flash_state,
     (const FlashModelParams *)flash_model_params,
@@ -188,8 +193,8 @@ void gpu_flash_model_step_cuda(
 // (`two_slot_words` = 2*state_size u32s) into ring slot `edge_offset`, so each
 // batched edge's [input|output] snapshot survives the next edge overwriting
 // `states`. The CUDA analog of Metal's per-edge blit (cosim/metal.rs blit copy).
-// Default-stream (stream 0) ordered with the kernel launches; the host syncs
-// once at end-of-batch.
+// On cudaStreamPerThread, ordered with the kernel launches (and captured into
+// the same graph); the host syncs once at end-of-batch.
 extern "C"
 void cosim_snapshot_cuda(
   const u32 *states,
@@ -203,5 +208,5 @@ void cosim_snapshot_cuda(
     states,
     two_slot_words * sizeof(u32),
     cudaMemcpyDeviceToDevice,
-    0));
+    cudaStreamPerThread));
 }
