@@ -2447,10 +2447,28 @@ fn run_cosim_generic<B: CosimBackend>(
                              config."
                         );
                     }
+                    // `--jtag-server 0` binds an OS-assigned free port — use
+                    // it when several `jacquard` instances debug concurrently
+                    // (or in CI) so they never collide on a fixed port. The
+                    // actual bound port is logged below for the operator/script
+                    // to point OpenOCD at.
                     let listener = std::net::TcpListener::bind(("127.0.0.1", port))
                         .unwrap_or_else(|e| {
-                            panic!("jtag server: cannot bind 127.0.0.1:{port}: {e}")
+                            let hint = if e.kind()
+                                == std::io::ErrorKind::AddrInUse
+                            {
+                                " — already in use (another jacquard server? \
+                                 pick a different --jtag-server <PORT>, or 0 to \
+                                 auto-assign a free one)"
+                            } else {
+                                ""
+                            };
+                            panic!("jtag server: cannot bind 127.0.0.1:{port}: {e}{hint}")
                         });
+                    let port = listener
+                        .local_addr()
+                        .map(|a| a.port())
+                        .unwrap_or(port);
                     clilog::info!(
                         "JTAG server `jtag_0`: listening on 127.0.0.1:{port}, \
                          hold_edges={} ({pins}); waiting for a remote_bitbang \

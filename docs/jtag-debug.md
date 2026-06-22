@@ -85,6 +85,12 @@ JTAG server `jtag_0`: listening on 127.0.0.1:9999, hold_edges=8 (...);
   waiting for a remote_bitbang client (e.g. OpenOCD)…
 ```
 
+Pass `--jtag-server 0` to bind an **OS-assigned free port** instead of a
+fixed one — read the actual port from the `listening on 127.0.0.1:<port>`
+line. Use this when several `jacquard` instances debug concurrently (or
+in CI) so they never collide; if a fixed port is already taken, the bind
+fails with an actionable error.
+
 Once a client connects, the design steps forward one `remote_bitbang`
 transaction at a time, paced by the client. v1 accepts a single
 connection; when the client disconnects (or sends `Q`), the session ends

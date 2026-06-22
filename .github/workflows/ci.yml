@@ -1377,36 +1377,38 @@ jobs:
         run: cargo build --release --features metal --bin jacquard
 
       - name: Attach with real OpenOCD and assert IDCODE + DMI read-back
-        # Self-hosted runners persist between jobs, so a `jacquard` server
-        # orphaned by an earlier failed run can still hold the port. Free
-        # it first (else the new server can't bind and OpenOCD connects to
-        # the stale socket), then start a fresh server. The driver script
-        # waits for *this* server's LISTEN before launching OpenOCD; a trap
-        # guarantees cleanup even on failure.
+        # Bind an OS-assigned port (`--jtag-server 0`) so concurrent jobs /
+        # a server orphaned by an earlier run on this persistent self-hosted
+        # runner can never collide. Parse the actual port the server logs,
+        # then point OpenOCD at it. `kill -9` + an EXIT trap ensure this run
+        # cannot leave an orphan behind.
         timeout-minutes: 40
         run: |
-          PORT=9824
-          STALE=$(lsof -ti tcp:$PORT 2>/dev/null || true)
-          if [ -n "$STALE" ]; then
-            echo "killing stale process(es) on :$PORT — $STALE"
-            kill -9 $STALE 2>/dev/null || true
-            sleep 2
-          fi
           ./target/release/jacquard cosim \
             tests/jtag_minimal/data/top.pnl.v \
             --config tests/jtag_minimal/sim_config.json \
             --top-module top \
-            --jtag-server $PORT \
+            --jtag-server 0 \
             --jtag-hold-cycles 8 \
             --output-vcd tests/jtag_minimal/data/cosim_openocd_trace.vcd \
             --max-clock-edges 8000000 \
             > jtag_minimal_openocd_server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill -9 $SERVER_PID 2>/dev/null || true' EXIT
-          # openocd_debug.sh waits for the port to LISTEN (cosim setup runs
-          # first) before launching OpenOCD, then asserts IDCODE + DMI.
+          # Wait for the server to bind and log its actual port (cosim setup
+          # — netlist parse + partitioning — runs first).
+          PORT=""
+          for _ in $(seq 1 240); do
+            PORT=$(grep -oE "listening on 127\.0\.0\.1:[0-9]+" \
+              jtag_minimal_openocd_server.log | head -1 | grep -oE "[0-9]+$")
+            [ -n "$PORT" ] && break
+            kill -0 $SERVER_PID 2>/dev/null || { echo "server exited during setup"; cat jtag_minimal_openocd_server.log; exit 1; }
+            sleep 1
+          done
+          [ -n "$PORT" ] || { echo "server never logged a listening port"; exit 1; }
+          echo "JTAG server listening on port $PORT"
           OPENOCD_LOG=openocd_debug.log \
-            bash tests/jtag_minimal/scripts/openocd_debug.sh $PORT
+            bash tests/jtag_minimal/scripts/openocd_debug.sh "$PORT"
           STATUS=$?
           kill -9 $SERVER_PID 2>/dev/null || true
           exit $STATUS

@@ -372,7 +372,9 @@ struct CosimArgs {
     /// blocks for one client (e.g. OpenOCD's `remote_bitbang` driver)
     /// before the run starts, then drives the configured
     /// TCK/TMS/TDI/(TRST) pins live and answers TDO reads from the
-    /// design's `tdo_gpio` output. The interactive sibling of
+    /// design's `tdo_gpio` output. Pass `0` to bind an OS-assigned free
+    /// port (printed at startup) — handy when several `jacquard`
+    /// instances debug concurrently. The interactive sibling of
     /// `--jtag-replay` (mutually exclusive with it). Attach a debugger
     /// to inspect the design's RISC-V Debug Module exactly as on
     /// silicon — see `docs/jtag-debug.md`. Issue #124.
