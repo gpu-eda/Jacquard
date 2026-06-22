@@ -1353,7 +1353,11 @@ jobs:
           echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
           LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
           echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
-          openocd --version
+          # Put the Homebrew bin (openocd, etc.) on PATH for later steps —
+          # `brew shellenv` only affects this step's shell. The self-hosted
+          # runner doesn't have /opt/homebrew/bin on PATH by default.
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+          "$(brew --prefix)/bin/openocd" --version
 
       - name: Cache cargo
         uses: actions/cache@v5
