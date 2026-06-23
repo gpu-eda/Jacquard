@@ -82,22 +82,17 @@ jobs:
           echo "tarball=${PKG}.tar.gz" >> "$GITHUB_OUTPUT"
           echo "sha=${PKG}.tar.gz.sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke-test the packaged binary (relocated)
+      - name: User-acceptance smoke (relocated tarball; docs/installation.md § Verify)
+        # Unpack the release tarball like a user would and run the documented
+        # install-verification flow (jacquard --version, sim, cosim) against the
+        # *relocated* binaries — no build tree, so it catches relocatability
+        # regressions. Shared with the standalone user-acceptance workflow.
         run: |
           set -euo pipefail
           dest="${RUNNER_TEMP}/relocate"
           rm -rf "$dest" && mkdir -p "$dest"
           tar -C "$dest" -xzf "${{ steps.package.outputs.tarball }}"
-          "$dest/jacquard" --version
-          "$dest/opensta-to-ir" --help >/dev/null
-          # Run the apb_trace cosim with the *relocated* binary against the
-          # checked-in fixtures — proves the embedded metallib loads.
-          "$dest/jacquard" cosim "${GITHUB_WORKSPACE}/tests/apb_trace/apb_trace_synth.gv" \
-            --config "${GITHUB_WORKSPACE}/tests/apb_trace/sim_config.json" \
-            --top-module apb_trace \
-            --max-clock-edges 200 \
-            --bus-trace-csv "${RUNNER_TEMP}/apb.csv"
-          python3 "${GITHUB_WORKSPACE}/tests/apb_trace/check.py" "${RUNNER_TEMP}/apb.csv"
+          bash scripts/ci/user_acceptance_smoke.sh "$dest" "${GITHUB_WORKSPACE}"
 
       - name: Extract release notes from CHANGELOG
         if: steps.meta.outputs.is_release == 'true'

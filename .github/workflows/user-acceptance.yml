@@ -1,0 +1,55 @@
+name: User Acceptance (Metal)
+
+# On-demand user-acceptance smoke for the macOS/Metal binary: builds the
+# simulator, installs it to a clean directory (relocated — no build tree), and
+# runs the documented install-verification flow (docs/installation.md § Verify:
+# jacquard --version, sim, cosim) via scripts/ci/user_acceptance_smoke.sh.
+#
+# The same script gates the release in release.yml. This standalone workflow is
+# for validating the user-install experience on demand (e.g. after touching the
+# Metal kernel, packaging, or the install docs) without cutting a release.
+# ADR 0018 / docs/plans/distribution.md.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metal-smoke:
+    name: Install-as-documented + smoke (macOS / Metal)
+    runs-on: macos-runner-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Init required submodules
+        run: git submodule update --init vendor/eda-infra-rs
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM (OpenMP for the Metal build)
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          brew install llvm
+          LLVM_PREFIX=$(brew --prefix llvm)
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> "$GITHUB_ENV"
+
+      - name: Build jacquard (Metal) + opensta-to-ir
+        run: |
+          cargo build --release --features metal --bin jacquard
+          cargo build --release --manifest-path crates/opensta-to-ir/Cargo.toml --bin opensta-to-ir
+
+      - name: Install to a clean dir (relocated) + run user-acceptance smoke
+        run: |
+          set -euo pipefail
+          dest="${RUNNER_TEMP}/install"
+          rm -rf "$dest" && mkdir -p "$dest"
+          cp target/release/jacquard "$dest/"
+          cp crates/opensta-to-ir/target/release/opensta-to-ir "$dest/"
+          bash scripts/ci/user_acceptance_smoke.sh "$dest" "${GITHUB_WORKSPACE}"

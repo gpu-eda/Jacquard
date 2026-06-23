@@ -28,13 +28,17 @@ Metal GPU.
 ### cargo binstall — prebuilt binary, no toolchain build
 
 ```sh
-cargo binstall jacquard
+cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
 ```
 
-Fetches the release binary on **macOS/Metal**. Linux is **not**
-binstall-able: there are two GPU backends (CUDA, HIP) for one target
-triple, so it can't be auto-selected — use the release tarball for your
-backend, a container, or build from source.
+Fetches the release binary on **macOS/Metal**. The `--git` form is
+required: `jacquard` is **not on crates.io** (its dependencies are a
+vendored fork carrying in-flight patches), so binstall reads the
+`[package.metadata.binstall]` pkg-url straight from the repo rather than
+looking the crate up on the registry. Linux is **not** binstall-able:
+there are two GPU backends (CUDA, HIP) for one target triple, so it can't
+be auto-selected — use the release tarball for your backend, a container,
+or build from source.
 
 ### Prebuilt release tarball
 
