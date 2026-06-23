@@ -1983,6 +1983,16 @@ fn main() {
 /// Emit a working OpenOCD `remote_bitbang` config for `cosim
 /// --jtag-server`. Pure string generation — no design/GPU needed.
 fn cmd_jtag_openocd_config(args: JtagOpenocdConfigArgs) {
+    // Bound as locals so the format string captures them implicitly —
+    // one place to keep template and values in sync.
+    let JtagOpenocdConfigArgs {
+        host,
+        irlen,
+        chipname,
+        dmi_timeout,
+        port,
+        ..
+    } = &args;
     let expected_id = args
         .expected_id
         .as_deref()
@@ -2016,12 +2026,6 @@ fn cmd_jtag_openocd_config(args: JtagOpenocdConfigArgs) {
          # `riscv dmi_read`/`dmi_write` still work. A real hart examines\n\
          # fully — uncomment to halt it:\n\
          # reset halt\n",
-        host = args.host,
-        port = args.port,
-        chipname = args.chipname,
-        irlen = args.irlen,
-        expected_id = expected_id,
-        dmi_timeout = args.dmi_timeout,
     );
     match args.output.as_ref() {
         Some(path) => {
