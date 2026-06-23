@@ -632,7 +632,15 @@ fn generate_partitions(
             // at the raw (pre-merge) partition count — merging only consolidates
             // toward the min-replication floor, so this isolates the trade.
             let effective_parts = if std::env::var("JACQUARD_NO_MERGE").is_ok() {
+                // Drop degenerate empty partitions (0 boomerang stages) that
+                // mt-kahypar emits at high part counts — the merge step would
+                // absorb them, and flatten assumes `stages[0]` exists
+                // (flatten.rs:908). They do no work, so dropping them doesn't
+                // bias the curve; it just yields the true working-partition count.
                 prebuilt
+                    .into_iter()
+                    .filter(|p| !p.stages.is_empty())
+                    .collect::<Vec<_>>()
             } else {
                 process_partitions(
                     aig,
