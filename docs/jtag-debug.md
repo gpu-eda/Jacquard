@@ -104,9 +104,19 @@ and the simulation free-runs to its edge budget.
 
 ## OpenOCD configuration
 
-Point OpenOCD's `remote_bitbang` driver at the server's port. A minimal
-config for a 5-bit-IR RISC-V DTM (mirroring
-`tests/jtag_minimal/scripts/openocd.cfg`):
+The boilerplate is the most error-prone part of attaching a debugger, so
+generate it with the built-in helper instead of hand-writing it:
+
+```bash
+jacquard jtag-openocd-config --port 9999 --expected-id 0xdeadbeef \
+    -o openocd.cfg
+```
+
+`--irlen` (default 5), `--host`, `--chipname` and `--dmi-timeout` are all
+configurable; `jacquard jtag-openocd-config --help` lists them. The
+emitted config wires up the `remote_bitbang` driver, a RISC-V Debug TAP,
+and the target, and ends with `init`. For reference, the equivalent
+hand-written config (mirroring `tests/jtag_minimal/scripts/openocd.cfg`):
 
 ```tcl
 adapter driver remote_bitbang
@@ -120,9 +130,9 @@ jtag newtap $_CHIPNAME cpu -irlen 5
 set _TARGETNAME $_CHIPNAME.cpu
 target create $_TARGETNAME riscv -chain-position $_TARGETNAME
 
-# Cosim is fast, but the JTAG protocol is bit-serial — keep the DMI
-# timeout generous.
-riscv set_command_timeout_sec 10
+# The JTAG protocol is bit-serial and the GPU server is per-edge while
+# stepping — keep the DMI timeout generous.
+riscv set_command_timeout_sec 60
 ```
 
 Run it against the launched server:
