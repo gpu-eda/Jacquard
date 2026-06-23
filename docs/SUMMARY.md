@@ -44,6 +44,7 @@
   - [0016 — Selective X-propagation](adr/0016-selective-x-propagation.md)
   - [0017 — Cosim execution model](adr/0017-cosim-execution-model.md)
   - [0018 — Distribution and installation model (Proposed)](adr/0018-distribution-and-installation.md)
+  - [0019 — Cell-model IR: logic sibling of the timing IR (Proposed)](adr/0019-cell-model-ir.md)
 - [Implementation Plans](plans/README.md)
   - [Post-Phase-0 Roadmap](plans/post-phase-0-roadmap.md)
   - [GF180MCU PDK enablement](plans/gf180mcu-enablement.md)
@@ -65,4 +66,5 @@
     - [Phase 2 Stage C — flash kernels](plans/cosim-phase2-stageC-flash.md)
   - [Interactive JTAG debug server](plans/jtag-debug-server.md)
   - [netlist-graph xroots query](plans/netlist-graph-xroots.md)
+  - [Cell-model IR](plans/cell-model-ir.md)
 - [Spike — OpenTimer on SKY130](spikes/opentimer-sky130.md)

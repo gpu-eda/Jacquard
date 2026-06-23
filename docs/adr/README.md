@@ -71,6 +71,7 @@ the code before writing it.
 | [0016](0016-selective-x-propagation.md) | Selective X-propagation | Accepted (amended 2026-06-25) |
 | [0017](0017-cosim-execution-model.md) | Cosim execution model | Accepted (amended 2026-06-25) |
 | [0018](0018-distribution-and-installation.md) | Distribution and installation model | Accepted (amended 2026-06-25) — Phase 4 & 7 open |
+| [0019](0019-cell-model-ir.md) | Cell-model IR: a complete per-cell-type library descriptor | Proposed |
 
 ## How the ADRs relate
 
