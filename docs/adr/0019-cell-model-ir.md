@@ -1,24 +1,54 @@
-# ADR 0019 — Cell-model IR: the logic sibling of the timing IR
+# ADR 0019 — Cell-model IR: a complete per-cell-type library descriptor
 
 **Status:** Proposed.
 
 ## Context
 
-A standard-cell library must tell Jacquard three things about each cell.
-Call them the **three layers**:
+Everything Jacquard needs to know about a standard cell is a **property
+of the cell type** and comes from the **same Liberty library** — its pin
+directions, its combinational logic, its sequential/classification
+nature, *and* its timing characterization:
 
-| Layer | What Jacquard needs | Where it lives today |
+| Per-cell-type fact | What Jacquard needs | Where it lives today |
 |---|---|---|
 | **L1 — pin directions** | input vs output per pin | build-time baked from vendored submodules (`build.rs` → `GF180MCU_PIN_TABLE`/`SKY130_PIN_TABLE`), hand-coded for AIGPDK; partly user-suppliable via `--cell-library <v>` (ADR 0010 Tier 1) |
 | **L2 — combinational logic** | the boolean function of each output, to build the AIG | read at runtime from a **hardcoded** `vendor/…/<cell>.functional.v` and decomposed by `pdk_decomp` (`src/aig.rs:1895`); fully hand-coded for AIGPDK |
 | **L3 — sequential & classification** | is the cell a DFF/latch/clock-gate/SRAM/tie/filler, and what are its pin roles (clock, D, Q, async set/reset, enable; SRAM ports)? | hand-coded per-PDK Rust (`src/pdk.rs`, `src/gf180mcu_pdk.rs`, `src/sky130_pdk.rs`, pin-name matches in `src/aig.rs:2080-2260`) — *data masquerading as code* (ADR 0010's framing) |
+| **L4 — timing characterization** | per-cell-type setup/hold, clock→Q, DFF/SRAM timing | parsed at runtime from a `.lib` into `liberty_parser::TimingLibrary` (`src/liberty_parser.rs`), consumed in `src/aig.rs:2793` / `src/flatten.rs` (incl. as a `liberty_fallback`); already user-suppliable via a `.lib` path |
 
-ADR 0010 opened a **declarative path** for some of this (`--cell-library`
+### Two different "timing" artifacts — only one is per-cell-type
+
+This is the easy thing to conflate. There are two:
+
+- **Per-cell-type characterization** (L4 above) — setup/hold, clock→Q,
+  delays — a **library** property, one value per cell type, straight from
+  the `.lib`.
+- **Per-design annotation** — the **timing IR** (ADR 0002),
+  `TimingArc { cell_instance: "<hierarchical instance path>" }` — SDF for
+  *a specific netlist's instances*, produced per-design by SDF/OpenSTA.
+
+Only L4 is a cell-library fact. The timing IR is **orthogonal** to a cell
+library — it annotates a design, not a library — and stays its own IR.
+ADR 0002 drew exactly this line and predicted this ADR:
+
+> "The IR represents *timing annotation data only*. It is **not** … cell
+> characterization. Attempts to extend it toward those adjacent formats
+> are rejected — **they become separate IRs if needed**."
+
+Cell characterization is that separate IR. It is **not a sibling** of the
+timing IR (same scope, different half); it is a **different axis**
+entirely — per-cell-type library facts vs per-instance design annotation.
+
+### Where the declarative path got to
+
+ADR 0010 opened a **declarative path** for some of L1–L3 (`--cell-library`
 for L1, a `.cells.toml` manifest for cell *kind*), and ADR 0011 added a
 real port-mapping schema for `kind = "ram"`. But ADR 0010 explicitly
 **deferred the larger schema** — sequential pin-roles, full L3 — "to a
-future ADR after real adoption data", and L2 was never addressed: the
-functional-model source is still a hardcoded `vendor/` path.
+future ADR after real adoption data", L2 was never addressed (functional
+models still come from a hardcoded `vendor/` path), and L4 lives in a
+parallel runtime `.lib` parser. Four facts about one cell type, from one
+Liberty file, arrive through four different mechanisms.
 
 Two concrete gaps make this acute, both surfaced by
 issue [#130](https://github.com/gpu-eda/Jacquard/issues/130):
@@ -34,44 +64,41 @@ issue [#130](https://github.com/gpu-eda/Jacquard/issues/130):
   by baking the library into the binary, so such libraries simply cannot
   be simulated — there is no all-runtime path.
 
-The project has **already solved the analogous problem for the other half
-of a cell.** The **timing IR** (ADR 0002) is a portable, versioned,
-generated, diff-able structured description of a cell library's *timing*,
-produced from Liberty by a focused converter crate (`opensta-to-ir`) and
-consumed by Jacquard core — with the vendored sources demoted to a
-generation-time input. ADR 0002 even anticipated this ADR in its scope
-boundary:
-
-> "The IR represents *timing annotation data only*. It is **not** … cell
-> characterization. Attempts to extend it toward those adjacent formats
-> are rejected — **they become separate IRs if needed**."
-
-A cell's *logic* is exactly that adjacent format. This ADR makes it a
-separate IR.
+The project already proved the *shape* of the fix on the timing side: the
+timing IR (ADR 0002) is a portable, versioned, generated, diff-able
+structured form produced from Liberty by a focused converter crate, with
+the vendored sources demoted to a generation-time input. This ADR applies
+the same shape to the cell library — but to **all** of its per-cell-type
+facts at once, in **one** descriptor, because they share one source.
 
 ## Decision
 
-Introduce a **cell-model IR**: a portable, versioned, **generated**
-structured description of a cell library's **logic** — the L2/L3 sibling
-of the timing IR's L1-timing description. Jacquard core consumes the
-cell-model IR (and the hand-override manifest from ADR 0010/0011) as its
-**only** source of cell semantics: no per-PDK Rust classifiers, no
-`build.rs` pin-table generation, no runtime `functional.v` parsing, no
-hardcoded `vendor/` paths.
+Introduce a **cell-model IR**: a portable, versioned, **generated**,
+JSON-first structured descriptor that carries **everything per-cell-type
+about a library** — L1 directions, L2 combinational logic, L3
+sequential/classification, **and L4 timing characterization** — in one
+file per library. Jacquard core consumes the cell-model IR (and the
+hand-override manifest from ADR 0010/0011) as its **only** source of cell
+semantics: no per-PDK Rust classifiers, no `build.rs` pin-table
+generation, no runtime `functional.v` parsing, and no runtime `.lib`
+parsing.
+
+The ADR-0002 timing IR is **unchanged and orthogonal** — it annotates a
+specific design's instances; nothing in it is per-library.
 
 The sub-decisions:
 
-### D1 — A separate IR, with aligned identifiers
+### D1 — One descriptor for all per-cell-type facts; the timing IR stays orthogonal
 
-The cell-model IR is **distinct from** the timing IR; we do not broaden
-ADR 0002 (its scope discipline is load-bearing, and the two have
-different provenances — see D5). But the two IRs describe the **same
-cells**, so they **share a canonical identifier convention** — a small
-shared schema fragment (or documented normalization) for cell-type names
-(same drive-strength handling the timing IR uses) and pin names — so that
-"for cell *X*, here is its logic *and* its timing" is a clean join. The
-shared-identifier fragment is the one piece deliberately co-designed
-across the two crates.
+All five facts (L1–L4 + classification) live in **one** cell-model IR per
+library, because they all come from one Liberty file and are all keyed by
+cell type. This *folds in* `liberty_parser::TimingLibrary` (L4): the
+runtime stops parsing `.lib` and reads pre-extracted timing from the
+descriptor. It does **not** touch the per-design timing IR (ADR 0002),
+which is a different axis (per-instance design annotation) and keeps its
+own crate/format. The only cross-reference the two need is the netlist
+itself — an instance knows its cell type — so there is no shared-schema
+join to co-design between them.
 
 ### D2 — JSON-first
 
@@ -92,7 +119,7 @@ Each combinational cell's logic is stored as a **pre-decomposed AIG**
 splices the cell's AIG directly into the design AIG with no
 decomposition work — minimal startup time and memory, and it removes
 `pdk_decomp` / functional-Verilog parsing from jacquard core entirely.
-Decomposition moves into the generator (D5). If the aggregate AIG payload
+Decomposition moves into the generator (D6). If the aggregate AIG payload
 grows unwieldy in JSON, encode it with FlatBuffers (the D2 escape hatch).
 
 ### D4 — L3 schema: sequential pin-roles + classification
@@ -107,19 +134,31 @@ pin-name matches in `src/aig.rs:2080-2260`). Cell **classification**
 analogue of ADR 0011's RAM port schema, which stands as the worked
 precedent; RAM keeps its ADR-0011 schema.
 
-### D5 — A separate generator (converter crate)
+### D5 — L4 timing characterization, in the same descriptor
+
+The descriptor carries the per-cell-type timing — setup/hold, clock→Q,
+DFF/SRAM timing — keyed by the same cell type as the logic; this is the
+data `liberty_parser::TimingLibrary` holds today, extracted once by the
+generator instead of parsed from a `.lib` at every run. Multi-corner is
+representable as a value set per arc (reusing the timing IR's min/typ/max
+precedent), though most flows ship one corner. At runtime this *replaces*
+`TimingLibrary::from_file`; the per-design timing IR (ADR 0002) still
+layers a specific design's instance arrivals on top, unchanged.
+
+### D6 — A separate generator (converter crate)
 
 The IR is produced by a **converter crate** mirroring `opensta-to-ir`:
 Liberty (with `functional.v` as a fallback for cells Liberty
-under-specifies) → cell-model IR. It **reuses, not reimplements**, the
-existing decomposition: `pdk_decomp` relocates into a shared library the
-generator links, and the Liberty group-walker (`src/liberty_parser.rs`,
-which today reads only timing groups) is extended to read `function` /
-`ff` / `latch` / cell-class. The generator — not jacquard core — owns all
-Verilog/Liberty parsing and AIG decomposition; it is unit-testable in
-isolation, off the runtime critical path.
+under-specifies) → cell-model IR — emitting L1–L4 from a single pass over
+the `.lib`. It **reuses, not reimplements**, the existing machinery:
+`pdk_decomp` relocates into a shared library the generator links, and the
+Liberty group-walker (`src/liberty_parser.rs`, which today reads only the
+L4 timing groups) is extended to also read `function` / `ff` / `latch` /
+cell-class. The generator — not jacquard core — owns all Verilog/Liberty
+parsing and AIG decomposition; it is unit-testable in isolation, off the
+runtime critical path.
 
-### D6 — Bundled descriptors; vendored PDKs demote to generation inputs
+### D7 — Bundled descriptors; vendored PDKs demote to generation inputs
 
 The built-in PDKs (AIGPDK, SKY130, GF180MCU) ship as **generated
 cell-model-IR files checked into core** — the same posture as the timing
@@ -129,7 +168,7 @@ dependency of jacquard core: core depends on neither the cell submodules
 nor `pdk_decomp` at runtime. (Initial bootstrap still uses the vendored
 PDKs to produce the first built-in descriptors.)
 
-### D7 — Selection by declared prefix + explicit override
+### D8 — Selection by declared prefix + explicit override
 
 Each descriptor **declares the cell-name prefix(es) it covers**. Jacquard
 auto-matches a netlist against the bundled descriptors (replacing the
@@ -153,9 +192,15 @@ provenance.
   matches this netlist" — derived or `--cell-descriptor`-overridden — and
   the 7t/9t silent-substitution risk goes away because each library has
   its own generated descriptor.
+- **Retires the runtime `.lib` parse and unifies "bring your own
+  library."** L4 folds in, so `liberty_parser::TimingLibrary` leaves the
+  runtime for the generator. Today you already point at your own `.lib`
+  for timing while the logic is baked from `vendor/`; now both come from
+  one descriptor — exactly the proprietary-library goal.
 - **New schema + converter crate to maintain,** under the same scope
-  discipline ADR 0002 demands: the cell-model IR is *cell logic only* — not
-  a netlist, not timing, not a placement/physical model. Creep is rejected.
+  discipline ADR 0002 demands: the cell-model IR is *per-cell-type library
+  facts only* — not a netlist, not per-design annotation, not a
+  placement/physical model. Creep is rejected.
 - **Verification moves to a diff/round-trip discipline** (ADR 0001/0002
   pattern): a regenerated descriptor must equal the checked-in one, and a
   logic round-trip — does the IR's AIG reproduce a reference of the cell? —
@@ -171,7 +216,9 @@ provenance.
 - **L2 source of truth** — Liberty `function` strings (clean for most
   cells) vs `functional.v` (needed for some): the generator accepts both;
   unifying them is explicitly *not* a goal now.
-- **Exact shared-identifier fragment** (D1) co-designed with the timing IR.
+- **L4 multi-corner shape** — single value vs the timing IR's min/typ/max
+  value set per arc; default to one corner until a multi-corner cell flow
+  demands more.
 - **Bundled-descriptor provenance** — checked-in artifacts (like the
   timing-ir bindings) vs regenerated in CI from pinned vendored PDKs.
 - **Migration shape** — run the IR consumer alongside the per-PDK Rust
@@ -179,12 +226,16 @@ provenance.
 
 ## Relationship to other ADRs
 
-- **Complements [ADR 0002](0002-timing-ir.md)** — the logic sibling of the
-  timing IR; realises 0002's "separate IRs if needed" boundary; shares its
-  versioning + diff discipline and its identifier convention (D1).
+- **Orthogonal to [ADR 0002](0002-timing-ir.md)** — the timing IR is
+  per-design instance annotation; the cell-model IR is per-cell-type
+  library facts (incl. L4 timing characterization). Different axes, not
+  siblings — but the cell-model IR *realises* 0002's predicted "separate
+  IR for cell characterization", and reuses its versioning + diff
+  discipline.
 - **Extends [ADR 0010](0010-declarative-cell-metadata.md)** — supplies the
-  "future ADR" 0010 deferred for the heavy (L2/L3) schema, and recasts the
-  `.cells.toml` path as a hand-override over generated IR.
+  "future ADR" 0010 deferred for the heavy (L2/L3) schema, folds in the L4
+  `.lib` characterization, and recasts the `.cells.toml` path as a
+  hand-override over generated IR.
 - **Builds on [ADR 0011](0011-ram-port-mapping-schema.md)** — RAM keeps its
   port schema; it is the worked precedent for the D4 sequential schema.
 - **Feeds [ADR 0014](0014-aig-as-simulation-ir.md)** — the cell-model IR's

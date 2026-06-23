@@ -44,7 +44,24 @@ Introduce a timing intermediate representation (timing IR) for SDF-equivalent an
 - Adopting FlatBuffers adds a code-generation step to the build, via `flatc`. Build hygiene (checked-in generated code, pinned `flatc` version, or a build-script integration) is required.
 - If the IR is ever shared across other tooling beyond Jacquard, its stability contract tightens. Flagged in open questions on `timing-correctness.md`; not resolved here.
 
+## Amendment 2026-06-23: cell characterization is ADR 0019, not this IR
+
+The scope boundary above ("not cell characterization … they become
+separate IRs if needed") is now realised by
+[ADR 0019](0019-cell-model-ir.md). Two timing artifacts must not be
+conflated: this IR is **per-design instance annotation** (`TimingArc {
+cell_instance }`, SDF-equivalent for a specific netlist), whereas
+**per-cell-type** timing characterization (setup/hold, clock→Q, today's
+`liberty_parser::TimingLibrary`) is a *library* property and lives in the
+ADR-0019 cell-model IR alongside the cell's logic. The two are orthogonal
+axes — per-design vs per-library — not two halves of one scope. This
+ADR's decision is unchanged.
+
 ## Links
+
+- [ADR 0019](0019-cell-model-ir.md) — cell-model IR (per-cell-type
+  characterization; the "separate IR" this ADR's scope boundary
+  anticipated).
 
 - `../project-scope.md` — validation and permissive-license constraints.
 - `../timing-correctness.md` — requirement R1, principle P5 (multi-corner).
