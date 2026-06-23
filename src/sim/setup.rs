@@ -621,7 +621,7 @@ fn generate_partitions(
 
             let (parts_indices_good, prebuilt): (Vec<_>, Vec<_>) =
                 parts_good.into_iter().unzip();
-            let effective_parts = process_partitions(
+            let mut effective_parts = process_partitions(
                 aig,
                 staged,
                 parts_indices_good,
@@ -629,6 +629,16 @@ fn generate_partitions(
                 max_stage_degrad,
             )
             .unwrap();
+            // Drop any empty (zero-boomerang-stage) partition before it reaches
+            // the flattener. mt-kahypar can leave a requested part-id with no
+            // vertices when the part count is high relative to the graph's
+            // structure; such a partition realizes no endpoints (no work), but
+            // `FlattenedScriptV1::from` indexes `part.stages[0]` unconditionally
+            // (flatten.rs) and panics with "index out of bounds: len is 0" on it.
+            // Dropping them is correctness-neutral and hardens the partition →
+            // flatten boundary for any high-part-count path (finer partitioning,
+            // large `--num-blocks`).
+            effective_parts.retain(|p| !p.stages.is_empty());
             clilog::info!("after merging: {} parts.", effective_parts.len());
             effective_parts
         })
