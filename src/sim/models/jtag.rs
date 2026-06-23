@@ -64,6 +64,17 @@ pub struct TrstPin {
     pub active_low: bool,
 }
 
+/// Accept one `remote_bitbang` client and disable Nagle (single-byte TDO
+/// replies must not wait). Shared by the first connect and reconnect;
+/// callers supply their own log line and decide how to handle the error.
+fn accept_client(listener: &TcpListener) -> std::io::Result<(TcpStream, std::net::SocketAddr)> {
+    let (stream, peer) = listener.accept()?;
+    if let Err(e) = stream.set_nodelay(true) {
+        clilog::warn!("jtag server: could not set TCP_NODELAY: {e}");
+    }
+    Ok((stream, peer))
+}
+
 /// Where a [`JtagReplayModel`] pulls its `remote_bitbang` bytes from.
 ///
 /// The model's FSM (TCK/TMS/TDI/TRST decode, IEEE 1149.1 TCK deferral,
@@ -137,9 +148,8 @@ impl JtagSource {
                                      for the next remote_bitbang client \
                                      (--jtag-reconnect)…"
                                 );
-                                match listener.accept() {
+                                match accept_client(listener) {
                                     Ok((s, peer)) => {
-                                        let _ = s.set_nodelay(true);
                                         *stream = s;
                                         *reconnected = true;
                                         clilog::info!(
@@ -340,13 +350,8 @@ impl JtagReplayModel {
         listener: std::net::TcpListener,
         persist: bool,
     ) -> Self {
-        let (stream, peer) = listener.accept().unwrap_or_else(|e| {
-            panic!("jtag server: accept failed: {e}")
-        });
-        // Single-byte TDO replies must not wait on Nagle.
-        if let Err(e) = stream.set_nodelay(true) {
-            clilog::warn!("jtag server: could not set TCP_NODELAY: {e}");
-        }
+        let (stream, peer) = accept_client(&listener)
+            .unwrap_or_else(|e| panic!("jtag server: accept failed: {e}"));
         clilog::info!("JTAG server `{name}`: client connected from {peer}");
         // Default power-on TRST pulse: hold TRST deasserted for a few
         // edges (so the assertion is a clean `negedge`), then assert it
@@ -482,15 +487,10 @@ impl JtagReplayModel {
             }
             // Blink LED commands — no-op.
             b'B' | b'b' => {}
-            // Quit. Ends the stream/session — except in `--jtag-reconnect`
-            // mode, where the client (e.g. OpenOCD) sends `Q` then closes
-            // the socket and we re-`accept()` the next one, so `Q` must not
-            // be terminal.
-            b'Q' => {
-                if !self.source.is_persist() {
-                    self.quit = true;
-                }
-            }
+            // Quit — this client is done. Whether that ends the *model*
+            // is `finished()`'s call (a `--jtag-reconnect` session keeps
+            // going and waits for the next client).
+            b'Q' => self.quit = true,
             // Unknown byte — ignore but warn so corrupted streams
             // surface during capture/replay. Count too noisy bytes
             // up-front would require a HashMap; one-shot at end-of-
@@ -507,7 +507,10 @@ impl JtagReplayModel {
     /// off the end. Cosim doesn't gate on this — replay just goes
     /// idle on its own.
     pub fn finished(&self) -> bool {
-        self.quit || self.source.is_exhausted()
+        // `quit` ends the model only when the session won't be reused;
+        // under `--jtag-reconnect` the client's `Q` just ends *its* turn
+        // and we wait for the next one (only a closed source finishes).
+        (self.quit && !self.source.is_persist()) || self.source.is_exhausted()
     }
 
     /// Sample the design's current TDO bit from the GPU output state.
@@ -563,10 +566,12 @@ impl JtagReplayModel {
                 return;
             };
             // A `--jtag-reconnect` re-accept may have happened inside the
-            // read above. Re-arm the power-on TRST pulse (by restarting
-            // the edge clock) so the fresh debug session gets a clean DTM
-            // reset, exactly like the first connection.
+            // read above. Start the new session clean: clear the previous
+            // client's `Q`, and re-arm the power-on TRST pulse (by
+            // restarting the edge clock) for a fresh DTM reset, exactly
+            // like the first connection.
             if self.source.take_reconnected() {
+                self.quit = false;
                 self.edges_elapsed = 0;
             }
             let old_tck = self.tck;
@@ -1026,16 +1031,14 @@ mod tests {
         // assert `Q` *does* finish.
         use std::net::TcpListener;
         use std::thread;
-        use std::time::Duration;
 
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        // Hold a connection open so `new_live`'s accept() succeeds and the
-        // source isn't exhausted; we never read from it here.
+        // Just need a connection for `new_live`'s accept() to return; we
+        // never read from it, so the client can drop immediately (the
+        // completed connection waits in the listen backlog).
         let client = thread::spawn(move || {
-            let s = TcpStream::connect(("127.0.0.1", port)).unwrap();
-            thread::sleep(Duration::from_millis(200));
-            drop(s);
+            TcpStream::connect(("127.0.0.1", port)).unwrap();
         });
         let mut m = JtagReplayModel::new_live(
             "jtag_0".into(),
