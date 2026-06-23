@@ -328,12 +328,16 @@ from the repo with <code>uv run</code>. The design behind this layout is
 <p>The cleanest path on a Mac. Requires an Apple Silicon machine with a
 Metal GPU.</p>
 <h3 id="cargo-binstall--prebuilt-binary-no-toolchain-build"><a class="header" href="#cargo-binstall--prebuilt-binary-no-toolchain-build">cargo binstall — prebuilt binary, no toolchain build</a></h3>
-<pre><code class="language-sh">cargo binstall jacquard
+<pre><code class="language-sh">cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
 </code></pre>
-<p>Fetches the release binary on <strong>macOS/Metal</strong>. Linux is <strong>not</strong>
-binstall-able: there are two GPU backends (CUDA, HIP) for one target
-triple, so it can't be auto-selected — use the release tarball for your
-backend, a container, or build from source.</p>
+<p>Fetches the release binary on <strong>macOS/Metal</strong>. The <code>--git</code> form is
+required: <code>jacquard</code> is <strong>not on crates.io</strong> (its dependencies are a
+vendored fork carrying in-flight patches), so binstall reads the
+<code>[package.metadata.binstall]</code> pkg-url straight from the repo rather than
+looking the crate up on the registry. Linux is <strong>not</strong> binstall-able:
+there are two GPU backends (CUDA, HIP) for one target triple, so it can't
+be auto-selected — use the release tarball for your backend, a container,
+or build from source.</p>
 <h3 id="prebuilt-release-tarball"><a class="header" href="#prebuilt-release-tarball">Prebuilt release tarball</a></h3>
 <p>Download <code>jacquard-&lt;version&gt;-&lt;target&gt;.tar.gz</code> from the
 <a href="https://github.com/gpu-eda/Jacquard/releases">releases page</a>, extract,
@@ -7975,6 +7979,42 @@ while keeping the from-source instructions for contributors.</li>
 <ul>
 <li><code>ghcr.io/gpu-eda/jacquard:cuda</code> for reproducible Linux/CUDA runs.
 Deferred per ADR 0018; revisit if CUDA release binaries prove awkward.</li>
+</ul>
+<h2 id="phase-7--upstream-the-eda-infra-rs-fork-de-fork-prerequisite"><a class="header" href="#phase-7--upstream-the-eda-infra-rs-fork-de-fork-prerequisite">Phase 7 — Upstream the <code>eda-infra-rs</code> fork (de-fork prerequisite)</a></h2>
+<p>The simulator can't be published to crates.io while its core deps are a
+<strong>vendored fork</strong> (<code>vendor/eda-infra-rs</code> → <code>ChipFlow/eda-infra-rs</code>) carrying
+patches not on the registry (the path deps declare a version but resolve to the
+fork's patched code; ADR 0018). De-forking — getting every fork change
+upstreamed + released so jacquard can depend on published
+<code>gzz2000/eda-infra-rs</code> crates — is the long-term unblock. <strong>Not</strong> required for
+the binary-distribution channels (those work today); tracked here as the path to
+crates.io / dependency hygiene. (<code>opensta-to-ir</code> / <code>timing-ir</code> are ours to
+version + name as we like, so they are not a blocker.)</p>
+<p><strong>Audit (2026-06-23):</strong> the fork (<code>e4e3db0</code>, branch <code>master</code>) is <strong>13 commits
+ahead, 1 behind</strong> upstream <code>gzz2000/eda-infra-rs</code>. Upstream merged none of ours;
+it only added the license-string fix (<code>026070c</code>). Status of our 13 commits:</p>
+<div class="table-wrapper"><table><thead><tr><th>Fork change</th><th>Upstream PR</th><th>Status</th></tr></thead><tbody>
+<tr><td>sverilogparse: ANSI-style ports (<code>e4e3db0</code>)</td><td>gzz2000#3</td><td>OPEN — awaiting merge</td></tr>
+<tr><td>Apple Metal support (<code>139a696</code>)</td><td>gzz2000#1</td><td><strong>DRAFT</strong> — never submitted</td></tr>
+<tr><td>sverilogparse: unary NOT <code>~</code> (<code>d7df6e8</code>)</td><td>—</td><td>not PR'd</td></tr>
+<tr><td>HIP/AMD + HIP-on-NVIDIA backend (~9 commits, <code>c89d426</code>..<code>8b1bc63</code>)</td><td>—</td><td><strong>not PR'd</strong> (largest gap)</td></tr>
+<tr><td>rustfmt + .gitignore (<code>fb436ed</code>)</td><td>—</td><td>housekeeping; fold into a PR</td></tr>
+</tbody></table>
+</div>
+<p><strong>Tasks (priority order):</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"/>
+Pull upstream's license fix (<code>026070c</code>) into the fork + bump the submodule
+pin → closes the release-process checklist item + the <code>NOTICE</code> footnote.</li>
+<li><input disabled="" type="checkbox"/>
+File the <strong>HIP backend</strong> PR(s) upstream (the ~9-commit gap).</li>
+<li><input disabled="" type="checkbox"/>
+Mark Metal PR gzz2000#1 <strong>ready for review</strong> (un-draft).</li>
+<li><input disabled="" type="checkbox"/>
+File the <strong>unary-NOT</strong> sverilogparse PR.</li>
+<li><input disabled="" type="checkbox"/>
+Once all merged + released: drop the fork, point deps at published
+<code>gzz2000/eda-infra-rs</code> versions — removes the core "no crates.io" blocker.</li>
 </ul>
 <h2 id="verification-3"><a class="header" href="#verification-3">Verification</a></h2>
 <ul>

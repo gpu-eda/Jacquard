@@ -177,12 +177,16 @@ from the repo with <code>uv run</code>. The design behind this layout is
 <p>The cleanest path on a Mac. Requires an Apple Silicon machine with a
 Metal GPU.</p>
 <h3 id="cargo-binstall--prebuilt-binary-no-toolchain-build"><a class="header" href="#cargo-binstall--prebuilt-binary-no-toolchain-build">cargo binstall — prebuilt binary, no toolchain build</a></h3>
-<pre><code class="language-sh">cargo binstall jacquard
+<pre><code class="language-sh">cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
 </code></pre>
-<p>Fetches the release binary on <strong>macOS/Metal</strong>. Linux is <strong>not</strong>
-binstall-able: there are two GPU backends (CUDA, HIP) for one target
-triple, so it can't be auto-selected — use the release tarball for your
-backend, a container, or build from source.</p>
+<p>Fetches the release binary on <strong>macOS/Metal</strong>. The <code>--git</code> form is
+required: <code>jacquard</code> is <strong>not on crates.io</strong> (its dependencies are a
+vendored fork carrying in-flight patches), so binstall reads the
+<code>[package.metadata.binstall]</code> pkg-url straight from the repo rather than
+looking the crate up on the registry. Linux is <strong>not</strong> binstall-able:
+there are two GPU backends (CUDA, HIP) for one target triple, so it can't
+be auto-selected — use the release tarball for your backend, a container,
+or build from source.</p>
 <h3 id="prebuilt-release-tarball"><a class="header" href="#prebuilt-release-tarball">Prebuilt release tarball</a></h3>
 <p>Download <code>jacquard-&lt;version&gt;-&lt;target&gt;.tar.gz</code> from the
 <a href="https://github.com/gpu-eda/Jacquard/releases">releases page</a>, extract,
