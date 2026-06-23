@@ -139,11 +139,43 @@ precedent; RAM keeps its ADR-0011 schema.
 The descriptor carries the per-cell-type timing — setup/hold, clock→Q,
 DFF/SRAM timing — keyed by the same cell type as the logic; this is the
 data `liberty_parser::TimingLibrary` holds today, extracted once by the
-generator instead of parsed from a `.lib` at every run. Multi-corner is
-representable as a value set per arc (reusing the timing IR's min/typ/max
-precedent), though most flows ship one corner. At runtime this *replaces*
-`TimingLibrary::from_file`; the per-design timing IR (ADR 0002) still
-layers a specific design's instance arrivals on top, unchanged.
+generator instead of parsed from a `.lib` at every run. At runtime this
+*replaces* `TimingLibrary::from_file`; the per-design timing IR (ADR 0002)
+still layers a specific design's instance arrivals on top, unchanged.
+
+**Multi-corner lives in the one descriptor, keyed by corner** — the same
+shape the timing IR already uses (`crates/timing-ir`: an ordered corner-name
+set + a `corner_index` per value, with `min/typ/max` as the *within-corner*
+derate triple). Corner is the outer key; min/typ/max is the orthogonal inner
+derate — not a reinterpretation of the triple. File-per-corner is rejected
+because L1–L3 (directions, function, sequential roles, and especially the
+D3 AIG — the bulk of the descriptor) are **corner-invariant**: only L4's
+numbers vary across `ss`/`tt`/`ff`, so a per-corner file would duplicate the
+*expensive* AIG to vary the *cheap* timing. Corner-keyed L4 dedups the AIG,
+keeps **one descriptor = one library** (which D8 selection assumes), and
+degrades to a one-entry corner map for the common single-corner flow. A
+corner-overlay-file split is a *deferred size escape hatch* (parallel to D2),
+to be decided from a real descriptor size — not built now.
+
+**The simulation corner is user-selected, not read from the netlist or
+SDF.** A `--corner <name>` run flag picks among the descriptor's corner set,
+defaulting to a descriptor-declared `default_corner` (typically `tt`). The
+netlist is structural and records no corner; synthesis *used* a setup corner
+to choose cells but writes it nowhere Jacquard reads. SDF carries PVT header
+fields (`VOLTAGE`/`PROCESS`/`TEMPERATURE`), but they are the wrong source on
+both counts: when an SDF *is* present its delays already encode the corner
+and feed the orthogonal timing IR (ADR 0002), so L4 corner selection does
+not apply to annotated instances; and L4 matters precisely in the **no-SDF**
+cosim path (today's `liberty_fallback`), where there is no SDF header to
+read. There are two different corners — the **setup corner** synthesis
+chose for (a flow fact, recorded nowhere) and the **simulation corner** the
+user wants to observe — and only the user knows the latter, so user-passed
+is the *correct* source, not a fallback. This also makes today's implicit
+single-corner choice (whatever `.lib` was passed) explicit. When an SDF is
+supplied, its PVT header may be surfaced as an informational cross-check
+(`SDF says ss_125C, you selected tt_025C`), never as the selector. This
+mirrors `opensta-to-ir`, which already treats corner identity as declared
+input, not auto-detected.
 
 ### D6 — A separate generator (converter crate)
 
@@ -216,9 +248,14 @@ provenance.
 - **L2 source of truth** — Liberty `function` strings (clean for most
   cells) vs `functional.v` (needed for some): the generator accepts both;
   unifying them is explicitly *not* a goal now.
-- **L4 multi-corner shape** — single value vs the timing IR's min/typ/max
-  value set per arc; default to one corner until a multi-corner cell flow
-  demands more.
+- ~~**L4 multi-corner shape**~~ — **Resolved (D5):** all corners in the one
+  descriptor, L4 keyed by corner (mirroring the timing IR's corner-set +
+  `corner_index`; min/typ/max stays the orthogonal within-corner derate).
+  Simulation corner is user-selected via `--corner` (default
+  `default_corner`), *not* inferred from the netlist or SDF — the setup
+  corner is recorded nowhere Jacquard reads, and SDF delays already encode
+  the corner via the orthogonal timing IR. Corner-overlay-file split deferred
+  as a size escape hatch.
 - **Bundled-descriptor provenance** — checked-in artifacts (like the
   timing-ir bindings) vs regenerated in CI from pinned vendored PDKs.
 - **Migration shape** — run the IR consumer alongside the per-PDK Rust
