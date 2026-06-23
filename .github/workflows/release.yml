@@ -3,8 +3,9 @@ name: Release
 # Builds prebuilt binaries and attaches them to a GitHub Release.
 # See ADR 0018 and docs/plans/distribution.md.
 #
-# - Tagging `v<X.Y.Z>` builds + publishes a DRAFT release (you review the
-#   assets, then click Publish).
+# - Tagging `v<X.Y.Z>` builds, smoke-tests, and publishes the release with the
+#   macOS/Metal binary attached (or attaches it to an existing release of that
+#   tag). Notes come from the matching CHANGELOG section.
 # - `workflow_dispatch` is a dry-run: it builds, packages, smoke-tests,
 #   and uploads the tarball as a workflow artifact — no release created.
 #
@@ -116,20 +117,23 @@ jobs:
             echo "AUTO=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish draft release
+      - name: Publish release + attach binary
         if: steps.meta.outputs.is_release == 'true'
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          args=(--draft --title "$tag" --repo "$GITHUB_REPOSITORY")
-          if [ "${{ steps.notes.outputs.AUTO }}" = "true" ]; then
-            args+=(--generate-notes)
-          else
-            args+=(--notes-file notes.md)
-          fi
-          gh release create "$tag" "${args[@]}" \
-            "${{ steps.package.outputs.tarball }}" \
-            "${{ steps.package.outputs.sha }}"
+        # softprops uses GITHUB_TOKEN via the API — no `gh` CLI, which isn't on
+        # PATH on the self-hosted macos-runner-1 (the old `gh release create`
+        # died with "gh: command not found", so v0.1.0/v0.2.0 shipped with no
+        # binary). Creates the release if missing, or attaches the asset to an
+        # existing one (e.g. re-running a tag whose release was cut by hand).
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          body_path: notes.md
+          generate_release_notes: ${{ steps.notes.outputs.AUTO == 'true' }}
+          files: |
+            ${{ steps.package.outputs.tarball }}
+            ${{ steps.package.outputs.sha }}
 
       - name: Upload dry-run artifact
         if: steps.meta.outputs.is_release == 'false'

@@ -892,10 +892,15 @@ fn sim_metal(
     let mtl_device = MTLDevice::system_default().expect("No Metal device found");
     clilog::info!("Using Metal device: {}", mtl_device.name());
 
-    let metallib_path = env!("METALLIB_PATH");
+    // Embed the Metal kernel library at compile time (not a runtime build-tree
+    // path) so a shipped / `cargo binstall`ed binary is relocatable — the same
+    // pattern the cosim path uses (src/sim/cosim/metal.rs). Loading it from
+    // `env!("METALLIB_PATH")` at runtime breaks any relocated binary, whose
+    // build tree doesn't exist. See ADR 0018, distribution.md (Phase 1a).
+    const METALLIB_BYTES: &[u8] = include_bytes!(env!("METALLIB_PATH"));
     let library = mtl_device
-        .new_library_with_file(metallib_path)
-        .expect("Failed to load metallib");
+        .new_library_with_data(METALLIB_BYTES)
+        .expect("Failed to load embedded metallib");
     let kernel_function = library
         .get_function("simulate_v1_stage", None)
         .expect("Failed to get kernel function");
