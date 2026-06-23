@@ -92,9 +92,15 @@ in CI) so they never collide; if a fixed port is already taken, the bind
 fails with an actionable error.
 
 Once a client connects, the design steps forward one `remote_bitbang`
-transaction at a time, paced by the client. v1 accepts a single
-connection; when the client disconnects (or sends `Q`), the session ends
-and the simulation free-runs to its edge budget.
+transaction at a time, paced by the client. By default a single
+connection is served; when the client disconnects (or sends `Q`), the
+session ends and the simulation free-runs to its edge budget.
+
+Add **`--jtag-reconnect`** to keep the server alive across disconnects:
+when the debugger detaches, the server preserves the design state and
+waits to `accept()` the next client — so you can **restart OpenOCD
+without re-running the slow cosim setup** (each fresh attach gets a clean
+DTM reset). The run then never stops on its own; `Ctrl-C`/kill to end it.
 
 > **Edge budget.** `--max-clock-edges` does **not** stop the run while a
 > debug client is attached — the session is paced by the client and would
@@ -204,8 +210,9 @@ for the `tdo_gpio` config surface.
 
 ## Caveats and limitations
 
-- **Single client (v1).** One connection per run. Reconnect support and
-  multi-tap chains are future work.
+- **One client at a time.** A single connection is served at once;
+  `--jtag-reconnect` accepts a new one after the previous disconnects.
+  Simultaneous clients and multi-tap chains are future work.
 - **Performance.** An attached session loses edge batching for its
   duration — inherent and acceptable, since interactive debug is slow
   relative to free-running simulation. Throughput is unaffected when no

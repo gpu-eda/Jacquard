@@ -52,7 +52,7 @@ use crate::sim::models::{
     read_bit, warn_unhandled, EmittedEvent, ModelOverrides, PeripheralModel,
 };
 use std::io::{ErrorKind, Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 
 /// Optional pin position + polarity for the design's TRST input.
 ///
@@ -79,10 +79,22 @@ enum JtagSource {
     /// byte read blocks until it sends one, and `R` (read-TDO) commands
     /// are answered back over the same stream.
     Live {
+        /// Listener kept for the lifetime of the model so a `persist`
+        /// session can `accept()` a fresh client after one disconnects.
+        listener: TcpListener,
+        /// The currently-connected client.
         stream: TcpStream,
-        /// Set once the socket reaches EOF or errors — `finished()`
-        /// then lets the sim free-run instead of blocking forever.
+        /// When true, a client disconnect re-`accept()`s the next client
+        /// (debugger restart without restarting the slow cosim) instead
+        /// of ending the session. `--jtag-reconnect`.
+        persist: bool,
+        /// Set once the socket reaches EOF or errors (and `persist` is
+        /// off, or re-accept failed) — `finished()` then lets the sim
+        /// free-run instead of blocking forever.
         closed: bool,
+        /// Set by a reconnect so the model can re-arm its power-on TRST
+        /// pulse for the new debug session.
+        reconnected: bool,
         /// Bytes consumed so far (diagnostics; Replay derives this from
         /// its cursor).
         consumed: usize,
@@ -104,8 +116,11 @@ impl JtagSource {
                 b
             }
             JtagSource::Live {
+                listener,
                 stream,
+                persist,
                 closed,
+                reconnected,
                 consumed,
             } => {
                 if *closed {
@@ -116,6 +131,32 @@ impl JtagSource {
                     match stream.read(&mut buf) {
                         Ok(0) => {
                             // Orderly client disconnect.
+                            if *persist {
+                                clilog::info!(
+                                    "jtag server: client disconnected; waiting \
+                                     for the next remote_bitbang client \
+                                     (--jtag-reconnect)…"
+                                );
+                                match listener.accept() {
+                                    Ok((s, peer)) => {
+                                        let _ = s.set_nodelay(true);
+                                        *stream = s;
+                                        *reconnected = true;
+                                        clilog::info!(
+                                            "jtag server: client reconnected from {peer}"
+                                        );
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        *closed = true;
+                                        clilog::warn!(
+                                            "jtag server: accept failed on \
+                                             reconnect: {e}; ending session"
+                                        );
+                                        return None;
+                                    }
+                                }
+                            }
                             *closed = true;
                             clilog::info!("jtag server: client disconnected (EOF)");
                             return None;
@@ -158,6 +199,20 @@ impl JtagSource {
         match self {
             JtagSource::Replay { bytes, cursor } => *cursor >= bytes.len(),
             JtagSource::Live { closed, .. } => *closed,
+        }
+    }
+
+    /// True for a live socket in `--jtag-reconnect` (persist) mode.
+    fn is_persist(&self) -> bool {
+        matches!(self, JtagSource::Live { persist: true, .. })
+    }
+
+    /// Take (and clear) the "a new client just reconnected" flag, so the
+    /// model can re-arm its power-on TRST pulse for the new session.
+    fn take_reconnected(&mut self) -> bool {
+        match self {
+            JtagSource::Live { reconnected, .. } => std::mem::replace(reconnected, false),
+            _ => false,
         }
     }
 
@@ -267,11 +322,13 @@ impl JtagReplayModel {
         )
     }
 
-    /// Build a live-server model driven by an accepted `remote_bitbang`
-    /// client over `stream`. Identical to [`new`](Self::new) except the
-    /// byte feed is the socket and `R` commands are answered with the
-    /// design's live TDO. `tdo_pos` should be `Some` (resolved from
-    /// `JtagConfig.tdo_gpio`); a `None` here means `R` always reads `0`.
+    /// Build a live-server model. Blocks on `listener.accept()` for the
+    /// first `remote_bitbang` client, then drives the design from the
+    /// socket and answers `R` with the design's live TDO. `tdo_pos`
+    /// should be `Some` (resolved from `JtagConfig.tdo_gpio`); `None`
+    /// means `R` always reads `0`. With `persist`, a client disconnect
+    /// re-`accept()`s the next client (debugger restart without restarting
+    /// cosim) instead of ending the session.
     pub fn new_live(
         name: String,
         tck_pos: u32,
@@ -280,8 +337,17 @@ impl JtagReplayModel {
         trst: Option<TrstPin>,
         tdo_pos: Option<u32>,
         hold_edges: u32,
-        stream: TcpStream,
+        listener: std::net::TcpListener,
+        persist: bool,
     ) -> Self {
+        let (stream, peer) = listener.accept().unwrap_or_else(|e| {
+            panic!("jtag server: accept failed: {e}")
+        });
+        // Single-byte TDO replies must not wait on Nagle.
+        if let Err(e) = stream.set_nodelay(true) {
+            clilog::warn!("jtag server: could not set TCP_NODELAY: {e}");
+        }
+        clilog::info!("JTAG server `{name}`: client connected from {peer}");
         // Default power-on TRST pulse: hold TRST deasserted for a few
         // edges (so the assertion is a clean `negedge`), then assert it
         // for ~4 bitbang-bytes' worth of edges before releasing to the
@@ -313,8 +379,11 @@ impl JtagReplayModel {
             hold_edges,
             trst_power_on,
             JtagSource::Live {
+                listener,
                 stream,
+                persist,
                 closed: false,
+                reconnected: false,
                 consumed: 0,
             },
         )
@@ -413,8 +482,15 @@ impl JtagReplayModel {
             }
             // Blink LED commands — no-op.
             b'B' | b'b' => {}
-            // Quit — treat as end-of-stream.
-            b'Q' => self.quit = true,
+            // Quit. Ends the stream/session — except in `--jtag-reconnect`
+            // mode, where the client (e.g. OpenOCD) sends `Q` then closes
+            // the socket and we re-`accept()` the next one, so `Q` must not
+            // be terminal.
+            b'Q' => {
+                if !self.source.is_persist() {
+                    self.quit = true;
+                }
+            }
             // Unknown byte — ignore but warn so corrupted streams
             // surface during capture/replay. Count too noisy bytes
             // up-front would require a HashMap; one-shot at end-of-
@@ -486,6 +562,13 @@ impl JtagReplayModel {
                 // session. Nothing to apply this edge.
                 return;
             };
+            // A `--jtag-reconnect` re-accept may have happened inside the
+            // read above. Re-arm the power-on TRST pulse (by restarting
+            // the edge clock) so the fresh debug session gets a clean DTM
+            // reset, exactly like the first connection.
+            if self.source.take_reconnected() {
+                self.edges_elapsed = 0;
+            }
             let old_tck = self.tck;
             self.consume_byte(byte);
             let new_tck = self.tck;
@@ -907,18 +990,17 @@ mod tests {
             resp[0]
         });
 
-        let (stream, _) = listener.accept().unwrap();
-        // Bound any wait so a logic bug fails the test instead of hanging
-        // CI; the production server intentionally has no read timeout.
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .unwrap();
+        // `new_live` accepts the client thread's connection internally.
+        // Any hang is bounded by the client's 5 s read timeout above: a
+        // missing TDO write makes its `read_exact` time out, which drops
+        // the socket → EOF unblocks the model.
         let mut m = JtagReplayModel::new_live(
             "jtag_0".into(),
             10, 11, 12, None,
             Some(33), // TDO at output-state bit 33 (word 1, bit 1)
             1,
-            stream,
+            listener,
+            false, // persist
         );
         // Output state with TDO high.
         let out = vec![0u32, 1u32 << 1];
@@ -933,5 +1015,37 @@ mod tests {
         assert_eq!(got, b'1', "R must read back TDO=1 from output_state");
         assert_eq!(m.diagnostics().tdo_read_requests, 1);
         assert!(m.finished(), "client 'Q' ends the session");
+    }
+
+    #[test]
+    fn persist_mode_quit_is_not_terminal() {
+        // In `--jtag-reconnect` mode the client sends `Q` then closes, and
+        // the server re-accepts the next one — so `Q` must NOT end the
+        // session (else `is_active()` drops and the loop could stop before
+        // the reconnect). Contrast: the non-persist live/replay tests above
+        // assert `Q` *does* finish.
+        use std::net::TcpListener;
+        use std::thread;
+        use std::time::Duration;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        // Hold a connection open so `new_live`'s accept() succeeds and the
+        // source isn't exhausted; we never read from it here.
+        let client = thread::spawn(move || {
+            let s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            thread::sleep(Duration::from_millis(200));
+            drop(s);
+        });
+        let mut m = JtagReplayModel::new_live(
+            "jtag_0".into(),
+            10, 11, 12, None, None,
+            1,
+            listener,
+            true, // persist
+        );
+        m.consume_byte(b'Q');
+        assert!(!m.finished(), "persist: Q must not end the session");
+        client.join().unwrap();
     }
 }
