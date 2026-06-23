@@ -96,9 +96,11 @@ transaction at a time, paced by the client. v1 accepts a single
 connection; when the client disconnects (or sends `Q`), the session ends
 and the simulation free-runs to its edge budget.
 
-> **Edge budget.** An interactive session can outlive a normal
-> `--max-clock-edges` cap. Set it generously (the example uses 100M) so
-> the design does not stop out from under your debugger mid-session.
+> **Edge budget.** `--max-clock-edges` does **not** stop the run while a
+> debug client is attached — the session is paced by the client and would
+> otherwise die mid-inspect. The cap is honoured again once the client
+> disconnects (so the post-session free-run is still bounded). You can
+> leave `--max-clock-edges` at its default for interactive use.
 
 ## OpenOCD configuration
 
