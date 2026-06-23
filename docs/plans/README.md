@@ -30,6 +30,7 @@ persistent plans here.
 | [WS3 follow-up: re-add cosim `--sdf` via `opensta-to-ir`](ws3-cosim-sdf-followup.md) | Deferred |
 | [Multi-clock and stimulus architecture](multi-clock-and-stimulus-architecture.md) | Exploratory — demand-driven |
 | [Cosim backend portability](cosim-backend-portability.md) | Active — design captured (#105); see ADR 0017 amendment |
+| [Cell-model IR](cell-model-ir.md) | Proposed — realises ADR 0019 (#130, #67) |
 
 ## Reading order for new contributors
 
