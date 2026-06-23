@@ -116,6 +116,39 @@ package metadata. Remaining (needs maintainer action):
 - `ghcr.io/gpu-eda/jacquard:cuda` for reproducible Linux/CUDA runs.
   Deferred per ADR 0018; revisit if CUDA release binaries prove awkward.
 
+## Phase 7 — Upstream the `eda-infra-rs` fork (de-fork prerequisite)
+
+The simulator can't be published to crates.io while its core deps are a
+**vendored fork** (`vendor/eda-infra-rs` → `ChipFlow/eda-infra-rs`) carrying
+patches not on the registry (the path deps declare a version but resolve to the
+fork's patched code; ADR 0018). De-forking — getting every fork change
+upstreamed + released so jacquard can depend on published
+`gzz2000/eda-infra-rs` crates — is the long-term unblock. **Not** required for
+the binary-distribution channels (those work today); tracked here as the path to
+crates.io / dependency hygiene. (`opensta-to-ir` / `timing-ir` are ours to
+version + name as we like, so they are not a blocker.)
+
+**Audit (2026-06-23):** the fork (`e4e3db0`, branch `master`) is **13 commits
+ahead, 1 behind** upstream `gzz2000/eda-infra-rs`. Upstream merged none of ours;
+it only added the license-string fix (`026070c`). Status of our 13 commits:
+
+| Fork change | Upstream PR | Status |
+|---|---|---|
+| sverilogparse: ANSI-style ports (`e4e3db0`) | gzz2000#3 | OPEN — awaiting merge |
+| Apple Metal support (`139a696`) | gzz2000#1 | **DRAFT** — never submitted |
+| sverilogparse: unary NOT `~` (`d7df6e8`) | — | not PR'd |
+| HIP/AMD + HIP-on-NVIDIA backend (~9 commits, `c89d426`..`8b1bc63`) | — | **not PR'd** (largest gap) |
+| rustfmt + .gitignore (`fb436ed`) | — | housekeeping; fold into a PR |
+
+**Tasks (priority order):**
+- [ ] Pull upstream's license fix (`026070c`) into the fork + bump the submodule
+      pin → closes the release-process checklist item + the `NOTICE` footnote.
+- [ ] File the **HIP backend** PR(s) upstream (the ~9-commit gap).
+- [ ] Mark Metal PR gzz2000#1 **ready for review** (un-draft).
+- [ ] File the **unary-NOT** sverilogparse PR.
+- [ ] Once all merged + released: drop the fork, point deps at published
+      `gzz2000/eda-infra-rs` versions — removes the core "no crates.io" blocker.
+
 ## Verification
 
 - A clean checkout-free install on a second macOS machine (or a fresh

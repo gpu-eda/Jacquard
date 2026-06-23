@@ -4,8 +4,9 @@ name: Publish netlist-graph
 #
 # - Tagging `netlist-graph-v<X.Y.Z>` builds and publishes to PyPI via
 #   trusted publishing (OIDC — no stored token).
-# - `workflow_dispatch` is a dry-run: it builds + uploads the wheel as a
-#   workflow artifact but does NOT publish.
+# - `workflow_dispatch` builds + uploads the wheel as a workflow artifact AND
+#   publishes to TestPyPI (environment `testpypi`) — a real upload to validate
+#   the trusted-publisher wiring before cutting the production tag.
 #
 # The `v*` (Rust binary) release workflow uses a different tag prefix, so
 # the two never collide.
@@ -69,3 +70,25 @@ jobs:
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-testpypi:
+    name: Publish to TestPyPI (dry-run validation)
+    needs: build
+    runs-on: ubuntu-latest
+    # Manual dispatch only — a real upload to TestPyPI to validate the OIDC
+    # trusted-publisher wiring before cutting the production `netlist-graph-v*`
+    # tag. TestPyPI rejects re-uploads of an existing version, so bump the
+    # package version (or use a .devN suffix) if re-running for the same version.
+    if: github.event_name == 'workflow_dispatch'
+    environment: testpypi
+    permissions:
+      id-token: write   # trusted publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: netlist-graph-dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
