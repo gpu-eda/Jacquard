@@ -1,0 +1,446 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Interactive JTAG Debug - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ChipFlow/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="interactive-jtag-debug---jtag-server"><a class="header" href="#interactive-jtag-debug---jtag-server">Interactive JTAG Debug (<code>--jtag-server</code>)</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p><code>jacquard cosim --jtag-server &lt;PORT&gt;</code> opens a live
+<a href="https://github.com/openocd-org/openocd/blob/master/src/jtag/drivers/remote_bitbang.c"><code>remote_bitbang</code></a> JTAG socket alongside a running GPU
+co-simulation. An external debugger — OpenOCD, then gdb on top of it —
+attaches and inspects the design through its RISC-V <strong>Debug Module
+(DM)</strong>: halt/resume/step the hart, read/write GPRs, CSRs, PC and memory,
+and <code>load</code> firmware — exactly as the same firmware would be debugged on
+real silicon.</p>
+<p>It is the <strong>interactive sibling of <a href="signal-tracing.html"><code>--jtag-replay</code></a></strong>.
+Where <code>--jtag-replay &lt;FILE&gt;</code> plays back a <em>recorded</em> <code>remote_bitbang</code>
+byte stream (deterministic, one-directional), <code>--jtag-server &lt;PORT&gt;</code>
+opens a <em>live</em> socket and lets the connected client drive the same
+configured TCK/TMS/TDI/(TRST) pins, stepping the design in lock-step with
+each debug transaction and answering TDO reads from the design's live
+output.</p>
+<p>The two are mutually exclusive — pick a recorded stream <em>or</em> a live
+client, not both.</p>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Byte source</th><th>TDO read-back</th><th>Use</th></tr></thead><tbody>
+<tr><td><code>--jtag-replay &lt;FILE&gt;</code></td><td>recorded file</td><td>counted, not answered</td><td>deterministic regression / firmware load</td></tr>
+<tr><td><code>--jtag-server &lt;PORT&gt;</code></td><td>live TCP client</td><td>sampled + written to client</td><td>interactive debug (OpenOCD → gdb)</td></tr>
+</tbody></table>
+</div>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>The JTAG TAP pins are declared once in <code>sim_config.json</code>, shared by both
+the replay and server paths. TCK/TMS/TDI/TRST are design <strong>inputs</strong>; TDO
+is a design <strong>output</strong>, so the server needs <code>tdo_gpio</code> to answer TDO
+reads:</p>
+<pre><code class="language-json">{
+  "jtag": {
+    "tck_gpio": 2,
+    "tms_gpio": 3,
+    "tdi_gpio": 4,
+    "trst_gpio": 5,
+    "trst_active_low": true,
+    "tdo_gpio": 6
+  }
+}
+</code></pre>
+<ul>
+<li><code>trst_gpio</code> should be set for a RISC-V Debug TAP: the DTM resets on
+<code>negedge trst_n</code>, and the server injects a one-shot power-on TRST pulse
+at startup so a debugger that never asserts TRST (stock OpenOCD with
+<code>reset_config none</code>) still resets the DTM — mirroring a real chip's
+power-on TAP reset. (Tunable/disable via the <code>JACQUARD_JTAG_TRST_PULSE</code>
+env var; see <em>How it works</em>.) TAPs that genuinely reset via a
+five-cycle <code>TMS=1</code> sequence can omit it.</li>
+<li><code>tdo_gpio</code> is optional for <code>--jtag-replay</code> (replay never answers <code>R</code>)
+but <strong>required for useful <code>--jtag-server</code> use</strong>: without it, every TDO
+read returns <code>0</code> and the debugger cannot read the design back. cosim
+warns at startup if it is missing.</li>
+</ul>
+<p>The TCK clock domain must also appear in <code>clocks[]</code> so the multi-clock
+scheduler allocates it a tick slot; the model overrides TCK at each byte
+transition. See <code>tests/jtag_minimal/sim_config.json</code> for a complete,
+working example.</p>
+<h2 id="launching-the-server"><a class="header" href="#launching-the-server">Launching the server</a></h2>
+<pre><code class="language-bash">jacquard cosim design.pnl.v \
+    --config sim_config.json \
+    --top-module top \
+    --jtag-server 9999 \
+    --jtag-hold-cycles 8 \
+    --output-vcd debug.vcd \
+    --max-clock-edges 100000000
+</code></pre>
+<p>cosim builds the design, <strong>binds <code>127.0.0.1:9999</code>, and blocks waiting for
+one client</strong> before the run starts:</p>
+<pre><code>JTAG server `jtag_0`: listening on 127.0.0.1:9999, hold_edges=8 (...);
+  waiting for a remote_bitbang client (e.g. OpenOCD)…
+</code></pre>
+<p>Pass <code>--jtag-server 0</code> to bind an <strong>OS-assigned free port</strong> instead of a
+fixed one — read the actual port from the <code>listening on 127.0.0.1:&lt;port&gt;</code>
+line. Use this when several <code>jacquard</code> instances debug concurrently (or
+in CI) so they never collide; if a fixed port is already taken, the bind
+fails with an actionable error.</p>
+<p>Once a client connects, the design steps forward one <code>remote_bitbang</code>
+transaction at a time, paced by the client. By default a single
+connection is served; when the client disconnects (or sends <code>Q</code>), the
+session ends and the simulation free-runs to its edge budget.</p>
+<p>Add <strong><code>--jtag-reconnect</code></strong> to keep the server alive across disconnects:
+when the debugger detaches, the server preserves the design state and
+waits to <code>accept()</code> the next client — so you can <strong>restart OpenOCD
+without re-running the slow cosim setup</strong> (each fresh attach gets a clean
+DTM reset). The run then never stops on its own; <code>Ctrl-C</code>/kill to end it.</p>
+<blockquote>
+<p><strong>Edge budget.</strong> <code>--max-clock-edges</code> does <strong>not</strong> stop the run while a
+debug client is attached — the session is paced by the client and would
+otherwise die mid-inspect. The cap is honoured again once the client
+disconnects (so the post-session free-run is still bounded). You can
+leave <code>--max-clock-edges</code> at its default for interactive use.</p>
+</blockquote>
+<h2 id="openocd-configuration"><a class="header" href="#openocd-configuration">OpenOCD configuration</a></h2>
+<p>The boilerplate is the most error-prone part of attaching a debugger, so
+generate it with the built-in helper instead of hand-writing it:</p>
+<pre><code class="language-bash">jacquard jtag-openocd-config --port 9999 --expected-id 0xdeadbeef \
+    -o openocd.cfg
+</code></pre>
+<p><code>--irlen</code> (default 5), <code>--host</code>, <code>--chipname</code> and <code>--dmi-timeout</code> are all
+configurable; <code>jacquard jtag-openocd-config --help</code> lists them. The
+emitted config wires up the <code>remote_bitbang</code> driver, a RISC-V Debug TAP,
+and the target, and ends with <code>init</code>. For reference, the equivalent
+hand-written config (mirroring <code>tests/jtag_minimal/scripts/openocd.cfg</code>):</p>
+<pre><code class="language-tcl">adapter driver remote_bitbang
+remote_bitbang host localhost
+remote_bitbang port 9999
+transport select jtag
+adapter speed 1
+
+set _CHIPNAME jtag
+jtag newtap $_CHIPNAME cpu -irlen 5
+set _TARGETNAME $_CHIPNAME.cpu
+target create $_TARGETNAME riscv -chain-position $_TARGETNAME
+
+# The JTAG protocol is bit-serial and the GPU server is per-edge while
+# stepping — keep the DMI timeout generous.
+riscv set_command_timeout_sec 60
+</code></pre>
+<p>Run it against the launched server:</p>
+<pre><code class="language-bash">openocd -f openocd.cfg
+</code></pre>
+<p>OpenOCD examines the TAP, brings up the DM (<code>dmactive=1</code>), and exposes a
+gdb remote on <code>:3333</code> by default.</p>
+<h2 id="attaching-gdb"><a class="header" href="#attaching-gdb">Attaching gdb</a></h2>
+<pre><code class="language-bash">riscv32-unknown-elf-gdb firmware.elf
+(gdb) target remote :3333
+(gdb) info registers          # read GPRs / CSRs / PC via the DM
+(gdb) x/16xw 0x20000000       # read memory
+(gdb) load                    # write firmware through Program Buffer / sysbus
+(gdb) break main
+(gdb) continue
+</code></pre>
+<p>The design runs on the GPU; gdb sees it through the DM exactly as it
+would see silicon over a real JTAG probe.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
+<p>The cosim main loop is synchronous (<code>step_edge → run_edges → wait → repeat</code>). A live debug session <strong>inverts time control</strong>: the client is
+the clock source, so <code>step_edge</code> <em>blocking on a socket read is</em> the
+correct synchronisation — no async executor, no background thread.</p>
+<ul>
+<li>While a client is connected the JTAG model reports <code>is_active() == true</code>, which forces the existing <strong>single-edge (<code>batch=1</code>)</strong> dispatch —
+the same fine-grained stepping <code>--jtag-replay</code> already uses. Each cosim
+edge processes one <code>remote_bitbang</code> step.</li>
+<li>On each <code>R</code> (read-TDO) command the model samples the design's live TDO
+from the output state (<code>output_state[tdo_pos]</code>) and writes the ASCII
+<code>'0'</code>/<code>'1'</code> back over the socket — the only response the protocol
+requires.</li>
+<li>TCK/TMS/TDI/TRST drive through the usual
+<code>overrides → BitOps → state_prep</code> path, unchanged from replay.</li>
+<li><strong>Power-on TRST pulse.</strong> A RISC-V DTM resets on <code>negedge trst_n</code>. On
+real silicon the power-on reset supplies that edge; in a recorded
+capture the harness pulses TRST before the debugger runs. But stock
+OpenOCD with <code>reset_config none</code> never asserts TRST — so without help
+the DTM would never reset and examine would fail with "dtmcontrol is
+0" / "scan chain interrogation: all zeroes". The live server therefore
+injects one brief TRST pulse at startup (deasserted → asserted →
+released, timed in cosim edges), reproducing the recorded stream's
+leading <code>u…r</code>. Replay is unaffected (it drives TRST from the stream),
+and an explicit client TRST assertion still wins after the pulse. The
+window is <code>[hold_edges, 5·hold_edges)</code> by default; override or disable
+it with <code>JACQUARD_JTAG_TRST_PULSE="&lt;from&gt;,&lt;to&gt;"</code> / <code>="off"</code> (edges) if
+a design needs different timing.</li>
+</ul>
+<p>The batched fast path is untouched when no client is attached: a design
+with a <code>jtag</code> config but no <code>--jtag-server</code>/<code>--jtag-replay</code> flag simply
+leaves the JTAG inputs floating and runs at full throughput.</p>
+<p>This works on any cosim backend (CPU / Metal / CUDA / HIP) — it is the
+CPU-side model plus <code>batch=1</code> of the GPU backend, with no per-backend
+kernel work. See
+<a href="adr/0017-cosim-execution-model.html">ADR 0017 (Amendment 2026-06-21)</a> for
+the execution-model rationale and
+<a href="adr/0013-plural-peripheral-configs.html">ADR 0013 (Amendment 2026-06-21)</a>
+for the <code>tdo_gpio</code> config surface.</p>
+<h2 id="caveats-and-limitations"><a class="header" href="#caveats-and-limitations">Caveats and limitations</a></h2>
+<ul>
+<li><strong>One client at a time.</strong> A single connection is served at once;
+<code>--jtag-reconnect</code> accepts a new one after the previous disconnects.
+Simultaneous clients and multi-tap chains are future work.</li>
+<li><strong>Performance.</strong> An attached session loses edge batching for its
+duration — inherent and acceptable, since interactive debug is slow
+relative to free-running simulation. Throughput is unaffected when no
+client is attached.</li>
+<li><strong>X-propagation.</strong> Under <code>--xprop</code>, the debug <em>read</em> path is two-state
+in v1 (TDO resolves through the design as 0/1). X-aware debug reads are
+a planned refinement (J5 in the plan).</li>
+<li><strong>Reset interplay.</strong> The design's own reset (<code>reset_gpio</code>) and the JTAG
+TAP reset (driven by the client) proceed concurrently, mirroring real
+hardware where the debugger drives JTAG while the chip resets.</li>
+</ul>
+<h2 id="validation"><a class="header" href="#validation">Validation</a></h2>
+<p>Three layers, increasing in fidelity:</p>
+<ul>
+<li>
+<p>A <strong>model-level loopback unit test</strong>
+(<code>live_source_loops_back_tdo_over_socket</code> in <code>src/sim/models/jtag.rs</code>)
+drives the FSM through a real <code>TcpStream</code> and reads back a sampled TDO
+bit — GPU-free and deterministic, runs in <code>cargo test</code>.</p>
+</li>
+<li>
+<p>The <strong><code>jtag-minimal-cosim-server</code> CI job</strong> streams the <em>same</em>
+<code>bitbang.rec</code> the <code>--jtag-replay</code> gate uses over the live socket (via
+<code>tests/jtag_minimal/scripts/bitbang_client.py</code>) and asserts the design
+reaches the same <code>data0_obs == 0xCAFEBABE</code>. This pins live-vs-replay
+<em>drive</em> equivalence with zero external tooling — but reaches
+<code>0xCAFEBABE</code> via a DMI <em>write</em>, so it does not exercise a correct TDO
+<em>read</em>.</p>
+</li>
+<li>
+<p>The <strong><code>jtag-minimal-openocd</code> CI job</strong> drives the live server with
+<strong>real OpenOCD</strong> (<code>tests/jtag_minimal/scripts/openocd_debug.sh</code>):
+examine reads IDCODE/DTMCS back over TDO, then it writes <em>and reads
+back</em> DATA0, asserting <code>IDCODE == 0xdeadbeef</code> and the DMI read-back
+<code>== 0xcafebabe</code>. This is the only gate that exercises the live <strong>TDO
+read</strong> path (and the power-on TRST-pulse fix). Run it locally with any
+port:</p>
+<pre><code class="language-bash">jacquard cosim … --jtag-server 9824 &amp;
+bash tests/jtag_minimal/scripts/openocd_debug.sh 9824
+</code></pre>
+<blockquote>
+<p><strong>Fake hart.</strong> <code>jtag_minimal</code> is a bare DTM+DM with no real CPU, so
+full RISC-V target examination stops at <code>Failed to read MISA</code> and
+OpenOCD exits non-zero — expected. DMI access (write/read DATA0) is
+the contract the gate checks. A design with a real hart examines
+fully.</p>
+</blockquote>
+</li>
+</ul>
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li>Issue <a href="https://github.com/gpu-eda/Jacquard/issues/124">#124</a>.</li>
+<li>Implementation staging:
+<a href="plans/jtag-debug-server.html"><code>docs/plans/jtag-debug-server.md</code></a>.</li>
+<li><a href="adr/0017-cosim-execution-model.html">ADR 0017 — Cosim execution model</a>
+(interactive, externally-paced peripheral models; <code>output_state</code>
+wiring).</li>
+<li><a href="adr/0013-plural-peripheral-configs.html">ADR 0013 — Cosim peripheral model architecture</a>
+(<code>tdo_gpio</code> config surface).</li>
+<li>Replay path &amp; fixture: <code>src/sim/models/jtag.rs</code>, <code>tests/jtag_minimal/</code>.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="bus-tracing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="adding-a-pdk.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="bus-tracing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="adding-a-pdk.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
