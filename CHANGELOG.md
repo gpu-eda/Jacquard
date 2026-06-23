@@ -9,6 +9,44 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-06-23
+
+Distribution fixes — the first release whose `release.yml` produces an
+attached, working Metal binary. v0.1.0 and v0.2.0 shipped with no binary
+asset (the publish step invoked `gh`, which is not on PATH on the macOS
+runner) and a `sim` kernel that loaded its Metal library from a build-tree
+path, breaking relocated binaries.
+
+### Added
+
+- **User-acceptance smoke gate** (`scripts/ci/user_acceptance_smoke.sh`):
+  a shared post-install verification (`--version`, `sim`, `cosim`
+  apb_trace per `docs/installation.md` § Verify) that now gates the
+  release-workflow publish step. The missing `sim` coverage is what let
+  v0.2.0 ship a broken binary.
+- **`user-acceptance.yml`** standalone `workflow_dispatch`: build → install
+  to a clean directory → run the smoke script against the relocated binary.
+- **TestPyPI publish job** in `publish-netlist-graph.yml` (`workflow_dispatch`,
+  environment `testpypi`) to validate the OIDC trusted-publisher wiring
+  before the real PyPI tag.
+
+### Changed
+
+- `docs/installation.md`: `cargo binstall jacquard` →
+  `cargo binstall --git …`. `jacquard` is not on crates.io (the vendored
+  `eda-infra-rs` fork has diverged from its declared versions), so the
+  `--git` form is required.
+- `crates/timing-ir/Cargo.toml` repository URL → `gpu-eda`.
+- `docs/plans/distribution.md`: added Phase 7 (eda-infra-rs upstreaming).
+
+### Fixed
+
+- **Release publish now attaches the binary**: switched from `gh release
+  create` to `softprops/action-gh-release` (token API, no `gh` dependency).
+- **Relocatable `sim` Metal binary**: the `sim` Metal kernel is now embedded
+  via `include_bytes!` instead of being read from a build-tree path, so the
+  shipped binary works when installed outside the build tree.
+
 ## [0.2.0] - 2026-06-23
 
 ### Added
@@ -261,6 +299,7 @@ runners land (ADR 0018).
   CUDA / HIP detect violations on the GPU but don't currently route
   them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/gpu-eda/Jacquard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gpu-eda/Jacquard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gpu-eda/Jacquard/releases/tag/v0.1.0

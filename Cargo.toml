@@ -1,6 +1,6 @@
 [package]
 name = "jacquard"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "GPU-accelerated RTL logic simulator with vector-driven setup/hold timing analysis. Maps gate-level netlists to a virtual manycore Boolean processor and runs them on Metal / CUDA / HIP."
 repository = "https://github.com/gpu-eda/Jacquard"
