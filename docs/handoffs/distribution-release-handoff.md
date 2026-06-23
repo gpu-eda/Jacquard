@@ -1,15 +1,14 @@
 # Handoff — distribution & release hardening
 
-**Created:** 2026-06-23 · **Branch:** `feat/user-acceptance-and-dist-docs`
-(in-flight) off `main`.
+**Created/updated:** 2026-06-23 · **In-flight: PR #133**
+(`feat/user-acceptance-and-dist-docs`), CI running.
 
 ## Goal & now
 
 Bring the ADR 0018 distribution layer to "actually works": ship a usable Metal
 binary, gate releases on a user-level install+smoke, and document the channel
-reality. **Now:** finish + merge the in-flight branch (PR pending), then **cut
-v0.2.1** (the first release whose `release.yml` produces an attached, working
-binary).
+reality. **Now:** merge **PR #133** once green, then **cut v0.2.1** (the first
+release whose `release.yml` produces an attached, working binary).
 
 ## State of the release
 
@@ -30,7 +29,7 @@ binary).
   roll a `[0.2.1]` "distribution fixes" CHANGELOG entry, bump `Cargo.toml`
   0.2.0→0.2.1, commit, tag after main CI green, confirm the asset attaches.
 
-## In-flight branch `feat/user-acceptance-and-dist-docs` (needs PR + merge)
+## In-flight: PR #133 (`feat/user-acceptance-and-dist-docs`) — open, CI running
 
 - `scripts/ci/user_acceptance_smoke.sh` — shared post-install verify
   (`--version`, **sim**, **cosim** apb_trace per `docs/installation.md` §
@@ -87,7 +86,7 @@ to the real release / PyPI / tap. **Build this as the next layer after v0.2.1.**
 
 ## Open follow-ups (priority order)
 
-1. PR + merge the in-flight branch, then **cut v0.2.1** (confirm the Metal
+1. Merge **PR #133** (once green), then **cut v0.2.1** (confirm the Metal
    tarball asset attaches via the fixed workflow).
 2. **Homebrew formula** bump → push to the tap (after v0.2.1).
 3. **netlist-graph** → dispatch to TestPyPI → verify → tag `netlist-graph-v0.1.0`.
