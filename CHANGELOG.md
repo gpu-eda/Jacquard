@@ -9,8 +9,20 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-23
+
 ### Added
 
+- **Interactive JTAG debug server (`--jtag-server`)** (#124). `jacquard cosim
+  --jtag-server <PORT>` opens a live `remote_bitbang` JTAG socket alongside the
+  running GPU co-simulation, so an external debugger (OpenOCD, then gdb on top)
+  can attach and drive the design's RISC-V Debug Module — halt/resume/step,
+  read/write GPRs/CSRs/PC/memory, and `load` firmware — in lock-step with each
+  debug transaction. The interactive sibling of `--jtag-replay` (recorded
+  streams). Adds `--jtag-reconnect` (re-accept a debugger without restarting
+  cosim) and a `jacquard jtag-openocd-config` helper that emits the matching
+  `openocd.cfg`. Host-side only (no kernel changes); the CI gate is a real
+  OpenOCD attach. See `docs/jtag-debug.md`.
 - **`reg_init` register value-injection for cosim** (#108). A new
   `reg_init` array in the testbench JSON deposits a definite value into
   chosen registers at tick 0 with `$deposit` semantics — the seed clears
@@ -41,6 +53,11 @@ the public contracts in `docs/release-process.md` follow stricter rules).
   (X-exact — known whenever `A` is), on `OE=0` it reads the external net.
   `in_c`/`in_s` input pads are unchanged. See ADR 0016. Unit test:
   `aig::gf180mcu_chip_top_tests::bi_24t_models_tristate_readback`.
+- **Empty-partition flatten panic** (#128). A partition with zero boomerang
+  stages — which mt-kahypar can emit at high partition counts (finer
+  partitioning or a large `--num-blocks`) — panicked in
+  `FlattenedScriptV1::from` ("index out of bounds: len is 0"). Such partitions
+  do no work and are now dropped before flattening.
 
 ## [0.1.0] - 2026-06-04
 
@@ -244,5 +261,6 @@ runners land (ADR 0018).
   CUDA / HIP detect violations on the GPU but don't currently route
   them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gpu-eda/Jacquard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gpu-eda/Jacquard/releases/tag/v0.1.0
