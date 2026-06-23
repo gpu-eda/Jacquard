@@ -1397,12 +1397,16 @@ jobs:
           trap 'kill -9 $SERVER_PID 2>/dev/null || true' EXIT
           # Wait for the server to bind and log its actual port (cosim setup
           # — netlist parse + partitioning — runs first).
+          # NB: the `|| true` is load-bearing — GitHub runs this with
+          # `set -eo pipefail`, so a grep that matches nothing (empty log
+          # on the first iterations, before the server finishes setup)
+          # would otherwise abort the whole step with no diagnostics.
           PORT=""
           for _ in $(seq 1 240); do
             PORT=$(grep -oE "listening on 127\.0\.0\.1:[0-9]+" \
-              jtag_minimal_openocd_server.log | head -1 | grep -oE "[0-9]+$")
+              jtag_minimal_openocd_server.log | head -1 | grep -oE "[0-9]+$" || true)
             [ -n "$PORT" ] && break
-            kill -0 $SERVER_PID 2>/dev/null || { echo "server exited during setup"; cat jtag_minimal_openocd_server.log; exit 1; }
+            kill -0 "$SERVER_PID" 2>/dev/null || { echo "server exited during setup"; cat jtag_minimal_openocd_server.log; exit 1; }
             sleep 1
           done
           [ -n "$PORT" ] || { echo "server never logged a listening port"; exit 1; }
