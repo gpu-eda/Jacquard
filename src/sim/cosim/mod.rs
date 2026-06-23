@@ -3059,7 +3059,18 @@ fn run_cosim_generic<B: CosimBackend>(
         }
     }
 
-    while tick < max_edges {
+    // `--max-clock-edges` bounds the run — but an interactive JTAG debug
+    // session is paced by the client, and a long inspect/step session can
+    // outlive any fixed edge budget. While a `--jtag-server` client is
+    // attached (the JTAG model reports `is_active()`), don't stop the sim
+    // out from under the debugger; honour the cap only once it disconnects.
+    let jtag_server_enabled = opts.jtag_server.is_some();
+    loop {
+        let jtag_attached =
+            jtag_server_enabled && models.iter().any(|m| m.is_active());
+        if tick >= max_edges && !jtag_attached {
+            break;
+        }
         // Drain queued actions, advance per-edge state, sync overrides
         // and forward emitted events. Active iff a dispatcher is loaded
         // OR any model has per-edge state to advance.
@@ -3154,7 +3165,10 @@ fn run_cosim_generic<B: CosimBackend>(
         } else if deep_diag {
             1 // single tick for deep diagnostics
         } else {
-            BATCH_SIZE.min(max_edges - tick)
+            // `saturating_sub`: when a JTAG client keeps the run going past
+            // `max_edges` it is always in single-edge mode above, so this
+            // branch isn't taken — but stay panic-safe if tick == max_edges.
+            BATCH_SIZE.min(max_edges.saturating_sub(tick)).max(1)
         };
 
         // Don't cross reset boundary within a batch
