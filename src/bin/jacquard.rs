@@ -391,6 +391,14 @@ struct CosimArgs {
     #[clap(long = "jtag-server", value_name = "PORT", conflicts_with = "jtag_replay")]
     jtag_server: Option<u16>,
 
+    /// Keep the `--jtag-server` alive across client disconnects: when the
+    /// debugger (OpenOCD) detaches, wait for and accept the next client
+    /// instead of ending the session — so you can restart OpenOCD without
+    /// re-running the slow cosim setup. The design state is preserved; the
+    /// run then never stops on its own (Ctrl-C / kill to end it).
+    #[clap(long = "jtag-reconnect", requires = "jtag_server")]
+    jtag_reconnect: bool,
+
     /// Cosim edges per JTAG stream byte. Default 4 — chosen against
     /// the "chip-clock ≥ 2× TCK" assumption that holds by construction
     /// in any chipflow design running a debug TAP. Bump for designs
@@ -2121,6 +2129,7 @@ fn cmd_cosim(args: CosimArgs) {
             dump_dff_cycles: args.dump_dff_cycles,
             jtag_replay: args.jtag_replay.clone(),
             jtag_server: args.jtag_server,
+            jtag_reconnect: args.jtag_reconnect,
             jtag_hold_cycles: args.jtag_hold_cycles,
             run_params: args.run_params.clone(),
             bus_trace_csv: args.bus_trace_csv.clone(),

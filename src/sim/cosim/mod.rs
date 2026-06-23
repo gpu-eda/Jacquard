@@ -53,6 +53,10 @@ pub struct CosimOpts {
     /// the interactive sibling of `jtag_replay`. Mutually exclusive with
     /// `jtag_replay`. Issue #124.
     pub jtag_server: Option<u16>,
+    /// When the `--jtag-server` client disconnects, wait for and accept
+    /// the next one (debugger restart without restarting the slow cosim)
+    /// instead of ending the session. Issue #124.
+    pub jtag_reconnect: bool,
     /// Cosim edges per JTAG stream byte. Default 4; see
     /// `JtagReplayModel` for the rationale.
     pub jtag_hold_cycles: u32,
@@ -2471,18 +2475,14 @@ fn run_cosim_generic<B: CosimBackend>(
                         .unwrap_or(port);
                     clilog::info!(
                         "JTAG server `jtag_0`: listening on 127.0.0.1:{port}, \
-                         hold_edges={} ({pins}); waiting for a remote_bitbang \
-                         client (e.g. OpenOCD)…",
-                        opts.jtag_hold_cycles
+                         hold_edges={} reconnect={} ({pins}); waiting for a \
+                         remote_bitbang client (e.g. OpenOCD)…",
+                        opts.jtag_hold_cycles,
+                        opts.jtag_reconnect
                     );
-                    let (stream, peer) = listener.accept().unwrap_or_else(|e| {
-                        panic!("jtag server: accept on 127.0.0.1:{port} failed: {e}")
-                    });
-                    // Single-byte TDO replies must not wait on Nagle.
-                    if let Err(e) = stream.set_nodelay(true) {
-                        clilog::warn!("jtag server: could not set TCP_NODELAY: {e}");
-                    }
-                    clilog::info!("JTAG server `jtag_0`: client connected from {peer}");
+                    // `new_live` blocks on the first accept() (and re-accepts
+                    // on disconnect when `jtag_reconnect`), keeping the
+                    // listener for the model's lifetime.
                     let model = crate::sim::models::jtag::JtagReplayModel::new_live(
                         "jtag_0".to_string(),
                         tck,
@@ -2491,7 +2491,8 @@ fn run_cosim_generic<B: CosimBackend>(
                         trst,
                         tdo,
                         opts.jtag_hold_cycles,
-                        stream,
+                        listener,
+                        opts.jtag_reconnect,
                     );
                     Some(Box::new(model))
                 }
