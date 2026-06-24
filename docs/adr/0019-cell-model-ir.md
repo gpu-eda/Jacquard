@@ -180,15 +180,44 @@ input, not auto-detected.
 ### D6 — A separate generator (converter crate)
 
 The IR is produced by a **converter crate** mirroring `opensta-to-ir`:
-Liberty (with `functional.v` as a fallback for cells Liberty
-under-specifies) → cell-model IR — emitting L1–L4 from a single pass over
-the `.lib`. It **reuses, not reimplements**, the existing machinery:
+Liberty → cell-model IR — emitting **all of L1–L4 from a single pass over
+the `.lib`**, with `functional.v` consulted only as a fallback for the L2
+combinational cases Liberty under-specifies (see the resolved L2 open
+question below). It **reuses, not reimplements**, the existing machinery:
 `pdk_decomp` relocates into a shared library the generator links, and the
 Liberty group-walker (`src/liberty_parser.rs`, which today reads only the
 L4 timing groups) is extended to also read `function` / `ff` / `latch` /
 cell-class. The generator — not jacquard core — owns all Verilog/Liberty
 parsing and AIG decomposition; it is unit-testable in isolation, off the
 runtime critical path.
+
+**Cross-check when both sources are present.** For a library that ships
+both Liberty and `functional.v` (the open PDKs), the generator validates
+the two against each other and **surfaces any disagreement** as a
+generation-time diagnostic rather than silently trusting one. Two checks:
+
+- **Logic (L2/L3).** Build the combinational AIG from the Liberty
+  `function` *and* from the `.v` gate/UDP netlist and check the two for
+  logical equivalence; likewise the sequential next-state/reset from
+  Liberty `ff`/`latch` against the `.v` sequential UDP.
+- **Timing (L4).** For **standard cells**, the `.v` `specify` block carries
+  timing *arc topology* but no values (zero-placeholder SDF scaffold), so
+  the check is **arc-set agreement**, not value comparison: every Liberty
+  `timing()` group (`related_pin` + `timing_type`) should correspond to a
+  `.v` `specify` path or timing check and vice versa, and across a
+  multi-corner library every corner `.lib` should carry the **same
+  cell/arc set** (only the values differ). For **macros/SRAM**, whose
+  behavioural `.v` often embeds *real* hardcoded timing (access time,
+  setup/hold) that can diverge from the macro's Liberty, the check extends
+  to a **value comparison** and flags the divergence. A missing, extra, or
+  mis-typed arc, a cross-corner arc-set difference, or a macro value
+  divergence — on either source — is surfaced. Liberty remains the
+  authoritative L4 source either way.
+
+This is the same diff discipline ADR 0001/0002 use, applied across the L2
+logic sources, the L4 arc topology, and the corner set; it is the
+structural check `build.rs`'s port-only `assert_eq!` never had — directly
+the silent-substitution class #130 names.
 
 ### D7 — Bundled descriptors; vendored PDKs demote to generation inputs
 
@@ -245,9 +274,45 @@ provenance.
 
 ## Open questions
 
-- **L2 source of truth** — Liberty `function` strings (clean for most
-  cells) vs `functional.v` (needed for some): the generator accepts both;
-  unifying them is explicitly *not* a goal now.
+- ~~**L2 source of truth**~~ — **Resolved (D6): Liberty-first, `.v` as a
+  bounded fallback.** A survey of open and commercial (Liberate-generated)
+  standard-cell libraries found the same shape in all of them: Liberty
+  carries `function` for every combinational cell and `ff`/`latch` groups
+  (`clocked_on`/`next_state`/`clear`/`preset`, with reset polarity) for
+  every sequential cell, while the behavioural `.v` models sequential cells
+  as a vendor UDP wrapped in `notifier`/`$setuphold` timing-check
+  machinery. So **Liberty is the cleaner and sufficient source for L2
+  `function` and L3 `ff`/`latch`** — it states the next-state/reset logic
+  directly, whereas the `.v` buries it in simulation scaffolding. The
+  generator reads Liberty first and consults `.v`/UDP **only** for the L2
+  combinational cases Liberty under-specifies (cells with no `function`
+  string, or UDP truth tables whose exact X-semantics you want, e.g. some
+  muxes). This is the converter's *target*; the existing GF180/SKY130
+  `functional.v` path is fine as the first converter input in plan C1.
+
+  Two bounded sub-points:
+
+  - **L4 timing is Liberty-exclusive for standard cells.** A stdcell `.v`
+    `specify` block carries timing *arc topology* (which arcs/checks exist)
+    but **zero/placeholder values** — it is an SDF back-annotation scaffold,
+    redundant with the `.lib`'s own arc set. So the cross-check on stdcell
+    timing is arc-set agreement, not value comparison (see D6).
+    **Exception — macros/SRAM.** A memory/macro behavioural `.v` often
+    **embeds real, hardcoded timing** (access time, setup/hold) that can
+    *diverge* from the macro's Liberty — here the two sources disagree on
+    *values*, not just topology. (The GF180 SRAM model is a suspected case,
+    not yet diffed; SRAM timing is already a special path in Jacquard, with
+    a hardcoded conservative read-delay fallback in
+    `src/liberty_parser.rs`.) The generator must surface that disagreement
+    (D6); L4 still comes from Liberty as the single authoritative source,
+    but the divergence is a real correctness signal worth flagging rather
+    than hiding.
+  - **Violation-response is out of scope.** The `.v`'s `notifier`→UDP-`x`
+    corruption-on-violation is a *simulator policy*, not a per-cell-type
+    library fact: the constraint *values* it needs are already L4 from
+    Liberty, and the *response* is owned by Jacquard's own timing-violation
+    subsystem (`docs/timing-violations.md`: report-based, X only under
+    `--xprop`). It is not extracted into the IR.
 - ~~**L4 multi-corner shape**~~ — **Resolved (D5):** all corners in the one
   descriptor, L4 keyed by corner (mirroring the timing IR's corner-set +
   `corner_index`; min/typ/max stays the orthogonal within-corner derate).

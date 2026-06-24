@@ -33,9 +33,14 @@ cleanup that the first two earn.
 - **Sequential fidelity (C2).** Liberty `ff` `clear`/`preset`/
   `clear_preset_var` → Jacquard async-reset DFF is the bug-prone mapping;
   gate it on equivalence against the current hardcoded behaviour.
-- **L2 cells Liberty under-specifies.** Some structural/complex cells need
-  the `functional.v` fallback; the converter takes both inputs (ADR 0019
-  open question), so C1 must exercise a cell that *only* has `functional.v`.
+- **L2 source (Liberty-first; resolved in ADR 0019 D6).** The converter
+  reads Liberty `function`/`ff`/`latch` first and falls back to
+  `functional.v`/UDP only where Liberty under-specifies. C1 must therefore
+  exercise both ends: a clean `function` cell *and* a cell that needs the
+  `.v`/UDP fallback (a UDP-modelled mux). Where both sources exist, the
+  converter cross-checks them (logic equivalence; timing arc-set agreement;
+  macro/SRAM timing-value divergence) and **surfaces disagreement** — the
+  structural check `build.rs`'s port-only `assert_eq!` never had (#130).
 - **AIG payload size (D2/D3).** If the JSON AIG is unwieldy for a full
   library, switch that payload to the FlatBuffers escape hatch — decide at
   C1 from the real GF180 descriptor size.
