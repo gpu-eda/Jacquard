@@ -28,24 +28,33 @@ Metal GPU.
 ### cargo binstall — prebuilt binary, no toolchain build
 
 ```sh
+brew install llvm     # runtime dependency — see note below
 cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
 ```
 
-Fetches the release binary on **macOS/Metal**. The `--git` form is
-required: `jacquard` is **not on crates.io** (its dependencies are a
-vendored fork carrying in-flight patches), so binstall reads the
-`[package.metadata.binstall]` pkg-url straight from the repo rather than
-looking the crate up on the registry. Linux is **not** binstall-able:
-there are two GPU backends (CUDA, HIP) for one target triple, so it can't
-be auto-selected — use the release tarball for your backend, a container,
-or build from source.
+Fetches the release binaries (`jacquard` + `timing_analysis`) on
+**macOS/Metal**. The `--git` form is required: `jacquard` is **not on
+crates.io** (its dependencies are a vendored fork carrying in-flight
+patches), so binstall reads the `[package.metadata.binstall]` pkg-url
+straight from the repo rather than looking the crate up on the registry.
+Linux is **not** binstall-able: there are two GPU backends (CUDA, HIP) for
+one target triple, so it can't be auto-selected — use the release tarball
+for your backend, a container, or build from source.
+
+> **Runtime dependency — Homebrew LLVM.** The prebuilt macOS binary links
+> Homebrew LLVM's `libc++` and `libomp` (the build uses LLVM clang for
+> OpenMP, via the mt-kahypar partitioner), so it needs `brew install llvm`
+> to run. The **Homebrew** install handles this automatically
+> (`depends_on "llvm"`); **binstall** and the **raw tarball** do not, so
+> install LLVM first.
 
 ### Prebuilt release tarball
 
 Download `jacquard-<version>-<target>.tar.gz` from the
 [releases page](https://github.com/gpu-eda/Jacquard/releases), extract,
-and put `jacquard` (and `opensta-to-ir`) on your `PATH`. The macOS/Metal
-binary is self-contained (the GPU kernel is embedded).
+and put `jacquard`, `timing_analysis`, and `opensta-to-ir` on your `PATH`.
+The GPU kernel is embedded, but the binary still needs Homebrew LLVM at
+runtime (`brew install llvm`) — see the note above.
 
 ### From source (any backend)
 

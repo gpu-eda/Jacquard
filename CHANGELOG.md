@@ -9,6 +9,18 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Prebuilt macOS install channels worked only with Homebrew LLVM present**
+  (caught by the new staging-validation pipeline). Two defects in the v0.2.1
+  artifact: (1) `cargo binstall` failed because the tarball omitted
+  `timing_analysis`, a non-optional `jacquard`-package bin — it now ships in
+  the tarball (and the Homebrew formula installs it); (2) the binary links
+  Homebrew LLVM's `libc++`/`libomp`, so it failed to launch on machines
+  without LLVM — the Homebrew formula now `depends_on "llvm"`, and the
+  binstall/raw-tarball LLVM runtime prerequisite is documented in
+  `docs/installation.md`.
+
 ### Added
 
 - **Staging install-validation pipeline** for release candidates. Tagging a
