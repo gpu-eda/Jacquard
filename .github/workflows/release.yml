@@ -59,6 +59,15 @@ jobs:
             python3 scripts/bump_version.py --check "${tag_ver}"
             echo "is_release=true" >> "$GITHUB_OUTPUT"
             echo "version=${tag_ver}" >> "$GITHUB_OUTPUT"
+            # A SemVer pre-release suffix (e.g. 0.2.2-rc.1) marks a staging
+            # release candidate — publish it as a GitHub *prerelease* so it
+            # never shows as "Latest". Validate it with validate-install.yml,
+            # then promote by cutting the final tag. See docs/release-process.md.
+            if [[ "${tag_ver}" == *-* ]]; then
+              echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             # Dry-run: assert the crates agree and reuse their shared version
             # (bump_version.py is the single TOML parser — no grep/sed re-derive).
@@ -131,6 +140,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           draft: false
+          prerelease: ${{ steps.meta.outputs.is_prerelease == 'true' }}
           body_path: notes.md
           generate_release_notes: ${{ steps.notes.outputs.AUTO == 'true' }}
           files: |

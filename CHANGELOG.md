@@ -9,6 +9,18 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+### Added
+
+- **Staging install-validation pipeline** for release candidates. Tagging a
+  SemVer pre-release (`vX.Y.Z-rc.N`) now publishes a GitHub *prerelease*
+  (never "Latest"), and a new **Validate install (staging)** workflow
+  (`validate-install.yml`, `workflow_dispatch`) runs the documented end-user
+  install commands against that prerelease asset — `cargo binstall` (compile
+  fallback disabled, so a missing/misnamed asset fails hard) and
+  `brew install` (the formula repointed at the prerelease tarball, installed
+  from a throwaway local tap). A green run is the promotion gate. See
+  `docs/release-process.md` § Staging validation.
+
 ### Changed
 
 - **Unified the first-party Rust crate versions.** `jacquard`,
