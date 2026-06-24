@@ -1,6 +1,6 @@
 [package]
 name = "timing-ir"
-version = "0.2.1"
+version = "0.2.2-rc.1"
 edition = "2021"
 description = "Jacquard timing intermediate representation (IR) for SDF-equivalent annotations. See docs/adr/0002-timing-ir.md."
 license = "Apache-2.0"
