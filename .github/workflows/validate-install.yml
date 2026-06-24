@@ -64,6 +64,15 @@ jobs:
             --strategies crate-meta-data \
             --disable-strategies compile,quick-install
 
+      # The prebuilt binary links Homebrew LLVM's libc++/libomp. The brew
+      # channel pulls LLVM via `depends_on "llvm"`, but binstall/raw-tarball
+      # users must install it themselves (docs/installation.md) — so the
+      # binstall gate installs it too, matching the documented prerequisite.
+      - name: Install LLVM runtime (binstall prerequisite)
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install llvm
+
       - name: Verify the installed binary
         run: |
           set -euo pipefail

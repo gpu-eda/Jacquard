@@ -76,9 +76,13 @@ jobs:
             echo "version=${ver}-dryrun" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build jacquard (Metal) + opensta-to-ir
+      - name: Build jacquard + timing_analysis (Metal) + opensta-to-ir
         run: |
-          cargo build --release --features metal --bin jacquard
+          # timing_analysis is the jacquard package's *other* bin; cargo
+          # binstall requires every non-optional package bin to be in the
+          # archive, so it must ship alongside jacquard (it builds without the
+          # metal feature, but one invocation keeps the build cache shared).
+          cargo build --release --features metal --bin jacquard --bin timing_analysis
           cargo build --release --manifest-path crates/opensta-to-ir/Cargo.toml --bin opensta-to-ir
 
       - name: Package
@@ -88,12 +92,13 @@ jobs:
           PKG="jacquard-${{ steps.meta.outputs.version }}-macos-arm64-metal"
           mkdir -p "stage/${PKG}"
           cp target/release/jacquard "stage/${PKG}/"
+          cp target/release/timing_analysis "stage/${PKG}/"
           cp crates/opensta-to-ir/target/release/opensta-to-ir "stage/${PKG}/"
           cp LICENSE README.md CHANGELOG.md "stage/${PKG}/"
           # Binaries at the archive root → matches the cargo-binstall
           # `bin-dir = "{ bin }{ binary-ext }"` in Cargo.toml.
           tar -czf "${PKG}.tar.gz" -C "stage/${PKG}" \
-            jacquard opensta-to-ir LICENSE README.md CHANGELOG.md
+            jacquard timing_analysis opensta-to-ir LICENSE README.md CHANGELOG.md
           shasum -a 256 "${PKG}.tar.gz" | tee "${PKG}.tar.gz.sha256"
           echo "tarball=${PKG}.tar.gz" >> "$GITHUB_OUTPUT"
           echo "sha=${PKG}.tar.gz.sha256" >> "$GITHUB_OUTPUT"

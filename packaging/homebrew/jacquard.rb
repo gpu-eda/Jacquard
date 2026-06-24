@@ -20,10 +20,17 @@ class Jacquard < Formula
   license "Apache-2.0"
 
   depends_on arch: :arm64
+  # The prebuilt binary links Homebrew LLVM's libc++ and libomp (the build
+  # uses LLVM clang for OpenMP, via the mt-kahypar partitioner). Declaring the
+  # dependency makes `brew install` pull LLVM so the binary loads on a clean
+  # machine. (binstall / raw-tarball users must `brew install llvm` themselves
+  # — see docs/installation.md.)
+  depends_on "llvm"
   depends_on :macos
 
   def install
     bin.install "jacquard"
+    bin.install "timing_analysis"
     bin.install "opensta-to-ir"
   end
 
