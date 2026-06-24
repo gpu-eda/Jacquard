@@ -135,22 +135,44 @@ jobs:
 
       - name: Publish release + attach binary
         if: steps.meta.outputs.is_release == 'true'
+        id: gh_release
         # softprops uses GITHUB_TOKEN via the API — no `gh` CLI, which isn't on
         # PATH on the self-hosted macos-runner-1 (the old `gh release create`
         # died with "gh: command not found", so v0.1.0/v0.2.0 shipped with no
         # binary). Creates the release if missing, or attaches the asset to an
         # existing one (e.g. re-running a tag whose release was cut by hand).
+        #
+        # This repo has immutable releases enabled, so assets can't be added
+        # after a release is published. A final release uploads-then-publishes
+        # atomically (draft:false works). A prerelease, though, is published on
+        # creation and the asset upload is then rejected — so prereleases are
+        # created as a *draft* (mutable) here and published in the next step.
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          draft: false
+          draft: ${{ steps.meta.outputs.is_prerelease == 'true' }}
           prerelease: ${{ steps.meta.outputs.is_prerelease == 'true' }}
           body_path: notes.md
           generate_release_notes: ${{ steps.notes.outputs.AUTO == 'true' }}
           files: |
             ${{ steps.package.outputs.tarball }}
             ${{ steps.package.outputs.sha }}
+
+      - name: Publish the prerelease draft (immutable-releases repo)
+        # The prerelease was created as a draft so the binary could attach;
+        # flip it to published now (assets are already in place). Final
+        # releases skip this — they publish directly above.
+        if: steps.meta.outputs.is_release == 'true' && steps.meta.outputs.is_prerelease == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -X PATCH \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/${{ steps.gh_release.outputs.id }}" \
+            -d '{"draft": false}' -o /dev/null
 
       - name: Upload dry-run artifact
         if: steps.meta.outputs.is_release == 'false'
