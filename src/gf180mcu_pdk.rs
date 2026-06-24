@@ -27,7 +27,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::pdk_decomp::{
+use cell_decomp::{
     build_chain_gate, build_udp_aig, build_xor_chain, finalize_decomp_result, parse_udp,
     BehavioralGate, BehavioralModel, DecompResult, UdpModel, WireVal,
 };
@@ -97,7 +97,7 @@ pub fn load_pdk_models(cells_root: &Path, cell_types: &[String]) -> Gf180PdkMode
         let src = std::fs::read_to_string(&entry).unwrap_or_else(|e| {
             panic!("read {}: {e}", entry.display());
         });
-        let model = crate::pdk_decomp::parse_functional_model(&src).unwrap_or_else(|| {
+        let model = cell_decomp::parse_functional_model(&src).unwrap_or_else(|| {
             panic!("parse {}: returned None", entry.display())
         });
 
@@ -574,7 +574,7 @@ mod tests {
     /// downstream) or needs explicit prefix configuration.
     #[test]
     fn sky130_parser_reads_gf180mcu_dff_with_udp() {
-        use crate::sky130_pdk::parse_functional_model;
+        use cell_decomp::parse_functional_model;
         let path = "vendor/gf180mcu_fd_sc_mcu7t5v0/cells/dffq/\
                     gf180mcu_fd_sc_mcu7t5v0__dffq_1.functional.v";
         let src = std::fs::read_to_string(path)
@@ -652,7 +652,7 @@ mod tests {
 
     #[test]
     fn sky130_parser_reads_gf180mcu_simple_gate() {
-        use crate::sky130_pdk::parse_functional_model;
+        use cell_decomp::parse_functional_model;
         let path = "vendor/gf180mcu_fd_sc_mcu7t5v0/cells/nand2/\
                     gf180mcu_fd_sc_mcu7t5v0__nand2_1.functional.v";
         let src = std::fs::read_to_string(path)
@@ -693,7 +693,7 @@ mod tests {
     //   5. Decompose to AIG via decompose_combinational.
     //   6. Walk the AIG and compare outputs.
     //
-    // The AIG walker matches the encoding in sky130_pdk::finalize_decomp_result.
+    // The AIG walker matches the encoding in cell_decomp::finalize_decomp_result.
     // -------------------------------------------------------------------------
 
     fn load_cell_model(cell_type: &str) -> BehavioralModel {
@@ -701,7 +701,7 @@ mod tests {
         let path = pick_smallest_drive_functional(&dir)
             .unwrap_or_else(|| panic!("no functional.v under {}", dir.display()));
         let src = std::fs::read_to_string(&path).unwrap();
-        crate::pdk_decomp::parse_functional_model(&src)
+        cell_decomp::parse_functional_model(&src)
             .unwrap_or_else(|| panic!("parse {}", path.display()))
     }
 
@@ -771,7 +771,7 @@ mod tests {
                 bool_inputs.insert(name.clone(), bit);
                 pin_values.insert(pin_index_for[name], bit);
             }
-            let expected = crate::sky130_pdk::eval_behavioral_model(
+            let expected = cell_decomp::eval_behavioral_model(
                 &model,
                 &bool_inputs,
                 output_pin,

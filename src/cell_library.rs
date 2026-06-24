@@ -43,7 +43,7 @@ use sverilogparse::{SVerilog, SVerilogRange, WireDefType};
 #[serde(rename_all = "snake_case")]
 pub enum CellKind {
     /// Standard combinational logic cell. Default-routed through
-    /// `pdk_decomp::decompose_with_pdk`; manifests will rarely need
+    /// the per-PDK `decompose_with_pdk`; manifests will rarely need
     /// to declare this explicitly.
     Std,
     /// Edge-triggered flip-flop.

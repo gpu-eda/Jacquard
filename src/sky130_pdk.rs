@@ -14,6 +14,15 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+// PDK-neutral behavioural parsing + AIG-decomposition primitives now live
+// in the standalone `cell_decomp` crate. Bring in everything the staying
+// `decompose_*` / `load_*` code (and the test suite) references so their
+// existing call shape is preserved.
+use cell_decomp::{
+    build_chain_gate, build_udp_aig, build_xor_chain, finalize_decomp_result,
+    parse_functional_model, parse_udp, BehavioralModel, UdpModel, WireVal,
+};
+
 // ============================================================================
 // Core types (formerly in sky130_decomp.rs)
 // ============================================================================
@@ -129,9 +138,10 @@ impl CellInputs {
     }
 }
 
-// `DecompResult` is now defined in `crate::pdk_decomp`; re-export it here
-// so existing call sites continue to work unchanged.
-pub use crate::pdk_decomp::DecompResult;
+// `DecompResult` is now defined in the `cell_decomp` crate; re-export it
+// here so existing `crate::sky130_pdk::DecompResult` call sites continue to
+// work unchanged.
+pub use cell_decomp::DecompResult;
 
 /// Check if a cell type is a sequential element (DFF or latch).
 ///
@@ -202,52 +212,9 @@ pub fn is_multi_output_cell(cell_type: &str) -> bool {
 // Data structures
 // ============================================================================
 
-/// A single gate instantiation from a functional Verilog model.
-#[derive(Debug, Clone)]
-pub struct BehavioralGate {
-    /// Gate type: "and", "or", "nand", "nor", "not", "xor", "xnor", "buf",
-    /// or a UDP name like "sky130_fd_sc_hd__udp_mux_2to1_N"
-    pub gate_type: String,
-    /// Output wire name
-    pub output: String,
-    /// Input wire names (in port order)
-    pub inputs: Vec<String>,
-}
-
-/// A parsed functional Verilog model for a cell.
-#[derive(Debug, Clone)]
-pub struct BehavioralModel {
-    /// Module name (e.g. "sky130_fd_sc_hd__o21ai")
-    pub module_name: String,
-    /// Module input port names (e.g. ["A1", "A2", "B1"])
-    pub inputs: Vec<String>,
-    /// Module output port names (e.g. ["Y"])
-    pub outputs: Vec<String>,
-    /// Gate instantiations in order
-    pub gates: Vec<BehavioralGate>,
-}
-
-/// A single row in a UDP truth table.
-#[derive(Debug, Clone)]
-pub struct UdpRow {
-    /// Input values: Some(true)=1, Some(false)=0, None=don't-care (?)
-    pub inputs: Vec<Option<bool>>,
-    /// Output value
-    pub output: bool,
-}
-
-/// A parsed Verilog UDP (User Defined Primitive).
-#[derive(Debug, Clone)]
-pub struct UdpModel {
-    /// Primitive name
-    pub name: String,
-    /// Output port name
-    pub output: String,
-    /// Input port names in order
-    pub inputs: Vec<String>,
-    /// Truth table rows
-    pub rows: Vec<UdpRow>,
-}
+// `BehavioralGate`, `BehavioralModel`, `UdpRow`, and `UdpModel` are now
+// defined in the `cell_decomp` crate; they are imported above so existing
+// call sites continue to work unchanged.
 
 /// Collection of loaded PDK models for a cell library.
 pub struct PdkModels {
@@ -258,395 +225,15 @@ pub struct PdkModels {
 }
 
 // ============================================================================
-// Parser: Functional Verilog models
-// ============================================================================
-
-/// Parse a functional Verilog model file (*.functional.v).
-///
-/// Handles:
-/// - module declaration with port names and directions
-/// - Gate instantiations: `gate_type name (output, input1, input2, ...);`
-/// - Skips: comments, `supply`, `wire`, `timescale`, `celldefine`, etc.
-pub fn parse_functional_model(verilog_src: &str) -> Option<BehavioralModel> {
-    let mut module_name = String::new();
-    let mut port_names: Vec<String> = Vec::new();
-    let mut input_ports: Vec<String> = Vec::new();
-    let mut output_ports: Vec<String> = Vec::new();
-    let mut gates: Vec<BehavioralGate> = Vec::new();
-
-    // Simple state machine
-    enum State {
-        LookingForModule,
-        InModulePorts,
-        InModuleBody,
-    }
-    let mut state = State::LookingForModule;
-
-    // Accumulate multi-line tokens
-    let mut accum = String::new();
-
-    for line in verilog_src.lines() {
-        let trimmed = line.trim();
-
-        // Skip comments and preprocessor directives
-        if trimmed.starts_with("//")
-            || trimmed.starts_with("/*")
-            || trimmed.starts_with("*/")
-            || trimmed.starts_with('*')
-            || trimmed.starts_with('`')
-            || trimmed.is_empty()
-        {
-            continue;
-        }
-
-        match state {
-            State::LookingForModule => {
-                if trimmed.starts_with("module ") {
-                    // Parse: module sky130_fd_sc_hd__o21ai (
-                    accum.clear();
-                    accum.push_str(trimmed);
-
-                    if accum.contains(");") {
-                        parse_module_header(&accum, &mut module_name, &mut port_names);
-                        state = State::InModuleBody;
-                    } else {
-                        state = State::InModulePorts;
-                    }
-                }
-            }
-            State::InModulePorts => {
-                accum.push(' ');
-                accum.push_str(trimmed);
-                if accum.contains(");") {
-                    parse_module_header(&accum, &mut module_name, &mut port_names);
-                    state = State::InModuleBody;
-                }
-            }
-            State::InModuleBody => {
-                if trimmed == "endmodule" {
-                    break;
-                }
-
-                // Parse port direction declarations
-                if trimmed.starts_with("output ") {
-                    let names = parse_port_declaration(trimmed, "output");
-                    output_ports.extend(names);
-                    continue;
-                }
-                if trimmed.starts_with("input ") {
-                    let names = parse_port_declaration(trimmed, "input");
-                    input_ports.extend(names);
-                    continue;
-                }
-
-                // Skip non-gate lines
-                if trimmed.starts_with("wire ")
-                    || trimmed.starts_with("supply")
-                    || trimmed.starts_with("pullup")
-                    || trimmed.starts_with("pulldown")
-                    || trimmed.starts_with("reg ")
-                {
-                    continue;
-                }
-
-                // Try to parse gate instantiation
-                // Could be multi-line, accumulate until we see ';'
-                if !trimmed.starts_with("//") && !trimmed.is_empty() {
-                    accum.clear();
-                    accum.push_str(trimmed);
-                    if !accum.contains(';') {
-                        // Multi-line gate instantiation - keep accumulating
-                        // (unusual in functional models but handle it)
-                        continue;
-                    }
-                    if let Some(gate) = parse_gate_instantiation(&accum) {
-                        gates.push(gate);
-                    }
-                }
-            }
-        }
-    }
-
-    if module_name.is_empty() {
-        return None;
-    }
-
-    Some(BehavioralModel {
-        module_name,
-        inputs: input_ports,
-        outputs: output_ports,
-        gates,
-    })
-}
-
-/// Parse module header: `module name ( port1, port2, ... );`
-fn parse_module_header(header: &str, name: &mut String, ports: &mut Vec<String>) {
-    // Find module name
-    let after_module = header.strip_prefix("module ").unwrap_or(header);
-    if let Some(paren_pos) = after_module.find('(') {
-        *name = after_module[..paren_pos].trim().to_string();
-
-        // Extract ports between ( and )
-        let rest = &after_module[paren_pos + 1..];
-        if let Some(close) = rest.find(')') {
-            let port_str = &rest[..close];
-            *ports = port_str
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-        }
-    }
-}
-
-/// Parse port declarations like `output Y ;` or `input A1;`
-fn parse_port_declaration(line: &str, keyword: &str) -> Vec<String> {
-    let after_kw = line
-        .strip_prefix(keyword)
-        .unwrap_or(line)
-        .trim()
-        .trim_end_matches(';')
-        .trim();
-    after_kw
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
-/// Parse a gate instantiation line like:
-/// `or   or0   (or0_out    , A2, A1         );`
-/// Returns BehavioralGate or None if not a gate.
-fn parse_gate_instantiation(line: &str) -> Option<BehavioralGate> {
-    let line = line.trim().trim_end_matches(';').trim();
-
-    // Find the parenthesized port list
-    let paren_start = line.find('(')?;
-    let paren_end = line.rfind(')')?;
-
-    // Everything before '(' is: gate_type [#delay] instance_name
-    let prefix = line[..paren_start].trim();
-    let port_list = &line[paren_start + 1..paren_end];
-
-    // Split prefix into tokens
-    let tokens: Vec<&str> = prefix.split_whitespace().collect();
-    if tokens.is_empty() {
-        return None;
-    }
-
-    let gate_type = tokens[0].to_string();
-
-    // Skip delay specifications like `UNIT_DELAY
-    // (used in DFF models - we skip those cells entirely)
-
-    // Parse port list: output is first, then inputs
-    let ports: Vec<String> = port_list
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    if ports.is_empty() {
-        return None;
-    }
-
-    // Skip named port connections (module instantiations like .A(wire))
-    // These are hierarchical cell references, not gate primitives
-    if ports[0].starts_with('.') {
-        return None;
-    }
-
-    let output = ports[0].clone();
-    let inputs = ports[1..].to_vec();
-
-    Some(BehavioralGate {
-        gate_type,
-        output,
-        inputs,
-    })
-}
-
-// ============================================================================
-// Parser: UDP truth tables
-// ============================================================================
-
-/// Parse a Verilog UDP primitive definition.
-pub fn parse_udp(verilog_src: &str) -> Option<UdpModel> {
-    let mut name = String::new();
-    let mut output_port = String::new();
-    let mut input_ports: Vec<String> = Vec::new();
-    let mut rows: Vec<UdpRow> = Vec::new();
-
-    enum State {
-        LookingForPrimitive,
-        InPrimitivePorts,
-        InPrimitiveBody,
-        InTable,
-    }
-    let mut state = State::LookingForPrimitive;
-    let mut accum = String::new();
-
-    for line in verilog_src.lines() {
-        let trimmed = line.trim();
-
-        if trimmed.starts_with("//")
-            || trimmed.starts_with("/*")
-            || trimmed.starts_with("*/")
-            || trimmed.starts_with('*')
-            || trimmed.starts_with('`')
-            || trimmed.is_empty()
-        {
-            continue;
-        }
-
-        match state {
-            State::LookingForPrimitive => {
-                if trimmed.starts_with("primitive ") {
-                    accum.clear();
-                    accum.push_str(trimmed);
-                    if accum.contains(");") {
-                        parse_primitive_header(&accum, &mut name);
-                        state = State::InPrimitiveBody;
-                    } else {
-                        state = State::InPrimitivePorts;
-                    }
-                }
-            }
-            State::InPrimitivePorts => {
-                accum.push(' ');
-                accum.push_str(trimmed);
-                if accum.contains(");") {
-                    parse_primitive_header(&accum, &mut name);
-                    state = State::InPrimitiveBody;
-                }
-            }
-            State::InPrimitiveBody => {
-                if trimmed == "endprimitive" {
-                    break;
-                }
-                if trimmed.starts_with("output ") {
-                    output_port = trimmed
-                        .strip_prefix("output ")
-                        .unwrap()
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim()
-                        .to_string();
-                } else if trimmed.starts_with("input ") {
-                    let ports_str = trimmed
-                        .strip_prefix("input ")
-                        .unwrap()
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim();
-                    // Accumulate input ports (may be on separate lines)
-                    for port in ports_str.split(',') {
-                        let p = port.trim().to_string();
-                        if !p.is_empty() {
-                            input_ports.push(p);
-                        }
-                    }
-                } else if trimmed == "table" {
-                    state = State::InTable;
-                }
-            }
-            State::InTable => {
-                if trimmed == "endtable" {
-                    state = State::InPrimitiveBody;
-                    continue;
-                }
-
-                // Parse table row like: `0   ?   0  :  1   ;`
-                let row_str = trimmed.trim_end_matches(';').trim();
-                // Remove comment prefix (//  A0  A1  S  :  Y)
-                if row_str.starts_with("//") {
-                    continue;
-                }
-
-                if let Some(colon_pos) = row_str.find(':') {
-                    let input_str = row_str[..colon_pos].trim();
-                    let output_str = row_str[colon_pos + 1..].trim();
-
-                    let input_vals: Vec<Option<bool>> = input_str
-                        .split_whitespace()
-                        .map(|s| match s {
-                            "0" => Some(false),
-                            "1" => Some(true),
-                            "?" | "x" | "X" => None,
-                            _ => None,
-                        })
-                        .collect();
-
-                    let output_val = match output_str {
-                        "1" => true,
-                        "0" => false,
-                        _ => continue, // skip 'x' outputs
-                    };
-
-                    if input_vals.len() == input_ports.len() {
-                        rows.push(UdpRow {
-                            inputs: input_vals,
-                            output: output_val,
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    if name.is_empty() {
-        return None;
-    }
-
-    Some(UdpModel {
-        name,
-        output: output_port,
-        inputs: input_ports,
-        rows,
-    })
-}
-
-fn parse_primitive_header(header: &str, name: &mut String) {
-    let after_prim = header.strip_prefix("primitive ").unwrap_or(header);
-    if let Some(paren_pos) = after_prim.find('(') {
-        *name = after_prim[..paren_pos].trim().to_string();
-    }
-}
-
-// ============================================================================
 // AIG builder from behavioral models
 // ============================================================================
 
-/// Evaluate a UDP truth table for specific input values.
-/// Returns the output value. Panics if no matching row found.
-fn eval_udp_for_inputs(udp: &UdpModel, input_vals: &[bool]) -> bool {
-    assert_eq!(input_vals.len(), udp.inputs.len());
-
-    for row in &udp.rows {
-        let matches = row
-            .inputs
-            .iter()
-            .zip(input_vals.iter())
-            .all(|(pattern, &actual)| match pattern {
-                None => true,            // don't-care matches anything
-                Some(v) => *v == actual, // must match exactly
-            });
-        if matches {
-            return row.output;
-        }
-    }
-
-    panic!(
-        "UDP '{}': no matching row for inputs {:?}",
-        udp.name, input_vals
-    );
-}
-
-// `WireVal` is now defined in `crate::pdk_decomp`; bring it in here so
-// the local `decompose_*` builders keep their existing call shape.
-use crate::pdk_decomp::{
-    build_chain_gate, build_udp_aig, build_xor_chain, finalize_decomp_result, WireVal,
-};
+// The functional-model and UDP parsers (`parse_functional_model`,
+// `parse_udp`, and their helpers), the `eval_udp_for_inputs` truth-table
+// evaluator, and the AIG-builder primitives (`WireVal`, `build_chain_gate`,
+// `build_xor_chain`, `build_udp_aig`, `finalize_decomp_result`) all now
+// live in the `cell_decomp` crate; they are imported at the top of this
+// module so the local `decompose_*` builders keep their existing call shape.
 
 /// Convert a parsed behavioral model to an AIG decomposition for a specific output pin.
 ///
@@ -768,7 +355,7 @@ pub fn decompose_from_behavioral(
 
 // `build_chain_gate`, `GATE_MARKER`, `build_xor_chain`, `build_udp_aig`
 // (and their internal helpers `is_gate_ref`, `gate_ref_index`,
-// `build_xor_2`) now live in `crate::pdk_decomp`.
+// `build_xor_2`) now live in the `cell_decomp` crate.
 
 /// Map a CellInputs pin name to its aigpin_iv value.
 fn get_cell_input_by_name(inputs: &CellInputs, name: &str) -> usize {
@@ -807,7 +394,7 @@ fn get_cell_input_by_name(inputs: &CellInputs, name: &str) -> usize {
 }
 
 // `finalize_decomp_result` and the internal `convert_ref_to_standard`
-// helper now live in `crate::pdk_decomp`.
+// helper now live in the `cell_decomp` crate.
 
 // ============================================================================
 // Model loading
@@ -1051,71 +638,9 @@ pub fn decompose_with_pdk(
     finalize_decomp_result(and_gates, output_val)
 }
 
-// ============================================================================
-// Gate-level evaluator (for testing)
-// ============================================================================
-
-/// Directly evaluate a behavioral model's gate network for given input values.
-/// This doesn't go through AIG - it directly interprets the Verilog gates.
-/// Used as a reference oracle in tests.
-pub fn eval_behavioral_model(
-    model: &BehavioralModel,
-    input_values: &HashMap<String, bool>,
-    output_pin: &str,
-    udps: &HashMap<String, UdpModel>,
-) -> bool {
-    let mut wires: HashMap<String, bool> = HashMap::new();
-
-    // Set input values
-    for (name, &val) in input_values {
-        wires.insert(name.clone(), val);
-    }
-
-    // Evaluate gates in order
-    for gate in &model.gates {
-        let gate_type = gate.gate_type.as_str();
-
-        if gate_type == "buf" {
-            let v = wires[&gate.inputs[0]];
-            wires.insert(gate.output.clone(), v);
-            continue;
-        }
-
-        if gate_type.starts_with("sky130_fd_sc_hd__udp_") {
-            let udp = &udps[gate_type];
-            let input_vals: Vec<bool> = gate.inputs.iter().map(|name| wires[name]).collect();
-            let result = eval_udp_for_inputs(udp, &input_vals);
-            wires.insert(gate.output.clone(), result);
-            continue;
-        }
-
-        let input_vals: Vec<bool> =
-            gate.inputs.iter().map(|name| {
-                *wires.get(name).unwrap_or_else(|| {
-                    panic!(
-                        "Wire '{}' not found in model '{}' at gate '{}' (type '{}'). Available wires: {:?}",
-                        name, model.module_name, gate.output, gate_type,
-                        wires.keys().collect::<Vec<_>>()
-                    )
-                })
-            }).collect();
-
-        let result = match gate_type {
-            "not" => !input_vals[0],
-            "and" => input_vals.iter().all(|&v| v),
-            "nand" => !input_vals.iter().all(|&v| v),
-            "or" => input_vals.iter().any(|&v| v),
-            "nor" => !input_vals.iter().any(|&v| v),
-            "xor" => input_vals.iter().fold(false, |acc, &v| acc ^ v),
-            "xnor" => !input_vals.iter().fold(false, |acc, &v| acc ^ v),
-            _ => panic!("Unknown gate type: {}", gate_type),
-        };
-
-        wires.insert(gate.output.clone(), result);
-    }
-
-    wires[output_pin]
-}
+// `eval_behavioral_model` (the gate-level reference oracle used in tests)
+// now lives in the `cell_decomp` crate; it is imported inside the
+// `#[cfg(test)]` block below so the test suite keeps its existing call shape.
 
 // ============================================================================
 // Tests
@@ -1124,6 +649,9 @@ pub fn eval_behavioral_model(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Reference-oracle evaluators used only by the test suite; they live in
+    // the `cell_decomp` crate alongside the parsers they exercise.
+    use cell_decomp::{eval_behavioral_model, eval_udp_for_inputs};
 
     #[test]
     fn test_parse_o21ai() {
