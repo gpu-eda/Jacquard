@@ -73,6 +73,35 @@ For maintainers cutting a release:
    section for that version. No artefacts attached unless someone has
    asked for them.
 
+## Staging validation (release candidates)
+
+Optional but recommended before a user-facing release: prove the
+*documented install commands* work against a staging artifact before
+promoting. There is no "test crates registry", so a **GitHub prerelease**
+is the staging tier for the binary channels.
+
+1. **Cut an RC.** `python3 scripts/bump_version.py <X.Y.Z>-rc.<N>`, commit,
+   tag `v<X.Y.Z>-rc.<N>`, push the tag. `release.yml` detects the SemVer
+   pre-release suffix and publishes a GitHub **prerelease** (never shown as
+   "Latest") with the Metal tarball attached.
+
+2. **Validate.** Dispatch the **Validate install (staging)** workflow
+   (`validate-install.yml`) with that tag. It runs the real install
+   commands against the prerelease asset on macOS:
+   - `cargo binstall` (asset-fetch via the `[package.metadata.binstall]`
+     override, compile fallback disabled so a missing asset fails hard);
+   - `brew install` of an RC formula (the source-of-truth formula repointed
+     at the prerelease tarball + its `.sha256`, installed from a throwaway
+     local tap).
+
+3. **Promote.** A green run means the channels work. Bump to the final
+   `<X.Y.Z>` (drop the `-rc.<N>`), commit, tag `v<X.Y.Z>`, push — the same
+   flow as a normal release below.
+
+The `netlist-graph` (PyPI) channel validates separately via its own
+`workflow_dispatch` → TestPyPI path (see `publish-netlist-graph.yml`); it
+versions independently of the Rust crates.
+
 ## What does NOT need to change at release time
 
 - Submodule pins (unless deliberately bumping a vendored dep).

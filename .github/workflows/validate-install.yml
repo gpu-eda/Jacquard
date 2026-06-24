@@ -1,0 +1,122 @@
+name: Validate install (staging)
+
+# Runs the *documented* end-user install commands against an already-published
+# release (or release candidate) and is the promotion gate for the staging
+# flow (ADR 0018, docs/release-process.md § Staging validation).
+#
+# Cut an RC: `bump_version.py X.Y.Z-rc.N`, commit, tag `vX.Y.Z-rc.N` —
+# release.yml publishes a GitHub *prerelease* with the Metal tarball. Then
+# dispatch this workflow with that tag. A green run means the real install
+# commands work against the staging artifact; promote by cutting the final
+# `vX.Y.Z` tag.
+#
+# Scope: this validates the *install channels* (asset naming, the binstall
+# pkg-url override, the Homebrew formula + sha256) — that the published
+# artifact installs and runs. Binary *functionality* (sim/cosim) is already
+# smoke-tested against the relocated tarball at release-build time
+# (release.yml), so this runs on GitHub-hosted macos-latest (Apple Silicon),
+# where `jacquard --version` needs no GPU and validation never contends for
+# the single shared Metal runner. The Python/TestPyPI channel
+# (`netlist-graph`) versions independently and is not gated here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag to validate (e.g. v0.2.2-rc.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-install-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  binstall:
+    name: cargo binstall
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          submodules: false
+
+      # No submodule init: binstall's crate-meta-data strategy only TOML-parses
+      # the manifest header (name / version / [package.metadata.binstall]); it
+      # never resolves the path deps into the vendored fork.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: cargo-bins/cargo-binstall@main
+
+      - name: Install jacquard from the release tarball (no source fallback)
+        # `cargo binstall --git` can't pin a tag (it reads the default branch),
+        # so we pin by checking out the tag and using --manifest-path: it reads
+        # `version` from the tag's Cargo.toml and exercises the
+        # [package.metadata.binstall] pkg-url override. Disabling the compile +
+        # quick-install strategies makes a missing/misnamed asset a hard
+        # failure instead of a silent source build — which is the whole point.
+        run: |
+          cargo binstall jacquard \
+            --manifest-path Cargo.toml \
+            --no-confirm \
+            --strategies crate-meta-data \
+            --disable-strategies compile,quick-install
+
+      - name: Verify the installed binary
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          got="$("${HOME}/.cargo/bin/jacquard" --version)"
+          echo "installed: ${got}"
+          [[ "${got}" == *"${ver}"* ]] || {
+            echo "version mismatch: want ${ver}, got ${got}" >&2; exit 1; }
+        env:
+          TAG: ${{ inputs.tag }}
+
+  brew:
+    name: brew install
+    runs-on: macos-latest
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_FROM_API: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Build an RC formula pointed at the release tarball
+        # Repoint the source-of-truth formula's url/version/sha256 at the
+        # dispatched tag's published tarball + .sha256, so we validate the
+        # formula *mechanism* against the staging asset without touching the
+        # production tap. We rewrite from the asset (not from the formula as
+        # committed at the tag, which may still point at an older release).
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          base="https://github.com/gpu-eda/Jacquard/releases/download/${TAG}"
+          tarball="jacquard-${ver}-macos-arm64-metal.tar.gz"
+          sha="$(curl -fsSL "${base}/${tarball}.sha256" | awk '{print $1}')"
+          test -n "${sha}"
+          sed -e "s|url \".*\"|url \"${base}/${tarball}\"|" \
+              -e "s|version \".*\"|version \"${ver}\"|" \
+              -e "s|sha256 \".*\"|sha256 \"${sha}\"|" \
+              packaging/homebrew/jacquard.rb > /tmp/jacquard-rc.rb
+          echo "--- generated RC formula ---"; cat /tmp/jacquard-rc.rb
+        env:
+          TAG: ${{ inputs.tag }}
+
+      - name: Install from a local tap + verify
+        # Fully-qualified install (`<org>/<tap>/<formula>`) trusts only this
+        # formula — no `brew trust` needed. The local tap is never pushed, so
+        # the production gpu-eda/homebrew-tap is untouched.
+        run: |
+          set -euo pipefail
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          # macos-latest is ephemeral — no prior tap/install state to clean up.
+          brew tap-new gpu-eda/rc-validate
+          cp /tmp/jacquard-rc.rb "$(brew --repository gpu-eda/rc-validate)/Formula/jacquard.rb"
+          brew install --formula gpu-eda/rc-validate/jacquard
+          brew test gpu-eda/rc-validate/jacquard
+          jacquard --version
