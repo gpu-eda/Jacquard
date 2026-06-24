@@ -14,10 +14,9 @@
 class Jacquard < Formula
   desc "GPU-accelerated RTL logic simulator (Metal backend)"
   homepage "https://github.com/gpu-eda/Jacquard"
-  url "https://github.com/gpu-eda/Jacquard/releases/download/v0.1.0/jacquard-0.1.0-macos-arm64-metal.tar.gz"
-  version "0.1.0"
-  # Placeholder — replace with the released tarball's sha256.
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  url "https://github.com/gpu-eda/Jacquard/releases/download/v0.2.1/jacquard-0.2.1-macos-arm64-metal.tar.gz"
+  version "0.2.1"
+  sha256 "230fe1e0569cd463ab2be1e700de8284b0e101dfd8a0a4aeddeb6fba746cfba0"
   license "Apache-2.0"
 
   depends_on arch: :arm64
