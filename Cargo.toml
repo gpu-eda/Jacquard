@@ -24,6 +24,7 @@ pkg-url = "{ repo }/releases/download/v{ version }/jacquard-{ version }-macos-ar
 [dependencies]
 cachedhash = "0.2.0"
 cell-decomp = { path = "crates/cell-decomp" }
+cell-model-ir = { path = "crates/cell-model-ir" }
 clap = { version = "4.5.15", features = ["derive"] }
 clilog = { version = "0.2.5", path = "vendor/eda-infra-rs/clilog" }
 compact_str = "0.7.1"
