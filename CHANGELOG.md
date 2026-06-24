@@ -9,6 +9,18 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+### Changed
+
+- **Unified the first-party Rust crate versions.** `jacquard`,
+  `opensta-to-ir`, and `timing-ir` ship together in one release tarball
+  and now carry a single shared version (the two helper crates move
+  `0.1.0` → `0.2.1` to match `jacquard`; both are `publish = false`, so no
+  external version contract changes). A new `scripts/bump_version.py` is
+  the single source of truth — `bump_version.py <X.Y.Z>` sets all three,
+  and `release.yml` runs `bump_version.py --check <tag>` as a verify-guard
+  that aborts a release if the tag and crate versions disagree.
+  `netlist-graph` continues to version independently.
+
 ## [0.2.1] - 2026-06-23
 
 Distribution fixes — the first release whose `release.yml` produces an

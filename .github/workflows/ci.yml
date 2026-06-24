@@ -800,6 +800,12 @@ jobs:
       - name: Init required submodules
         run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
 
+      # Catch version drift on every PR, not just at release time: the
+      # first-party Rust crates must all carry the same version
+      # (docs/release-process.md, scripts/bump_version.py).
+      - name: Check Rust crate versions agree
+        run: python3 scripts/bump_version.py --check
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:

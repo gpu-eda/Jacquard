@@ -54,8 +54,15 @@ For maintainers cutting a release:
    the link references at the bottom of the file. Leave a fresh empty
    `[Unreleased]` section at the top.
 
-3. **Bump `version` in [`Cargo.toml`](../Cargo.toml)** to match.
-   `cargo build` to update `Cargo.lock`.
+3. **Bump the Rust crate version** to match:
+   `python3 scripts/bump_version.py <X.Y.Z>`. The three first-party
+   Rust crates (`jacquard`, `opensta-to-ir`, `timing-ir`) ship together
+   in one tarball and carry a single shared version, so this script sets
+   all three at once — never edit their `[package].version` by hand.
+   Then `cargo build` to update `Cargo.lock`. (`netlist-graph` versions
+   independently — see its own `netlist-graph-v*` tag flow.) The release
+   workflow re-runs `bump_version.py --check <tag>` as a verify-guard and
+   aborts before publishing if the tag and the crates disagree.
 
 4. **Commit:** `chore: release v<X.Y.Z>` with the standard
    `Co-developed-by` trailer.
