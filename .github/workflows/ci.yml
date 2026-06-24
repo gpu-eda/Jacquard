@@ -97,6 +97,13 @@ jobs:
       - name: Run library tests
         run: cargo test --lib
 
+      # Lightweight sub-crates that carry dev-dependencies are not workspace
+      # members (the repo has no [workspace]), so `cargo test --lib` above does
+      # not reach them. They have no heavy toolchain deps (unlike opensta-to-ir),
+      # so run their tests standalone here rather than in a dedicated job.
+      - name: Run cell-model-ir tests
+        run: cargo test --manifest-path crates/cell-model-ir/Cargo.toml
+
   # Cosim CpuBackend regression on a free Linux runner (no GPU). Builds the
   # no-feature jacquard binary (CpuBackend) and runs the seven cosim fixtures,
   # diffing each output against the committed golden in tests/*/expected/.
