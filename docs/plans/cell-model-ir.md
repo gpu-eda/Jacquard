@@ -25,7 +25,8 @@ cleanup that the first two earn.
 |---|---|---|
 | **C1 — foundation + #130** | Relocate `pdk_decomp` into a shared lib. Define the cell-model-IR JSON schema for **L1 directions + L2 combinational AIG** (D3) — the corner of the schema needed to build the AIG. Write the converter crate (Liberty `function`/`functional.v` → IR). Redirect *one* PDK's (GF180MCU) stdcell logic to consume the IR. | A 9T netlist (e.g. `tests/jtag_minimal`) simulates against its **own** generated 9T descriptor; result byte-identical to the current 7T-substituted run where they truly agree, and the round-trip logic check passes. |
 | **C2 — L3 sequential + L4 timing schema** | Add the D4 sequential pin-role schema (clock+edge, D/next-state, Q, async set/reset+polarity, enable) + classification kinds, **and the D5 L4 timing block** (setup/hold, clock→Q, DFF/SRAM timing). Extend the converter to emit both from Liberty `ff`/`latch` and the timing groups it already parses, with **L4 keyed by corner** (one descriptor, all corners; mirrors the timing IR). Wire the consumer to replace the hardcoded DFF pin-name matches (`src/aig.rs:2080-2260`) and to read L4 from the IR instead of `TimingLibrary::from_file`, selecting the corner via `--corner` (default `default_corner`). | A design with sequential GF180/SKY130 cells simulates **and times** from the IR with **no per-PDK Rust DFF handling and no runtime `.lib` parse**; equivalence vs the current hardcoded + `liberty_parser` path (the oracle). |
-| **C3 — bundle + cut over + selection** | Generate bundled descriptors for all built-in PDKs (AIGPDK/SKY130/GF180), check them in. Selection by descriptor-declared prefix + `--cell-descriptor` (D8). Drop the runtime `vendor/` cell dependency, `pdk_decomp`, and `liberty_parser::TimingLibrary` from core; retire `gf180mcu*.rs`/`sky130*.rs` classifiers, `PdkVariant`, and the `build.rs` pin-table generators. | The existing PDK regression suite (incl. timed runs) passes consuming **only** bundled descriptors; vendored cell submodules are no longer a build/runtime dependency of jacquard core. |
+| **C3 — bundle + cut over + selection** | **Regenerate** bundled descriptors for all built-in PDKs (AIGPDK/SKY130/GF180) **in CI from the pinned vendored submodules and embed at build time — not checked in** (D7); build-time generation replaces the `build.rs` pin-table step. Selection by descriptor-declared prefix + `--cell-descriptor` (D8). Drop the runtime `vendor/` cell dependency, `pdk_decomp`, and `liberty_parser::TimingLibrary` from core; retire `gf180mcu*.rs`/`sky130*.rs` classifiers, `PdkVariant`, and the `build.rs` pin-table generators. | The existing PDK regression suite (incl. timed runs) passes consuming **only** build-time-generated descriptors; vendored cell submodules are no longer a *runtime* dependency of jacquard core, and CI regeneration is deterministic. |
+| **C3a — IHP SG13G2 (new PDK, zero Rust)** | Vendor the [IHP-Open-PDK](https://github.com/IHP-GmbH/IHP-Open-PDK) SG13G2 stdcells as a submodule; add it to the bundle by **generating a descriptor only — no per-PDK Rust** (D7a). Exercises the Liberty-first path cleanly (every SG13G2 cell has `function`; every flop a full `ff` group with reset polarity). | An SG13G2 gate-level design simulates **and times** purely from its generated descriptor, with no `ihp_*.rs` in core — the worked proof that adding a PDK is no longer a Jacquard code change. |
 | **C4 (later)** | A documented proprietary-library workflow: user runs the generator on their own Liberty, gets a descriptor, simulates — no Jacquard build. Honesty fix: the round-trip logic check replaces `build.rs`'s port-only `assert_eq!`. | `docs/adding-a-pdk.md` recipe; a synthetic "private" library exercised end-to-end in a test. |
 
 ## Risks / open questions
@@ -44,8 +45,13 @@ cleanup that the first two earn.
 - **AIG payload size (D2/D3).** If the JSON AIG is unwieldy for a full
   library, switch that payload to the FlatBuffers escape hatch — decide at
   C1 from the real GF180 descriptor size.
-- **Migration ordering (C3).** Per-PDK cutover keeps the suite green
-  throughout; a single switch is riskier. Default to per-PDK.
+- **Migration ordering (C3) — resolved: per-PDK cutover.** Each PDK
+  migrates independently with the IR consumer running alongside the per-PDK
+  Rust, keeping the suite green; a single switch is riskier. IHP (C3a) is
+  added the same way but greenfield (no Rust to retire).
+- **Bundled-descriptor provenance — resolved: CI-regenerated (D7).** Not
+  checked in; embedded at build time from pinned submodules. C3 must wire
+  the generation into the build/CI and prove it deterministic.
 - **Identifier alignment (D1).** The shared cell/pin-name fragment must be
   fixed in C1 before two IRs exist that would diverge.
 

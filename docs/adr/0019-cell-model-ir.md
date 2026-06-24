@@ -1,6 +1,7 @@
 # ADR 0019 — Cell-model IR: a complete per-cell-type library descriptor
 
-**Status:** Proposed.
+**Status:** Proposed — all four design open questions resolved (see below);
+pending maintainer approval to start implementation (plan C1).
 
 ## Context
 
@@ -219,15 +220,40 @@ logic sources, the L4 arc topology, and the corner set; it is the
 structural check `build.rs`'s port-only `assert_eq!` never had — directly
 the silent-substitution class #130 names.
 
-### D7 — Bundled descriptors; vendored PDKs demote to generation inputs
+### D7 — Bundled descriptors regenerated in CI from pinned vendored PDKs
 
-The built-in PDKs (AIGPDK, SKY130, GF180MCU) ship as **generated
-cell-model-IR files checked into core** — the same posture as the timing
-IR's checked-in bindings. They are generated **from the vendored PDKs**,
-which therefore become inputs to *cell-library generation* rather than a
-dependency of jacquard core: core depends on neither the cell submodules
-nor `pdk_decomp` at runtime. (Initial bootstrap still uses the vendored
-PDKs to produce the first built-in descriptors.)
+The built-in PDKs — AIGPDK, SKY130, GF180MCU, and **IHP SG13G2** (added
+through the IR; see D7a) — are bundled as generated cell-model-IR files,
+**regenerated in CI from the pinned vendored PDKs rather than checked in as
+artifacts**. CI runs the converter (D6) over the pinned submodules and
+embeds the resulting descriptors into the binary at build time; the
+descriptors are *not* committed blobs. The vendored PDKs therefore become
+inputs to *cell-library generation*, not a runtime dependency of jacquard
+core — core depends on neither the cell submodules nor `pdk_decomp` at
+runtime, and a released binary is self-contained.
+
+This is the deliberate contrast with the timing-IR bindings (which are
+checked in): cell descriptors are larger, fully derived, and have a
+deterministic generator, so committing them would only add generated blobs
+and drift risk. Build-time generation replaces today's `build.rs`
+pin-table generation, so source builds keep the same vendored-submodule
+requirement they already have. Diff-ability (D2) is preserved as a
+*capability* — CI regenerates deterministically and the generator ships a
+descriptor diff tool (mirroring `timing-ir-diff`) — rather than via git
+history; drift and provenance are enforced by the CI regeneration + the D6
+cross-check, not by a committed reference.
+
+### D7a — IHP SG13G2 as a new PDK added with zero per-PDK Rust
+
+IHP's open SG13G2 PDK ([IHP-Open-PDK](https://github.com/IHP-GmbH/IHP-Open-PDK))
+is added as a **new** built-in target — Jacquard has no existing per-PDK
+Rust for it — so it is the proof of the headline consequence that *adding
+a PDK is no longer a Jacquard code change*: it is onboarded purely by
+vendoring its submodule and generating a descriptor. It is also the
+cleanest **Liberty-first** validation: every SG13G2 combinational cell
+carries a `function` string and every sequential cell a complete `ff`
+group (with reset polarity), exercising the D6 Liberty-first path end to
+end, in contrast to GF180's `functional.v`-primary legacy path.
 
 ### D8 — Selection by declared prefix + explicit override
 
@@ -248,7 +274,9 @@ provenance.
 - **Large core simplification.** `src/gf180mcu.rs`, `src/gf180mcu_pdk.rs`,
   `src/sky130*.rs` special-cases, the `PdkVariant` enum, the `build.rs`
   pin-table generators, and the hardcoded vendor paths all retire in
-  favour of one IR consumer. Adding a PDK stops being a Jacquard PR.
+  favour of one IR consumer. Adding a PDK stops being a Jacquard PR — and
+  **IHP SG13G2 (D7a) is the worked proof**: a new built-in PDK onboarded
+  with zero per-PDK Rust, purely by vendoring + generating a descriptor.
 - **#130 dissolves.** "Which functional models?" becomes "which descriptor
   matches this netlist" — derived or `--cell-descriptor`-overridden — and
   the 7t/9t silent-substitution risk goes away because each library has
@@ -263,10 +291,12 @@ provenance.
   facts only* — not a netlist, not per-design annotation, not a
   placement/physical model. Creep is rejected.
 - **Verification moves to a diff/round-trip discipline** (ADR 0001/0002
-  pattern): a regenerated descriptor must equal the checked-in one, and a
-  logic round-trip — does the IR's AIG reproduce a reference of the cell? —
-  generalises today's `build.rs` port-only `assert_eq!` into an actual
-  logic check, closing the gap #130 names.
+  pattern): since descriptors are CI-regenerated rather than committed
+  (D7), the gate is that **CI regeneration is deterministic** plus a logic
+  round-trip — does the IR's AIG reproduce a reference of the cell? — and
+  the D6 cross-check across sources. Together these generalise today's
+  `build.rs` port-only `assert_eq!` into an actual logic check, closing the
+  gap #130 names.
 - **Sequential fidelity is the risk surface.** Mapping Liberty `ff`
   (`clear` / `preset` / `clear_preset_var`) onto Jacquard's DFF +
   async-reset model is where bugs will hide; it gets dedicated generator
@@ -321,10 +351,17 @@ provenance.
   corner is recorded nowhere Jacquard reads, and SDF delays already encode
   the corner via the orthogonal timing IR. Corner-overlay-file split deferred
   as a size escape hatch.
-- **Bundled-descriptor provenance** — checked-in artifacts (like the
-  timing-ir bindings) vs regenerated in CI from pinned vendored PDKs.
-- **Migration shape** — run the IR consumer alongside the per-PDK Rust
-  during transition (per-PDK cutover) vs a single switch.
+- ~~**Bundled-descriptor provenance**~~ — **Resolved (D7): regenerated in
+  CI** from pinned vendored PDKs and embedded at build time, *not* checked
+  in as artifacts. Build-time generation replaces the `build.rs` pin-table
+  step (source builds keep the existing submodule requirement); diff-ability
+  and drift control move to deterministic CI regeneration + the generator's
+  descriptor diff tool + the D6 cross-check.
+- ~~**Migration shape**~~ — **Resolved: per-PDK cutover.** The IR consumer
+  runs alongside the per-PDK Rust and each PDK is migrated independently,
+  keeping the suite green throughout, rather than a single switch. **IHP
+  SG13G2 (D7a) is added in the same per-PDK fashion** — but greenfield (no
+  existing Rust to retire), so it doubles as the zero-per-PDK-Rust proof.
 
 ## Relationship to other ADRs
 
