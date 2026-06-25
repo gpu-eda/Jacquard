@@ -126,7 +126,7 @@
                         <a href="print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/ChipFlow/Jacquard" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -160,6 +160,24 @@
 <p><strong>See also:</strong> <a href="timing-correctness.html"><code>timing-correctness.md</code></a> — forward-looking validation contract and timing IR requirements (in progress). The document below describes current behaviour.</p>
 </blockquote>
 <p>This document explains GEM's boomerang evaluation architecture and how timing simulation with per-gate delays can be implemented efficiently on GPU.</p>
+<h2 id="current-status-what-ships-today"><a class="header" href="#current-status-what-ships-today">Current status (what ships today)</a></h2>
+<p>Phase 1 closed 2026-05-02; see <a href="plans/post-phase-0-roadmap.html"><code>plans/post-phase-0-roadmap.md</code></a>.</p>
+<div class="table-wrapper"><table><thead><tr><th>Capability</th><th>Status</th></tr></thead><tbody>
+<tr><td>Liberty parsing</td><td>✅</td></tr>
+<tr><td>SDF back-annotation via <code>opensta-to-ir</code></td><td>✅</td></tr>
+<tr><td>Per-DFF clock-arrival folding (Pillar B Stages 1+2)</td><td>✅</td></tr>
+<tr><td>GPU-side setup/hold violation detection</td><td>✅ Metal, CUDA, HIP (<code>sim</code>); the <code>cosim</code> path is a follow-up</td></tr>
+<tr><td><strong>Symbolic violation messages</strong> (<code>top/cpu/regs[7][bit 22] [word=42]</code>)</td><td>✅ Metal, CUDA, HIP (<code>sim</code>)</td></tr>
+<tr><td><strong><code>--timing-report &lt;path.json&gt;</code></strong> structured end-of-run report</td><td>✅ Metal, CUDA, HIP (<code>sim</code>); not yet wired for <code>cosim</code></td></tr>
+<tr><td><strong><code>--timing-summary</code></strong> human-readable text summary</td><td>✅ Metal, CUDA, HIP (<code>sim</code>); not yet wired for <code>cosim</code></td></tr>
+<tr><td>OpenSTA detection + version check</td><td>✅</td></tr>
+<tr><td>Multi-corner timing IR (<code>--timing-corner &lt;name&gt;</code>)</td><td>✅</td></tr>
+<tr><td><code>--sdf-corner</code> (min/typ/max selection from one SDF)</td><td>⚠ One corner at a time</td></tr>
+<tr><td>Per-receiver wire delay (Pillar C Tier 1)</td><td>❌ Phase 2 (blocked on ADR 0007)</td></tr>
+</tbody></table>
+</div>
+<p>See <a href="timing-violations.html"><code>timing-violations.md</code></a> for the full violation-output
+interface and <a href="why-jacquard.html"><code>why-jacquard.md</code></a> for positioning.</p>
 <h2 id="background-the-simulation-challenge"><a class="header" href="#background-the-simulation-challenge">Background: The Simulation Challenge</a></h2>
 <p>GEM simulates And-Inverter Graphs (AIGs) where every node is either:</p>
 <ul>

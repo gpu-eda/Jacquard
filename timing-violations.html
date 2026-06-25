@@ -126,7 +126,7 @@
                         <a href="print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/ChipFlow/Jacquard" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -316,9 +316,9 @@ closest-to-violation tracking when the design never tripped a
 violation) needs GPU-side near-miss instrumentation and is not in
 v1.0.0; for now, <code>worst_slack</code> is populated only from actual violation
 events.</li>
-<li><code>--timing-report</code> only produces output today on the Metal sim path.
-The CUDA / HIP / cosim paths do not currently route runtime violations
-through <code>process_events</code> — bringing them in is independent plumbing.</li>
+<li><code>--timing-report</code> is wired on all three <code>sim</code> backends (Metal, CUDA,
+HIP). The <code>cosim</code> path does not yet route runtime violations through
+<code>process_events</code> — bringing it in is independent plumbing.</li>
 <li>The <code>violations</code> array is capped at 100,000 records by default
 (~8 MB JSON). Override or disable the cap with
 <code>--timing-report-max-violations &lt;N&gt;</code> (<code>0</code> = unbounded). Setup/hold
