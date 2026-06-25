@@ -9,6 +9,8 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-06-25
+
 ### Fixed
 
 - **Prebuilt macOS install channels worked only with Homebrew LLVM present**
@@ -335,7 +337,8 @@ runners land (ADR 0018).
   CUDA / HIP detect violations on the GPU but don't currently route
   them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/gpu-eda/Jacquard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/gpu-eda/Jacquard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gpu-eda/Jacquard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gpu-eda/Jacquard/releases/tag/v0.1.0
