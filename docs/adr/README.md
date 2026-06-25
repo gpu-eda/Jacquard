@@ -2,8 +2,19 @@
 
 ADRs capture decisions worth understanding later: the context, the
 options considered, and the rationale for the choice. They are
-numbered, append-only, and never silently rewritten — if a decision
-changes, supersede the old ADR with a new one and update the status.
+numbered, append-only, and never silently rewritten. When reality moves
+past an ADR, **record the change in the ADR rather than letting a stale
+claim mislead** — two paths depending on the size of the change:
+
+- **Full reversal** (the decision no longer holds) → supersede the old
+  ADR with a new one and set the old status to **Superseded**.
+- **Refinement** (a claim turned out too blunt, a constraint relaxed,
+  a detail corrected) → add a dated **Amendment** note at the top of the
+  affected section stating the current understanding, and **keep the
+  original decision text in place below it** (relegated, not deleted),
+  so the audit trail stays intact. Mark the status `Accepted (amended
+  <date>)` and note it in the index. [ADR 0006](0006-sdf-preprocessing-model.md)
+  and [ADR 0014](0014-aig-as-simulation-ir.md) are worked examples.
 
 ## Status legend
 
@@ -55,7 +66,7 @@ the code before writing it.
 | [0011](0011-ram-port-mapping-schema.md) | RAM port-mapping schema for declarative cell metadata | Accepted |
 | [0012](0012-cdc-jitter-injection.md) | Reproducible CDC jitter injection for multi-clock cosim | Accepted (partial) |
 | [0013](0013-plural-peripheral-configs.md) | Cosim peripheral model architecture | Accepted |
-| [0014](0014-aig-as-simulation-ir.md) | AIG as simulation intermediate representation | Accepted |
+| [0014](0014-aig-as-simulation-ir.md) | AIG as simulation intermediate representation | Accepted (amended 2026-06-25) |
 | [0015](0015-boomerang-execution-model.md) | Boomerang execution model and GPU resource mapping | Accepted |
 | [0016](0016-selective-x-propagation.md) | Selective X-propagation | Accepted |
 | [0017](0017-cosim-execution-model.md) | Cosim execution model | Accepted |

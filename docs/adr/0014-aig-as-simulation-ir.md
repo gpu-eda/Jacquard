@@ -1,6 +1,6 @@
 # ADR 0014 — AIG as simulation intermediate representation
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-06-25 — see the latch constraint below)
 
 ## Context
 
@@ -165,7 +165,23 @@ opcode dispatch, no conditional branching, maximum SIMT utilisation.
 
 **Constrains:**
 
-- **No latches or async logic.** The AIG assumes clean register
+- **No latches or async logic.**
+
+  > **Amendment (2026-06-25):** "No latches" is too blunt. The
+  > constraint is specifically a *raw `LATCH` cell left in the logic*.
+  > Two structured latch-derived uses **are** supported and not rejected:
+  > **clock gating** via the `CKLNQD` integrated clock-gating cell (an
+  > ICG is internally a latch + AND, identified as a gated clock —
+  > `aig.rs:845`), and **latch-based register files / memory** mapped to
+  > `$__RAMGEM_SYNC_` SRAM cells by the memory-synthesis step
+  > (`aig.rs:830`). Asynchronous *set/reset* on flip-flops is also
+  > supported (it lowers to an AIG overlay, `wire_dff_reset_set_overlay`);
+  > "async reset" was never the restriction. What remains unsupported is
+  > raw level-sensitive latches in the logic and asynchronous *sequential*
+  > (self-timed) feedback. See `docs/simulation-architecture.md`
+  > § "No Latch or Asynchronous Sequential Logic Support".
+
+  *Original decision:* The AIG assumes clean register
   boundaries: DFFs capture on clock edges, combinational logic is
   acyclic between registers.  Level-sensitive latches and
   combinational loops would require iterative evaluation that the
