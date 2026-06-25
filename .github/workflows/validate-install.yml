@@ -57,6 +57,12 @@ jobs:
         # [package.metadata.binstall] pkg-url override. Disabling the compile +
         # quick-install strategies makes a missing/misnamed asset a hard
         # failure instead of a silent source build — which is the whole point.
+        #
+        # GITHUB_TOKEN authenticates binstall's GitHub API calls (release
+        # lookup): unauthenticated is 60 req/hr/IP and 403s under load, which
+        # then times out the fetcher and aborts.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           cargo binstall jacquard \
             --manifest-path Cargo.toml \
