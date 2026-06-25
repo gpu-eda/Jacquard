@@ -198,7 +198,10 @@ impl CombLogic {
     /// the converter's Liberty-vs-`.v` cross-check (ADR 0019 D6). Returns a
     /// map from output pin name to value. Returns `Err` if an input pin named
     /// in [`Self::inputs`] is missing from `input_values`.
-    pub fn eval(&self, input_values: &HashMap<String, bool>) -> Result<HashMap<String, bool>, String> {
+    pub fn eval(
+        &self,
+        input_values: &HashMap<String, bool>,
+    ) -> Result<HashMap<String, bool>, String> {
         // node_vals[i] = value of node i. node 0 is constant 0.
         let mut node_vals = vec![false; self.num_nodes()];
         for (i, pin) in self.inputs.iter().enumerate() {
@@ -251,12 +254,18 @@ pub struct Ref {
 impl Ref {
     /// A non-inverted reference to `node`.
     pub fn node(node: u32) -> Self {
-        Self { node, inverted: false }
+        Self {
+            node,
+            inverted: false,
+        }
     }
 
     /// An inverted reference to `node`.
     pub fn inv(node: u32) -> Self {
-        Self { node, inverted: true }
+        Self {
+            node,
+            inverted: true,
+        }
     }
 
     /// Evaluate this ref against a node-value table.
@@ -279,16 +288,31 @@ mod tests {
         // node 0 = const0, node 1 = A, node 2 = B, node 3 = A & B.
         let logic = CombLogic {
             inputs: vec!["A".into(), "B".into()],
-            and_nodes: vec![AndNode { a: Ref::node(1), b: Ref::node(2) }],
-            outputs: vec![OutputPin { pin: "Y".into(), r: Ref::inv(3) }],
+            and_nodes: vec![AndNode {
+                a: Ref::node(1),
+                b: Ref::node(2),
+            }],
+            outputs: vec![OutputPin {
+                pin: "Y".into(),
+                r: Ref::inv(3),
+            }],
         };
         ir.cells.push(CellModel {
             cell_type: "demo_nand2".into(),
             kind: CellKind::Comb,
             pins: vec![
-                Pin { name: "A".into(), direction: Direction::Input },
-                Pin { name: "B".into(), direction: Direction::Input },
-                Pin { name: "Y".into(), direction: Direction::Output },
+                Pin {
+                    name: "A".into(),
+                    direction: Direction::Input,
+                },
+                Pin {
+                    name: "B".into(),
+                    direction: Direction::Input,
+                },
+                Pin {
+                    name: "Y".into(),
+                    direction: Direction::Output,
+                },
             ],
             logic: Some(logic),
         });

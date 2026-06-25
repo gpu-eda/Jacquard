@@ -239,6 +239,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cell-decomp"
+version = "0.2.3"
+
+[[package]]
+name = "cell-model-ir"
+version = "0.2.3"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -777,6 +790,8 @@ dependencies = [
  "block",
  "cachedhash",
  "cc",
+ "cell-decomp",
+ "cell-model-ir",
  "clap",
  "clilog",
  "compact_str",
@@ -785,6 +800,7 @@ dependencies = [
  "flatbuffers",
  "indexmap 2.14.0",
  "itertools 0.13.0",
+ "liberty-parse",
  "metal",
  "mt-kahypar",
  "netlistdb",
@@ -838,6 +854,10 @@ name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
+
+[[package]]
+name = "liberty-parse"
+version = "0.2.3"
 
 [[package]]
 name = "libm"
