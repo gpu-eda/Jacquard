@@ -392,12 +392,18 @@ jacquard cosim tests/apb_trace/apb_trace_synth.gv \
 </code></pre>
 <p>Then head to <a href="usage.html">Getting Started</a> to run your own designs.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="getting-started-with-jacquard"><a class="header" href="#getting-started-with-jacquard">Getting Started with Jacquard</a></h1>
-<p><strong>Caveats</strong>: Jacquard currently only supports non-interactive testbenches. This means the input to the circuit needs to be a static waveform (e.g., VCD). Registers and clock gates inside the circuit are allowed, but latches and other asynchronous sequential logics are currently unsupported.</p>
+<p><strong>Caveats</strong>: <code>jacquard sim</code> drives the design from a static input waveform (e.g. VCD); for reactive testbenches use <code>jacquard cosim</code>. Storage must be <strong>edge-triggered flip-flops</strong> — <em>latches</em> (level-sensitive storage) are not supported. Asynchronous <strong>set/reset on flip-flops is fine</strong> (async reset is <em>not</em> the restriction); what's excluded is latch-based / level-sensitive sequential logic.</p>
 <p><strong>Dataset</strong>: Some (namely, netlists after AIG transformation in Steps 1-2 below, and reference VCDs) input data is available <a href="https://drive.google.com/drive/folders/1M42vFoVZhG4ZjyD1hqYD0Hrw8F1rwNXd?usp=drive_link">here</a> .</p>
 <h2 id="step-0-download-the-aig-process-kit"><a class="header" href="#step-0-download-the-aig-process-kit">Step 0. Download the AIG Process Kit</a></h2>
 <p>Go to <a href="./aigpdk">aigpdk</a> directory where you can download <code>aigpdk.lib</code>, <code>aigpdk_nomem.lib</code>, <code>aigpdk.v</code>, and <code>memlib_yosys.txt</code>. You will need them later in the flow.</p>
-<p>Before continuing, make sure your design contains only synchronous logic.
-If your design has clock gates implemented in your RTL code, you need to replace them manually with instantiations to the <code>CKLNQD</code> module in <code>aigpdk.v</code>.
+<p>Before continuing, make sure your design's logic storage is edge-triggered
+flip-flops — a raw latch left in the gate-level logic is rejected (async
+set/reset on flip-flops is fine; async reset is not the restriction). Two
+structured latch uses are still supported: <strong>clock gates</strong> map to the <code>CKLNQD</code>
+integrated clock-gating cell — replace any RTL clock gates manually with
+<code>CKLNQD</code> instantiations from <code>aigpdk.v</code> — and <strong>latch-based register files /
+memory</strong> are captured by the memory-synthesis step below (<code>memory_libmap</code> →
+RAM), not left as raw latches.
 Also, you are advised to be familiar with where memory blocks (e.g., caches) are implemented in your design so you can check that the memory blocks are mapped correctly later.</p>
 <h2 id="step-1-memory-synthesis-with-yosys"><a class="header" href="#step-1-memory-synthesis-with-yosys">Step 1. Memory Synthesis with Yosys</a></h2>
 <p>This step makes use of the open-source <a href="https://github.com/YosysHQ/yosys">Yosys</a> synthesizer to recognize and map the memory blocks automatically.</p>
@@ -930,8 +936,13 @@ Display: cell=24, enable_pos=5154 (word=161, bit=2), format='...', args=[...]
 <strong>Status</strong>: Identified through third-party test suite</li>
 </ul>
 <h3 id="3-no-latch-or-asynchronous-sequential-logic-support"><a class="header" href="#3-no-latch-or-asynchronous-sequential-logic-support">3. No Latch or Asynchronous Sequential Logic Support</a></h3>
-<p><strong>Issue</strong>: Jacquard only supports edge-triggered D flip-flops (DFFs) as sequential elements. Latch-based designs (SR latches, transparent latches, master-slave latch pairs) and asynchronous sequential logic are not supported.</p>
-<p><strong>Impact</strong>: Designs using latches will either:</p>
+<p><strong>Issue</strong>: Jacquard only supports edge-triggered D flip-flops (DFFs) as sequential elements. A raw <code>LATCH</code> cell left in the combinational/sequential logic, latch-based designs (SR latches, transparent latches, master-slave latch pairs), and asynchronous <em>sequential</em> logic (self-timed feedback) are not supported. Asynchronous <strong>set/reset on flip-flops</strong> is supported (it lowers to an AIG overlay — <code>wire_dff_reset_set_overlay</code>), so "async reset" is not the restriction.</p>
+<p><strong>Supported via dedicated paths</strong>: two common latch-derived structures are <em>not</em> affected by this limitation —</p>
+<ul>
+<li><strong>Clock gating</strong> is handled by the <code>CKLNQD</code> integrated clock-gating cell (an ICG is internally a latch + AND, identified as a gated clock rather than rejected; <code>aig.rs:845</code>). Replace RTL clock gates with <code>CKLNQD</code> instantiations.</li>
+<li><strong>Latch-based register files / memory</strong> (a common area-saving pattern) are recognised by the memory-synthesis step (Yosys <code>memory_libmap</code>) and mapped to <code>$__RAMGEM_SYNC_</code> SRAM cells that Jacquard simulates (<code>aig.rs:830</code>) — not left as raw latches.</li>
+</ul>
+<p><strong>Impact</strong>: Designs using latches <em>in the logic</em> will either:</p>
 <ul>
 <li>Fail during AIG conversion (unrecognized cell type)</li>
 <li>Be silently treated as combinational logic (incorrect simulation)</li>
@@ -3456,8 +3467,19 @@ If you use one of those skills, expect it to default to YAML format under `thoug
 <div style="break-before: page; page-break-before: always;"></div><h1 id="architecture-decision-records"><a class="header" href="#architecture-decision-records">Architecture Decision Records</a></h1>
 <p>ADRs capture decisions worth understanding later: the context, the
 options considered, and the rationale for the choice. They are
-numbered, append-only, and never silently rewritten — if a decision
-changes, supersede the old ADR with a new one and update the status.</p>
+numbered, append-only, and never silently rewritten. When reality moves
+past an ADR, <strong>record the change in the ADR rather than letting a stale
+claim mislead</strong> — two paths depending on the size of the change:</p>
+<ul>
+<li><strong>Full reversal</strong> (the decision no longer holds) → supersede the old
+ADR with a new one and set the old status to <strong>Superseded</strong>.</li>
+<li><strong>Refinement</strong> (a claim turned out too blunt, a constraint relaxed,
+a detail corrected) → add a dated <strong>Amendment</strong> note at the top of the
+affected section stating the current understanding, and <strong>keep the
+original decision text in place below it</strong> (relegated, not deleted),
+so the audit trail stays intact. Mark the status <code>Accepted (amended &lt;date&gt;)</code> and note it in the index. <a href="adr/0006-sdf-preprocessing-model.html">ADR 0006</a>
+and <a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a> are worked examples.</li>
+</ul>
 <h2 id="status-legend"><a class="header" href="#status-legend">Status legend</a></h2>
 <ul>
 <li><strong>Accepted / Approved</strong> — current, in effect.</li>
@@ -3504,7 +3526,7 @@ the code before writing it.</p>
 <tr><td><a href="adr/0011-ram-port-mapping-schema.html">0011</a></td><td>RAM port-mapping schema for declarative cell metadata</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Accepted (partial)</td></tr>
 <tr><td><a href="adr/0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Accepted</td></tr>
-<tr><td><a href="adr/0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted</td></tr>
+<tr><td><a href="adr/0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted (amended 2026-06-25)</td></tr>
 <tr><td><a href="adr/0015-boomerang-execution-model.html">0015</a></td><td>Boomerang execution model and GPU resource mapping</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0016-selective-x-propagation.html">0016</a></td><td>Selective X-propagation</td><td>Accepted</td></tr>
 <tr><td><a href="adr/0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted</td></tr>
@@ -4900,7 +4922,7 @@ the "Not yet" plural column (TAP daisy-chain suffices — single instance).</p>
 </ul>
 <p>Plan: <a href="adr/../plans/jtag-debug-server.html"><code>../plans/jtag-debug-server.md</code></a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0014--aig-as-simulation-intermediate-representation"><a class="header" href="#adr-0014--aig-as-simulation-intermediate-representation">ADR 0014 — AIG as simulation intermediate representation</a></h1>
-<p><strong>Status:</strong> Accepted</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25 — see the latch constraint below)</p>
 <h2 id="context-13"><a class="header" href="#context-13">Context</a></h2>
 <p>Jacquard simulates gate-level RTL designs on GPUs by converting
 technology-mapped netlists into an executable form.  The choice of
@@ -5041,24 +5063,46 @@ simulation cost than a technology-mapped netlist would.</li>
 </ul>
 <p><strong>Constrains:</strong></p>
 <ul>
-<li><strong>No latches or async logic.</strong> The AIG assumes clean register
+<li>
+<p><strong>No latches or async logic.</strong></p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> "No latches" is too blunt. The
+constraint is specifically a <em>raw <code>LATCH</code> cell left in the logic</em>.
+Two structured latch-derived uses <strong>are</strong> supported and not rejected:
+<strong>clock gating</strong> via the <code>CKLNQD</code> integrated clock-gating cell (an
+ICG is internally a latch + AND, identified as a gated clock —
+<code>aig.rs:845</code>), and <strong>latch-based register files / memory</strong> mapped to
+<code>$__RAMGEM_SYNC_</code> SRAM cells by the memory-synthesis step
+(<code>aig.rs:830</code>). Asynchronous <em>set/reset</em> on flip-flops is also
+supported (it lowers to an AIG overlay, <code>wire_dff_reset_set_overlay</code>);
+"async reset" was never the restriction. What remains unsupported is
+raw level-sensitive latches in the logic and asynchronous <em>sequential</em>
+(self-timed) feedback. See <code>docs/simulation-architecture.md</code>
+§ "No Latch or Asynchronous Sequential Logic Support".</p>
+</blockquote>
+<p><em>Original decision:</em> The AIG assumes clean register
 boundaries: DFFs capture on clock edges, combinational logic is
 acyclic between registers.  Level-sensitive latches and
 combinational loops would require iterative evaluation that the
 current pipeline doesn't support (see <code>docs/simulation-architecture.md</code>
-§ "Known Issues").</li>
-<li><strong>Decomposition quality matters.</strong> A poor decomposition of a
+§ "Known Issues").</p>
+</li>
+<li>
+<p><strong>Decomposition quality matters.</strong> A poor decomposition of a
 complex cell (e.g., a mux-heavy datapath cell) can produce a deep
 AND tree that requires more boomerang stages.  The SKY130 and
 GF180MCU decompositions are hand-tuned for the common cells; exotic
-cells from other PDKs may decompose sub-optimally.</li>
-<li><strong>No gate-delay preservation in the AIG itself.</strong> The AIG is a
+cells from other PDKs may decompose sub-optimally.</p>
+</li>
+<li>
+<p><strong>No gate-delay preservation in the AIG itself.</strong> The AIG is a
 functional (Boolean) representation.  Timing information from
 Liberty/SDF is loaded separately and overlaid onto the AIG's pin
 structure via <code>gate_delays</code> and <code>aigpin_cell_origins</code>.  This means
 the AIG construction can re-order or deduplicate nodes without
 worrying about timing — but it also means the timing model must
-reconstruct the mapping from AIG pins back to physical cells.</li>
+reconstruct the mapping from AIG pins back to physical cells.</p>
+</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0015--boomerang-execution-model-and-gpu-resource-mapping"><a class="header" href="#adr-0015--boomerang-execution-model-and-gpu-resource-mapping">ADR 0015 — Boomerang execution model and GPU resource mapping</a></h1>
 <p><strong>Status:</strong> Accepted</p>

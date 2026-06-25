@@ -156,7 +156,7 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0014--aig-as-simulation-intermediate-representation"><a class="header" href="#adr-0014--aig-as-simulation-intermediate-representation">ADR 0014 — AIG as simulation intermediate representation</a></h1>
-<p><strong>Status:</strong> Accepted</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25 — see the latch constraint below)</p>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Jacquard simulates gate-level RTL designs on GPUs by converting
 technology-mapped netlists into an executable form.  The choice of
@@ -297,24 +297,46 @@ simulation cost than a technology-mapped netlist would.</li>
 </ul>
 <p><strong>Constrains:</strong></p>
 <ul>
-<li><strong>No latches or async logic.</strong> The AIG assumes clean register
+<li>
+<p><strong>No latches or async logic.</strong></p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> "No latches" is too blunt. The
+constraint is specifically a <em>raw <code>LATCH</code> cell left in the logic</em>.
+Two structured latch-derived uses <strong>are</strong> supported and not rejected:
+<strong>clock gating</strong> via the <code>CKLNQD</code> integrated clock-gating cell (an
+ICG is internally a latch + AND, identified as a gated clock —
+<code>aig.rs:845</code>), and <strong>latch-based register files / memory</strong> mapped to
+<code>$__RAMGEM_SYNC_</code> SRAM cells by the memory-synthesis step
+(<code>aig.rs:830</code>). Asynchronous <em>set/reset</em> on flip-flops is also
+supported (it lowers to an AIG overlay, <code>wire_dff_reset_set_overlay</code>);
+"async reset" was never the restriction. What remains unsupported is
+raw level-sensitive latches in the logic and asynchronous <em>sequential</em>
+(self-timed) feedback. See <code>docs/simulation-architecture.md</code>
+§ "No Latch or Asynchronous Sequential Logic Support".</p>
+</blockquote>
+<p><em>Original decision:</em> The AIG assumes clean register
 boundaries: DFFs capture on clock edges, combinational logic is
 acyclic between registers.  Level-sensitive latches and
 combinational loops would require iterative evaluation that the
 current pipeline doesn't support (see <code>docs/simulation-architecture.md</code>
-§ "Known Issues").</li>
-<li><strong>Decomposition quality matters.</strong> A poor decomposition of a
+§ "Known Issues").</p>
+</li>
+<li>
+<p><strong>Decomposition quality matters.</strong> A poor decomposition of a
 complex cell (e.g., a mux-heavy datapath cell) can produce a deep
 AND tree that requires more boomerang stages.  The SKY130 and
 GF180MCU decompositions are hand-tuned for the common cells; exotic
-cells from other PDKs may decompose sub-optimally.</li>
-<li><strong>No gate-delay preservation in the AIG itself.</strong> The AIG is a
+cells from other PDKs may decompose sub-optimally.</p>
+</li>
+<li>
+<p><strong>No gate-delay preservation in the AIG itself.</strong> The AIG is a
 functional (Boolean) representation.  Timing information from
 Liberty/SDF is loaded separately and overlaid onto the AIG's pin
 structure via <code>gate_delays</code> and <code>aigpin_cell_origins</code>.  This means
 the AIG construction can re-order or deduplicate nodes without
 worrying about timing — but it also means the timing model must
-reconstruct the mapping from AIG pins back to physical cells.</li>
+reconstruct the mapping from AIG pins back to physical cells.</p>
+</li>
 </ul>
 
                     </main>

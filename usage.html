@@ -156,12 +156,18 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="getting-started-with-jacquard"><a class="header" href="#getting-started-with-jacquard">Getting Started with Jacquard</a></h1>
-<p><strong>Caveats</strong>: Jacquard currently only supports non-interactive testbenches. This means the input to the circuit needs to be a static waveform (e.g., VCD). Registers and clock gates inside the circuit are allowed, but latches and other asynchronous sequential logics are currently unsupported.</p>
+<p><strong>Caveats</strong>: <code>jacquard sim</code> drives the design from a static input waveform (e.g. VCD); for reactive testbenches use <code>jacquard cosim</code>. Storage must be <strong>edge-triggered flip-flops</strong> — <em>latches</em> (level-sensitive storage) are not supported. Asynchronous <strong>set/reset on flip-flops is fine</strong> (async reset is <em>not</em> the restriction); what's excluded is latch-based / level-sensitive sequential logic.</p>
 <p><strong>Dataset</strong>: Some (namely, netlists after AIG transformation in Steps 1-2 below, and reference VCDs) input data is available <a href="https://drive.google.com/drive/folders/1M42vFoVZhG4ZjyD1hqYD0Hrw8F1rwNXd?usp=drive_link">here</a> .</p>
 <h2 id="step-0-download-the-aig-process-kit"><a class="header" href="#step-0-download-the-aig-process-kit">Step 0. Download the AIG Process Kit</a></h2>
 <p>Go to <a href="./aigpdk">aigpdk</a> directory where you can download <code>aigpdk.lib</code>, <code>aigpdk_nomem.lib</code>, <code>aigpdk.v</code>, and <code>memlib_yosys.txt</code>. You will need them later in the flow.</p>
-<p>Before continuing, make sure your design contains only synchronous logic.
-If your design has clock gates implemented in your RTL code, you need to replace them manually with instantiations to the <code>CKLNQD</code> module in <code>aigpdk.v</code>.
+<p>Before continuing, make sure your design's logic storage is edge-triggered
+flip-flops — a raw latch left in the gate-level logic is rejected (async
+set/reset on flip-flops is fine; async reset is not the restriction). Two
+structured latch uses are still supported: <strong>clock gates</strong> map to the <code>CKLNQD</code>
+integrated clock-gating cell — replace any RTL clock gates manually with
+<code>CKLNQD</code> instantiations from <code>aigpdk.v</code> — and <strong>latch-based register files /
+memory</strong> are captured by the memory-synthesis step below (<code>memory_libmap</code> →
+RAM), not left as raw latches.
 Also, you are advised to be familiar with where memory blocks (e.g., caches) are implemented in your design so you can check that the memory blocks are mapped correctly later.</p>
 <h2 id="step-1-memory-synthesis-with-yosys"><a class="header" href="#step-1-memory-synthesis-with-yosys">Step 1. Memory Synthesis with Yosys</a></h2>
 <p>This step makes use of the open-source <a href="https://github.com/YosysHQ/yosys">Yosys</a> synthesizer to recognize and map the memory blocks automatically.</p>

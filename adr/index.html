@@ -158,8 +158,19 @@
                         <h1 id="architecture-decision-records"><a class="header" href="#architecture-decision-records">Architecture Decision Records</a></h1>
 <p>ADRs capture decisions worth understanding later: the context, the
 options considered, and the rationale for the choice. They are
-numbered, append-only, and never silently rewritten — if a decision
-changes, supersede the old ADR with a new one and update the status.</p>
+numbered, append-only, and never silently rewritten. When reality moves
+past an ADR, <strong>record the change in the ADR rather than letting a stale
+claim mislead</strong> — two paths depending on the size of the change:</p>
+<ul>
+<li><strong>Full reversal</strong> (the decision no longer holds) → supersede the old
+ADR with a new one and set the old status to <strong>Superseded</strong>.</li>
+<li><strong>Refinement</strong> (a claim turned out too blunt, a constraint relaxed,
+a detail corrected) → add a dated <strong>Amendment</strong> note at the top of the
+affected section stating the current understanding, and <strong>keep the
+original decision text in place below it</strong> (relegated, not deleted),
+so the audit trail stays intact. Mark the status <code>Accepted (amended &lt;date&gt;)</code> and note it in the index. <a href="0006-sdf-preprocessing-model.html">ADR 0006</a>
+and <a href="0014-aig-as-simulation-ir.html">ADR 0014</a> are worked examples.</li>
+</ul>
 <h2 id="status-legend"><a class="header" href="#status-legend">Status legend</a></h2>
 <ul>
 <li><strong>Accepted / Approved</strong> — current, in effect.</li>
@@ -206,7 +217,7 @@ the code before writing it.</p>
 <tr><td><a href="0011-ram-port-mapping-schema.html">0011</a></td><td>RAM port-mapping schema for declarative cell metadata</td><td>Accepted</td></tr>
 <tr><td><a href="0012-cdc-jitter-injection.html">0012</a></td><td>Reproducible CDC jitter injection for multi-clock cosim</td><td>Accepted (partial)</td></tr>
 <tr><td><a href="0013-plural-peripheral-configs.html">0013</a></td><td>Cosim peripheral model architecture</td><td>Accepted</td></tr>
-<tr><td><a href="0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted</td></tr>
+<tr><td><a href="0014-aig-as-simulation-ir.html">0014</a></td><td>AIG as simulation intermediate representation</td><td>Accepted (amended 2026-06-25)</td></tr>
 <tr><td><a href="0015-boomerang-execution-model.html">0015</a></td><td>Boomerang execution model and GPU resource mapping</td><td>Accepted</td></tr>
 <tr><td><a href="0016-selective-x-propagation.html">0016</a></td><td>Selective X-propagation</td><td>Accepted</td></tr>
 <tr><td><a href="0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted</td></tr>

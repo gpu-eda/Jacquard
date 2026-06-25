@@ -403,8 +403,13 @@ Display: cell=24, enable_pos=5154 (word=161, bit=2), format='...', args=[...]
 <strong>Status</strong>: Identified through third-party test suite</li>
 </ul>
 <h3 id="3-no-latch-or-asynchronous-sequential-logic-support"><a class="header" href="#3-no-latch-or-asynchronous-sequential-logic-support">3. No Latch or Asynchronous Sequential Logic Support</a></h3>
-<p><strong>Issue</strong>: Jacquard only supports edge-triggered D flip-flops (DFFs) as sequential elements. Latch-based designs (SR latches, transparent latches, master-slave latch pairs) and asynchronous sequential logic are not supported.</p>
-<p><strong>Impact</strong>: Designs using latches will either:</p>
+<p><strong>Issue</strong>: Jacquard only supports edge-triggered D flip-flops (DFFs) as sequential elements. A raw <code>LATCH</code> cell left in the combinational/sequential logic, latch-based designs (SR latches, transparent latches, master-slave latch pairs), and asynchronous <em>sequential</em> logic (self-timed feedback) are not supported. Asynchronous <strong>set/reset on flip-flops</strong> is supported (it lowers to an AIG overlay — <code>wire_dff_reset_set_overlay</code>), so "async reset" is not the restriction.</p>
+<p><strong>Supported via dedicated paths</strong>: two common latch-derived structures are <em>not</em> affected by this limitation —</p>
+<ul>
+<li><strong>Clock gating</strong> is handled by the <code>CKLNQD</code> integrated clock-gating cell (an ICG is internally a latch + AND, identified as a gated clock rather than rejected; <code>aig.rs:845</code>). Replace RTL clock gates with <code>CKLNQD</code> instantiations.</li>
+<li><strong>Latch-based register files / memory</strong> (a common area-saving pattern) are recognised by the memory-synthesis step (Yosys <code>memory_libmap</code>) and mapped to <code>$__RAMGEM_SYNC_</code> SRAM cells that Jacquard simulates (<code>aig.rs:830</code>) — not left as raw latches.</li>
+</ul>
+<p><strong>Impact</strong>: Designs using latches <em>in the logic</em> will either:</p>
 <ul>
 <li>Fail during AIG conversion (unrecognized cell type)</li>
 <li>Be silently treated as combinational logic (incorrect simulation)</li>
