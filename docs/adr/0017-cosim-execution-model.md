@@ -1,6 +1,16 @@
 # ADR 0017 — Cosim execution model
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-06-25).
+
+> **Amendment (2026-06-25):** The original body describes cosim as
+> Metal-only (`run_cosim` in `cosim_metal.rs`, `cmd_cosim` hard-erroring on
+> other backends) and `step_edge` receiving an empty `output_state`. Both
+> are now stale: `CudaBackend` and `HipBackend` implement `CosimBackend`
+> (`src/sim/cosim/cuda.rs`, `hip.rs`; dispatched from `jacquard.rs`), and
+> `step_edge` receives the real output slice. The later in-body amendments
+> (2026-06-07/06-19/06-21) document this architecture; this note flags that
+> the original "Metal-only" wording reflects the state at initial
+> acceptance, not current reality.
 
 ## Context
 

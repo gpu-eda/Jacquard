@@ -10,6 +10,13 @@ built versus deferred. Remaining work is tracked in
 [issue #92](https://github.com/gpu-eda/Jacquard/issues/92) and
 [`../plans/cdc-jitter-completion.md`](../plans/cdc-jitter-completion.md).
 
+> **Amendment (2026-06-25):** The Implementation status table cites
+> `cosim_metal.rs` for the scheduler and jitter draw — that file reference
+> is stale. The `MultiClockScheduler`, per-domain PRNG setup, and jitter
+> draw loop all live in `src/sim/cosim/mod.rs` (the unified multi-backend
+> cosim entrypoint); `src/sim/cosim/metal.rs` holds only the `MetalBackend`
+> struct. The implemented/deferred split itself is still accurate.
+
 ## Context
 
 The multi-clock scheduler (`MultiClockScheduler` in `cosim_metal.rs`)

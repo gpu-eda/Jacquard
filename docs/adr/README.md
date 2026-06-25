@@ -53,24 +53,24 @@ the code before writing it.
 
 | # | Title | Status |
 |---|---|---|
-| [0001](0001-opensta-as-oracle.md) | OpenSTA as the timing correctness oracle and sole STA path | Accepted (scope expanded 2026-05-01) |
-| [0002](0002-timing-ir.md) | Timing intermediate representation | Accepted |
+| [0001](0001-opensta-as-oracle.md) | OpenSTA as the timing correctness oracle and sole STA path | Accepted (amended 2026-06-25; scope expanded 2026-05-01) |
+| [0002](0002-timing-ir.md) | Timing intermediate representation | Accepted (amended 2026-06-25) |
 | [0003](0003-opentimer-primary-sta.md) | OpenTimer as in-process reference STA | Superseded (2026-05-01) — spike failed; OpenSTA subprocess only |
-| [0004](0004-private-pdk-testing.md) | Private PDK testing track | Accepted |
-| [0005](0005-opensta-vendoring-and-corpus.md) | OpenSTA vendoring and test-corpus strategy | Accepted |
+| [0004](0004-private-pdk-testing.md) | Private PDK testing track | Accepted (amended 2026-06-25) |
+| [0005](0005-opensta-vendoring-and-corpus.md) | OpenSTA vendoring and test-corpus strategy | Accepted (amended 2026-06-25) |
 | [0006](0006-sdf-preprocessing-model.md) | SDF preprocessing model and interim-to-release cutover | Accepted (amended 2026-05-02) |
-| [0007](0007-timing-model-fidelity-roadmap.md) | Timing model fidelity roadmap | Proposed |
-| [0008](0008-structured-timing-output.md) | Structured timing output as first-class deliverable | Approved |
-| [0009](0009-opensta-verilog-reader-inputs.md) | OpenSTA Verilog reader inputs | Accepted |
-| [0010](0010-declarative-cell-metadata.md) | Declarative cell metadata | Accepted |
-| [0011](0011-ram-port-mapping-schema.md) | RAM port-mapping schema for declarative cell metadata | Accepted |
-| [0012](0012-cdc-jitter-injection.md) | Reproducible CDC jitter injection for multi-clock cosim | Accepted (partial) |
-| [0013](0013-plural-peripheral-configs.md) | Cosim peripheral model architecture | Accepted |
+| [0007](0007-timing-model-fidelity-roadmap.md) | Timing model fidelity roadmap | Proposed (line refs amended 2026-06-25) |
+| [0008](0008-structured-timing-output.md) | Structured timing output as first-class deliverable | Accepted (amended 2026-06-25) |
+| [0009](0009-opensta-verilog-reader-inputs.md) | OpenSTA Verilog reader inputs | Accepted (amended 2026-06-25) |
+| [0010](0010-declarative-cell-metadata.md) | Declarative cell metadata | Accepted (amended 2026-06-25) |
+| [0011](0011-ram-port-mapping-schema.md) | RAM port-mapping schema for declarative cell metadata | Accepted (amended 2026-06-25) |
+| [0012](0012-cdc-jitter-injection.md) | Reproducible CDC jitter injection for multi-clock cosim | Accepted (partial; amended 2026-06-25) |
+| [0013](0013-plural-peripheral-configs.md) | Cosim peripheral model architecture | Accepted (amended 2026-06-25) |
 | [0014](0014-aig-as-simulation-ir.md) | AIG as simulation intermediate representation | Accepted (amended 2026-06-25) |
 | [0015](0015-boomerang-execution-model.md) | Boomerang execution model and GPU resource mapping | Accepted |
-| [0016](0016-selective-x-propagation.md) | Selective X-propagation | Accepted |
-| [0017](0017-cosim-execution-model.md) | Cosim execution model | Accepted |
-| [0018](0018-distribution-and-installation.md) | Distribution and installation model | Proposed |
+| [0016](0016-selective-x-propagation.md) | Selective X-propagation | Accepted (amended 2026-06-25) |
+| [0017](0017-cosim-execution-model.md) | Cosim execution model | Accepted (amended 2026-06-25) |
+| [0018](0018-distribution-and-installation.md) | Distribution and installation model | Accepted (amended 2026-06-25) — Phase 4 & 7 open |
 
 ## How the ADRs relate
 

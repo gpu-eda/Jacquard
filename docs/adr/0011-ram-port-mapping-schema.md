@@ -1,6 +1,13 @@
 # ADR 0011 — RAM port-mapping schema for declarative cell metadata
 
-**Status:** Accepted.
+**Status:** Accepted (amended 2026-06-25).
+
+> **Amendment (2026-06-25):** The "SRAM preload" consequence is now wired
+> (`TestbenchConfig::sram_init`, `src/sim/cosim/mod.rs`), but the shipped
+> path handles only the **single-SRAM** case (the design must have exactly
+> one SRAM; multi-SRAM designs fail with an explicit error). The
+> virtual-address-overlap matching of segments to multiple SRAM instances
+> described below is not yet built (issue #80). Schema unchanged.
 
 ## Context
 

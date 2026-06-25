@@ -1,7 +1,15 @@
 # ADR 0016 — Selective X-propagation
 
-**Status:** Accepted (2026-05). Extension to cosim proposed 2026-06-03 —
-see [Amendment](#amendment-2026-06-03-cosim-and-io-x-sources).
+**Status:** Accepted (2026-05; amended 2026-06-25). Extension to cosim
+proposed 2026-06-03 — see [Amendment](#amendment-2026-06-03-cosim-and-io-x-sources).
+
+> **Amendment (2026-06-25):** Stage-count correction. The body says
+> "Stages 1–6 are implemented; Stage 7 (dynamic X narrowing) is a future
+> enhancement." Per `docs/selective-x-propagation.md`, **all seven stages
+> are implemented** — Stage 7 is the Criterion benchmarks
+> (`benches/xprop.rs`), not dynamic narrowing. *Dynamic X narrowing*
+> (periodic X-mask scan, partition-kernel hot-swap) is a separate, still
+> unbuilt enhancement.
 
 ## Context
 

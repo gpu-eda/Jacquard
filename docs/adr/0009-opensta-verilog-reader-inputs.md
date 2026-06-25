@@ -1,6 +1,12 @@
 # ADR 0009 — OpenSTA Verilog reader input constraints
 
-**Status:** Accepted.
+**Status:** Accepted (amended 2026-06-25).
+
+> **Amendment (2026-06-25):** The claim that the filter has "integration
+> test coverage in `tests/opensta_integration.rs`" is imprecise — the
+> module-filtering tests are **unit** tests in `src/verilog_filter.rs`
+> (`tests/opensta_integration.rs` covers the OpenSTA end-to-end run, not
+> the filter). Decision unchanged.
 
 ## Context
 

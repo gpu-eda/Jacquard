@@ -1,6 +1,13 @@
 # ADR 0004 — Private PDK testing track
 
-**Status:** Accepted. Plumbing tracked in the phase-0 plan.
+**Status:** Accepted (amended 2026-06-25).
+
+> **Amendment (2026-06-25):** Phase 0 shipped (2026-05-02), so the
+> "plumbing tracked in the phase-0 plan" rider no longer points at anything
+> in flight. What actually landed is the **open-source** GF180MCU path
+> (`GF180MCU_LIBERTY_DIR`); the **commercial / NDA** PDK track described in
+> the Decision body (the `*_PDK_PATH` env-gated, CI-runner-restricted flow)
+> is not yet implemented.
 
 ## Context
 

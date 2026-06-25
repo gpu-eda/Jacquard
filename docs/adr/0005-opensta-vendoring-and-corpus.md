@@ -1,6 +1,15 @@
 # ADR 0005 — OpenSTA vendoring and test-corpus strategy
 
-**Status:** Accepted.
+**Status:** Accepted (amended 2026-06-25).
+
+> **Amendment (2026-06-25):** The corpus contents described below
+> (SKY130 MCU SoC, NVDLA, AIGPDK examples, representative SDFs) are
+> aspirational, not current. As shipped, the primary corpus contains a
+> single entry — `aigpdk_dff_chain` — with the SKY130/MCU/NVDLA entries
+> marked *pending* (blocked on a sky130-Liberty CI strategy), and the
+> stress corpus is empty (`tests/timing_ir/stress/manifest.toml` →
+> `entries = []`, pending the Phase 1 stress runner). The vendoring +
+> corpus-split *architecture* is implemented as described.
 
 ## Context
 

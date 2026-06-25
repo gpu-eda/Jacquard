@@ -1,6 +1,16 @@
 # ADR 0008 — Structured timing output as first-class deliverable
 
-**Status:** Approved.
+**Status:** Accepted (amended 2026-06-25).
+
+> **Amendment (2026-06-25):** Two refinements to claims below.
+> (1) The structured outputs (`--timing-report <json>`, `--timing-summary`,
+> symbolic violation messages) are no longer Metal-only — CUDA and HIP
+> `sim` now route setup/hold violations through `process_events` (commit
+> `24723b5`; `jacquard.rs` sim_cuda/sim_hip). The remaining gap is the
+> `cosim` path, which does not yet emit `--timing-report`. (2) Any
+> reference to a `--worst-slack-n` flag is aspirational — it is not
+> implemented; the report's `worst_slack` arrays use a fixed top-N.
+> Original decision unchanged below.
 
 ## Context
 

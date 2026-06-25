@@ -1,6 +1,38 @@
 # ADR 0018 — Distribution and installation model
 
-**Status:** Proposed.
+**Status:** Accepted (amended 2026-06-25). Phase 4 (CUDA/HIP prebuilt
+binaries) and Phase 7 (eda-infra-rs upstreaming) remain open — see the
+amendment below.
+
+> **Amendment (2026-06-25) — built and shipped.** The distribution layer
+> this ADR proposed is now operational; the original "no release
+> artifacts; install = clone + submodules + cargo build" premise is
+> historical. What's live:
+> - **GitHub Releases** (macOS arm64/Metal): from v0.2.1 (first attached,
+>   working binary) through **v0.2.3**. `release.yml` builds, smoke-tests
+>   the relocated tarball, and publishes (prereleases via a draft, for the
+>   immutable-releases repo).
+> - **`cargo binstall --git`**: `[package.metadata.binstall]` pkg-url
+>   override in `Cargo.toml`.
+> - **Homebrew tap** `gpu-eda/homebrew-tap`: formula at
+>   `packaging/homebrew/jacquard.rb` (v0.2.3); `depends_on "llvm"`.
+> - **Staging install-validation** (`validate-install.yml`): a
+>   `workflow_dispatch` gate running the documented `cargo binstall` +
+>   `brew install` against a published (pre)release. RC tags
+>   (`vX.Y.Z-rc.N`) publish as prereleases and gate promotion.
+> - **`netlist-graph` on PyPI** (`publish-netlist-graph.yml`, OIDC trusted
+>   publishing): `netlist-graph 0.1.0` published; TestPyPI dry-run job too.
+> - **Single shared crate version** via `scripts/bump_version.py` +
+>   verify-guard; **Cargo.lock tracked**; repo URLs corrected to `gpu-eda`.
+> - **Docs**: `docs/installation.md`, `docs/release-process.md`
+>   (incl. the staging-validation gate).
+>
+> **Still open:** Phase 4 (CUDA/HIP prebuilt binaries — gated on
+> self-hosted NVIDIA/AMD release runners; Linux stays source-build),
+> Phase 6 (container image — deferred per the original decision), and
+> Phase 7 (eda-infra-rs upstreaming, the path to a crates.io publish —
+> see `docs/plans/distribution.md § Phase 7`). The original proposal
+> follows unchanged.
 
 **TL;DR.** In the context of shipping Jacquard to users (and to
 docs-dogfooding agents), facing the fact that it is a GPU-compiled Rust

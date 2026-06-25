@@ -1,6 +1,13 @@
 # ADR 0007 — Timing model fidelity roadmap
 
-**Status:** Proposed.
+**Status:** Proposed. (Line references amended 2026-06-25.)
+
+> **Amendment (2026-06-25):** The roadmap is still Proposed/unbuilt, but
+> several `src/` line references below have drifted as the code moved — most
+> notably the wire-delay lumping code, cited as `flatten.rs:1850-1872`, now
+> lives around `flatten.rs:2030-2051` (the old location is unrelated code).
+> Treat the file:line citations as approximate; verify against current
+> `flatten.rs` / `aig.rs` before relying on them.
 
 ## Context
 

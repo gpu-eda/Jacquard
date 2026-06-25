@@ -1,6 +1,14 @@
 # ADR 0001 — OpenSTA as the timing correctness oracle and sole STA path
 
-**Status:** Accepted. Scope expanded 2026-05-01 — see Decision §3 below.
+**Status:** Accepted (amended 2026-06-25). Scope expanded 2026-05-01 — see
+Decision §3 below.
+
+> **Amendment (2026-06-25):** Decision §1's claim that "OpenSTA is never
+> invoked from the `jacquard` runtime binary" is no longer true. `opensta-to-ir`
+> is a direct dependency (`Cargo.toml`) and is the shipping SDF path
+> (`src/sim/setup.rs` `load_sdf_via_opensta_to_ir`); ADR 0006's amendment
+> ratified invoking it as a subprocess at runtime. The original §1 text is
+> retained below as the record of the initial decision.
 
 ## Context
 

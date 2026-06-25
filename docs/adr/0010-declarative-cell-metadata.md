@@ -1,6 +1,11 @@
 # ADR 0010 — Declarative cell metadata for PDK enablement
 
-**Status:** Accepted.
+**Status:** Accepted (amended 2026-06-25).
+
+> **Amendment (2026-06-25):** The work this ADR "deferred to a future ADR"
+> (explicit RAM port mapping) was delivered as **[ADR 0011](0011-ram-port-mapping-schema.md)**
+> — schema v1.1 (`src/cell_library.rs` accepts `"1.0"` and `"1.1"`). The
+> "Deferred" section below should be read as *delivered*, not open.
 
 ## Context
 
