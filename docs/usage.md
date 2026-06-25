@@ -7,9 +7,14 @@
 ## Step 0. Download the AIG Process Kit
 Go to [aigpdk](./aigpdk) directory where you can download `aigpdk.lib`, `aigpdk_nomem.lib`, `aigpdk.v`, and `memlib_yosys.txt`. You will need them later in the flow.
 
-Before continuing, make sure your design's storage is edge-triggered
-flip-flops (no latches — async set/reset on flip-flops is fine).
-If your design has clock gates implemented in your RTL code, you need to replace them manually with instantiations to the `CKLNQD` module in `aigpdk.v`.
+Before continuing, make sure your design's logic storage is edge-triggered
+flip-flops — a raw latch left in the gate-level logic is rejected (async
+set/reset on flip-flops is fine; async reset is not the restriction). Two
+structured latch uses are still supported: **clock gates** map to the `CKLNQD`
+integrated clock-gating cell — replace any RTL clock gates manually with
+`CKLNQD` instantiations from `aigpdk.v` — and **latch-based register files /
+memory** are captured by the memory-synthesis step below (`memory_libmap` →
+RAM), not left as raw latches.
 Also, you are advised to be familiar with where memory blocks (e.g., caches) are implemented in your design so you can check that the memory blocks are mapped correctly later.
 
 ## Step 1. Memory Synthesis with Yosys

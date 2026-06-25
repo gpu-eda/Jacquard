@@ -102,10 +102,13 @@ mdbook serve   # opens at http://localhost:3000
   `jacquard cosim` runs peripheral models (SPI flash, UART, JTAG — including an
   interactive `--jtag-server` — and Wishbone / APB3 bus tracing) as GPU kernels
   alongside the design, so inputs can depend on design outputs cycle-by-cycle.
-- **Edge-triggered flip-flops only** — *latches* (level-sensitive storage) are
-  not supported. Asynchronous **set/reset on flip-flops is supported** (e.g.
-  AIGPDK `DFFSR`, SKY130 `RESET_B`/`SET_B`, GF180MCU `RN`/`SETN`); what's
-  excluded is latch-based / level-sensitive sequential logic, not async reset.
+- **Edge-triggered flip-flops only in the logic** — a raw `LATCH` cell in the
+  gate-level netlist is rejected (async set/reset on flip-flops is fine; async
+  reset is *not* the restriction). The two common structured latch uses are
+  supported through their own paths: **clock gating** via the `CKLNQD`
+  integrated clock-gating cell (below), and **latch / register-file memory**
+  mapped through the memory-synthesis step (`memory_libmap` → RAM; see
+  [docs/usage.md](docs/usage.md)).
 - Clock gates must use `CKLNQD` (from `aigpdk.v`) or the equivalent clock-gate
   cells from the SKY130 or GF180MCU PDKs.
 

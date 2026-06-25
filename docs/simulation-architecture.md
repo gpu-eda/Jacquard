@@ -283,9 +283,13 @@ WARN (GATESIM_VCDI_MISSING_PI) Primary input port (HierName(), "reset", None) no
 
 ### 3. No Latch or Asynchronous Sequential Logic Support
 
-**Issue**: Jacquard only supports edge-triggered D flip-flops (DFFs) as sequential elements. Latch-based designs (SR latches, transparent latches, master-slave latch pairs) and asynchronous sequential logic are not supported.
+**Issue**: Jacquard only supports edge-triggered D flip-flops (DFFs) as sequential elements. A raw `LATCH` cell left in the combinational/sequential logic, latch-based designs (SR latches, transparent latches, master-slave latch pairs), and asynchronous *sequential* logic (self-timed feedback) are not supported. Asynchronous **set/reset on flip-flops** is supported (it lowers to an AIG overlay — `wire_dff_reset_set_overlay`), so "async reset" is not the restriction.
 
-**Impact**: Designs using latches will either:
+**Supported via dedicated paths**: two common latch-derived structures are *not* affected by this limitation —
+- **Clock gating** is handled by the `CKLNQD` integrated clock-gating cell (an ICG is internally a latch + AND, identified as a gated clock rather than rejected; `aig.rs:845`). Replace RTL clock gates with `CKLNQD` instantiations.
+- **Latch-based register files / memory** (a common area-saving pattern) are recognised by the memory-synthesis step (Yosys `memory_libmap`) and mapped to `$__RAMGEM_SYNC_` SRAM cells that Jacquard simulates (`aig.rs:830`) — not left as raw latches.
+
+**Impact**: Designs using latches *in the logic* will either:
 - Fail during AIG conversion (unrecognized cell type)
 - Be silently treated as combinational logic (incorrect simulation)
 
