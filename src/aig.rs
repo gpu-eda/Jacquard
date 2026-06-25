@@ -716,6 +716,7 @@ impl AIG {
         pdk_models: Option<&PdkModels>,
         gf180_pdk: Option<&Gf180PdkModels>,
         cell_library: Option<&crate::cell_library::RuntimeCellLibrary>,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) {
         let mut work_stack: Vec<WorkItem> = vec![WorkItem::Visit(start_pinid)];
 
@@ -1022,6 +1023,7 @@ impl AIG {
                                 cellid,
                                 celltype,
                                 gf180_pdk,
+                                cell_descriptor,
                             );
                             topo_instack[pinid] = false;
                             continue;
@@ -1614,6 +1616,7 @@ impl AIG {
         cellid: usize,
         celltype: &str,
         gf180_pdk: Option<&Gf180PdkModels>,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) {
         let cell_type = crate::gf180mcu::extract_cell_type(celltype);
 
@@ -1754,18 +1757,6 @@ impl AIG {
             return;
         }
 
-        let pdk = gf180_pdk.expect(
-            "GF180 PDK models required for gf180mcu cell decomposition. \
-             Ensure vendor/gf180mcu_fd_sc_mcu7t5v0 submodule is initialized.",
-        );
-        let model = pdk.models.get(cell_type).unwrap_or_else(|| {
-            panic!(
-                "No GF180MCU behavioural model loaded for cell type '{cell_type}'. \
-                 from_netlistdb only loads models for cells present in the netlist; \
-                 this points at a load_pdk_models bug.",
-            )
-        });
-
         // Build inputs map by pin name. The HashMap allocation per cell
         // is fine — combinational cells are small and the decomposer
         // path runs once per cell instance during AIG construction.
@@ -1785,29 +1776,62 @@ impl AIG {
         }
 
         let output_pin_name = netlistdb.pinnames[pinid].1.as_str();
-        let decomp =
-            crate::gf180mcu_pdk::decompose_with_pdk(model, &inputs, output_pin_name, &pdk.udps);
 
-        // Stitch the DecompResult into the global AIG — same algorithm
-        // as sky130_postprocess's tail.
-        let mut gate_outputs: SmallVec<[usize; 5]> = SmallVec::new();
-        for &(a_ref, b_ref) in &decomp.and_gates {
-            let a_iv = self.resolve_decomp_ref(a_ref, &gate_outputs);
-            let b_iv = self.resolve_decomp_ref(b_ref, &gate_outputs);
-            let gate_out = self.add_and_gate(a_iv, b_iv);
-            gate_outputs.push(gate_out >> 1);
-        }
+        // ADR 0019 C1.4: descriptor-driven combinational splice. If a
+        // cell-model-IR descriptor was supplied AND it carries this cell type
+        // (keyed by the *full* netlist cell-type name) with a `logic` block,
+        // splice the pre-decomposed AIG straight in — no runtime
+        // `functional.v` decomposition. Otherwise fall back to the legacy
+        // `decompose_with_pdk` path UNCHANGED. The descriptor's
+        // `Other`/`None` (sequential/tie/filler/IO-pad) cells have no `logic`
+        // and so fall through here too.
+        let final_iv = match cell_descriptor
+            .and_then(|d| d.cell(celltype))
+            .and_then(|c| c.logic.as_ref())
+        {
+            Some(comb) => self.splice_comb_logic(comb, &inputs, output_pin_name),
+            None => {
+                let pdk = gf180_pdk.expect(
+                    "GF180 PDK models required for gf180mcu cell decomposition. \
+                     Ensure vendor/gf180mcu_fd_sc_mcu7t5v0 submodule is initialized.",
+                );
+                let model = pdk.models.get(cell_type).unwrap_or_else(|| {
+                    panic!(
+                        "No GF180MCU behavioural model loaded for cell type '{cell_type}'. \
+                         from_netlistdb only loads models for cells present in the netlist; \
+                         this points at a load_pdk_models bug.",
+                    )
+                });
 
-        let output_iv = if decomp.output_idx < 0 {
-            let gate_idx = (-decomp.output_idx - 1) as usize;
-            gate_outputs[gate_idx] << 1
-        } else {
-            (decomp.output_idx as usize) << 1
-        };
-        let final_iv = if decomp.output_inverted {
-            output_iv ^ 1
-        } else {
-            output_iv
+                let decomp = crate::gf180mcu_pdk::decompose_with_pdk(
+                    model,
+                    &inputs,
+                    output_pin_name,
+                    &pdk.udps,
+                );
+
+                // Stitch the DecompResult into the global AIG — same algorithm
+                // as sky130_postprocess's tail.
+                let mut gate_outputs: SmallVec<[usize; 5]> = SmallVec::new();
+                for &(a_ref, b_ref) in &decomp.and_gates {
+                    let a_iv = self.resolve_decomp_ref(a_ref, &gate_outputs);
+                    let b_iv = self.resolve_decomp_ref(b_ref, &gate_outputs);
+                    let gate_out = self.add_and_gate(a_iv, b_iv);
+                    gate_outputs.push(gate_out >> 1);
+                }
+
+                let output_iv = if decomp.output_idx < 0 {
+                    let gate_idx = (-decomp.output_idx - 1) as usize;
+                    gate_outputs[gate_idx] << 1
+                } else {
+                    (decomp.output_idx as usize) << 1
+                };
+                if decomp.output_inverted {
+                    output_iv ^ 1
+                } else {
+                    output_iv
+                }
+            }
         };
         self.pin2aigpin_iv[pinid] = final_iv;
 
@@ -1849,9 +1873,65 @@ impl AIG {
         }
     }
 
+    /// Splice a cell-model-IR [`CombLogic`] descriptor into the global AIG and
+    /// return the `aigpin_iv` driving the requested output pin (ADR 0019 D3).
+    ///
+    /// This is the descriptor-driven counterpart of the `decompose_with_pdk`
+    /// stitch: instead of decomposing a `functional.v` model at runtime, the
+    /// pre-decomposed AIG from the descriptor is remapped node-for-node into
+    /// the design AIG. The result is logically identical to the legacy path.
+    ///
+    /// `input_ivs` maps each input pin name to the instance's already-resolved
+    /// input `aigpin_iv` (as built by the DFS up to this cell). `output_pin` is
+    /// the netlist pin name being driven; for a multi-output cell each output
+    /// pin instance calls this with its own name and resolves its own ref.
+    ///
+    /// Node numbering follows the crate docs: node 0 is const-0 (Tie0,
+    /// `iv == 0`); nodes `1 ..= inputs.len()` are the input pins in
+    /// `comb.inputs` order; the rest are `and_nodes` in order. A [`Ref`]
+    /// resolves to `node_iv[r.node] ^ r.inverted`.
+    fn splice_comb_logic(
+        &mut self,
+        comb: &cell_model_ir::CombLogic,
+        input_ivs: &std::collections::HashMap<String, usize>,
+        output_pin: &str,
+    ) -> usize {
+        // node_iv[i] is the aigpin_iv realising descriptor node i.
+        let mut node_iv: Vec<usize> = vec![0; comb.num_nodes()];
+        // node 0 = const-0 = Tie0 = iv 0 (already set).
+        for (i, pin) in comb.inputs.iter().enumerate() {
+            node_iv[1 + i] = *input_ivs.get(pin).unwrap_or_else(|| {
+                panic!(
+                    "splice_comb_logic: input pin '{pin}' of descriptor cell \
+                     not found among resolved instance inputs"
+                )
+            });
+        }
+        let resolve = |r: &cell_model_ir::Ref, node_iv: &[usize]| -> usize {
+            node_iv[r.node as usize] ^ (r.inverted as usize)
+        };
+        let and_base = 1 + comb.inputs.len();
+        for (k, gate) in comb.and_nodes.iter().enumerate() {
+            let a_iv = resolve(&gate.a, &node_iv);
+            let b_iv = resolve(&gate.b, &node_iv);
+            node_iv[and_base + k] = self.add_and_gate(a_iv, b_iv);
+        }
+        let out = comb
+            .outputs
+            .iter()
+            .find(|o| o.pin == output_pin)
+            .unwrap_or_else(|| {
+                panic!(
+                    "splice_comb_logic: output pin '{output_pin}' not found in \
+                     descriptor cell's outputs"
+                )
+            });
+        resolve(&out.r, &node_iv)
+    }
+
     /// Build an AIG from a netlistdb, using explicit PDK behavioral models for decomposition.
     pub fn from_netlistdb_with_pdk(netlistdb: &NetlistDB, pdk_models: &PdkModels) -> AIG {
-        Self::from_netlistdb_impl(netlistdb, Some(pdk_models), None, None)
+        Self::from_netlistdb_impl(netlistdb, Some(pdk_models), None, None, None)
     }
 
     /// Build an AIG from a netlistdb, with a runtime cell library
@@ -1866,6 +1946,19 @@ impl AIG {
     pub fn from_netlistdb_with_cells(
         netlistdb: &NetlistDB,
         cell_library: Option<&crate::cell_library::RuntimeCellLibrary>,
+    ) -> AIG {
+        Self::from_netlistdb_with_cells_and_descriptor(netlistdb, cell_library, None)
+    }
+
+    /// As [`Self::from_netlistdb_with_cells`], but also accepts an optional
+    /// cell-model-IR descriptor (ADR 0019). When present, GF180 combinational
+    /// cells the descriptor models (`logic: Some`) are spliced from the
+    /// descriptor's pre-decomposed AIG instead of the hardcoded
+    /// `functional.v` path. Absent = today's behaviour exactly.
+    pub fn from_netlistdb_with_cells_and_descriptor(
+        netlistdb: &NetlistDB,
+        cell_library: Option<&crate::cell_library::RuntimeCellLibrary>,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) -> AIG {
         let has_sky130 = (1..netlistdb.num_cells).any(|cid| {
             PdkVariant::classify(netlistdb.celltypes[cid].as_str())
@@ -1890,7 +1983,13 @@ impl AIG {
             }
             cell_types.sort();
             let pdk_models = crate::sky130_pdk::load_pdk_models(&pdk_path, &cell_types);
-            Self::from_netlistdb_impl(netlistdb, Some(&pdk_models), None, cell_library)
+            Self::from_netlistdb_impl(
+                netlistdb,
+                Some(&pdk_models),
+                None,
+                cell_library,
+                cell_descriptor,
+            )
         } else if has_gf180mcu {
             let pdk_path = std::path::PathBuf::from("vendor/gf180mcu_fd_sc_mcu7t5v0");
             let mut cell_types: Vec<String> = Vec::new();
@@ -1905,9 +2004,15 @@ impl AIG {
             }
             cell_types.sort();
             let gf180_pdk = crate::gf180mcu_pdk::load_pdk_models(&pdk_path, &cell_types);
-            Self::from_netlistdb_impl(netlistdb, None, Some(&gf180_pdk), cell_library)
+            Self::from_netlistdb_impl(
+                netlistdb,
+                None,
+                Some(&gf180_pdk),
+                cell_library,
+                cell_descriptor,
+            )
         } else {
-            Self::from_netlistdb_impl(netlistdb, None, None, cell_library)
+            Self::from_netlistdb_impl(netlistdb, None, None, cell_library, cell_descriptor)
         }
     }
 
@@ -1927,6 +2032,7 @@ impl AIG {
         pdk_models: Option<&PdkModels>,
         gf180_pdk: Option<&Gf180PdkModels>,
         cell_library: Option<&crate::cell_library::RuntimeCellLibrary>,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) -> AIG {
         let mut aig = AIG {
             num_aigpins: 0,
@@ -2037,6 +2143,7 @@ impl AIG {
                 pdk_models,
                 gf180_pdk,
                 cell_library,
+                cell_descriptor,
             );
         }
 
@@ -4651,5 +4758,139 @@ endmodule
         .expect("netlist parse");
         let aig = AIG::from_netlistdb(&nl);
         assert!(aig.num_aigpins > 0, "AIG should have at least one pin");
+    }
+}
+
+/// Unit tests for [`AIG::splice_comb_logic`] — the descriptor-driven
+/// combinational splice (ADR 0019 C1.4). These hand-build small
+/// [`cell_model_ir::CombLogic`] descriptors, splice them into a fresh AIG with
+/// synthetic input aigpins, and check the spliced output evaluates the cell's
+/// truth table. They are the fast TDD gate; the byte-identical equivalence
+/// test against a real GF180 fixture lives in `tests/`.
+#[cfg(test)]
+mod splice_comb_logic_tests {
+    use super::*;
+    use cell_model_ir::{AndNode, CombLogic, OutputPin, Ref};
+    use std::collections::HashMap;
+
+    /// Build a fresh AIG with Tie0 at pin 0 (mirrors `from_netlistdb_impl`).
+    fn fresh_aig() -> AIG {
+        AIG {
+            num_aigpins: 0,
+            drivers: vec![DriverType::Tie0],
+            aigpin_cell_origins: vec![Vec::new()],
+            ..Default::default()
+        }
+    }
+
+    /// Add an InputPort aigpin and return its non-inverted `iv`.
+    fn add_input(aig: &mut AIG) -> usize {
+        let pin = aig.add_aigpin(DriverType::InputPort(0));
+        pin << 1
+    }
+
+    /// Pure 2-state CPU evaluation of an aigpin_iv, given input aigpin -> bool.
+    /// Walks the `drivers` table recursively. Tie0 is false; const-1 (iv 1) is
+    /// handled by the inversion bit on aigpin 0.
+    fn eval_iv(aig: &AIG, iv: usize, inputs: &HashMap<usize, bool>) -> bool {
+        let aigpin = iv >> 1;
+        let invert = (iv & 1) == 1;
+        let base = match aig.drivers[aigpin] {
+            DriverType::Tie0 => false,
+            DriverType::InputPort(_) => *inputs
+                .get(&aigpin)
+                .unwrap_or_else(|| panic!("no input value for aigpin {aigpin}")),
+            DriverType::AndGate(a, b) => {
+                eval_iv(aig, a, inputs) && eval_iv(aig, b, inputs)
+            }
+            ref other => panic!("eval_iv: unexpected driver {other:?}"),
+        };
+        base ^ invert
+    }
+
+    /// NAND2: inputs [A, B], one AndNode(node1, node2), output ZN = !node3.
+    #[test]
+    fn splice_nand2_evaluates_truth_table() {
+        let mut aig = fresh_aig();
+        let a_iv = add_input(&mut aig);
+        let b_iv = add_input(&mut aig);
+        let a_pin = a_iv >> 1;
+        let b_pin = b_iv >> 1;
+
+        let comb = CombLogic {
+            inputs: vec!["A".into(), "B".into()],
+            and_nodes: vec![AndNode { a: Ref::node(1), b: Ref::node(2) }],
+            outputs: vec![OutputPin { pin: "ZN".into(), r: Ref::inv(3) }],
+        };
+        let input_ivs =
+            HashMap::from([("A".to_string(), a_iv), ("B".to_string(), b_iv)]);
+        let out_iv = aig.splice_comb_logic(&comb, &input_ivs, "ZN");
+
+        for (a, b) in [(false, false), (false, true), (true, false), (true, true)] {
+            let inputs = HashMap::from([(a_pin, a), (b_pin, b)]);
+            let got = eval_iv(&aig, out_iv, &inputs);
+            assert_eq!(got, !(a && b), "NAND2 mismatch for A={a} B={b}");
+        }
+    }
+
+    /// A two-output cell exercises per-output ref resolution: from inputs
+    /// [A, B] with one AND node (A & B), output `AND = node3` and output
+    /// `NAND = !node3`. Each output instance resolves its own ref off the
+    /// shared spliced gate.
+    #[test]
+    fn splice_two_output_cell_resolves_each_output() {
+        let mut aig = fresh_aig();
+        let a_iv = add_input(&mut aig);
+        let b_iv = add_input(&mut aig);
+        let a_pin = a_iv >> 1;
+        let b_pin = b_iv >> 1;
+
+        let comb = CombLogic {
+            inputs: vec!["A".into(), "B".into()],
+            and_nodes: vec![AndNode { a: Ref::node(1), b: Ref::node(2) }],
+            outputs: vec![
+                OutputPin { pin: "AND".into(), r: Ref::node(3) },
+                OutputPin { pin: "NAND".into(), r: Ref::inv(3) },
+            ],
+        };
+        let input_ivs =
+            HashMap::from([("A".to_string(), a_iv), ("B".to_string(), b_iv)]);
+        let and_iv = aig.splice_comb_logic(&comb, &input_ivs, "AND");
+        let nand_iv = aig.splice_comb_logic(&comb, &input_ivs, "NAND");
+
+        for (a, b) in [(false, false), (false, true), (true, false), (true, true)] {
+            let inputs = HashMap::from([(a_pin, a), (b_pin, b)]);
+            assert_eq!(eval_iv(&aig, and_iv, &inputs), a && b, "AND A={a} B={b}");
+            assert_eq!(
+                eval_iv(&aig, nand_iv, &inputs),
+                !(a && b),
+                "NAND A={a} B={b}"
+            );
+        }
+        // The two outputs reuse the same shared AND gate (cache hit), differing
+        // only in the inversion bit, so both refer to the same aigpin.
+        assert_eq!(and_iv >> 1, nand_iv >> 1, "outputs share the AND gate");
+    }
+
+    /// An inverter passes through an inverted input ref with no AND nodes,
+    /// exercising the const/identity edges and a direct input->output ref.
+    #[test]
+    fn splice_inverter_no_and_nodes() {
+        let mut aig = fresh_aig();
+        let a_iv = add_input(&mut aig);
+        let a_pin = a_iv >> 1;
+
+        let comb = CombLogic {
+            inputs: vec!["A".into()],
+            and_nodes: vec![],
+            outputs: vec![OutputPin { pin: "ZN".into(), r: Ref::inv(1) }],
+        };
+        let input_ivs = HashMap::from([("A".to_string(), a_iv)]);
+        let out_iv = aig.splice_comb_logic(&comb, &input_ivs, "ZN");
+
+        for a in [false, true] {
+            let inputs = HashMap::from([(a_pin, a)]);
+            assert_eq!(eval_iv(&aig, out_iv, &inputs), !a, "INV A={a}");
+        }
     }
 }
