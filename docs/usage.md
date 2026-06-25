@@ -1,13 +1,14 @@
 # Getting Started with Jacquard
 
-**Caveats**: Jacquard currently only supports non-interactive testbenches. This means the input to the circuit needs to be a static waveform (e.g., VCD). Registers and clock gates inside the circuit are allowed, but latches and other asynchronous sequential logics are currently unsupported.
+**Caveats**: `jacquard sim` drives the design from a static input waveform (e.g. VCD); for reactive testbenches use `jacquard cosim`. Storage must be **edge-triggered flip-flops** — *latches* (level-sensitive storage) are not supported. Asynchronous **set/reset on flip-flops is fine** (async reset is *not* the restriction); what's excluded is latch-based / level-sensitive sequential logic.
 
 **Dataset**: Some (namely, netlists after AIG transformation in Steps 1-2 below, and reference VCDs) input data is available [here](https://drive.google.com/drive/folders/1M42vFoVZhG4ZjyD1hqYD0Hrw8F1rwNXd?usp=drive_link) .
 
 ## Step 0. Download the AIG Process Kit
 Go to [aigpdk](./aigpdk) directory where you can download `aigpdk.lib`, `aigpdk_nomem.lib`, `aigpdk.v`, and `memlib_yosys.txt`. You will need them later in the flow.
 
-Before continuing, make sure your design contains only synchronous logic.
+Before continuing, make sure your design's storage is edge-triggered
+flip-flops (no latches — async set/reset on flip-flops is fine).
 If your design has clock gates implemented in your RTL code, you need to replace them manually with instantiations to the `CKLNQD` module in `aigpdk.v`.
 Also, you are advised to be familiar with where memory blocks (e.g., caches) are implemented in your design so you can check that the memory blocks are mapped correctly later.
 
