@@ -9,6 +9,34 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-06-25
+
+Documentation release — no functional change to the binary.
+
+### Documentation
+
+- Reworked the README getting-started flow: an inline
+  `brew install gpu-eda/homebrew-tap/jacquard` one-liner, the timing-feature
+  status table moved into the generated docs, and stale `ChipFlow` /
+  `chipflow.github.io` references corrected to `gpu-eda`.
+- **Clarified the latch limitation** across the book: a raw latch left in the
+  logic is unsupported, but **clock gating** (the `CKLNQD` integrated
+  clock-gating cell) and **latch-based register-file / memory** (mapped to RAM
+  via the memory-synthesis step) are supported, and asynchronous set/reset on
+  flip-flops is fine — "async reset" was never the restriction.
+- Corrected stale timing-feature status: CUDA + HIP `sim` now route setup/hold
+  violations (`--timing-report`, symbolic messages); multi-corner timing IR is
+  available via `--timing-corner`.
+- ADR convention: a *refinement* to a decision is now recorded as a dated
+  in-place **Amendment** (original decision preserved below it), reserving
+  superseding ADRs for full reversals. ADR 0014's "no latches" constraint is
+  amended accordingly (clock gating + latch-based memory are supported).
+
+### Changed
+
+- CI: `validate-install` authenticates cargo-binstall's GitHub API calls so the
+  binstall channel check no longer hits the unauthenticated rate limit.
+
 ## [0.2.2] - 2026-06-25
 
 ### Fixed
