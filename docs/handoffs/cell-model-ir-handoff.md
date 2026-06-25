@@ -1,88 +1,109 @@
 # Handoff — Cell-model IR (ADR 0019)
 
-**Active thread:** ADR 0019 "Cell-model IR: a complete per-cell-type
-library descriptor" is **Proposed** and up as **PR #132** (docs-only,
-nothing wired). It is waiting on the maintainer to react and to steer the
-open questions before any code is written. Branch:
-`docs/cell-model-ir-adr` (worktree `../Jacquard-cellir`).
+**Active thread:** ADR 0019 "Cell-model IR" is **approved by the maintainer**
+(all four design open questions resolved) and **plan checkpoint C1 is
+COMPLETE** — the IR + converter foundation is built, and GF180 now
+simulates from a generated descriptor (issue #130 closed). All work is on
+branch `docs/cell-model-ir-adr` (worktree `../Jacquard-cellir`), pushed to
+**PR #132**. Next up is **C2** (L3 sequential + L4 timing schema).
 
-## Done this session
+## Design decisions resolved (ADR 0019, all four open questions closed)
 
-- **JTAG debug server — MERGED (PR #125 → `main`, CI green).** Implements
-  `docs/plans/jtag-debug-server.md` (J1–J4) *plus* the fix that made it
-  actually work: a **power-on TRST pulse** (real OpenOCD couldn't examine
-  the DTM without a `negedge trst_n`; replay/synthetic gates couldn't
-  catch it). Added a real-OpenOCD CI gate (`jtag-minimal-openocd`),
-  auto-port (`--jtag-server 0`), `--max-clock-edges` relaxed while
-  attached, `jacquard jtag-openocd-config` generator, and
-  `--jtag-reconnect`. All verified on Metal. This thread is **closed**.
-- **Issue #127** filed — non-deterministic output state-slot assignment
-  (mt-kahypar partitioning). Confirmed **no observable effect** (VCD is
-  byte-reproducible across slots; JTAG unaffected). Parked, low priority.
-- **Issue #130** (maintainer-filed) — GF180 cosim hardcodes the 7T
-  stdcell functional models regardless of netlist library. This is the
-  **trigger** for ADR 0019.
-- **ADR 0019 + plan + ADR 0002 amendment** written and revised (PR #132).
+- **L2 source — Liberty-first, `.v` fallback (D6).** Survey of GF180/SKY130
+  + commercial Liberate libs (Helvellyn, GF130, IHP) showed Liberty carries
+  `function` (combinational) + `ff`/`latch` (sequential) for every cell,
+  while the behavioural `.v` buries sequential logic in vendor-UDP +
+  `notifier`/`$setuphold` simulation scaffolding. So the converter reads
+  Liberty first; `.v`/UDP is a fallback for cells Liberty under-specifies.
+  The `.v` `specify` block carries timing *topology* but **zero-placeholder
+  values** (SDF scaffold) → L4 is Liberty-exclusive for stdcells;
+  macro/SRAM `.v` can embed real timing that diverges (surface it).
+  Violation-response (`notifier`→X) is a runtime policy, out of the IR.
+- **L4 multi-corner (D5).** One descriptor, L4 keyed by corner (mirrors the
+  timing IR's corner-set + `corner_index`; min/typ/max = within-corner
+  derate). Simulation corner is **user-selected** (`--corner`, default
+  `default_corner`), not inferred from netlist/SDF.
+- **Provenance (D7).** Descriptors are **CI-regenerated** from pinned
+  vendored PDKs and embedded at build time — NOT checked-in artifacts.
+- **Migration (per-PDK).** Per-PDK cutover; **IHP SG13G2** added as a new
+  built-in PDK with zero per-PDK Rust (D7a) — the proof that adding a PDK
+  is no longer a code change.
 
-## ADR 0019 — the design, in one breath
+## C1 — COMPLETE (7 commits on the branch, each CI-gated + /simplify'd)
 
-Everything Jacquard needs about a cell is a **per-cell-type fact from one
-Liberty file**: L1 directions, L2 combinational logic, L3
-sequential/classification, **L4 timing characterization**. Put all four in
-**one generated JSON descriptor per library**; core consumes it as its
-only source of cell semantics. Vendored PDKs demote to *generation
-inputs*; proprietary libraries work with zero Jacquard changes.
+Four small crates mirroring the `timing-ir`/`opensta-to-ir` pattern, then
+the runtime wire-in:
 
-Decisions (full text in the ADR): D1 one descriptor (timing IR
-orthogonal); D2 JSON-first (FlatBuffers escape hatch); D3 L2 = pre-built
-AIG (decomp moves to the generator); D4 L3 sequential schema; D5 L4
-timing folded in; D6 converter crate (Liberty → IR, reusing `pdk_decomp`
-+ `liberty_parser`); D7 bundled descriptors; D8 selection by declared
-prefix + `--cell-descriptor`.
+1. **`crates/cell-decomp`** — PDK-neutral Verilog parse + AIG-decomp
+   primitives, lifted out of `src/pdk_decomp.rs` + `src/sky130_pdk.rs`
+   (made vendor-agnostic: UDP dispatch by map membership, not sky130 prefix).
+2. **`crates/cell-model-ir`** — the JSON schema (D2): L1 pin directions + L2
+   combinational AIG as a flat AIGER-like node list (`CombLogic`: const-0 /
+   inputs / and-nodes, `Ref{node,inverted}`), `CombLogic::eval`, a structural
+   diff + `cell-model-ir-diff` bin. Cells keyed by full netlist name, pins by
+   netlistdb pin-name (D1). `SCHEMA_MAJOR/MINOR = 0.1`.
+3. **`crates/liberty-parse`** — ONE generic Liberty parser (group tree +
+   `Value`); `TimingLibrary` refactored to walk it (was a separate hand-rolled
+   parser). `liberty_parser.rs` 1183 → 797 lines.
+4. **`crates/liberty-to-cellir`** — standalone converter (like opensta-to-ir):
+   `function.rs` compiles Liberty boolean exprs → AIG (precedence
+   invert>AND>XOR>OR; TDD'd against an independent reference evaluator, 22
+   tests); `convert.rs` walks the lib tree → `CellModelIr`; `crosscheck.rs`
+   is the D6 Liberty-vs-`.v` eval cross-check.
+5. **GF180 descriptor consumer** (`src/aig.rs` `splice_comb_logic` + a
+   `--cell-descriptor` flag threaded through `from_netlistdb_with_cells_and_descriptor`):
+   GF180 combinational cells build from the descriptor's pre-decomposed AIG
+   instead of the hardcoded 7t `functional.v`. **Closes #130.**
 
-**The load-bearing insight** (don't re-derive it): there are **two
-different "timing" artifacts** — per-cell-type *characterization*
-(`liberty_parser::TimingLibrary`, a library fact → goes **in** the cell
-IR) vs the per-design *annotation* timing IR (ADR 0002, `TimingArc {
-cell_instance }`, SDF → **orthogonal**, untouched). The cell IR is **not**
-the timing IR's "logic sibling"; it's the *"separate IR for cell
-characterization"* ADR 0002's scope boundary predicted. ADR 0002 got a
-dated cross-reference amendment.
+**Proof:** GF180 7t and 9t descriptors both generate with
+`cross_check_mismatches=0` (143 combinational cells agree with `.v` on every
+input vector), 212 KB JSON (→ JSON-first holds, no FlatBuffers needed). The
+`tests/jtag_minimal` 9t cosim is **byte-identical** between the legacy 7t
+path and the `--cell-descriptor` 9t path (matching MD5), and the full
+4M-edge descriptor run passes `data0_obs == 0xCAFEBABE`.
 
 ## Next steps (in order)
 
-1. **Maintainer reviews PR #132** and steers the four open questions
-   (listed at the bottom of the ADR): L2 source unification
-   (`function` vs `functional.v`), L4 multi-corner shape, bundled-descriptor
-   provenance (checked-in vs CI-regenerated), migration ordering.
-2. On approval, start **plan C1** (`docs/plans/cell-model-ir.md`):
-   relocate `pdk_decomp` into a shared lib; define the L1+L2 JSON schema
-   (pre-built AIG); write the Liberty→IR converter; redirect GF180's
-   stdcell logic to consume it. **Gate:** a 9T netlist (e.g.
-   `tests/jtag_minimal`) sims against its *own* 9T descriptor — this also
-   closes #130.
-3. Optional cheap interim for #130 before the full IR: make `build.rs`
-   diff functional *bodies* (not just ports) across 7t/9t and tighten the
-   `src/gf180mcu_pdk.rs` doc comment (option 1 in #130) — makes the
-   current 7T-canonical assumption honest.
+1. **C2 — L3 sequential + L4 timing schema.** Extend `cell-model-ir` with
+   the D4 sequential pin-role schema (clock+edge, D/next-state, Q, async
+   set/reset+polarity, enable) + classification kinds, AND the D5 L4 timing
+   block (corner-keyed). Extend the converter to emit both from Liberty
+   `ff`/`latch` + the timing groups `liberty-parse` already exposes. Wire the
+   consumer to replace the hardcoded DFF pin-name matches
+   (`src/aig.rs:2080-2260`) and read L4 from the IR instead of
+   `TimingLibrary::from_file`, selecting corner via `--corner`. Gate:
+   sequential GF180/SKY130 cells sim AND time from the IR with no per-PDK
+   Rust DFF handling and no runtime `.lib` parse.
+2. **C3 — bundle + cut over + selection** (incl. CI-regen provenance + drop
+   the runtime `vendor/` dep) and **C3a — IHP SG13G2** (new PDK, zero Rust).
+3. **C4 — proprietary-library workflow** doc + test.
 
 ## Key anchors (verified this session)
 
-- Hardcoded 7T path: `src/aig.rs:1895`. Port-only assert: `build.rs:202/206`.
-- Per-cell-type timing (to fold in): `src/liberty_parser.rs`
-  (`TimingLibrary`), consumed at `src/aig.rs:2793` + `src/flatten.rs`
-  (incl. `liberty_fallback`); loaded from a user `.lib` via
-  `TimingLibrary::from_file`.
-- Per-PDK classifiers to retire: `src/pdk.rs` (`PdkVariant`, prefix
-  detection), `src/gf180mcu_pdk.rs`, `src/sky130_pdk.rs`, DFF pin matches
-  `src/aig.rs:2080-2260`.
-- The sibling pattern to mirror: `crates/timing-ir` + `crates/opensta-to-ir`.
+- Descriptor splice: `src/aig.rs` `splice_comb_logic` + dispatch in
+  `gf180mcu_postprocess` (the `decompose_with_pdk` block); legacy path
+  preserved in the `None` arm.
+- Sequential pin-name matches to retire in C2: `src/aig.rs:2080-2260`.
+- Per-cell-type timing to fold in (C2): `src/liberty_parser.rs` (`TimingLibrary`,
+  now tree-walking `liberty-parse`), consumed at `src/aig.rs` + `src/flatten.rs`.
+- Converter CLI: `cargo run -p`-style via
+  `--manifest-path crates/liberty-to-cellir/Cargo.toml -- <lib> --functional-v <cells> -o <json>`.
+  GF180 ships per-cell split libs; the converter merges them.
+- CI runs the four pipeline crates' tests standalone in the Unit Tests job.
 
 ## Loose ends
 
-- **Two stray worktrees** off this repo: `../Jacquard-jtag-server` (merged
-  JTAG branch) and `../Jacquard-cellir` (this ADR branch). Maintainer
-  asked to leave them; remove with `git worktree remove` when done.
-- **#127** parked (non-issue in practice).
-- At resolution: fold this handoff's content into the ADR/plan and
-  **delete this file** (project handoff discipline — exactly one exists).
+- The generated descriptors live in `/tmp/claude/gf180_{7t,9t}.json` (NOT
+  committed — D7 says CI-regenerated). C3 wires generation into the build/CI.
+- `vendor/gf180mcu_fd_sc_mcu9t5v0` submodule was initialised this session
+  (1.5 GB) to generate + gate the 9t descriptor.
+- C1 follow-ups noted in the C1.3c commit: no `.v`→IR fallback for
+  no-`function` cells yet; `liberty-to-cellir` split-library discovery is
+  GF180-shaped (a `--cells-dir` flag would generalise it); making
+  `cell_decomp::eval_behavioral_model` fallible would drop the crosscheck's
+  `catch_unwind`.
+- **Two stray worktrees** off this repo (`../Jacquard-jtag-server`,
+  `../Jacquard-cellir`) — maintainer asked to leave them; remove with
+  `git worktree remove` when done.
+- At resolution (C-series complete): fold this handoff into the ADR/plan and
+  **delete this file** (one handoff at a time).
