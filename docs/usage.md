@@ -107,7 +107,7 @@ Download and install the Rust toolchain. This is as simple as a one-liner in you
 
 Clone Jacquard along with its dependencies.
 ``` sh
-git clone https://github.com/ChipFlow/Jacquard.git
+git clone https://github.com/gpu-eda/Jacquard.git
 cd Jacquard
 git submodule update --init --recursive
 ```
