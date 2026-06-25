@@ -1,13 +1,22 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-//! Simple Liberty (.lib) parser for extracting timing data from AIGPDK.
+//! Liberty (.lib) **timing** extraction (L4 — per-cell-type
+//! characterization).
 //!
-//! This parser is specialized for the scalar timing values used in aigpdk.lib.
-//! It extracts:
+//! The low-level tokenizer and generic group/attribute parser now live in
+//! the [`liberty_parse`] crate — the single Liberty front-end in the repo
+//! (ADR 0019 D6). This module no longer parses bytes: it parses with
+//! `liberty_parse::parse` and **walks** the resulting `LibertyGroup` tree
+//! (see the private `walk` module) to project it onto the timing types
+//! below. It extracts the scalar timing values used in `aigpdk.lib` and
+//! SKY130-style libraries:
 //! - Cell delays (cell_rise, cell_fall) for combinational cells
 //! - Setup/hold constraints for sequential cells (DFF, DFFSR)
 //! - Clock-to-Q delays for sequential cells
 //! - SRAM timing (read delays, setup/hold)
+//!
+//! The public `TimingLibrary` / `CellTiming` / `PinTiming` / `TimingArc`
+//! API is unchanged; only the parsing internals moved.
 
 use indexmap::IndexMap;
 use std::fs;
@@ -314,10 +323,8 @@ impl TimingLibrary {
     /// or for callers that have already validated the input by other means.
     /// Production paths should prefer [`Self::parse`].
     pub fn parse_unchecked(content: &str) -> Result<Self, String> {
-        let mut lib = TimingLibrary::default();
-        let mut parser = LibertyParser::new(content);
-        parser.parse_library(&mut lib)?;
-        Ok(lib)
+        let root = liberty_parse::parse(content)?;
+        Ok(walk::walk_library(&root))
     }
 
     /// Get timing for a cell by name.
@@ -451,551 +458,159 @@ pub struct SRAMTiming {
     pub write_data_hold_ps: u64,
 }
 
-/// Simple Liberty parser state machine.
-struct LibertyParser<'a> {
-    content: &'a str,
-    pos: usize,
-}
+/// Tree-walking extraction from the generic Liberty AST.
+///
+/// The low-level tokenizer and group/attribute parser now live in the
+/// `liberty-parse` crate (the single Liberty front-end — ADR 0019 D6).
+/// This module's job is purely to *walk* the resulting [`LibertyGroup`]
+/// tree and project it onto the timing types (`TimingLibrary`,
+/// `CellTiming`, `PinTiming`, `TimingArc`). No timing semantics changed in
+/// the refactor: the same groups/attributes are read, the same scalar
+/// extraction and ps conversion are applied.
+mod walk {
+    use super::{CellTiming, PinTiming, TimingArc, TimingLibrary};
+    use liberty_parse::LibertyGroup;
 
-impl<'a> LibertyParser<'a> {
-    fn new(content: &'a str) -> Self {
-        Self { content, pos: 0 }
-    }
-
-    fn skip_whitespace(&mut self) {
-        let bytes = self.content.as_bytes();
-        let len = bytes.len();
-        while self.pos < len {
-            let ch = bytes[self.pos];
-            if ch == b' ' || ch == b'\t' || ch == b'\n' || ch == b'\r' {
-                self.pos += 1;
-            } else if ch == b'/' && self.pos + 1 < len {
-                let next = bytes[self.pos + 1];
-                if next == b'*' {
-                    // Skip block comment - search for */
-                    self.pos += 2;
-                    while self.pos + 1 < len {
-                        if bytes[self.pos] == b'*' && bytes[self.pos + 1] == b'/' {
-                            self.pos += 2;
-                            break;
-                        }
-                        self.pos += 1;
-                    }
-                } else if next == b'/' {
-                    // Skip line comment - search for newline
-                    self.pos += 2;
-                    while self.pos < len && bytes[self.pos] != b'\n' {
-                        self.pos += 1;
-                    }
-                    if self.pos < len {
-                        self.pos += 1;
-                    }
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-    }
-
-    #[inline]
-    fn peek_byte(&self) -> Option<u8> {
-        if self.pos < self.content.len() {
-            Some(self.content.as_bytes()[self.pos])
-        } else {
-            None
-        }
-    }
-
-    fn peek_char(&mut self) -> Option<char> {
-        self.skip_whitespace();
-        self.peek_byte().map(|b| b as char)
-    }
-
-    fn expect_char(&mut self, ch: char) -> Result<(), String> {
-        self.skip_whitespace();
-        if self.peek_byte() == Some(ch as u8) {
-            self.pos += 1;
-            Ok(())
-        } else {
-            Err(format!(
-                "Expected '{}' at position {}, found '{}'",
-                ch,
-                self.pos,
-                self.peek_byte().map(|b| b as char).unwrap_or('?')
-            ))
-        }
-    }
-
-    fn read_identifier(&mut self) -> String {
-        self.skip_whitespace();
-        let start = self.pos;
-        while self.pos < self.content.len() {
-            let ch = self.content.as_bytes()[self.pos];
-            if ch.is_ascii_alphanumeric() || ch == b'_' || ch == b'$' {
-                self.pos += 1;
-            } else {
-                break;
-            }
-        }
-        self.content[start..self.pos].to_string()
-    }
-
-    fn read_string(&mut self) -> Result<String, String> {
-        self.skip_whitespace();
-        if self.peek_byte() != Some(b'"') {
-            return Err(format!("Expected string at position {}", self.pos));
-        }
-        self.pos += 1;
-        let start = self.pos;
-        let bytes = self.content.as_bytes();
-        while self.pos < bytes.len() && bytes[self.pos] != b'"' {
-            self.pos += 1;
-        }
-        let s = self.content[start..self.pos].to_string();
-        if self.pos < self.content.len() {
-            self.pos += 1; // Skip closing quote
-        }
-        Ok(s)
-    }
-
-    fn read_value(&mut self) -> Result<String, String> {
-        self.skip_whitespace();
-        if self.peek_byte() == Some(b'"') {
-            self.read_string()
-        } else {
-            // Read until semicolon, comma, or closing paren
-            let start = self.pos;
-            let mut depth = 0;
-            while self.pos < self.content.len() {
-                let ch = self.content.as_bytes()[self.pos];
-                if ch == b'(' {
-                    depth += 1;
-                    self.pos += 1;
-                } else if ch == b')' {
-                    if depth == 0 {
-                        break;
-                    }
-                    depth -= 1;
-                    self.pos += 1;
-                } else if (ch == b';' || ch == b',') && depth == 0 {
-                    break;
-                } else {
-                    self.pos += 1;
-                }
-            }
-            Ok(self.content[start..self.pos].trim().to_string())
-        }
-    }
-
-    fn parse_float_to_ps(&self, value: &str) -> u64 {
-        // Parse a floating point value and convert to picoseconds (integer)
-        // The Liberty file uses time_unit : "1ps", so values are already in ps
+    /// Parse a floating point value and convert to picoseconds (integer).
+    ///
+    /// The Liberty file uses `time_unit : "1ps"`, so values are already in
+    /// ps; we only round to the nearest integer. Ported verbatim from the
+    /// former `LibertyParser::parse_float_to_ps`.
+    fn parse_float_to_ps(value: &str) -> u64 {
         let value = value.trim().trim_matches('"');
         if let Ok(f) = value.parse::<f64>() {
-            // Round to nearest picosecond
-            (f * 1.0).round() as u64
+            // time_unit is 1ps, so no scale factor — just round to integer ps.
+            f.round() as u64
         } else {
             0
         }
     }
 
-    fn skip_block(&mut self) -> Result<(), String> {
-        let mut depth = 1;
-        while self.pos < self.content.len() && depth > 0 {
-            let ch = self.content.as_bytes()[self.pos];
-            if ch == b'{' {
-                depth += 1;
-            } else if ch == b'}' {
-                depth -= 1;
-            }
-            self.pos += 1;
-        }
-        Ok(())
-    }
-
-    fn parse_library(&mut self, lib: &mut TimingLibrary) -> Result<(), String> {
-        self.skip_whitespace();
-        let keyword = self.read_identifier();
-        if keyword != "library" {
-            return Err(format!("Expected 'library', found '{}'", keyword));
-        }
-
-        self.expect_char('(')?;
-        // Library name can be quoted (SKY130) or unquoted (AIGPDK)
-        self.skip_whitespace();
-        if self.peek_char() == Some('"') {
-            lib.name = self.read_string()?;
+    /// Extract the first scalar from a timing-table group such as
+    /// `cell_rise (scalar) { values ("1.0"); }`.
+    ///
+    /// Mirrors the former parser: find the `values` attribute and take the
+    /// first numeric token, splitting on commas/quotes so a list-valued
+    /// `values ("a, b, c")` yields its first entry. 2-D lookup tables (no
+    /// scalar leading value, or absent `values`) yield `None`, matching the
+    /// old "skip and use default timing" behaviour.
+    fn extract_scalar_ps(table: &LibertyGroup) -> Option<u64> {
+        let values = table.attr("values")?;
+        let first = values.first_string()?;
+        // `first_string` already returns the de-quoted text of the first
+        // value. A list packed in one quoted string ("a, b, c") still needs
+        // splitting on the separators the old parser split on.
+        let token = first
+            .trim_start()
+            .trim_start_matches('"')
+            .split([',', '"', ')'])
+            .next()
+            .unwrap_or("")
+            .trim();
+        if token.is_empty() {
+            None
         } else {
-            lib.name = self.read_identifier();
+            Some(parse_float_to_ps(token))
         }
-        self.expect_char(')')?;
-        self.expect_char('{')?;
-
-        while self.peek_char() != Some('}') {
-            self.skip_whitespace();
-            let keyword = self.read_identifier();
-
-            match keyword.as_str() {
-                "time_unit" => {
-                    self.expect_char(':')?;
-                    lib.time_unit = self.read_value()?;
-                    self.expect_char(';')?;
-                }
-                "cell" => {
-                    let cell = self.parse_cell()?;
-                    lib.cells.insert(cell.name.clone(), cell);
-                }
-                "type" | "operating_conditions" => {
-                    // Skip these blocks
-                    self.expect_char('(')?;
-                    self.read_value()?;
-                    self.expect_char(')')?;
-                    self.expect_char('{')?;
-                    self.skip_block()?;
-                }
-                _ => {
-                    // Skip unknown constructs
-                    if self.peek_char() == Some(':') {
-                        // Attribute: name : value ;
-                        self.expect_char(':')?;
-                        self.read_value()?;
-                        if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('(') {
-                        // Function or block: name(...) or name(...) { ... }
-                        self.skip_parenthesized()?;
-                        if self.peek_char() == Some('{') {
-                            // Block with body
-                            self.expect_char('{')?;
-                            self.skip_block()?;
-                        } else if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('{') {
-                        // Standalone block
-                        self.expect_char('{')?;
-                        self.skip_block()?;
-                    }
-                    // If nothing matched, the identifier was already consumed
-                    // and we'll try again on the next iteration
-                }
-            }
-        }
-
-        self.expect_char('}')?;
-        Ok(())
     }
 
-    /// Skip a parenthesized expression including its contents.
-    fn skip_parenthesized(&mut self) -> Result<(), String> {
-        self.expect_char('(')?;
-        let mut depth = 1;
-        while self.pos < self.content.len() && depth > 0 {
-            let ch = self.content.as_bytes()[self.pos];
-            if ch == b'(' {
-                depth += 1;
-            } else if ch == b')' {
-                depth -= 1;
-            }
-            self.pos += 1;
-        }
-        Ok(())
-    }
-
-    fn parse_cell(&mut self) -> Result<CellTiming, String> {
-        let mut cell = CellTiming::default();
-
-        self.expect_char('(')?;
-        // Cell name can be quoted (SKY130) or unquoted (AIGPDK)
-        self.skip_whitespace();
-        if self.peek_char() == Some('"') {
-            cell.name = self.read_string()?;
-        } else {
-            cell.name = self.read_identifier();
-            // Handle cell names with special characters like $__RAMGEM_SYNC_
-            if self.peek_char() == Some('_') {
-                while self.peek_char() == Some('_') {
-                    self.expect_char('_')?;
-                    cell.name.push('_');
-                    let extra = self.read_identifier();
-                    cell.name.push_str(&extra);
-                }
-            }
-        }
-        self.expect_char(')')?;
-        self.expect_char('{')?;
-
-        while self.peek_char() != Some('}') {
-            self.skip_whitespace();
-            let keyword = self.read_identifier();
-
-            match keyword.as_str() {
-                "pin" => {
-                    let pin = self.parse_pin()?;
-                    cell.pins.insert(pin.name.clone(), pin);
-                }
-                "bus" => {
-                    let pin = self.parse_bus()?;
-                    cell.pins.insert(pin.name.clone(), pin);
-                }
-                "ff" | "memory" | "statetable" => {
-                    // Skip these blocks - they have parenthesized args with commas
-                    self.skip_parenthesized()?;
-                    self.expect_char('{')?;
-                    self.skip_block()?;
-                }
-                _ => {
-                    // Skip unknown constructs
-                    if self.peek_char() == Some(':') {
-                        self.expect_char(':')?;
-                        self.read_value()?;
-                        if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('(') {
-                        self.skip_parenthesized()?;
-                        if self.peek_char() == Some('{') {
-                            self.expect_char('{')?;
-                            self.skip_block()?;
-                        } else if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('{') {
-                        self.expect_char('{')?;
-                        self.skip_block()?;
-                    }
-                }
-            }
-        }
-
-        self.expect_char('}')?;
-        Ok(cell)
-    }
-
-    fn parse_pin(&mut self) -> Result<PinTiming, String> {
-        let mut pin = PinTiming::default();
-
-        self.expect_char('(')?;
-        // Pin name can be quoted (SKY130) or unquoted (AIGPDK)
-        self.skip_whitespace();
-        if self.peek_char() == Some('"') {
-            pin.name = self.read_string()?;
-        } else {
-            pin.name = self.read_identifier();
-        }
-        self.expect_char(')')?;
-        self.expect_char('{')?;
-
-        while self.peek_char() != Some('}') {
-            self.skip_whitespace();
-            let keyword = self.read_identifier();
-
-            match keyword.as_str() {
-                "direction" => {
-                    self.expect_char(':')?;
-                    // Direction can be quoted (SKY130) or unquoted (AIGPDK)
-                    let val = self.read_value()?;
-                    pin.direction = val.trim_matches('"').to_string();
-                    self.expect_char(';')?;
-                }
-                "clock" => {
-                    self.expect_char(':')?;
-                    // Clock can be quoted (SKY130) or unquoted (AIGPDK)
-                    let val = self.read_value()?;
-                    let val = val.trim_matches('"');
-                    pin.is_clock = val == "true";
-                    self.expect_char(';')?;
-                }
-                "timing" => {
-                    let arc = self.parse_timing_arc()?;
-                    pin.timing_arcs.push(arc);
-                }
-                _ => {
-                    // Skip unknown constructs
-                    if self.peek_char() == Some(':') {
-                        self.expect_char(':')?;
-                        self.read_value()?;
-                        if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('(') {
-                        self.skip_parenthesized()?;
-                        if self.peek_char() == Some('{') {
-                            self.expect_char('{')?;
-                            self.skip_block()?;
-                        } else if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('{') {
-                        self.expect_char('{')?;
-                        self.skip_block()?;
-                    }
-                }
-            }
-        }
-
-        self.expect_char('}')?;
-        Ok(pin)
-    }
-
-    fn parse_bus(&mut self) -> Result<PinTiming, String> {
-        let mut pin = PinTiming::default();
-
-        self.expect_char('(')?;
-        // Bus name can be quoted (SKY130) or unquoted (AIGPDK)
-        self.skip_whitespace();
-        if self.peek_char() == Some('"') {
-            pin.name = self.read_string()?;
-        } else {
-            pin.name = self.read_identifier();
-        }
-        self.expect_char(')')?;
-        self.expect_char('{')?;
-
-        while self.peek_char() != Some('}') {
-            self.skip_whitespace();
-            let keyword = self.read_identifier();
-
-            match keyword.as_str() {
-                "direction" => {
-                    self.expect_char(':')?;
-                    let val = self.read_value()?;
-                    pin.direction = val.trim_matches('"').to_string();
-                    self.expect_char(';')?;
-                }
-                "timing" => {
-                    let arc = self.parse_timing_arc()?;
-                    pin.timing_arcs.push(arc);
-                }
-                "pin" | "memory_read" | "memory_write" => {
-                    // Skip nested blocks
-                    self.skip_parenthesized()?;
-                    if self.peek_char() == Some('{') {
-                        self.expect_char('{')?;
-                        self.skip_block()?;
-                    }
-                }
-                _ => {
-                    // Skip unknown constructs
-                    if self.peek_char() == Some(':') {
-                        self.expect_char(':')?;
-                        self.read_value()?;
-                        if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('(') {
-                        self.skip_parenthesized()?;
-                        if self.peek_char() == Some('{') {
-                            self.expect_char('{')?;
-                            self.skip_block()?;
-                        } else if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('{') {
-                        self.expect_char('{')?;
-                        self.skip_block()?;
-                    }
-                }
-            }
-        }
-
-        self.expect_char('}')?;
-        Ok(pin)
-    }
-
-    fn parse_timing_arc(&mut self) -> Result<TimingArc, String> {
+    /// Walk a `timing () { ... }` group into a [`TimingArc`].
+    fn walk_timing_arc(timing: &LibertyGroup) -> TimingArc {
         let mut arc = TimingArc::default();
 
-        self.expect_char('(')?;
-        self.expect_char(')')?;
-        self.expect_char('{')?;
+        if let Some(rp) = timing.attr("related_pin").and_then(|a| a.first_string()) {
+            arc.related_pin = rp.trim_matches('"').to_string();
+        }
+        if let Some(tt) = timing.attr("timing_type").and_then(|a| a.first_string()) {
+            arc.timing_type = Some(tt.trim_matches('"').to_string());
+        }
 
-        while self.peek_char() != Some('}') {
-            self.skip_whitespace();
-            let keyword = self.read_identifier();
-
-            match keyword.as_str() {
-                "related_pin" => {
-                    self.expect_char(':')?;
-                    arc.related_pin = self.read_string()?;
-                    self.expect_char(';')?;
-                }
-                "timing_type" => {
-                    self.expect_char(':')?;
-                    let val = self.read_value()?;
-                    arc.timing_type = Some(val.trim_matches('"').to_string());
-                    self.expect_char(';')?;
-                }
-                "cell_rise" | "cell_fall" | "rise_constraint" | "fall_constraint" => {
-                    // Parse timing table (scalar or lookup table)
-                    // For complex 2D tables (SKY130), we just skip and use default timing
-                    // For scalar tables (AIGPDK), we extract the single value
-                    self.skip_parenthesized()?;
-                    self.expect_char('{')?;
-
-                    // For scalar tables, extract the single value
-                    // For 2D tables, just skip the whole block
-                    let block_start = self.pos;
-                    self.skip_block()?;
-                    let block_end = self.pos;
-
-                    // Try to extract a scalar value from the block
-                    let block_content = &self.content[block_start..block_end];
-                    if let Some(values_start) = block_content.find("values") {
-                        // Look for values("number") pattern
-                        if let Some(paren_start) = block_content[values_start..].find('(') {
-                            let after_paren = values_start + paren_start + 1;
-                            // Find first numeric value (skip quotes)
-                            let rest = &block_content[after_paren..];
-                            let first_val = rest
-                                .trim_start()
-                                .trim_start_matches('"')
-                                .split([',', '"', ')'])
-                                .next()
-                                .unwrap_or("")
-                                .trim();
-                            if !first_val.is_empty() {
-                                let ps_val = self.parse_float_to_ps(first_val);
-                                match keyword.as_str() {
-                                    "cell_rise" => arc.cell_rise_ps = Some(ps_val),
-                                    "cell_fall" => arc.cell_fall_ps = Some(ps_val),
-                                    "rise_constraint" => arc.rise_constraint_ps = Some(ps_val),
-                                    "fall_constraint" => arc.fall_constraint_ps = Some(ps_val),
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    // Skip other timing attributes (e.g., rise_transition, fall_transition)
-                    if self.peek_char() == Some(':') {
-                        self.expect_char(':')?;
-                        self.read_value()?;
-                        if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('(') {
-                        self.skip_parenthesized()?;
-                        if self.peek_char() == Some('{') {
-                            self.expect_char('{')?;
-                            self.skip_block()?;
-                        } else if self.peek_char() == Some(';') {
-                            self.expect_char(';')?;
-                        }
-                    } else if self.peek_char() == Some('{') {
-                        self.expect_char('{')?;
-                        self.skip_block()?;
-                    }
+        // Timing tables are nested groups: cell_rise / cell_fall /
+        // rise_constraint / fall_constraint. Use the FIRST of each (the old
+        // parser overwrote on repeats too, so first-wins vs last-wins only
+        // differs for malformed duplicate tables; first is what extraction
+        // would observe walking in order).
+        for table in &timing.groups {
+            let slot = match table.group_type.as_str() {
+                "cell_rise" => &mut arc.cell_rise_ps,
+                "cell_fall" => &mut arc.cell_fall_ps,
+                "rise_constraint" => &mut arc.rise_constraint_ps,
+                "fall_constraint" => &mut arc.fall_constraint_ps,
+                _ => continue,
+            };
+            if slot.is_none() {
+                if let Some(ps) = extract_scalar_ps(table) {
+                    *slot = Some(ps);
                 }
             }
         }
 
-        self.expect_char('}')?;
-        Ok(arc)
+        arc
+    }
+
+    /// Walk a `pin (...) { ... }` or `bus (...) { ... }` group into a
+    /// [`PinTiming`]. Buses are treated like pins for timing purposes
+    /// (their direction + timing arcs), matching the former `parse_bus`.
+    fn walk_pin(pin_group: &LibertyGroup) -> PinTiming {
+        let mut pin = PinTiming {
+            name: pin_group.first_name().unwrap_or("").to_string(),
+            ..Default::default()
+        };
+
+        if let Some(dir) = pin_group.attr("direction").and_then(|a| a.first_string()) {
+            pin.direction = dir.trim_matches('"').to_string();
+        }
+        if let Some(clk) = pin_group.attr("clock").and_then(|a| a.first_string()) {
+            pin.is_clock = clk.trim_matches('"') == "true";
+        }
+
+        for timing in pin_group.groups_of_type("timing") {
+            pin.timing_arcs.push(walk_timing_arc(timing));
+        }
+
+        pin
+    }
+
+    /// Walk a `cell (...) { ... }` group into a [`CellTiming`].
+    fn walk_cell(cell_group: &LibertyGroup) -> CellTiming {
+        let mut cell = CellTiming {
+            name: cell_group.first_name().unwrap_or("").to_string(),
+            ..Default::default()
+        };
+
+        // `pin` and `bus` groups both carry pin-level timing. Walk them in
+        // source order; later definitions overwrite earlier ones by name,
+        // matching the former insert-by-name behaviour.
+        for child in &cell_group.groups {
+            match child.group_type.as_str() {
+                "pin" | "bus" => {
+                    let pin = walk_pin(child);
+                    cell.pins.insert(pin.name.clone(), pin);
+                }
+                _ => {}
+            }
+        }
+
+        cell
+    }
+
+    /// Project a parsed Liberty `library` group onto a [`TimingLibrary`].
+    pub(super) fn walk_library(root: &LibertyGroup) -> TimingLibrary {
+        let mut lib = TimingLibrary {
+            name: root.first_name().unwrap_or("").to_string(),
+            ..Default::default()
+        };
+
+        if let Some(tu) = root.attr("time_unit").and_then(|a| a.first_string()) {
+            lib.time_unit = tu.trim_matches('"').to_string();
+        }
+
+        for cell_group in root.groups_of_type("cell") {
+            let cell = walk_cell(cell_group);
+            lib.cells.insert(cell.name.clone(), cell);
+        }
+
+        lib
     }
 }
 
