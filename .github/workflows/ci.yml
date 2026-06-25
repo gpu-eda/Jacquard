@@ -101,8 +101,12 @@ jobs:
       # members (the repo has no [workspace]), so `cargo test --lib` above does
       # not reach them. They have no heavy toolchain deps (unlike opensta-to-ir),
       # so run their tests standalone here rather than in a dedicated job.
-      - name: Run cell-model-ir tests
-        run: cargo test --manifest-path crates/cell-model-ir/Cargo.toml
+      - name: Run cell-model-IR pipeline crate tests
+        run: |
+          cargo test --manifest-path crates/cell-decomp/Cargo.toml
+          cargo test --manifest-path crates/liberty-parse/Cargo.toml
+          cargo test --manifest-path crates/cell-model-ir/Cargo.toml
+          cargo test --manifest-path crates/liberty-to-cellir/Cargo.toml
 
   # Cosim CpuBackend regression on a free Linux runner (no GPU). Builds the
   # no-feature jacquard binary (CpuBackend) and runs the seven cosim fixtures,
