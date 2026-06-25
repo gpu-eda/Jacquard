@@ -200,6 +200,14 @@ struct SimArgs {
     #[clap(long = "cell-library", value_name = "PATH")]
     cell_library: Vec<PathBuf>,
 
+    /// Path to a generated cell-model-IR descriptor (ADR 0019). When
+    /// set, GF180 combinational cells the descriptor models are built
+    /// from its pre-decomposed AIG instead of the hardcoded vendored
+    /// `functional.v` path. Optional — absent reproduces today's
+    /// behaviour exactly.
+    #[clap(long = "cell-descriptor", value_name = "PATH")]
+    cell_descriptor: Option<PathBuf>,
+
     /// Path to a file listing internal signals to surface in the
     /// output VCD. One hierarchical signal name per line (`.` for
     /// hierarchy, optional trailing `[N]` for bit index). `#`
@@ -360,6 +368,11 @@ struct CosimArgs {
     #[clap(long = "cell-library", value_name = "PATH")]
     cell_library: Vec<PathBuf>,
 
+    /// Path to a generated cell-model-IR descriptor (ADR 0019). See
+    /// `jacquard sim --help` for details. Optional.
+    #[clap(long = "cell-descriptor", value_name = "PATH")]
+    cell_descriptor: Option<PathBuf>,
+
     /// Path to a file listing internal signals to surface in the
     /// output VCD. One hierarchical signal name per line; see
     /// `jacquard sim --trace-signals --help` for the full file
@@ -489,6 +502,10 @@ struct XsourcesArgs {
     /// User-supplied Verilog cell-library files (same as `sim`/`cosim`).
     #[clap(long = "cell-library", value_name = "PATH")]
     cell_library: Vec<PathBuf>,
+
+    /// Generated cell-model-IR descriptor (ADR 0019), same as `sim`/`cosim`.
+    #[clap(long = "cell-descriptor", value_name = "PATH")]
+    cell_descriptor: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -548,6 +565,7 @@ fn cmd_sim(args: SimArgs) {
         timing_ir: args.timing_ir.clone(),
         timing_corner: args.timing_corner.clone(),
         cell_library: args.cell_library.clone(),
+        cell_descriptor: args.cell_descriptor.clone(),
         trace_signals: args.trace_signals.clone(),
         extra_observable_signals: Vec::new(),
     };
@@ -1888,6 +1906,7 @@ fn cmd_dump_paths(args: DumpPathsArgs) {
         timing_ir: args.timing_ir.clone(),
         timing_corner: None,
         cell_library: Vec::new(),
+        cell_descriptor: None,
         trace_signals: None,
         extra_observable_signals: Vec::new(),
     };
@@ -1928,6 +1947,7 @@ fn cmd_xsources(args: XsourcesArgs) {
         &args.netlist_verilog,
         args.top_module.as_deref(),
         &args.cell_library,
+        args.cell_descriptor.as_deref(),
     );
 
     let config: Option<TestbenchConfig> = args.config.as_ref().map(|path| {
@@ -2109,6 +2129,7 @@ fn cmd_cosim(args: CosimArgs) {
             timing_ir: args.timing_ir.clone(),
             timing_corner: None,
             cell_library: args.cell_library.clone(),
+            cell_descriptor: args.cell_descriptor.clone(),
             trace_signals: args.trace_signals.clone(),
             extra_observable_signals: bus_trace_signals,
         };

@@ -299,7 +299,7 @@ mod tests {
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/xprop_cosim/sim_config.json");
 
     fn demo_manifest(with_config: bool) -> XSourceManifest {
-        let (netlistdb, aig) = build_netlist_and_aig(Path::new(DEMO_NETLIST), None, &[]);
+        let (netlistdb, aig) = build_netlist_and_aig(Path::new(DEMO_NETLIST), None, &[], None);
         let config: Option<TestbenchConfig> = if with_config {
             let f = std::fs::File::open(DEMO_CONFIG).unwrap();
             Some(serde_json::from_reader(std::io::BufReader::new(f)).unwrap())

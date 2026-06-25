@@ -62,6 +62,11 @@ pub struct DesignArgs {
     /// See `src/sim/trace_signals.rs` for the file format and
     /// resolution semantics.
     pub trace_signals: Option<PathBuf>,
+    /// Optional `--cell-descriptor <PATH>` — a generated cell-model-IR
+    /// descriptor (ADR 0019). When set, GF180 combinational cells the
+    /// descriptor models are built from its pre-decomposed AIG instead of the
+    /// hardcoded vendored `functional.v` path. Absent = today's behaviour.
+    pub cell_descriptor: Option<PathBuf>,
     /// Additional hierarchical signal names to register as observable,
     /// supplied programmatically rather than from a file. Any feature
     /// that needs specific nets to have state-buffer slots before
@@ -89,6 +94,7 @@ pub fn build_netlist_and_aig(
     netlist_verilog: &Path,
     top_module: Option<&str>,
     cell_library: &[PathBuf],
+    cell_descriptor: Option<&Path>,
 ) -> (NetlistDB, AIG) {
     // Detect cell library
     let lib = detect_library_from_file(netlist_verilog).expect("Failed to read netlist file");
@@ -154,7 +160,27 @@ pub fn build_netlist_and_aig(
     } else {
         Some(&runtime_lib)
     };
-    let aig = AIG::from_netlistdb_with_cells(&netlistdb, cell_lib_ref);
+
+    // ADR 0019: optional cell-model-IR descriptor (`--cell-descriptor`).
+    // When supplied, GF180 combinational cells it models are spliced from the
+    // descriptor's pre-decomposed AIG instead of the hardcoded `functional.v`
+    // path. Absent = today's behaviour exactly.
+    let descriptor = cell_descriptor.map(|path| {
+        let ir = cell_model_ir::CellModelIr::read_from(path)
+            .unwrap_or_else(|e| panic!("loading --cell-descriptor {}: {e}", path.display()));
+        clilog::info!(
+            "Loaded cell-model-IR descriptor '{}' ({} cells) from {}",
+            ir.library.name,
+            ir.cells.len(),
+            path.display()
+        );
+        ir
+    });
+    let aig = AIG::from_netlistdb_with_cells_and_descriptor(
+        &netlistdb,
+        cell_lib_ref,
+        descriptor.as_ref(),
+    );
     (netlistdb, aig)
 }
 
@@ -168,6 +194,7 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
         &args.netlist_verilog,
         args.top_module.as_deref(),
         &args.cell_library,
+        args.cell_descriptor.as_deref(),
     );
 
     // Register user-supplied trace signals (--trace-signals). Must
