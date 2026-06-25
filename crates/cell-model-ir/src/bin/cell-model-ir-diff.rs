@@ -51,7 +51,11 @@ fn main() -> ExitCode {
 
     let d = diff_irs(&a, &b);
     if d.is_clean() {
-        println!("clean: {} and {} are structurally identical", args.a.display(), args.b.display());
+        println!(
+            "clean: {} and {} are structurally identical",
+            args.a.display(),
+            args.b.display()
+        );
         ExitCode::from(EXIT_CLEAN)
     } else {
         println!("{} mismatch(es):", d.mismatches.len());

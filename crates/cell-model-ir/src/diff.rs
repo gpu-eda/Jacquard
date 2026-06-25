@@ -65,19 +65,24 @@ pub fn diff_irs(a: &CellModelIr, b: &CellModelIr) -> Diff {
         if ca != cb {
             // Pinpoint the sub-field that differs for a useful message.
             if ca.kind != cb.kind {
-                d.mismatches
-                    .push(format!("cell {name}: kind differs ({:?} vs {:?})", ca.kind, cb.kind));
+                d.mismatches.push(format!(
+                    "cell {name}: kind differs ({:?} vs {:?})",
+                    ca.kind, cb.kind
+                ));
             }
             if ca.pins != cb.pins {
                 d.mismatches.push(format!("cell {name}: pins differ"));
             }
             if ca.logic != cb.logic {
-                d.mismatches.push(format!("cell {name}: combinational AIG differs"));
+                d.mismatches
+                    .push(format!("cell {name}: combinational AIG differs"));
             }
         }
     }
 
-    Diff { mismatches: d.mismatches }
+    Diff {
+        mismatches: d.mismatches,
+    }
 }
 
 #[cfg(test)]
@@ -86,18 +91,30 @@ mod tests {
     use crate::{CellKind, CellModel, CombLogic, Direction, LibraryMeta, OutputPin, Pin, Ref};
 
     fn lib() -> CellModelIr {
-        let mut ir = CellModelIr::new(LibraryMeta { name: "l".into(), prefixes: vec!["l_".into()] });
+        let mut ir = CellModelIr::new(LibraryMeta {
+            name: "l".into(),
+            prefixes: vec!["l_".into()],
+        });
         ir.cells.push(CellModel {
             cell_type: "l_inv".into(),
             kind: CellKind::Comb,
             pins: vec![
-                Pin { name: "A".into(), direction: Direction::Input },
-                Pin { name: "Y".into(), direction: Direction::Output },
+                Pin {
+                    name: "A".into(),
+                    direction: Direction::Input,
+                },
+                Pin {
+                    name: "Y".into(),
+                    direction: Direction::Output,
+                },
             ],
             logic: Some(CombLogic {
                 inputs: vec!["A".into()],
                 and_nodes: vec![],
-                outputs: vec![OutputPin { pin: "Y".into(), r: Ref::inv(1) }],
+                outputs: vec![OutputPin {
+                    pin: "Y".into(),
+                    r: Ref::inv(1),
+                }],
             }),
         });
         ir
@@ -130,6 +147,9 @@ mod tests {
         // Flip the inverter's output to a buffer: structurally different AIG.
         b.cells[0].logic.as_mut().unwrap().outputs[0].r = Ref::node(1);
         let d = diff_irs(&a, &b);
-        assert!(d.mismatches.iter().any(|m| m.contains("combinational AIG differs")));
+        assert!(d
+            .mismatches
+            .iter()
+            .any(|m| m.contains("combinational AIG differs")));
     }
 }

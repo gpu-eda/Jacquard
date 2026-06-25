@@ -1,6 +1,6 @@
 [package]
 name = "cell-model-ir"
-version = "0.1.0"
+version = "0.2.3"
 edition = "2021"
 description = "Jacquard cell-model IR: a generated, JSON-first, per-cell-type library descriptor (pin directions, combinational AIG, sequential/classification, timing). See docs/adr/0019-cell-model-ir.md."
 license = "Apache-2.0"
