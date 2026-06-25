@@ -195,9 +195,9 @@ Top-level shape:
   violation) needs GPU-side near-miss instrumentation and is not in
   v1.0.0; for now, `worst_slack` is populated only from actual violation
   events.
-- `--timing-report` only produces output today on the Metal sim path.
-  The CUDA / HIP / cosim paths do not currently route runtime violations
-  through `process_events` — bringing them in is independent plumbing.
+- `--timing-report` is wired on all three `sim` backends (Metal, CUDA,
+  HIP). The `cosim` path does not yet route runtime violations through
+  `process_events` — bringing it in is independent plumbing.
 - The `violations` array is capped at 100,000 records by default
   (~8 MB JSON). Override or disable the cap with
   `--timing-report-max-violations <N>` (`0` = unbounded). Setup/hold

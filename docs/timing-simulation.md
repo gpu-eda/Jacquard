@@ -4,6 +4,27 @@
 
 This document explains GEM's boomerang evaluation architecture and how timing simulation with per-gate delays can be implemented efficiently on GPU.
 
+## Current status (what ships today)
+
+Phase 1 closed 2026-05-02; see [`plans/post-phase-0-roadmap.md`](plans/post-phase-0-roadmap.md).
+
+| Capability | Status |
+|---|---|
+| Liberty parsing | ✅ |
+| SDF back-annotation via `opensta-to-ir` | ✅ |
+| Per-DFF clock-arrival folding (Pillar B Stages 1+2) | ✅ |
+| GPU-side setup/hold violation detection | ✅ Metal, CUDA, HIP (`sim`); the `cosim` path is a follow-up |
+| **Symbolic violation messages** (`top/cpu/regs[7][bit 22] [word=42]`) | ✅ Metal, CUDA, HIP (`sim`) |
+| **`--timing-report <path.json>`** structured end-of-run report | ✅ Metal, CUDA, HIP (`sim`); not yet wired for `cosim` |
+| **`--timing-summary`** human-readable text summary | ✅ Metal, CUDA, HIP (`sim`); not yet wired for `cosim` |
+| OpenSTA detection + version check | ✅ |
+| Multi-corner timing IR (`--timing-corner <name>`) | ✅ |
+| `--sdf-corner` (min/typ/max selection from one SDF) | ⚠ One corner at a time |
+| Per-receiver wire delay (Pillar C Tier 1) | ❌ Phase 2 (blocked on ADR 0007) |
+
+See [`timing-violations.md`](timing-violations.md) for the full violation-output
+interface and [`why-jacquard.md`](why-jacquard.md) for positioning.
+
 ## Background: The Simulation Challenge
 
 GEM simulates And-Inverter Graphs (AIGs) where every node is either:

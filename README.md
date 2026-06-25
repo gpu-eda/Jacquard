@@ -1,6 +1,6 @@
 # Jacquard
 
-![CI](https://github.com/ChipFlow/Jacquard/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/gpu-eda/Jacquard/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Rust](https://img.shields.io/badge/rust-edition%202021-orange)
 
@@ -15,28 +15,12 @@ Jacquard builds on the excellent [GEM](https://github.com/NVlabs/GEM) research b
 - **Significant performance optimizations** to the partition mapping pipeline
 - **CI/CD** with automated testing across all three backends
 
-### Timing simulation status
-
-GPU-accelerated gate-level simulation with real cell timing. What ships
-today (Phase 1 closed 2026-05-02; see [`docs/plans/post-phase-0-roadmap.md`](docs/plans/post-phase-0-roadmap.md)):
-
-| Capability | Status |
-|---|---|
-| Liberty parsing | ✅ |
-| SDF back-annotation via `opensta-to-ir` | ✅ |
-| Per-DFF clock-arrival folding (Pillar B Stages 1+2) | ✅ |
-| GPU-side setup/hold violation detection | ✅ Metal; CUDA + HIP detect, route through `process_events` is a follow-up |
-| **Symbolic violation messages** (`top/cpu/regs[7][bit 22] [word=42]`) | ✅ Metal |
-| **`--timing-report <path.json>`** structured end-of-run report | ✅ Metal |
-| **`--timing-summary`** human-readable text summary | ✅ Metal |
-| OpenSTA detection + version check | ✅ |
-| Per-receiver wire delay (Pillar C Tier 1) | ❌ Phase 2 (blocked on ADR 0007) |
-| Multi-corner SDF (`--sdf-corner`) | ⚠ Single corner (typ) only; WS2.4 open |
-
-See [`docs/timing-violations.md`](docs/timing-violations.md) and
-[`docs/why-jacquard.md`](docs/why-jacquard.md) for the full output
-interface and positioning. [`CHANGELOG.md`](CHANGELOG.md) tracks
-released and unreleased changes.
+GPU-accelerated gate-level simulation with real cell timing is live across all
+three backends. For the per-backend feature status — Liberty parsing, SDF
+back-annotation, setup/hold violation detection, and the structured
+`--timing-report` — see **[Timing Simulation](https://gpu-eda.github.io/Jacquard/timing-simulation.html)**
+(or [`docs/timing-simulation.md`](docs/timing-simulation.md)).
+[`CHANGELOG.md`](CHANGELOG.md) tracks released and unreleased changes.
 
 ## Dependencies
 
@@ -54,10 +38,15 @@ Contributors editing only Rust / C++ / kernel sources do not need `flatc` or Ope
 
 ## Quick Start
 
-> **Just want to install Jacquard?** See **[docs/installation.md](docs/installation.md)**
-> for prebuilt binaries, Homebrew (macOS/Metal), and the `netlist-graph`
-> PyPI companion. The from-source build below is the contributor path —
-> and the route for Linux CUDA / HIP.
+> **Just want to install Jacquard?** On macOS (Apple Silicon / Metal):
+>
+> ```sh
+> brew install gpu-eda/homebrew-tap/jacquard
+> ```
+>
+> See **[docs/installation.md](docs/installation.md)** for `cargo binstall`,
+> the prebuilt tarball, and the `netlist-graph` PyPI companion. The from-source
+> build below is the contributor path — and the route for Linux CUDA / HIP.
 
 ```sh
 git clone https://github.com/gpu-eda/Jacquard.git
@@ -101,7 +90,7 @@ Partitioning (mapping the design to GPU blocks) happens automatically at startup
 
 ## Documentation
 
-Browse the full documentation [online](https://chipflow.github.io/Jacquard/) or build it locally with [mdbook](https://rust-lang.github.io/mdBook/):
+Browse the full documentation [online](https://gpu-eda.github.io/Jacquard/) or build it locally with [mdbook](https://rust-lang.github.io/mdBook/):
 
 ```sh
 mdbook serve   # opens at http://localhost:3000
@@ -109,9 +98,13 @@ mdbook serve   # opens at http://localhost:3000
 
 ## Limitations
 
-- Only supports non-interactive testbenches (static VCD input waveforms)
-- Synchronous logic only (no latches or async sequential logic)
-- Clock gates must use the `CKLNQD` module from `aigpdk.v`
+- `jacquard sim` takes a static VCD input waveform. For reactive testbenches,
+  `jacquard cosim` runs peripheral models (SPI flash, UART, JTAG — including an
+  interactive `--jtag-server` — and Wishbone / APB3 bus tracing) as GPU kernels
+  alongside the design, so inputs can depend on design outputs cycle-by-cycle.
+- Synchronous logic only (no latches or async sequential logic).
+- Clock gates must use `CKLNQD` (from `aigpdk.v`) or the equivalent clock-gate
+  cells from the SKY130 or GF180MCU PDKs.
 
 ## Benchmarks
 
