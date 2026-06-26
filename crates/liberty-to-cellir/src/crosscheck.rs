@@ -57,9 +57,7 @@ pub enum CellCheck {
 /// evaluate as pure 2-state logic. UDPs are handled separately (looked up in
 /// the model's `udps` map). Anything else (tristate `bufif*`, `notif*`, …)
 /// makes the model un-comparable here.
-const EVALUATABLE_GATES: &[&str] = &[
-    "and", "or", "nand", "nor", "not", "buf", "xor", "xnor",
-];
+const EVALUATABLE_GATES: &[&str] = &["and", "or", "nand", "nor", "not", "buf", "xor", "xnor"];
 
 /// An index of `.v` models discovered under a functional-v directory tree:
 /// module name -> behavioural model, plus any UDP definitions found.
@@ -120,7 +118,7 @@ pub fn check_cell(cell: &CellModel, index: &ModelIndex) -> CellCheck {
     let Some(logic) = &cell.logic else {
         return CellCheck::NotComb;
     };
-    if cell.kind != CellKind::Comb {
+    if cell.kind != CellKind::Std {
         return CellCheck::NotComb;
     }
     let Some(model) = index.models.get(&cell.cell_type) else {
@@ -184,10 +182,7 @@ pub fn check_cell(cell: &CellModel, index: &ModelIndex) -> CellCheck {
                 mismatches.push(Mismatch {
                     cell: cell.cell_type.clone(),
                     pin: out.pin.clone(),
-                    inputs: inputs
-                        .iter()
-                        .map(|p| (p.clone(), vals[p]))
-                        .collect(),
+                    inputs: inputs.iter().map(|p| (p.clone(), vals[p])).collect(),
                     liberty: lib_v,
                     functional_v: fv,
                 });
@@ -246,11 +241,20 @@ mod tests {
         };
         CellModel {
             cell_type: name.into(),
-            kind: CellKind::Comb,
+            kind: CellKind::Std,
             pins: vec![
-                Pin { name: "A1".into(), direction: Direction::Input },
-                Pin { name: "A2".into(), direction: Direction::Input },
-                Pin { name: "Z".into(), direction: Direction::Output },
+                Pin {
+                    name: "A1".into(),
+                    direction: Direction::Input,
+                },
+                Pin {
+                    name: "A2".into(),
+                    direction: Direction::Input,
+                },
+                Pin {
+                    name: "Z".into(),
+                    direction: Direction::Output,
+                },
             ],
             logic: Some(logic),
             sequential: None,
@@ -261,7 +265,10 @@ mod tests {
     fn index_with(name: &str) -> ModelIndex {
         let mut models = HashMap::new();
         models.insert(name.to_string(), and2_model(name));
-        ModelIndex { models, udps: HashMap::new() }
+        ModelIndex {
+            models,
+            udps: HashMap::new(),
+        }
     }
 
     #[test]
@@ -269,7 +276,11 @@ mod tests {
         let cell = and2_cell("demo__and2", false);
         let index = index_with("demo__and2");
         match check_cell(&cell, &index) {
-            CellCheck::Checked { mismatches, assignments, .. } => {
+            CellCheck::Checked {
+                mismatches,
+                assignments,
+                ..
+            } => {
                 assert_eq!(assignments, 4);
                 assert!(mismatches.is_empty(), "expected clean, got {mismatches:?}");
             }
@@ -298,7 +309,10 @@ mod tests {
     #[test]
     fn missing_model_reports_no_model() {
         let cell = and2_cell("demo__and2", false);
-        let empty = ModelIndex { models: HashMap::new(), udps: HashMap::new() };
+        let empty = ModelIndex {
+            models: HashMap::new(),
+            udps: HashMap::new(),
+        };
         assert_eq!(check_cell(&cell, &empty), CellCheck::NoModel);
     }
 
@@ -306,7 +320,7 @@ mod tests {
     fn non_comb_cell_skipped() {
         let cell = CellModel {
             cell_type: "demo__dff".into(),
-            kind: CellKind::Other,
+            kind: CellKind::Filler,
             pins: vec![],
             logic: None,
             sequential: None,
@@ -323,7 +337,10 @@ mod tests {
         let model = parse_functional_model(src).unwrap();
         let mut models = HashMap::new();
         models.insert("demo__bufz".to_string(), model);
-        let index = ModelIndex { models, udps: HashMap::new() };
+        let index = ModelIndex {
+            models,
+            udps: HashMap::new(),
+        };
         let cell = and2_cell("demo__bufz", false); // any comb logic with a model present
         match check_cell(&cell, &index) {
             CellCheck::UnevaluatableModel { cell, .. } => assert_eq!(cell, "demo__bufz"),
@@ -338,11 +355,14 @@ mod tests {
         let logic = CombLogic {
             inputs: inputs.clone(),
             and_nodes: vec![],
-            outputs: vec![OutputPin { pin: "Y".into(), r: Ref::node(1) }],
+            outputs: vec![OutputPin {
+                pin: "Y".into(),
+                r: Ref::node(1),
+            }],
         };
         let cell = CellModel {
             cell_type: "demo__wide".into(),
-            kind: CellKind::Comb,
+            kind: CellKind::Std,
             pins: vec![],
             logic: Some(logic),
             sequential: None,
@@ -351,12 +371,23 @@ mod tests {
         // Provide a dummy model so we don't short-circuit on NoModel.
         let mut models = HashMap::new();
         let src_inputs = inputs.join(", ");
-        let src = format!("module demo__wide( {src_inputs}, Y );\noutput Y;\n\tbuf u(Y, I0);\nendmodule\n");
-        models.insert("demo__wide".to_string(), parse_functional_model(&src).unwrap());
-        let index = ModelIndex { models, udps: HashMap::new() };
+        let src = format!(
+            "module demo__wide( {src_inputs}, Y );\noutput Y;\n\tbuf u(Y, I0);\nendmodule\n"
+        );
+        models.insert(
+            "demo__wide".to_string(),
+            parse_functional_model(&src).unwrap(),
+        );
+        let index = ModelIndex {
+            models,
+            udps: HashMap::new(),
+        };
         assert_eq!(
             check_cell(&cell, &index),
-            CellCheck::Capped { cell: "demo__wide".into(), inputs: n }
+            CellCheck::Capped {
+                cell: "demo__wide".into(),
+                inputs: n
+            }
         );
     }
 }

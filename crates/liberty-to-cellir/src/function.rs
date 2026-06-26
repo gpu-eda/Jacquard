@@ -185,7 +185,11 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                     toks.push(Tok::Ident(word.to_string()));
                 }
             }
-            other => return Err(format!("unexpected character '{other}' in function '{src}'")),
+            other => {
+                return Err(format!(
+                    "unexpected character '{other}' in function '{src}'"
+                ))
+            }
         }
     }
     Ok(toks)

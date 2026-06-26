@@ -7,18 +7,21 @@
 //! [`crate::function`] (L2, D3). The per-output single-output [`CombLogic`]s
 //! are merged into ONE [`CombLogic`] per cell over a shared input numbering.
 //!
-//! Classification (C1 stub, D4 is C2): a cell with >=1 combinational output
-//! function is [`CellKind::Comb`]; everything else (sequential, tie, filler,
-//! and — for C1 — any cell whose outputs lack a Liberty `function`) is
-//! [`CellKind::Other`] with `logic = None`.
+//! Classification (D4, C2.2): sequential cells (Liberty `ff`/`latch`) carry
+//! L3 [`cell_model_ir::Sequential`] and are classified `Dff`/`Latch`;
+//! integrated clock gates are `ClockGate`; a cell with a combinational output
+//! cone is `Std`; tie / filler / endcap / tap cells classify by function /
+//! name. L4 per-cell timing (corner-keyed) is emitted alongside. See
+//! [`crate::sequential`] (L3) and [`crate::timing`] (L4).
 
 use cell_model_ir::{
-    AndNode, CellKind, CellModel, CellModelIr, CombLogic, Direction, LibraryMeta, OutputPin, Pin,
-    Ref,
+    AndNode, CellModel, CellModelIr, CombLogic, Direction, LibraryMeta, OutputPin, Pin, Ref,
 };
 use liberty_parse::LibertyGroup;
 
 use crate::function;
+use crate::sequential::{self, SeqNote};
+use crate::timing;
 
 /// A diagnostic emitted while converting (surfaced by the CLI / collected by
 /// tests).
@@ -48,6 +51,9 @@ pub enum ConvertNote {
 pub struct Conversion {
     pub ir: CellModelIr,
     pub notes: Vec<ConvertNote>,
+    /// L3 (sequential) extraction diagnostics, incl. the `clear_preset_var`
+    /// precedence findings.
+    pub seq_notes: Vec<SeqNote>,
 }
 
 /// Convert a parsed `library(...)` group into a [`CellModelIr`].
@@ -58,12 +64,23 @@ pub fn convert_library(lib: &LibertyGroup, prefixes: Vec<String>) -> Conversion 
     assert_eq!(lib.group_type, "library", "expected a `library` group");
     let name = lib.first_name().unwrap_or("unnamed").to_string();
 
+    // L4 corner derivation (D5): a single corner taken from the library name,
+    // with the per-value ps scale from the library's `time_unit`. For a
+    // single-corner input `.lib` this is a one-entry corner set; a logic-only
+    // lib (no recognisable corner) emits no L4 timing.
+    let time_unit = lib.attr("time_unit").and_then(|a| a.first_string());
+    let ps_scale = timing::ps_per_time_unit(time_unit);
+    let corner = timing::corner_from_library_name(&name);
+    let corner_index = corner.as_ref().map(|_| 0u32);
+
     let mut cells = Vec::new();
     let mut notes = Vec::new();
+    let mut seq_notes = Vec::new();
 
     for cell_grp in lib.groups_of_type("cell") {
-        let (model, mut cnotes) = convert_cell(cell_grp);
+        let (model, mut cnotes, mut snotes) = convert_cell(cell_grp, corner_index, ps_scale);
         notes.append(&mut cnotes);
+        seq_notes.append(&mut snotes);
         cells.push(model);
     }
 
@@ -74,8 +91,16 @@ pub fn convert_library(lib: &LibertyGroup, prefixes: Vec<String>) -> Conversion 
     };
 
     let mut ir = CellModelIr::new(LibraryMeta { name, prefixes });
+    if let Some(c) = corner {
+        ir.default_corner = c.name.clone();
+        ir.corners = vec![c];
+    }
     ir.cells = cells;
-    Conversion { ir, notes }
+    Conversion {
+        ir,
+        notes,
+        seq_notes,
+    }
 }
 
 /// Read pin directions, returning `(pins, ordered_input_pin_names)`.
@@ -104,11 +129,68 @@ fn read_pins(cell: &LibertyGroup) -> (Vec<Pin>, Vec<String>) {
 }
 
 /// Convert one `cell` group.
-fn convert_cell(cell: &LibertyGroup) -> (CellModel, Vec<ConvertNote>) {
+///
+/// `corner_index` is `Some(0)` when the library yielded an L4 corner (then
+/// timing is emitted), `None` for a logic-only library. `ps_scale` converts
+/// the library's native `time_unit` to picoseconds.
+fn convert_cell(
+    cell: &LibertyGroup,
+    corner_index: Option<u32>,
+    ps_scale: f64,
+) -> (CellModel, Vec<ConvertNote>, Vec<SeqNote>) {
     let cell_type = cell.first_name().unwrap_or("unnamed").to_string();
     let (pins, input_pins) = read_pins(cell);
     let mut notes = Vec::new();
 
+    // Sequential cells (Liberty `ff`/`latch`) store their data path in L3
+    // next_state, NOT in L2 combinational logic — their output `function`
+    // strings reference internal state vars (`IQ1`). Skip the combinational
+    // compile for them so we don't emit spurious `SequentialOutput` notes.
+    let is_sequential = sequential::has_ff(cell) || sequential::has_latch(cell);
+
+    let comb_logic = if is_sequential {
+        None
+    } else {
+        compile_comb_logic(cell, &cell_type, &input_pins, &mut notes)
+    };
+    let has_logic = comb_logic.is_some();
+
+    // L3: classification + sequential pin-roles.
+    let seq = sequential::build(cell, &cell_type, &input_pins, has_logic);
+
+    // L4: per-cell timing, keyed by the single derived corner.
+    let cell_timing = corner_index.and_then(|ci| timing::build_cell_timing(cell, ci, ps_scale));
+
+    // A sequential cell carries its data path in `sequential.next_state`, so
+    // `logic` is None; a combinational/physical cell carries `logic`.
+    let (logic, sequential_field) = if seq.sequential.is_some() {
+        (None, seq.sequential)
+    } else {
+        (comb_logic, None)
+    };
+
+    (
+        CellModel {
+            cell_type,
+            kind: seq.kind,
+            pins,
+            logic,
+            sequential: sequential_field,
+            timing: cell_timing,
+        },
+        notes,
+        seq.notes,
+    )
+}
+
+/// Compile a non-sequential cell's combinational output cone into one merged
+/// [`CombLogic`], or `None` if no output carries a usable Liberty `function`.
+fn compile_comb_logic(
+    cell: &LibertyGroup,
+    cell_type: &str,
+    input_pins: &[String],
+    notes: &mut Vec<ConvertNote>,
+) -> Option<CombLogic> {
     // Gather (output_pin, function_str) pairs, in pin order.
     let mut output_fns: Vec<(String, String)> = Vec::new();
     for pin_grp in cell.groups_of_type("pin") {
@@ -133,9 +215,8 @@ fn convert_cell(cell: &LibertyGroup) -> (CellModel, Vec<ConvertNote>) {
     }
 
     // Compile each output function. An output whose `function` references an
-    // operand that is not a declared input pin (e.g. a DFF's internal `IQ`
-    // state node) cannot be combinationally modelled here — surface and skip
-    // that pin. If NO output compiles, the cell is Other/None.
+    // operand that is not a declared input pin cannot be combinationally
+    // modelled here — surface and skip that pin.
     let mut per_output: Vec<CombLogic> = Vec::new();
     for (pin, func_src) in &output_fns {
         match function::parse(func_src) {
@@ -147,23 +228,23 @@ fn convert_cell(cell: &LibertyGroup) -> (CellModel, Vec<ConvertNote>) {
                     .collect();
                 if !unknown.is_empty() {
                     notes.push(ConvertNote::SequentialOutput {
-                        cell: cell_type.clone(),
+                        cell: cell_type.to_string(),
                         pin: pin.clone(),
                         operands: unknown.into_iter().cloned().collect(),
                     });
                     continue;
                 }
-                match function::compile(pin, &expr, &input_pins) {
+                match function::compile(pin, &expr, input_pins) {
                     Ok(logic) => per_output.push(logic),
                     Err(e) => notes.push(ConvertNote::FunctionParseError {
-                        cell: cell_type.clone(),
+                        cell: cell_type.to_string(),
                         pin: pin.clone(),
                         error: e,
                     }),
                 }
             }
             Err(e) => notes.push(ConvertNote::FunctionParseError {
-                cell: cell_type.clone(),
+                cell: cell_type.to_string(),
                 pin: pin.clone(),
                 error: e,
             }),
@@ -173,37 +254,13 @@ fn convert_cell(cell: &LibertyGroup) -> (CellModel, Vec<ConvertNote>) {
     if per_output.is_empty() {
         if output_fns.is_empty() {
             notes.push(ConvertNote::SkippedNoFunction {
-                cell: cell_type.clone(),
+                cell: cell_type.to_string(),
             });
         }
-        return (
-            CellModel {
-                cell_type,
-                kind: CellKind::Other,
-                pins,
-                logic: None,
-                // L3/L4 (sequential roles, timing) populated by C2.2; the C1
-                // converter emits the L1+L2 corner only.
-                sequential: None,
-                timing: None,
-            },
-            notes,
-        );
+        return None;
     }
 
-    let logic = merge_outputs(&input_pins, per_output);
-    (
-        CellModel {
-            cell_type,
-            kind: CellKind::Comb,
-            pins,
-            logic: Some(logic),
-            // L3/L4 (sequential roles, timing) populated by C2.2.
-            sequential: None,
-            timing: None,
-        },
-        notes,
-    )
+    Some(merge_outputs(input_pins, per_output))
 }
 
 /// Merge several single-output [`CombLogic`]s (each already built over the
@@ -287,6 +344,7 @@ pub(crate) fn derive_prefix(cells: &[CellModel]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cell_model_ir::CellKind;
     use std::collections::HashMap;
 
     fn parse_lib(src: &str) -> LibertyGroup {
@@ -308,7 +366,7 @@ mod tests {
         assert_eq!(conv.ir.cells.len(), 1);
         let c = &conv.ir.cells[0];
         assert_eq!(c.cell_type, "demo__and2");
-        assert_eq!(c.kind, CellKind::Comb);
+        assert_eq!(c.kind, CellKind::Std);
         assert_eq!(c.pins.len(), 3);
         let logic = c.logic.as_ref().unwrap();
         for (a1, a2) in [(false, false), (false, true), (true, false), (true, true)] {
@@ -335,7 +393,7 @@ mod tests {
         "#;
         let conv = convert_library(&parse_lib(src), vec![]);
         let c = &conv.ir.cells[0];
-        assert_eq!(c.kind, CellKind::Comb);
+        assert_eq!(c.kind, CellKind::Std);
         let logic = c.logic.as_ref().unwrap();
         assert_eq!(logic.inputs, vec!["A".to_string(), "B".to_string()]);
         assert_eq!(logic.outputs.len(), 2);
@@ -350,9 +408,11 @@ mod tests {
     }
 
     #[test]
-    fn sequential_output_referencing_internal_node_is_other() {
-        // A DFF-like cell whose Q function references an internal node IQ
-        // (not a declared input pin) — must NOT be Comb.
+    fn output_referencing_internal_node_without_ff_group_is_not_std() {
+        // A cell whose Q `function` references an internal node `IQ` (not a
+        // declared input pin) but with NO `ff` group: it cannot be modelled
+        // combinationally, so it must NOT be `Std` and carries no logic. The
+        // internal-node reference is surfaced as a `SequentialOutput` note.
         let src = r#"
         library(demo) {
           cell(demo__dff) {
@@ -364,10 +424,8 @@ mod tests {
         "#;
         let conv = convert_library(&parse_lib(src), vec![]);
         let c = &conv.ir.cells[0];
-        assert_eq!(c.kind, CellKind::Other);
+        assert_ne!(c.kind, CellKind::Std);
         assert!(c.logic.is_none());
-        // Q's `function : "IQ"` references an internal state node, not an
-        // input pin — a sequential cell, expected to be flagged (not an error).
         assert!(conv
             .notes
             .iter()
@@ -375,7 +433,33 @@ mod tests {
     }
 
     #[test]
-    fn cell_with_no_function_is_skipped_as_other() {
+    fn real_ff_cell_emits_l3_and_no_spurious_notes() {
+        // A real flip-flop with an `ff` group: classified `Dff`, carries L3
+        // sequential metadata, no `logic`, and emits NO `SequentialOutput`
+        // note (the comb compile is skipped for sequential cells).
+        let src = r#"
+        library(demo) {
+          cell(demo__dffq) {
+            ff(IQ1, IQN1) { clocked_on : "CLK" ; next_state : "D" ; }
+            pin(CLK) { direction : input ; clock : true ; }
+            pin(D)   { direction : input ; }
+            pin(Q)   { direction : output ; function : "IQ1" ; }
+          }
+        }
+        "#;
+        let conv = convert_library(&parse_lib(src), vec![]);
+        let c = &conv.ir.cells[0];
+        assert_eq!(c.kind, CellKind::Dff);
+        assert!(c.logic.is_none());
+        assert!(c.sequential.is_some());
+        assert!(!conv
+            .notes
+            .iter()
+            .any(|n| matches!(n, ConvertNote::SequentialOutput { .. })));
+    }
+
+    #[test]
+    fn cell_with_no_function_is_classified_filler() {
         let src = r#"
         library(demo) {
           cell(demo__fill) {
@@ -385,7 +469,7 @@ mod tests {
         "#;
         let conv = convert_library(&parse_lib(src), vec![]);
         let c = &conv.ir.cells[0];
-        assert_eq!(c.kind, CellKind::Other);
+        assert_eq!(c.kind, CellKind::Filler);
         assert!(c.logic.is_none());
         assert!(conv.notes.iter().any(|n| matches!(
             n,
@@ -398,7 +482,7 @@ mod tests {
         let cells = vec![
             CellModel {
                 cell_type: "gf180mcu_fd_sc_mcu7t5v0__and2_1".into(),
-                kind: CellKind::Comb,
+                kind: CellKind::Std,
                 pins: vec![],
                 logic: None,
                 sequential: None,
@@ -406,7 +490,7 @@ mod tests {
             },
             CellModel {
                 cell_type: "gf180mcu_fd_sc_mcu7t5v0__nand2_1".into(),
-                kind: CellKind::Comb,
+                kind: CellKind::Std,
                 pins: vec![],
                 logic: None,
                 sequential: None,

@@ -27,6 +27,7 @@ use liberty_parse::LibertyGroup;
 
 use liberty_to_cellir::convert::{convert_library, ConvertNote};
 use liberty_to_cellir::crosscheck::{check_cell, CellCheck, ModelIndex};
+use liberty_to_cellir::sequential::SeqNote;
 
 #[derive(ClapParser, Debug)]
 #[command(
@@ -67,15 +68,40 @@ fn run(cli: &Cli) -> Result<(), String> {
     let lib = load_library(&cli.input)?;
 
     let conv = convert_library(&lib, cli.prefix.clone());
+    let seq_notes = conv.seq_notes;
     let ir = conv.ir;
 
     // --- summary counters ---
     let n_cells = ir.cells.len();
-    let n_comb = ir
-        .cells
-        .iter()
-        .filter(|c| c.logic.is_some())
-        .count();
+    let n_comb = ir.cells.iter().filter(|c| c.logic.is_some()).count();
+    let n_l3 = ir.cells.iter().filter(|c| c.sequential.is_some()).count();
+    let n_l4 = ir.cells.iter().filter(|c| c.timing.is_some()).count();
+    let n_corners = ir.corners.len();
+
+    // --- L3 sequential diagnostics, incl. the clear_preset precedence check ---
+    let mut clear_preset_divergent = 0usize;
+    let mut unparsed_controls = 0usize;
+    let mut next_state_errors = 0usize;
+    for note in &seq_notes {
+        match note {
+            SeqNote::ClearPresetNotResetDominant { cell, var1, var2 } => {
+                clear_preset_divergent += 1;
+                eprintln!(
+                    "CLEAR_PRESET NOT RESET-DOMINANT: {cell} has clear_preset_var1={var1} \
+                     clear_preset_var2={var2} (expected L/H). Jacquard's overlay is hardcoded \
+                     reset-dominant — the schema needs a per-cell `clear_preset` field."
+                );
+            }
+            SeqNote::UnparsedControl { cell, role, expr } => {
+                unparsed_controls += 1;
+                eprintln!("L3 unparsed {role} expression in {cell}: {expr:?}");
+            }
+            SeqNote::NextStateCompileError { cell, expr, error } => {
+                next_state_errors += 1;
+                eprintln!("L3 next_state compile error in {cell} ({expr:?}): {error}");
+            }
+        }
+    }
 
     // Classify conversion notes. `sequential_outputs` (DFF/latch Q referencing
     // an internal state node) are EXPECTED, not errors — kept separate from
@@ -89,7 +115,11 @@ fn run(cli: &Cli) -> Result<(), String> {
             ConvertNote::SkippedNoFunction { cell } => {
                 skipped_no_fn.insert(cell.clone(), ());
             }
-            ConvertNote::SequentialOutput { cell, pin, operands } => {
+            ConvertNote::SequentialOutput {
+                cell,
+                pin,
+                operands,
+            } => {
                 sequential_outputs += 1;
                 eprintln!("sequential output (not combinational at C1): {cell}.{pin} references {operands:?}");
             }
@@ -191,10 +221,13 @@ fn run(cli: &Cli) -> Result<(), String> {
 
     // --- summary line ---
     println!(
-        "cells={n_cells} combinational={n_comb} cross_checked={n_checked} \
+        "cells={n_cells} combinational={n_comb} l3_sequential={n_l3} l4_timing={n_l4} \
+         corners={n_corners} cross_checked={n_checked} \
          cross_check_mismatches={} capped={n_capped} unevaluatable={n_unevaluatable} \
          no_model={n_no_model} skipped_no_function={} sequential_outputs={sequential_outputs} \
-         function_parse_errors={parse_errors} json_bytes={json_bytes}",
+         function_parse_errors={parse_errors} clear_preset_divergent={clear_preset_divergent} \
+         l3_unparsed_controls={unparsed_controls} l3_next_state_errors={next_state_errors} \
+         json_bytes={json_bytes}",
         mismatches.len(),
         skipped_no_fn.len(),
     );
@@ -214,8 +247,8 @@ fn default_out(input: &Path) -> PathBuf {
 /// Load a Liberty library, transparently merging a split per-cell library if
 /// the named file carries no `cell` groups.
 fn load_library(input: &Path) -> Result<LibertyGroup, String> {
-    let content = std::fs::read_to_string(input)
-        .map_err(|e| format!("reading {}: {e}", input.display()))?;
+    let content =
+        std::fs::read_to_string(input).map_err(|e| format!("reading {}: {e}", input.display()))?;
     let mut lib =
         liberty_parse::parse(&content).map_err(|e| format!("parsing {}: {e}", input.display()))?;
 
@@ -245,10 +278,7 @@ fn load_library(input: &Path) -> Result<LibertyGroup, String> {
 /// Find per-cell `.lib` files that share the corner suffix of `input` and
 /// return their `cell` groups. Looks under a sibling `cells/` directory
 /// (the GF180/SKY130 layout) relative to the liberty dir.
-fn discover_split_cells(
-    input: &Path,
-    top: &LibertyGroup,
-) -> Result<Vec<LibertyGroup>, String> {
+fn discover_split_cells(input: &Path, top: &LibertyGroup) -> Result<Vec<LibertyGroup>, String> {
     let stem = input
         .file_stem()
         .and_then(|s| s.to_str())
@@ -264,7 +294,9 @@ fn discover_split_cells(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| {
             // Fallback: last "__<...>" run.
-            stem.rfind("__").map(|i| stem[i..].to_string()).unwrap_or_default()
+            stem.rfind("__")
+                .map(|i| stem[i..].to_string())
+                .unwrap_or_default()
         });
 
     // Candidate cells directories: sibling `cells/` of the liberty dir, or
@@ -295,9 +327,8 @@ fn discover_split_cells(
         // inside the top-level library. The `library`-rooted parser rejects
         // them as-is, so try a bare parse first and fall back to wrapping the
         // content in a synthetic library.
-        let parsed = liberty_parse::parse(&src).or_else(|_| {
-            liberty_parse::parse(&format!("library(_split) {{\n{src}\n}}\n"))
-        });
+        let parsed = liberty_parse::parse(&src)
+            .or_else(|_| liberty_parse::parse(&format!("library(_split) {{\n{src}\n}}\n")));
         match parsed {
             Ok(cell_lib) => {
                 for g in cell_lib.groups_of_type("cell") {
