@@ -182,6 +182,10 @@ fn convert_cell(cell: &LibertyGroup) -> (CellModel, Vec<ConvertNote>) {
                 kind: CellKind::Other,
                 pins,
                 logic: None,
+                // L3/L4 (sequential roles, timing) populated by C2.2; the C1
+                // converter emits the L1+L2 corner only.
+                sequential: None,
+                timing: None,
             },
             notes,
         );
@@ -194,6 +198,9 @@ fn convert_cell(cell: &LibertyGroup) -> (CellModel, Vec<ConvertNote>) {
             kind: CellKind::Comb,
             pins,
             logic: Some(logic),
+            // L3/L4 (sequential roles, timing) populated by C2.2.
+            sequential: None,
+            timing: None,
         },
         notes,
     )
@@ -394,12 +401,16 @@ mod tests {
                 kind: CellKind::Comb,
                 pins: vec![],
                 logic: None,
+                sequential: None,
+                timing: None,
             },
             CellModel {
                 cell_type: "gf180mcu_fd_sc_mcu7t5v0__nand2_1".into(),
                 kind: CellKind::Comb,
                 pins: vec![],
                 logic: None,
+                sequential: None,
+                timing: None,
             },
         ];
         assert_eq!(

@@ -253,6 +253,8 @@ mod tests {
                 Pin { name: "Z".into(), direction: Direction::Output },
             ],
             logic: Some(logic),
+            sequential: None,
+            timing: None,
         }
     }
 
@@ -307,6 +309,8 @@ mod tests {
             kind: CellKind::Other,
             pins: vec![],
             logic: None,
+            sequential: None,
+            timing: None,
         };
         let index = index_with("demo__dff");
         assert_eq!(check_cell(&cell, &index), CellCheck::NotComb);
@@ -341,6 +345,8 @@ mod tests {
             kind: CellKind::Comb,
             pins: vec![],
             logic: Some(logic),
+            sequential: None,
+            timing: None,
         };
         // Provide a dummy model so we don't short-circuit on NoModel.
         let mut models = HashMap::new();
