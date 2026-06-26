@@ -585,6 +585,20 @@ observe/drive halves (TDO sample, TCK/TMS/TDI drive via the usual
 GPU backend (the "per-edge fallback" of the 2026-06-19 amendment), so it works
 on any cosim backend once the host-side plumbing lands — no kernel work.
 Implementation staging: <a href="../plans/jtag-debug-server.html"><code>docs/plans/jtag-debug-server.md</code></a>.</p>
+<h2 id="amendment-2026-06-26-open-questions--cosim-timing-output"><a class="header" href="#amendment-2026-06-26-open-questions--cosim-timing-output">Amendment 2026-06-26: open questions — cosim timing output</a></h2>
+<p>Folded in from a now-deleted implementation-plan doc
+(<code>cosim-timing-support.md</code>) whose objective largely shipped. Open items
+remaining:</p>
+<ul>
+<li><strong>Timed cosim is Metal-only.</strong> Arrival-annotated VCD output works on the
+Metal backend (<code>metal.rs</code> threads <code>arrival_state_offset</code>; the driver writes
+per-net <code>arrival_ps</code>). The CPU, CUDA, and HIP backends assert
+<code>!script.timing_arrivals_enabled</code> — they don't yet support timed cosim.
+Extending arrival tracking to the other <code>CosimBackend</code> impls is open.</li>
+<li><strong>Cosim <code>--timing-report</code> (structured JSON) is not wired.</strong> The structured
+report is <code>sim</code>-only; see ADR 0008's 2026-06-25 amendment. The cosim path
+emits arrival-annotated VCD but not the JSON report.</li>
+</ul>
 <h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
 <ul>
 <li>ADR 0012 — CDC jitter injection (uses the scheduler's edge
