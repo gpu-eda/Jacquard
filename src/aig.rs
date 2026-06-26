@@ -380,6 +380,135 @@ impl AIG {
         (d_in, clken)
     }
 
+    /// Resolve a cell-model-IR async set/reset control to the *active-low*
+    /// `*_n` aigpin_iv that [`Self::wire_dff_reset_set_overlay`] expects
+    /// (ADR 0019 D4).
+    ///
+    /// The shared overlay is written for active-low controls (`reset_n`/`set_n`
+    /// = 1 when *inactive*). An [`cell_model_ir::ActiveLevel::Low`] pin (the
+    /// GF180 `RN`/`SETN`, SKY130 `*_B`, AIGPDK `R`/`S` convention) is passed
+    /// straight through; an [`cell_model_ir::ActiveLevel::High`] pin is
+    /// inverted so the overlay still sees "1 ⇒ inactive". `None` (no async
+    /// control) yields constant-1 (`iv == 1`), which `add_and_gate`
+    /// constant-folds away — identical to the legacy `ap_*_iv = 1` default.
+    fn resolve_async_n(
+        &self,
+        inputs: &std::collections::HashMap<String, usize>,
+        ctrl: Option<&cell_model_ir::AsyncControl>,
+    ) -> usize {
+        match ctrl {
+            None => 1,
+            Some(c) => {
+                let iv = *inputs.get(&c.pin).unwrap_or_else(|| {
+                    panic!(
+                        "wire_sequential_from_ir: async control pin '{}' is not \
+                         a resolved input of the cell",
+                        c.pin
+                    )
+                });
+                match c.active {
+                    cell_model_ir::ActiveLevel::Low => iv,
+                    cell_model_ir::ActiveLevel::High => iv ^ 1,
+                }
+            }
+        }
+    }
+
+    /// Wire a sequential cell's `D`/clock-enable from a cell-model-IR
+    /// [`Sequential`](cell_model_ir::Sequential) descriptor (ADR 0019 D4),
+    /// the IR-driven replacement for the hardcoded pin-name match in the
+    /// post-DFS DFF setup loop.
+    ///
+    /// Mirrors the legacy GF180/SKY130 input-side wiring exactly, but reads
+    /// every role from the descriptor instead of matching `"D"` / `"CLK"` /
+    /// `"CLKN"` / `"SE"` / `"SI"` / `"E"` / `"RN"` / `"SETN"` by string:
+    ///
+    /// * **`next_state`** is spliced like L2 combinational logic
+    ///   ([`Self::splice_comb_logic`]) to form the captured `D` value. Any scan
+    ///   mux (`SE ? SI : D`) or gated-clock OR is already folded into this AIG
+    ///   by the converter, so no special-casing is needed here.
+    /// * **clock enable** comes from the edge clock (traced via
+    ///   [`Self::trace_clock_pin`]; `ClockEdge::Falling` starts the trace
+    ///   negedge, matching the legacy `CLKN` handling). A *level* `enable` is
+    ///   ANDed onto the edge clock for a gated DFF, or *is* the enable for a
+    ///   latch (no edge clock) — the same "treat a latch as a level-enabled
+    ///   DFF" approximation the legacy GF180 path applies (GEM simulates no
+    ///   true latches).
+    /// * **async set/reset** are layered with the shared reset-dominant
+    ///   [`Self::wire_dff_reset_set_overlay`]. NB this is *reset-dominant* for
+    ///   both DFFs and latches; GF180 set-dominant latches (`latrsnq`) are
+    ///   therefore approximated reset-dominant — exactly as the legacy overlay
+    ///   does, so the two paths agree (see the C2.3 report / ADR 0019 D4).
+    fn wire_sequential_from_ir(
+        &mut self,
+        netlistdb: &NetlistDB,
+        cellid: usize,
+        seq: &cell_model_ir::Sequential,
+    ) {
+        // Resolve all input pins of the cell to (name -> iv) and (name -> pinid).
+        let mut inputs: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut pinid_by_name: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for pinid in netlistdb.cell2pin.iter_set(cellid) {
+            let name = netlistdb.pinnames[pinid].1.as_str();
+            pinid_by_name.insert(name.to_string(), pinid);
+            if netlistdb.pindirect[pinid] == Direction::I {
+                inputs.insert(name.to_string(), self.pin2aigpin_iv[pinid]);
+            }
+        }
+
+        // next_state → captured D value. Exactly one output (the next state).
+        let out_pin = &seq.next_state.outputs[0].pin;
+        let d_iv = self.splice_comb_logic(&seq.next_state, &inputs, out_pin);
+
+        // Clock enable: edge clock (if any), then a level enable folded in.
+        let mut clken_iv = match &seq.clock {
+            Some(clk) => {
+                let pinid = *pinid_by_name.get(&clk.pin).unwrap_or_else(|| {
+                    panic!(
+                        "wire_sequential_from_ir: clock pin '{}' not on cell",
+                        clk.pin
+                    )
+                });
+                let is_negedge = clk.edge == cell_model_ir::ClockEdge::Falling;
+                self.trace_clock_pin(netlistdb, pinid, is_negedge, false)
+                    .unwrap()
+            }
+            None => 0,
+        };
+        if let Some(en) = &seq.enable {
+            let raw = *inputs.get(&en.pin).unwrap_or_else(|| {
+                panic!(
+                    "wire_sequential_from_ir: enable pin '{}' is not a resolved \
+                     input of the cell",
+                    en.pin
+                )
+            });
+            let level = match en.active {
+                cell_model_ir::ActiveLevel::High => raw,
+                cell_model_ir::ActiveLevel::Low => raw ^ 1,
+            };
+            clken_iv = if seq.clock.is_some() {
+                // Gated DFF: clock-enable ANDed with the edge clock.
+                self.add_and_gate(clken_iv, level)
+            } else {
+                // Latch: the level enable is the transparency control.
+                level
+            };
+        }
+
+        // Async set/reset overlay (input side), reset-dominant — shared with
+        // the legacy path, so the formulas are byte-identical for active-low
+        // GF180 controls.
+        let reset_n = self.resolve_async_n(&inputs, seq.async_reset.as_ref());
+        let set_n = self.resolve_async_n(&inputs, seq.async_set.as_ref());
+        let (d_in, clken_iv) = self.wire_dff_reset_set_overlay(d_iv, clken_iv, reset_n, set_n);
+
+        let dff = self.dffs.entry(cellid).or_default();
+        dff.en_iv = clken_iv;
+        dff.d_iv = d_in;
+    }
+
     /// given a clock pin, trace back to clock root and return its
     /// enable signal (with invert bit).
     ///
@@ -1640,6 +1769,50 @@ impl AIG {
         if crate::gf180mcu_pdk::is_sequential_cell(cell_type) {
             let dff = self.dffs.get(&cellid).unwrap();
             let q = dff.q;
+
+            // ADR 0019 C2.3: IR-driven async *output* overlay. When the
+            // descriptor carries an L3 `sequential` block for this cell, read
+            // the async set/reset pins + polarity from it (and any `QN` output
+            // inversion); otherwise fall back to the hardcoded SETN/RN match.
+            // The output-side formula `Q_read = AND(OR(q, NOT set_n), reset_n)`
+            // is identical to the input-side overlay's reset-dominant shape, so
+            // the IR and legacy paths agree bit-for-bit for active-low GF180
+            // controls. Clock-gating cells have no L3 sequential and so take
+            // the legacy branch.
+            if let Some(seq) = cell_descriptor
+                .and_then(|d| d.cell(celltype))
+                .and_then(|c| c.sequential.as_ref())
+            {
+                let mut inputs: std::collections::HashMap<String, usize> =
+                    std::collections::HashMap::new();
+                for ipin in netlistdb.cell2pin.iter_set(cellid) {
+                    if netlistdb.pindirect[ipin] == Direction::I {
+                        inputs.insert(
+                            netlistdb.pinnames[ipin].1.to_string(),
+                            self.pin2aigpin_iv[ipin],
+                        );
+                    }
+                }
+                let reset_n = self.resolve_async_n(&inputs, seq.async_reset.as_ref());
+                let set_n = self.resolve_async_n(&inputs, seq.async_set.as_ref());
+                let mut q_read = q << 1;
+                q_read = self.add_and_gate(q_read ^ 1, set_n) ^ 1;
+                q_read = self.add_and_gate(q_read, reset_n);
+                // `QN` outputs read the inverted (post-overlay) state — async
+                // reset → Q=0 ⇒ QN=1, set → Q=1 ⇒ QN=0. GF180 dff/latch cells
+                // only expose `Q`, so this is inert for the gated suite but
+                // keeps the role honest for QN-bearing libraries.
+                let out_name = netlistdb.pinnames[pinid].1.as_str();
+                let inverted = seq
+                    .outputs
+                    .iter()
+                    .find(|o| o.pin == out_name)
+                    .map(|o| o.inverted)
+                    .unwrap_or(false);
+                self.pin2aigpin_iv[pinid] = if inverted { q_read ^ 1 } else { q_read };
+                return;
+            }
+
             let mut ap_s_iv = 1; // SETN default = 1 (inactive)
             let mut ap_r_iv = 1; // RN default = 1 (inactive)
             for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
@@ -2253,6 +2426,29 @@ impl AIG {
                 // panic; clock-tree-aware simulation through them is
                 // a follow-on item (Phase 5+).
                 let cell_type = PdkVariant::Gf180Mcu.extract_cell_type(celltype);
+
+                // ADR 0019 C2.3: IR-driven sequential wiring. When a
+                // cell-model-IR descriptor was supplied AND it carries an L3
+                // `sequential` block for this cell type (keyed by the *full*
+                // netlist cell-type name), drive D/clock-enable/async roles
+                // from the descriptor instead of the hardcoded pin-name match
+                // below. Clock-gating cells (`icgtp`/`icgtn`) emit *no* L3
+                // sequential (GF180 ICGs use a Liberty `statetable`), so they
+                // fall through to the legacy branch — keeping the clock-gate
+                // emulation untouched. Absent descriptor = legacy behaviour.
+                if let Some(seq) = cell_descriptor
+                    .and_then(|d| d.cell(celltype))
+                    .and_then(|c| c.sequential.as_ref())
+                {
+                    aig.wire_sequential_from_ir(netlistdb, cellid, seq);
+                    let dff = aig.dffs.entry(cellid).or_default();
+                    assert_ne!(
+                        dff.q, 0,
+                        "GF180MCU DFF {cellid} (IR-driven) has no Q output built"
+                    );
+                    continue;
+                }
+
                 let mut ap_d_iv: usize = 0;
                 let mut ap_clken_iv: usize = 0;
                 let mut ap_s_iv: usize = 1; // SETN default = inactive

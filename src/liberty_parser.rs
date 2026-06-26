@@ -156,6 +156,119 @@ impl TimingLibrary {
         Self::from_file(path)
     }
 
+    /// Project a cell-model-IR descriptor's L4 timing (ADR 0019 D5) onto a
+    /// [`TimingLibrary`], selecting one corner.
+    ///
+    /// This is the descriptor-driven counterpart of [`Self::from_file`]: instead
+    /// of parsing a `.lib` at runtime, the per-cell-type timing is taken from
+    /// the IR's pre-extracted, corner-keyed [`cell_model_ir::CellTiming`] arcs.
+    /// The resulting library exposes the *same* aggregate views the runtime
+    /// consumes (`and_gate_delay` / `dff_timing` / `sram_timing` /
+    /// `max_combinational_delay` / `clock_to_q` / `setup_time` / `hold_time`),
+    /// so [`crate::aig::AIG::load_timing_library`] and the flatten timing path
+    /// need no changes.
+    ///
+    /// `corner_index` selects which within-corner derate triple to read; the
+    /// **typ** value is rounded to integer ps (the legacy `TimingLibrary` is
+    /// integer-ps and the runtime's `u16` raw-ps would round anyway — ADR 0019
+    /// D5 notes the sub-ns difference vs the oracle's `.lib` parse). Picoseconds
+    /// are consumed directly (the IR is already ps; `time_unit` is *not*
+    /// re-applied).
+    pub fn from_cell_model_ir(ir: &cell_model_ir::CellModelIr, corner_index: u32) -> Self {
+        // Pick the TimingValue for the selected corner; fall back to the first
+        // entry if the arc was characterized at a different corner set.
+        let pick = |vals: &[cell_model_ir::TimingValue]| -> Option<u64> {
+            vals.iter()
+                .find(|v| v.corner_index == corner_index)
+                .or_else(|| vals.first())
+                .map(|v| v.typ.round() as u64)
+        };
+
+        let mut lib = TimingLibrary {
+            name: ir.library.name.clone(),
+            time_unit: "1ps".to_string(),
+            cells: IndexMap::new(),
+        };
+
+        for cell in &ir.cells {
+            let Some(timing) = &cell.timing else {
+                continue;
+            };
+            let mut ct = CellTiming {
+                name: cell.cell_type.clone(),
+                pins: IndexMap::new(),
+            };
+
+            for arc in &timing.delays {
+                let timing_type = match arc.kind {
+                    cell_model_ir::DelayKind::Combinational => None,
+                    // Clock→output: surface as `rising_edge` (what
+                    // `clock_to_q` / `sram_timing` look up). The reference
+                    // edge is implied by the cell's clock; negedge cells'
+                    // Q-arc still keys here, matching the legacy lookup.
+                    cell_model_ir::DelayKind::ClockToOutput => Some("rising_edge".to_string()),
+                };
+                let pin = ct
+                    .pins
+                    .entry(arc.to_pin.clone())
+                    .or_insert_with(|| PinTiming {
+                        name: arc.to_pin.clone(),
+                        direction: "output".to_string(),
+                        is_clock: false,
+                        timing_arcs: Vec::new(),
+                    });
+                pin.timing_arcs.push(TimingArc {
+                    related_pin: arc.from_pin.clone(),
+                    timing_type,
+                    cell_rise_ps: pick(&arc.rise),
+                    cell_fall_ps: pick(&arc.fall),
+                    rise_constraint_ps: None,
+                    fall_constraint_ps: None,
+                });
+            }
+
+            for arc in &timing.constraints {
+                // Only setup/hold are consumed; map onto the rising-edge
+                // timing-type strings the aggregate views match. The IR's
+                // `edge` distinguishes rising/falling reference clocks; the
+                // runtime only reads `*_rising`, so falling-edge constraints
+                // (negedge cells) project to `*_falling` and are ignored —
+                // identical to a real `.lib` parse.
+                let edge = match arc.edge {
+                    cell_model_ir::ClockEdge::Rising => "rising",
+                    cell_model_ir::ClockEdge::Falling => "falling",
+                };
+                let timing_type = match arc.kind {
+                    cell_model_ir::ConstraintKind::Setup => Some(format!("setup_{edge}")),
+                    cell_model_ir::ConstraintKind::Hold => Some(format!("hold_{edge}")),
+                    cell_model_ir::ConstraintKind::Recovery => Some(format!("recovery_{edge}")),
+                    cell_model_ir::ConstraintKind::Removal => Some(format!("removal_{edge}")),
+                };
+                let pin = ct
+                    .pins
+                    .entry(arc.data_pin.clone())
+                    .or_insert_with(|| PinTiming {
+                        name: arc.data_pin.clone(),
+                        direction: "input".to_string(),
+                        is_clock: false,
+                        timing_arcs: Vec::new(),
+                    });
+                pin.timing_arcs.push(TimingArc {
+                    related_pin: arc.related_pin.clone(),
+                    timing_type,
+                    cell_rise_ps: None,
+                    cell_fall_ps: None,
+                    rise_constraint_ps: pick(&arc.rise),
+                    fall_constraint_ps: pick(&arc.fall),
+                });
+            }
+
+            lib.cells.insert(cell.cell_type.clone(), ct);
+        }
+
+        lib
+    }
+
     /// Create a TimingLibrary with default SKY130 timing values.
     ///
     /// These are approximate values based on typical SKY130 HD cell characteristics.
@@ -765,6 +878,107 @@ library ("sky130_fd_sc_hd__tt_025C_1v80") {
         let (rise_q, fall_q) = clk_q.unwrap();
         assert_eq!(rise_q, 150);
         assert_eq!(fall_q, 140);
+    }
+
+    /// `TimingLibrary::from_cell_model_ir` (ADR 0019 D5) must project the IR's
+    /// corner-keyed L4 arcs onto the same aggregate views the runtime consumes
+    /// (`max_combinational_delay` / `clock_to_q` / `setup_time` / `hold_time`),
+    /// selecting the requested corner and rounding `typ` ps to integer.
+    #[test]
+    fn from_cell_model_ir_projects_selected_corner() {
+        use cell_model_ir::{
+            CellKind, CellModel, CellTiming as IrCellTiming, ClockEdge, ConstraintArc,
+            ConstraintKind, DelayArc, DelayKind, Direction as IrDir, LibraryMeta, Pin, TimingValue,
+        };
+        let mut ir = cell_model_ir::CellModelIr::new(LibraryMeta {
+            name: "demo".into(),
+            prefixes: vec!["demo_".into()],
+        });
+        ir.corners = vec![
+            cell_model_ir::Corner {
+                name: "ss".into(),
+                process: "ss".into(),
+                voltage: 1.0,
+                temperature: 125.0,
+            },
+            cell_model_ir::Corner {
+                name: "tt".into(),
+                process: "tt".into(),
+                voltage: 1.2,
+                temperature: 25.0,
+            },
+        ];
+        ir.default_corner = "tt".into();
+        // Per-corner triple: index 0 (ss) slower, index 1 (tt) typical. The
+        // `.4`/`.6` values verify integer rounding too.
+        let tv = |ci: u32, v: f64| TimingValue {
+            corner_index: ci,
+            min: v,
+            typ: v,
+            max: v,
+        };
+        let dff = CellModel {
+            cell_type: "demo_dff".into(),
+            kind: CellKind::Dff,
+            pins: vec![
+                Pin {
+                    name: "CLK".into(),
+                    direction: IrDir::Input,
+                },
+                Pin {
+                    name: "D".into(),
+                    direction: IrDir::Input,
+                },
+                Pin {
+                    name: "Q".into(),
+                    direction: IrDir::Output,
+                },
+            ],
+            logic: None,
+            sequential: None,
+            timing: Some(IrCellTiming {
+                delays: vec![DelayArc {
+                    from_pin: "CLK".into(),
+                    to_pin: "Q".into(),
+                    kind: DelayKind::ClockToOutput,
+                    rise: vec![tv(0, 300.0), tv(1, 150.4)],
+                    fall: vec![tv(0, 280.0), tv(1, 140.6)],
+                }],
+                constraints: vec![
+                    ConstraintArc {
+                        data_pin: "D".into(),
+                        related_pin: "CLK".into(),
+                        kind: ConstraintKind::Setup,
+                        edge: ClockEdge::Rising,
+                        rise: vec![tv(0, 160.0), tv(1, 80.0)],
+                        fall: vec![tv(0, 150.0), tv(1, 75.0)],
+                    },
+                    ConstraintArc {
+                        data_pin: "D".into(),
+                        related_pin: "CLK".into(),
+                        kind: ConstraintKind::Hold,
+                        edge: ClockEdge::Rising,
+                        rise: vec![tv(0, 40.0), tv(1, 20.0)],
+                        fall: vec![tv(0, 36.0), tv(1, 18.0)],
+                    },
+                ],
+                sram: None,
+            }),
+        };
+        ir.cells.push(dff);
+
+        // Select the `tt` corner (index 1) and confirm projection + rounding.
+        let lib = TimingLibrary::from_cell_model_ir(&ir, 1);
+        let cell = lib.get_cell("demo_dff").expect("cell projected");
+        assert_eq!(cell.clock_to_q("Q"), Some((150, 141))); // 150.4→150, 140.6→141
+        assert_eq!(cell.setup_time("D"), Some((80, 75)));
+        assert_eq!(cell.hold_time("D"), Some((20, 18)));
+
+        // Select the `ss` corner (index 0) and confirm the other derate.
+        let lib_ss = TimingLibrary::from_cell_model_ir(&ir, 0);
+        let cell_ss = lib_ss.get_cell("demo_dff").unwrap();
+        assert_eq!(cell_ss.clock_to_q("Q"), Some((300, 280)));
+        assert_eq!(cell_ss.setup_time("D"), Some((160, 150)));
     }
 
     /// Liberty input that looks real but contains no cells. `parse` should
