@@ -7,7 +7,7 @@
 > path handles only the **single-SRAM** case (the design must have exactly
 > one SRAM; multi-SRAM designs fail with an explicit error). The
 > virtual-address-overlap matching of segments to multiple SRAM instances
-> described below is not yet built (issue #80). Schema unchanged.
+> described below is not yet built (issue #103). Schema unchanged.
 
 ## Context
 

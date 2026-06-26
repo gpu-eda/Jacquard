@@ -84,7 +84,7 @@ impl std::fmt::Display for PreloadError {
                 f,
                 "design has {sram_count} SRAM cells but sram_init.elf_path \
                  doesn't specify which to target; multi-SRAM preload is a \
-                 future schema extension (issue #80). Use a design with \
+                 future schema extension (issue #103). Use a design with \
                  exactly one SRAM, or wait for the schema extension."
             ),
             Self::NoSramInDesign => write!(
