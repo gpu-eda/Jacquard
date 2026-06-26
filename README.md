@@ -18,8 +18,7 @@ Jacquard builds on the excellent [GEM](https://github.com/NVlabs/GEM) research b
 GPU-accelerated gate-level simulation with real cell timing is live across all
 three backends. For the per-backend feature status — Liberty parsing, SDF
 back-annotation, setup/hold violation detection, and the structured
-`--timing-report` — see **[Timing Simulation](https://gpu-eda.github.io/Jacquard/timing-simulation.html)**
-(or [`docs/timing-simulation.md`](docs/timing-simulation.md)).
+`--timing-report` — see **[Timing Simulation](https://gpu-eda.github.io/Jacquard/timing-simulation.html)**.
 [`CHANGELOG.md`](CHANGELOG.md) tracks released and unreleased changes.
 
 ## Dependencies
@@ -44,7 +43,7 @@ Contributors editing only Rust / C++ / kernel sources do not need `flatc` or Ope
 > brew install gpu-eda/homebrew-tap/jacquard
 > ```
 >
-> See **[docs/installation.md](docs/installation.md)** for `cargo binstall`,
+> See **[Installation](https://gpu-eda.github.io/Jacquard/installation.html)** for `cargo binstall`,
 > the prebuilt tarball, and the `netlist-graph` PyPI companion. The from-source
 > build below is the contributor path — and the route for Linux CUDA / HIP.
 
@@ -86,7 +85,7 @@ cargo run -r --features metal --bin jacquard -- sim design.gv input.vcd output.v
 
 Partitioning (mapping the design to GPU blocks) happens automatically at startup.
 
-**See [docs/usage.md](./docs/usage.md) for full documentation** including synthesis preparation, VCD scope handling, and troubleshooting.
+**See [Getting Started](https://gpu-eda.github.io/Jacquard/usage.html) for full documentation** including synthesis preparation, VCD scope handling, and troubleshooting.
 
 ## Documentation
 
@@ -108,7 +107,7 @@ mdbook serve   # opens at http://localhost:3000
   supported through their own paths: **clock gating** via the `CKLNQD`
   integrated clock-gating cell (below), and **latch / register-file memory**
   mapped through the memory-synthesis step (`memory_libmap` → RAM; see
-  [docs/usage.md](docs/usage.md)).
+  [Getting Started](https://gpu-eda.github.io/Jacquard/usage.html)).
 - Clock gates must use `CKLNQD` (from `aigpdk.v`) or the equivalent clock-gate
   cells from the SKY130 or GF180MCU PDKs.
 
