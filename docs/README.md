@@ -168,4 +168,4 @@ ADR 0010/0011; VCD scope behaviour → [Troubleshooting VCD](troubleshooting-vcd
 ---
 
 **Last Updated**: 2026-06-26
-**Maintained By**: gpu-eda + community contributors
+**Maintained By**: gpu-eda community
