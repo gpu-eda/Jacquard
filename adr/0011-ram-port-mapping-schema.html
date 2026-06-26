@@ -156,7 +156,15 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0011--ram-port-mapping-schema-for-declarative-cell-metadata"><a class="header" href="#adr-0011--ram-port-mapping-schema-for-declarative-cell-metadata">ADR 0011 — RAM port-mapping schema for declarative cell metadata</a></h1>
-<p><strong>Status:</strong> Accepted.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The "SRAM preload" consequence is now wired
+(<code>TestbenchConfig::sram_init</code>, <code>src/sim/cosim/mod.rs</code>), but the shipped
+path handles only the <strong>single-SRAM</strong> case (the design must have exactly
+one SRAM; multi-SRAM designs fail with an explicit error). The
+virtual-address-overlap matching of segments to multiple SRAM instances
+described below is not yet built (issue #103). Schema unchanged.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p><a href="0010-declarative-cell-metadata.html">ADR 0010</a> shipped a minimal Tier 2
 slice with one <code>kind</code> discriminator per cell. For <code>kind = "ram"</code>

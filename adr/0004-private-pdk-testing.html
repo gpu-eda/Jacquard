@@ -156,14 +156,22 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0004--private-pdk-testing-track"><a class="header" href="#adr-0004--private-pdk-testing-track">ADR 0004 — Private PDK testing track</a></h1>
-<p><strong>Status:</strong> Accepted. Plumbing tracked in the phase-0 plan.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> Phase 0 shipped (2026-05-02), so the
+"plumbing tracked in the phase-0 plan" rider no longer points at anything
+in flight. What actually landed is the <strong>open-source</strong> GF180MCU path
+(<code>GF180MCU_LIBERTY_DIR</code>); the <strong>commercial / NDA</strong> PDK track described in
+the Decision body (the <code>*_PDK_PATH</code> env-gated, CI-runner-restricted flow)
+is not yet implemented.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Some contributors and operators have access to commercial PDKs (GlobalFoundries, TSMC, and others) under NDA or licensing agreements that prohibit public redistribution of PDK files. Whether a given contributor has access is itself typically under NDA and not publicly known.</p>
 <p>Commercial PDK Liberty libraries are substantially richer and quirkier than open-source alternatives — they include cell variants, conditional timing arcs, vendor-specific annotations, and characterization detail not present in SKY130 or AIGPDK. Several parser bugs live only on commercial PDK output.</p>
 <p>SKY130-only coverage is insufficient for a sim tool used on commercial flows, and adding commercial PDK files to a public repository is not an option regardless of who operates the project.</p>
 <p>The standard industry pattern for testing against proprietary PDKs is environment-gated test suites: tests run when the contributor has licensed access, and skip cleanly when they don't.</p>
 <h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
-<p>Establish a private PDK test track gated on per-PDK environment variables (e.g. <code>GF130_PDK_PATH</code>, <code>TSMC_PDK_PATH</code>, and similar — one per PDK).</p>
+<p>Establish a private PDK test track gated on per-PDK environment variables (e.g. <code>TSMC_PDK_PATH</code>, and similar — one per PDK).</p>
 <ul>
 <li>Tests check for the required env var(s) and skip with a clear "PDK not available" message when unset.</li>
 <li>When env vars point to a readable PDK directory, tests execute fully.</li>

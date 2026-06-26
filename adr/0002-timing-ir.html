@@ -156,7 +156,14 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0002--timing-intermediate-representation"><a class="header" href="#adr-0002--timing-intermediate-representation">ADR 0002 — Timing intermediate representation</a></h1>
-<p><strong>Status:</strong> Accepted.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The vendor-extension type names in the
+Decision are stale. The schema uses a <code>VendorSource</code> enum with variants
+<code>Cadence</code> / <code>Synopsys</code> / <code>Mentor</code> / <code>Other</code> (<code>timing_ir.fbs</code>), not the
+<code>VendorCadence</code> / <code>VendorSynopsys</code> / <code>VendorOther</code> names written below;
+the <code>Mentor</code> variant was added and isn't mentioned in the original text.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Jacquard currently parses SDF directly in <code>src/sdf_parser.rs</code>, a hand-rolled parser that has accumulated reactive fixes (empty <code>()</code> delays, <code>(COND …)</code> pin specs, backslash escapes, edge-qualified timing checks, TIMINGCHECK stripping workarounds for OpenLane2 output). Each new production failure has been a one-off patch.</p>
 <p>Commercial tool output adds dialect variation (Cadence, Synopsys extensions). Future parser paths (Liberty, SPEF) and future reference tools (OpenSTA, OpenTimer) each carry their own data models. A format-per-consumer coupling structure will continue to spread parser complexity into the simulator.</p>

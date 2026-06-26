@@ -156,7 +156,18 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0017--cosim-execution-model"><a class="header" href="#adr-0017--cosim-execution-model">ADR 0017 — Cosim execution model</a></h1>
-<p><strong>Status:</strong> Accepted</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The original body describes cosim as
+Metal-only (<code>run_cosim</code> in <code>cosim_metal.rs</code>, <code>cmd_cosim</code> hard-erroring on
+other backends) and <code>step_edge</code> receiving an empty <code>output_state</code>. Both
+are now stale: <code>CudaBackend</code> and <code>HipBackend</code> implement <code>CosimBackend</code>
+(<code>src/sim/cosim/cuda.rs</code>, <code>hip.rs</code>; dispatched from <code>jacquard.rs</code>), and
+<code>step_edge</code> receives the real output slice. The later in-body amendments
+(2026-06-07/06-19/06-21) document this architecture; this note flags that
+the original "Metal-only" wording reflects the state at initial
+acceptance, not current reality.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>The cosim mode runs a GPU-simulated design alongside reactive
 peripheral models (flash, UART, JTAG, GPIO) that drive and observe

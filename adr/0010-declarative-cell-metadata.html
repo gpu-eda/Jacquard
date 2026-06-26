@@ -156,7 +156,13 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0010--declarative-cell-metadata-for-pdk-enablement"><a class="header" href="#adr-0010--declarative-cell-metadata-for-pdk-enablement">ADR 0010 — Declarative cell metadata for PDK enablement</a></h1>
-<p><strong>Status:</strong> Accepted.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The work this ADR "deferred to a future ADR"
+(explicit RAM port mapping) was delivered as <strong><a href="0011-ram-port-mapping-schema.html">ADR 0011</a></strong>
+— schema v1.1 (<code>src/cell_library.rs</code> accepts <code>"1.0"</code> and <code>"1.1"</code>). The
+"Deferred" section below should be read as <em>delivered</em>, not open.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>PDK enablement today is <em>per-PDK code + vendored Verilog</em> (see
 <code>src/sky130.rs</code>, <code>src/gf180mcu.rs</code>, <code>src/gf180mcu_pdk.rs</code>, the

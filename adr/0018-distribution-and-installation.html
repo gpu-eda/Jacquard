@@ -156,7 +156,41 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0018--distribution-and-installation-model"><a class="header" href="#adr-0018--distribution-and-installation-model">ADR 0018 — Distribution and installation model</a></h1>
-<p><strong>Status:</strong> Proposed.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25). Phase 4 (CUDA/HIP prebuilt
+binaries) and Phase 7 (eda-infra-rs upstreaming) remain open — see the
+amendment below.</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25) — built and shipped.</strong> The distribution layer
+this ADR proposed is now operational; the original "no release
+artifacts; install = clone + submodules + cargo build" premise is
+historical. What's live:</p>
+<ul>
+<li><strong>GitHub Releases</strong> (macOS arm64/Metal): from v0.2.1 (first attached,
+working binary) through <strong>v0.2.3</strong>. <code>release.yml</code> builds, smoke-tests
+the relocated tarball, and publishes (prereleases via a draft, for the
+immutable-releases repo).</li>
+<li><strong><code>cargo binstall --git</code></strong>: <code>[package.metadata.binstall]</code> pkg-url
+override in <code>Cargo.toml</code>.</li>
+<li><strong>Homebrew tap</strong> <code>gpu-eda/homebrew-tap</code>: formula at
+<code>packaging/homebrew/jacquard.rb</code> (v0.2.3); <code>depends_on "llvm"</code>.</li>
+<li><strong>Staging install-validation</strong> (<code>validate-install.yml</code>): a
+<code>workflow_dispatch</code> gate running the documented <code>cargo binstall</code> +
+<code>brew install</code> against a published (pre)release. RC tags
+(<code>vX.Y.Z-rc.N</code>) publish as prereleases and gate promotion.</li>
+<li><strong><code>netlist-graph</code> on PyPI</strong> (<code>publish-netlist-graph.yml</code>, OIDC trusted
+publishing): <code>netlist-graph 0.1.0</code> published; TestPyPI dry-run job too.</li>
+<li><strong>Single shared crate version</strong> via <code>scripts/bump_version.py</code> +
+verify-guard; <strong>Cargo.lock tracked</strong>; repo URLs corrected to <code>gpu-eda</code>.</li>
+<li><strong>Docs</strong>: <code>docs/installation.md</code>, <code>docs/release-process.md</code>
+(incl. the staging-validation gate).</li>
+</ul>
+<p><strong>Still open:</strong> Phase 4 (CUDA/HIP prebuilt binaries — gated on
+self-hosted NVIDIA/AMD release runners; Linux stays source-build),
+Phase 6 (container image — deferred per the original decision), and
+Phase 7 (eda-infra-rs upstreaming, the path to a crates.io publish —
+see <code>docs/plans/distribution.md § Phase 7</code>). The original proposal
+follows unchanged.</p>
+</blockquote>
 <p><strong>TL;DR.</strong> In the context of shipping Jacquard to users (and to
 docs-dogfooding agents), facing the fact that it is a GPU-compiled Rust
 binary with vendored path-dependency submodules plus two companion

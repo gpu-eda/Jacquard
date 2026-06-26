@@ -156,7 +156,17 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0005--opensta-vendoring-and-test-corpus-strategy"><a class="header" href="#adr-0005--opensta-vendoring-and-test-corpus-strategy">ADR 0005 — OpenSTA vendoring and test-corpus strategy</a></h1>
-<p><strong>Status:</strong> Accepted.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The corpus contents described below
+(SKY130 MCU SoC, NVDLA, AIGPDK examples, representative SDFs) are
+aspirational, not current. As shipped, the primary corpus contains a
+single entry — <code>aigpdk_dff_chain</code> — with the SKY130/MCU/NVDLA entries
+marked <em>pending</em> (blocked on a sky130-Liberty CI strategy), and the
+stress corpus is empty (<code>tests/timing_ir/stress/manifest.toml</code> →
+<code>entries = []</code>, pending the Phase 1 stress runner). The vendoring +
+corpus-split <em>architecture</em> is implemented as described.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Under ADR 0001, OpenSTA is the ground-truth oracle for timing correctness, invoked as a subprocess. Phase 0 (<code>../plans/phase-0-ir-and-oracle.md</code>) requires:</p>
 <ul>

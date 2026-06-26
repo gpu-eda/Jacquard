@@ -156,7 +156,18 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0008--structured-timing-output-as-first-class-deliverable"><a class="header" href="#adr-0008--structured-timing-output-as-first-class-deliverable">ADR 0008 — Structured timing output as first-class deliverable</a></h1>
-<p><strong>Status:</strong> Approved.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> Two refinements to claims below.
+(1) The structured outputs (<code>--timing-report &lt;json&gt;</code>, <code>--timing-summary</code>,
+symbolic violation messages) are no longer Metal-only — CUDA and HIP
+<code>sim</code> now route setup/hold violations through <code>process_events</code> (commit
+<code>24723b5</code>; <code>jacquard.rs</code> sim_cuda/sim_hip). The remaining gap is the
+<code>cosim</code> path, which does not yet emit <code>--timing-report</code>. (2) Any
+reference to a <code>--worst-slack-n</code> flag is aspirational — it is not
+implemented; the report's <code>worst_slack</code> arrays use a fixed top-N.
+Original decision unchanged below.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Jacquard produces timing information today through three channels: timed VCD (<code>--timed</code>), per-violation <code>clilog::warn!</code> messages on stderr, and an in-process <code>SimStats</code> counter. The <code>why-jacquard.md</code> analysis identifies a gap between the timing data Jacquard <em>has</em> internally and the answers users actually need from a flow:</p>
 <div class="table-wrapper"><table><thead><tr><th>User question</th><th>Today</th></tr></thead><tbody>

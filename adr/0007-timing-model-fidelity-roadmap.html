@@ -156,7 +156,15 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0007--timing-model-fidelity-roadmap"><a class="header" href="#adr-0007--timing-model-fidelity-roadmap">ADR 0007 — Timing model fidelity roadmap</a></h1>
-<p><strong>Status:</strong> Proposed.</p>
+<p><strong>Status:</strong> Proposed. (Line references amended 2026-06-25.)</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The roadmap is still Proposed/unbuilt, but
+several <code>src/</code> line references below have drifted as the code moved — most
+notably the wire-delay lumping code, cited as <code>flatten.rs:1850-1872</code>, now
+lives around <code>flatten.rs:2030-2051</code> (the old location is unrelated code).
+Treat the file:line citations as approximate; verify against current
+<code>flatten.rs</code> / <code>aig.rs</code> before relying on them.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Jacquard's timing model today consumes SDF-equivalent annotations via the timing IR (ADR 0002), produced and validated by OpenSTA called out of process (ADR 0001 — sole STA path; ADR 0003's in-process OpenTimer alternative was Superseded by the spike). The accuracy contract at present is "±5% on arrival times against CVC reference" per <code>timing-validation.md</code>. This is acceptable for sky130-class designs at ≥10 ns clock periods.</p>
 <p>Three structural simplifications in the current implementation become accuracy bottlenecks at scale:</p>

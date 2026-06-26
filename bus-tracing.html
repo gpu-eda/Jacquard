@@ -296,7 +296,7 @@ always-ready.</p>
 <p><code>tests/apb_trace/</code> is a self-contained, synthesizable APB3 system used
 as the CI regression. Its master issues a fixed program — two writes
 then two reads — to a register-file slave, and <code>check.py</code> asserts the
-decoded CSV. See <a href="../tests/apb_trace/README.html"><code>tests/apb_trace/README.md</code></a>.</p>
+decoded CSV. See <a href="https://github.com/gpu-eda/Jacquard/blob/main/tests/apb_trace/README.md"><code>tests/apb_trace/README.md</code></a>.</p>
 <pre><code class="language-bash">yosys -s tests/apb_trace/synth.tcl          # (from tests/apb_trace/)
 cargo run -r --features metal --bin jacquard -- cosim \
     tests/apb_trace/apb_trace_synth.gv \
@@ -319,7 +319,8 @@ python3 tests/apb_trace/check.py apb.csv
 <li>APB3 only for now; AHB-Lite / AHB5 and annotated-VCD output are the
 next phases (see the <a href="plans/bus-transaction-tracing.html">plan</a>).</li>
 <li>Up to 4 buses per run, addresses/data up to 32 bits.</li>
-<li>Cosim is Metal-only today, so bus tracing is Metal-only.</li>
+<li>Cosim is now backend-portable (Metal, CUDA, HIP, plus a CPU fallback);
+bus tracing is wired across the GPU backends (<code>cuda.rs</code>/<code>hip.rs</code>/<code>metal.rs</code>).</li>
 <li>The legacy hardcoded Wishbone trace (a separate, SoC-specific path) is
 unaffected; folding it onto this general mechanism is a planned
 follow-up.</li>
@@ -333,7 +334,7 @@ follow-up.</li>
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="jtag-debug.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="selective-x-propagation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -347,7 +348,7 @@ follow-up.</li>
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="jtag-debug.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="selective-x-propagation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

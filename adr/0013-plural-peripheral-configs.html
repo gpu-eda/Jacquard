@@ -160,6 +160,17 @@
 multiple peripherals (multi-UART #90, config-driven APB3 bus tracing).
 The "Target architecture" section below tracks the remaining, optional
 refactors; the conventions it establishes are already followed.</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> Two body claims are now stale. (1) "Cosim is
+Metal-only today" — CUDA (<code>src/sim/cosim/cuda.rs</code>) and HIP
+(<code>src/sim/cosim/hip.rs</code>) backends now implement the full peripheral stack
+(<code>gpu_io_step</code>, flash FSM, ring-buffer drain); the "Metal-only"
+characterisation applied only to the <em>prebuilt distribution</em> (ADR 0018),
+not the source build. (2) The note that <code>step_edge</code> receives an empty
+<code>output_state</code> slice was resolved by the interactive JTAG work — it now
+receives <code>&amp;backend.state()[state_size..]</code> (<code>cosim/mod.rs</code>). The original
+text below is retained for the record.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Jacquard's cosim mode runs reactive peripheral models alongside the
 GPU-simulated design: SPI flash serves firmware, UART decodes serial

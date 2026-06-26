@@ -156,7 +156,14 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0009--opensta-verilog-reader-input-constraints"><a class="header" href="#adr-0009--opensta-verilog-reader-input-constraints">ADR 0009 — OpenSTA Verilog reader input constraints</a></h1>
-<p><strong>Status:</strong> Accepted.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The claim that the filter has "integration
+test coverage in <code>tests/opensta_integration.rs</code>" is imprecise — the
+module-filtering tests are <strong>unit</strong> tests in <code>src/verilog_filter.rs</code>
+(<code>tests/opensta_integration.rs</code> covers the OpenSTA end-to-end run, not
+the filter). Decision unchanged.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>OpenSTA's <code>read_verilog</code> Tcl command is structural-only: it accepts cell
 instantiations and bare-net <code>assign</code> statements but rejects RTL

@@ -228,6 +228,24 @@ cargo run -r --features metal --bin jacquard -- sim &lt;args&gt; --check-with-cp
 # Check VCD structure
 grep '\$scope\|\$var' input.vcd | head -20
 </code></pre>
+<h3 id="cosim-reactive-peripherals"><a class="header" href="#cosim-reactive-peripherals">Cosim (reactive peripherals)</a></h3>
+<p><code>jacquard cosim</code> runs GPU-resident peripheral models (SPI flash, UART, Wishbone)
+alongside the design so inputs can react to outputs cycle-by-cycle. It runs on
+Metal, CUDA, and HIP (plus a CPU fallback).</p>
+<pre><code class="language-bash"># Drive the design from a JSON testbench config; write an output VCD
+cargo run -r --features metal --bin jacquard -- cosim \
+    design.v --config sim_config.json --output-vcd out.vcd
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>--config &lt;json&gt;</code></td><td>Testbench config: clock(s), reset, peripherals (required)</td></tr>
+<tr><td><code>--output-vcd &lt;path&gt;</code></td><td>Output VCD (chip outputs + any traced nets)</td></tr>
+<tr><td><code>--trace-signals &lt;path&gt;</code></td><td>Surface internal nets in the VCD (<a href="signal-tracing.html">Signal Tracing</a>)</td></tr>
+<tr><td><code>--bus-trace-csv &lt;path&gt;</code></td><td>Decode on-chip bus transactions (<a href="bus-tracing.html">Bus Tracing</a>)</td></tr>
+<tr><td><code>--jtag-server &lt;port&gt;</code> / <code>--jtag-replay &lt;path&gt;</code></td><td>Interactive / deterministic JTAG debug (<a href="jtag-debug.html">JTAG Debug</a>)</td></tr>
+<tr><td><code>--xprop</code></td><td>Selective X-propagation for uninitialised state</td></tr>
+<tr><td><code>--max-clock-edges &lt;n&gt;</code></td><td>Limit simulation length (1 cycle = 2 edges)</td></tr>
+</tbody></table>
+</div>
 <h3 id="key-statistics"><a class="header" href="#key-statistics">Key Statistics</a></h3>
 <p>When running Jacquard, look for these diagnostic outputs:</p>
 <pre><code>netlist has X pins, Y aig pins, Z and gates        # AIG complexity
@@ -244,33 +262,23 @@ WARN (GATESIM_VCDI_MISSING_PI) ...                 # VCD issues!
 <li><strong>Comparative Testing</strong>: Compared Jacquard vs iverilog outputs</li>
 <li><strong>Third-Party Validation</strong>: Tested with real-world examples (sva-playground)</li>
 </ol>
-<h2 id="known-issues-documented"><a class="header" href="#known-issues-documented">Known Issues Documented</a></h2>
-<ol>
-<li>
-<p><strong>VCD Hierarchy Mismatch</strong> (CRITICAL):</p>
+<h2 id="known-issues"><a class="header" href="#known-issues">Known Issues</a></h2>
+<p>Tracked live on GitHub — see the
+<a href="https://github.com/gpu-eda/Jacquard/issues">open issues</a> and the
+<a href="https://github.com/gpu-eda/Jacquard/labels/priority%3Ahigh"><code>priority:high</code></a>
+label. The long-standing ones:</p>
 <ul>
-<li>Jacquard expects flat VCD hierarchy</li>
-<li>Most testbenches generate hierarchical VCDs</li>
-<li>See troubleshooting-vcd.md for solutions</li>
+<li><strong>VCD hierarchy mismatch</strong> — Jacquard expects a flat top-level VCD; most
+testbenches emit hierarchical ones. Workaround: <code>--input-vcd-scope</code> (see
+<a href="troubleshooting-vcd.html">Troubleshooting VCD</a>). Tracking:
+<a href="https://github.com/gpu-eda/Jacquard/issues/142">#142</a>.</li>
+<li><strong>Complex FSM simulation</strong> — some FSM designs (e.g. <code>safe.v</code>) don't simulate
+correctly; under investigation. Tracking:
+<a href="https://github.com/gpu-eda/Jacquard/issues/143">#143</a>.</li>
+<li><strong>Format-string preservation</strong> — Yosys may drop <code>gem_format</code> attributes, so
+<code>$display</code> messages show placeholders. This is an upstream Yosys limitation;
+the workaround is to extract format strings from the pre-synthesis JSON.</li>
 </ul>
-</li>
-<li>
-<p><strong>Complex FSM Simulation</strong>:</p>
-<ul>
-<li>Some FSM designs don't simulate correctly</li>
-<li>Under investigation (safe.v example in third_party tests)</li>
-<li>May be related to synthesis optimization or reset handling</li>
-</ul>
-</li>
-<li>
-<p><strong>Format String Preservation</strong>:</p>
-<ul>
-<li>Yosys may not preserve format attributes</li>
-<li>Display messages show placeholders</li>
-<li>Extract format strings from pre-synthesis JSON as workaround</li>
-</ul>
-</li>
-</ol>
 <h2 id="contributing"><a class="header" href="#contributing">Contributing</a></h2>
 <p>When adding documentation:</p>
 <ol>
@@ -281,20 +289,20 @@ WARN (GATESIM_VCDI_MISSING_PI) ...                 # VCD issues!
 <li><strong>Test instructions</strong>: Verify all commands actually work</li>
 </ol>
 <h2 id="future-documentation-needs"><a class="header" href="#future-documentation-needs">Future Documentation Needs</a></h2>
+<p>Dedicated guides not yet written (coverage today is scattered across ADRs and
+reference docs):</p>
 <ul>
 <li><input disabled="" type="checkbox"/>
-Performance tuning guide (optimal <code>NUM_BLOCKS</code>, <code>--level-split</code>)</li>
+Performance tuning guide (choosing <code>NUM_BLOCKS</code>, <code>--level-split</code>)</li>
 <li><input disabled="" type="checkbox"/>
-Memory (SRAM) modeling and synthesis</li>
+SRAM modeling &amp; synthesis (synthesis flow + preload + observability in one place)</li>
 <li><input disabled="" type="checkbox"/>
-Custom cell library support beyond AIGPDK</li>
+Multi-clock domain user guide (config examples; cf. <a href="https://github.com/gpu-eda/Jacquard/issues/87">#87</a> for test coverage)</li>
 <li><input disabled="" type="checkbox"/>
-Multi-clock domain handling</li>
-<li><input disabled="" type="checkbox"/>
-VCD scope option detailed behavior</li>
-<li><input disabled="" type="checkbox"/>
-GPU kernel optimization internals</li>
+GPU kernel optimization internals (profiling, backend-specific tuning)</li>
 </ul>
+<p>Now covered: custom cell libraries → <a href="adding-a-pdk.html">Adding a New PDK</a> +
+ADR 0010/0011; VCD scope behaviour → <a href="troubleshooting-vcd.html">Troubleshooting VCD</a>.</p>
 <h2 id="related-resources"><a class="header" href="#related-resources">Related Resources</a></h2>
 <ul>
 <li><strong>Main README</strong>: <code>../README.md</code> - Project overview and quick start</li>
@@ -303,15 +311,15 @@ GPU kernel optimization internals</li>
 <li><strong>Third-Party Tests</strong>: <code>../tests/regression/third_party/</code> - Real-world examples with attribution</li>
 </ul>
 <hr />
-<p><strong>Last Updated</strong>: 2026-02-16
-<strong>Maintained By</strong>: ChipFlow + Community Contributions</p>
+<p><strong>Last Updated</strong>: 2026-06-26
+<strong>Maintained By</strong>: gpu-eda + community contributors</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
 
-                            <a rel="next prefetch" href="installation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="project-scope.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -322,7 +330,7 @@ GPU kernel optimization internals</li>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
 
-                    <a rel="next prefetch" href="installation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="project-scope.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

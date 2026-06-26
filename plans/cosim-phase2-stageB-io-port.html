@@ -1,0 +1,419 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Phase 2 Stage B — gpu_io_step port - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="stage-b-t21-port-spec--gpu_io_step-on-cudahip--batched-run_edges"><a class="header" href="#stage-b-t21-port-spec--gpu_io_step-on-cudahip--batched-run_edges">Stage B (T2.1) port spec — <code>gpu_io_step</code> on CUDA/HIP + batched <code>run_edges</code></a></h1>
+<p><strong>Status:</strong> Spec for review — not yet implemented. Sibling detail doc to
+<a href="cosim-phase2-cuda-hip.html"><code>cosim-phase2-cuda-hip.md</code></a> (the authoritative plan;
+Stage B = its checkpoint <strong>T2.1</strong>). Resumed from
+<code>docs/handoffs/backend-alignment-handoff.md</code>.</p>
+<p><strong>Goal:</strong> bring <code>CudaBackend</code>/<code>HipBackend</code> from design-step-only (Stage A) to
+<strong>GPU peripherals (UART + bus) running <em>inside</em> a batched launch</strong>, byte-identical
+to the CPU/Metal goldens, validated CI-only on <code>tesla4-runner</code>. Two decisions
+already taken by the maintainer this session:</p>
+<ol>
+<li><strong>GPU peripherals</strong>, not a CPU-peripheral crutch (the dropped "2a").</li>
+<li><strong>Batch in this stage</strong> — rework <code>run_edges</code> off its current per-edge
+<code>DEVICE.synchronize()</code> into one async launch sequence + a single end-of-batch
+sync, mirroring Metal's <code>encode_and_commit_gpu_batch</code>.</li>
+</ol>
+<p>CI gate: <code>dual_uart</code> + <code>apb_trace</code> cosim VCD/CSV byte-identical to
+<code>tests/{dual_uart,apb_trace}/expected/</code> on cuda <strong>and</strong> hip.</p>
+<hr />
+<h2 id="1-reference-map-port-from--to"><a class="header" href="#1-reference-map-port-from--to">1. Reference map (port <em>from</em> → <em>to</em>)</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Concern</th><th>Metal / CPU source (read)</th><th>CUDA/HIP target (write)</th></tr></thead><tbody>
+<tr><td>Kernel body</td><td><code>csrc/kernel_v1.metal:1170</code> <code>gpu_io_step</code></td><td><code>csrc/kernel_v1_impl.cuh</code> new <code>__global__ gpu_io_step</code></td></tr>
+<tr><td>GPU structs</td><td><code>kernel_v1.metal:1041-1163</code></td><td>device header in <code>kernel_v1_impl.cuh</code></td></tr>
+<tr><td>Launcher</td><td>(Metal <code>encode_io_step</code>)</td><td><code>kernel_v1.cu</code> / <code>.hip.cpp</code> <code>gpu_io_step_{cuda,hip}</code></td></tr>
+<tr><td>Rust <code>#[repr(C)]</code> ABI</td><td><code>metal.rs:113-250</code></td><td><code>cuda.rs</code>/<code>hip.rs</code> (or shared in <code>mod.rs</code>)</td></tr>
+<tr><td>IO buffer build</td><td><code>metal.rs:1446</code> <code>build_io_buffers</code></td><td><code>CudaBackend::new</code></td></tr>
+<tr><td>Bus params/positions</td><td><code>mod.rs:149</code> <code>build_bus_trace</code> (agnostic, already shared)</td><td>reuse as-is</td></tr>
+<tr><td>Batched encode</td><td><code>metal.rs:643</code> <code>encode_and_commit_gpu_batch</code></td><td><code>CudaBackend::run_edges</code></td></tr>
+<tr><td>UART drain</td><td><code>metal.rs:2116</code> <code>drain_uart_tx</code></td><td><code>CudaBackend::drain_uart_tx</code></td></tr>
+<tr><td>Bus drain</td><td><code>metal.rs:2132</code> <code>drain_bus_beats</code></td><td><code>CudaBackend::drain_bus_beats</code></td></tr>
+<tr><td>CPU equivalence oracle</td><td><code>mod.rs:3805-4045</code> (<code>CpuBackend</code> FSM)</td><td>(test target, no change)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Stage-B fixtures exercise UART + APB3 only.</strong> The legacy Wishbone (<code>WbTrace*</code>)
+path in <code>gpu_io_step</code> is dead for <code>dual_uart</code>/<code>apb_trace</code> (<code>has_trace == 0</code>,
+<code>n_buses</code> drives APB). Port the WB block for ABI/structural parity with Metal but
+it is not on the Stage-B critical path (no WB fixture until later).</p>
+<hr />
+<h2 id="2-gpu-struct-abi-to-replicate-device-header-in-kernel_v1_implcuh"><a class="header" href="#2-gpu-struct-abi-to-replicate-device-header-in-kernel_v1_implcuh">2. GPU-struct ABI to replicate (device header in <code>kernel_v1_impl.cuh</code>)</a></h2>
+<p>Exact field order/padding from <code>kernel_v1.metal:1041-1163</code>. Constants:
+<code>MAX_UARTS</code>, <code>UART_CHANNEL_CAP</code> (already defined for Metal — confirm the values
+and re-declare in the <code>.cuh</code>), <code>WB_TRACE_MAX_ADR_BITS=30</code>, <code>…_DAT_BITS=32</code>,
+<code>WB_TRACE_CHANNEL_CAP=16384</code>, <code>MAX_BUS_TRACES=4</code>, <code>BUS_TRACE_MAX_ADR_BITS=32</code>,
+<code>…_DAT_BITS=32</code>, <code>BUS_TRACE_CHANNEL_CAP=16384</code>, <code>BUS_PROTO_APB3=0</code>.</p>
+<p>Structs (CUDA <code>struct</code>, plain — no <code>device</code>/<code>constant</code> qualifiers):
+<code>UartDecoderState{state,last_tx,start_cycle,bits_received,value,current_cycle}</code>,
+<code>UartPerChannelConfig{tx_out_pos,cycles_per_bit}</code>,
+<code>UartParams{state_size,n_uarts,_pad[2],channels[MAX_UARTS]}</code>,
+<code>UartChannel{write_head,capacity,_pad[2],data[UART_CHANNEL_CAP]}</code>,
+<code>WbTraceParams</code>/<code>WbTraceEntry</code>/<code>WbTraceChannel</code>,
+<code>BusTraceParams{protocol,addr_bits,data_bits,sel_pos,enable_pos,ready_pos,write_pos,resp_pos,addr_pos[32],wdata_pos[32],rdata_pos[32]}</code>,
+<code>BusTraceParamsAll{n_buses,_pad[3],buses[MAX_BUS_TRACES]}</code>,
+<code>BusTraceEntry{tick,flags,addr,wdata,rdata}</code>,
+<code>BusTraceChannel{write_head,capacity,current_tick,prev_gate}</code> (+ entries at
+byte-offset 16).</p>
+<p><strong>ABI guard (required):</strong> <code>static_assert(sizeof(X) == …)</code> on both the C side and
+<code>const _: () = assert!(size_of::&lt;X&gt;() == …)</code> on the Rust side for every struct
+that crosses FFI. ABI drift is the #1 risk (silent corruption); the Rust ABI
+already exists at <code>metal.rs:113-250</code> and is the size-of-truth.</p>
+<p>The Rust <code>#[repr(C)]</code> mirrors at <code>metal.rs:113-250</code> are <code>#[cfg(feature="metal")]</code>.
+<strong>Action:</strong> lift <code>UartParams</code>/<code>UartPerChannelConfig</code>/<code>UartChannel</code>/
+<code>UartDecoderState</code>/<code>BusTraceParamsAll</code>/<code>BusTraceParams</code>/<code>BusTraceEntry</code>/
+<code>BusTraceChannel</code> (+ WB structs) into the <strong>agnostic parent</strong> (<code>mod.rs</code>,
+non-gated) so all three backends share one ABI definition, then have <code>metal.rs</code>,
+<code>cuda.rs</code>, <code>hip.rs</code> <code>use super::</code> them. This removes the triple-maintenance the
+plan's Risk "two kernel families" warns about. (<code>build_bus_trace</code>/
+<code>BusTracePositions</code> are already agnostic in <code>mod.rs</code> — this extends that pattern.)</p>
+<hr />
+<h2 id="3-kernel-gpu_io_step-shared-kernel_v1_implcuh"><a class="header" href="#3-kernel-gpu_io_step-shared-kernel_v1_implcuh">3. Kernel: <code>gpu_io_step</code> (shared <code>kernel_v1_impl.cuh</code>)</a></h2>
+<p>Direct transliteration of <code>kernel_v1.metal:1180-1354</code>. Metal→CUDA mechanical
+substitutions:</p>
+<ul>
+<li><code>kernel void</code> → <code>__global__ void</code>; <code>[[buffer(n)]]</code> args → plain pointers;
+<code>tid [[thread_position_in_threadgroup]]</code> → <code>threadIdx.x</code>. Single-thread work:
+keep the <code>if (tid != 0) return;</code> guard → <code>if (threadIdx.x != 0) return;</code>.</li>
+<li><code>device</code>/<code>constant</code> qualifiers dropped. <code>uchar</code> → <code>unsigned char</code> / <code>u8</code>,
+<code>u32</code> already aliased in the <code>.cuh</code>.</li>
+<li>The <code>READ_OUT_BIT</code> macro (<code>metal.rs</code>-shader <code>:1186</code>) ports verbatim (reads
+<code>states[state_size + (pos&gt;&gt;5)]</code> — the <strong>output</strong> slot; <code>0xFFFFFFFF</code> ⇒ 0).</li>
+<li>No barriers needed — pure thread-0 serial logic, no <code>simd_*</code>/<code>threadfence</code>.</li>
+</ul>
+<p>The UART FSM (4-state: IDLE/START/DATA/STOP), WB trace, and APB3 rising-edge
+gate logic copy line-for-line. <strong>The CPU FSM at <code>mod.rs:3923-4039</code> is the
+already-verified Rust twin</strong> — cross-check the port against it (same
+<code>cycles_per_bit/2</code> midpoints, same <code>value |= tx &lt;&lt; bits_received</code>, same
+<code>gate = sel &amp; en &amp; rdy</code> + rising-edge <code>(prev&gt;&gt;b)&amp;1 == 0</code>).</p>
+<hr />
+<h2 id="4-launcher-gpu_io_step_cudahip-kernel_v1cu--hipcpp"><a class="header" href="#4-launcher-gpu_io_step_cudahip-kernel_v1cu--hipcpp">4. Launcher: <code>gpu_io_step_{cuda,hip}</code> (<code>kernel_v1.cu</code> / <code>.hip.cpp</code>)</a></h2>
+<p>Follow the existing <code>cosim_state_prep_cuda</code> (<code>kernel_v1.cu:84</code>) pattern exactly —
+<code>extern "C"</code>, raw pointer args, <code>&lt;&lt;&lt;1, 256&gt;&gt;&gt;</code> launch, <code>checkCudaErrors</code>. ucc
+strips <code>_cuda</code>/<code>_hip</code> and appends the <code>Device</code> arg, surfacing
+<code>ucci::gpu_io_step(...)</code> automatically (no build.rs change). Signature mirrors
+the kernel: <code>(u32* states, UartDecoderState* uart_state, const UartParams* uart_params, UartChannel* uart_channel, WbTraceChannel* wb_channel, const WbTraceParams* wb_params, BusTraceChannel* bus_channel, const BusTraceParamsAll* bus_params)</code>.
+HIP launcher is the same body in <code>.hip.cpp</code> (shared <code>.cuh</code> kernel).</p>
+<p><strong>VCD-ring snapshot launcher (needed for §6 batching):</strong> add
+<code>cosim_snapshot_{cuda,hip}</code> — <code>cudaMemcpyAsync(ring + edge_off*2*state_size, states, 2*state_size*4, cudaMemcpyDeviceToDevice, 0)</code>. This is the CUDA analog of
+Metal's per-edge blit (<code>metal.rs:732-742</code>); it lets each edge's <code>[input|output]</code>
+slot be retained in a device ring while <code>states</code> is overwritten by the next
+edge — without it, batching (no per-edge sync/readback) loses all but the final
+snapshot.</p>
+<hr />
+<h2 id="5-backend-wiring--cudabackendnew-io-buffers"><a class="header" href="#5-backend-wiring--cudabackendnew-io-buffers">5. Backend wiring — <code>CudaBackend::new</code> (IO buffers)</a></h2>
+<p>Mirror <code>build_io_buffers</code> (<code>metal.rs:1446</code>), substituting device-resident <code>UVec</code>
+for <code>metal::Buffer</code>. New backend fields (all <code>UnsafeCell&lt;UVec&lt;…&gt;&gt;</code> or <code>UVec</code>):</p>
+<ul>
+<li><code>uart_state: UVec&lt;UartDecoderState&gt;</code> — <code>MAX_UARTS</code>, init <code>state=0,last_tx=1</code>.</li>
+<li><code>uart_params: UVec&lt;UartParams&gt;</code> — <code>state_size</code>, <code>n_uarts</code>, per-channel
+<code>tx_out_pos = gpio_map.output_bits[tx_gpio]</code>,
+<code>cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle</code> (the two args
+<strong>currently prefixed <code>_</code></strong> in <code>CudaBackend::new</code> — un-prefix <code>_gpio_map</code>,
+<code>_uart_configs</code>, <code>_sched_ticks_per_sys_clk_cycle</code>).</li>
+<li><code>uart_channel: UVec&lt;UartChannel&gt;</code> — <code>MAX_UARTS</code>, <code>capacity=UART_CHANNEL_CAP</code>,
+<code>write_head=0</code>.</li>
+<li><code>wb_params</code>/<code>wb_channel</code> (via <code>build_wb_trace_params</code> — also agnostic-lift or
+cfg-gate; low priority, no Stage-B fixture).</li>
+<li><code>bus_params: UVec&lt;u8&gt;</code>-backed <code>BusTraceParamsAll</code> + <code>bus_channel</code> (header +
+<code>BUS_TRACE_CHANNEL_CAP</code> entries, byte-sized buffer). Build params from
+<code>build_bus_trace(aig, netlistdb, script, config.effective_bus_traces())</code>
+(<code>mod.rs:149</code>) → pack <code>BusTracePositions</code> into <code>BusTraceParams</code> (the packing
+loop lives in <code>metal.rs</code> <code>build_bus_trace_params:1126</code> — extract the
+positions→<code>BusTraceParamsAll</code> packer into <code>mod.rs</code> so cuda/hip/metal share it,
+same move already done for the lanes).</li>
+<li>Per-channel read cursors <code>uart_read_heads: Vec&lt;u32&gt;</code>, <code>bus_trace_read_head: u32</code>
+(host-side, mirror <code>MetalBackend</code>).</li>
+</ul>
+<p><code>new</code> returns <code>(Self, bus_lanes)</code> — <code>bus_lanes</code> now real (from <code>build_bus_trace</code>),
+replacing the Stage-A empty <code>vec![]</code>.</p>
+<hr />
+<h2 id="6-backend-wiring--run_edges-the-batching-rework"><a class="header" href="#6-backend-wiring--run_edges-the-batching-rework">6. Backend wiring — <code>run_edges</code> (the batching rework)</a></h2>
+<p><strong>Current Stage A</strong> (<code>cuda.rs:342</code>): per edge → <code>state_prep</code>, <code>simulate_stage × N</code>, <strong><code>DEVICE.synchronize()</code></strong>, host read-back into VCD ring. The per-edge sync
+is what makes it not-yet-batched.</p>
+<p><strong>Target (mirror <code>encode_and_commit_gpu_batch</code>):</strong> enqueue <em>all</em> edges' kernels
+on the default stream with <strong>no intervening sync</strong>, one <code>DEVICE.synchronize()</code> at
+the very end, then read the ring + drain channels once. Per edge in <code>0..batch</code>:</p>
+<ol>
+<li>upload edge ops UVec (<strong>retain in a <code>Vec</code> for the whole batch</strong> — async
+launches read it after the call returns; dropping early = UB),</li>
+<li><code>ucci::cosim_state_prep(...)</code>,</li>
+<li><code>ucci::cosim_simulate_stage(...)</code> × <code>num_major_stages</code>,</li>
+<li><code>ucci::gpu_io_step(...)</code> (NEW — UART/bus capture into the device rings),</li>
+<li>if <code>enable_vcd</code>: <code>ucci::cosim_snapshot(...)</code> → device ring slot <code>edge_offset</code>.</li>
+</ol>
+<p>Then <strong>one</strong> <code>DEVICE.synchronize()</code>. Then: read the VCD ring UVec back to host →
+<code>Vec&lt;Vec&lt;u32&gt;&gt;</code> for <code>vcd_snapshot</code>; UART/bus channels are managed/<code>UVec</code> so
+<code>drain_*</code> reads them after the sync.</p>
+<p>Notes / invariants:</p>
+<ul>
+<li>Flash kernels (<code>gpu_apply_flash_din</code>, <code>gpu_flash_model_step</code>) are <strong>Stage C</strong> —
+omit from the dispatch chain here (Metal's <code>encode_*flash*</code> calls are skipped).</li>
+<li><code>wait</code>/<code>vcd_snapshot</code> semantics unchanged from Stage A (token still unused; the
+single end-of-batch sync replaces per-edge).</li>
+<li>Ops-buffer lifetime is the one new correctness hazard vs Stage A (which synced
+immediately so the UVec could drop). Collect <code>Vec&lt;UVec&lt;u32&gt;&gt;</code>, drop after sync.</li>
+<li>The VCD ring UVec is sized <code>batch_capacity * 2 * state_size</code>; grow lazily to the
+largest <code>batch</code> seen (mirror Metal's ring sizing).</li>
+</ul>
+<hr />
+<h2 id="7-backend-wiring--drains"><a class="header" href="#7-backend-wiring--drains">7. Backend wiring — drains</a></h2>
+<ul>
+<li><code>drain_uart_tx</code> (<code>cuda.rs:332</code>): replace <code>vec![]</code> with the
+<code>metal.rs:2116</code> loop over <code>uart_channel[i].write_head</code> vs <code>uart_read_heads[i]</code>,
+reading <code>data[head % capacity]</code>. UVec → ensure host-visible (post-sync read).</li>
+<li><code>drain_bus_beats</code> (<code>cuda.rs:337</code>): replace <code>vec![]</code> with the <code>metal.rs:2132</code>
+loop reading <code>BusTraceEntry</code> at byte-offset 16, building <code>RawBeat</code> (same flag
+decode: <code>bus_id = flags&gt;&gt;8</code>, <code>write = flags&amp;1</code>, <code>err = (flags&gt;&gt;1)&amp;1</code>).</li>
+<li><code>flash_d_i</code>/<code>flash_debug_snapshot</code> stay Stage-A stubs (flash is Stage C).</li>
+</ul>
+<hr />
+<h2 id="8-ci"><a class="header" href="#8-ci">8. CI</a></h2>
+<p>The check script already supports <code>dual_uart</code> + <code>apb_trace</code> under
+<code>COSIM_SCOPE=all</code> (<code>scripts/ci/cosim_cpu_check.sh:97-110</code>). Stage A restricted the
+cuda/hip steps to <code>COSIM_SCOPE=logic</code> (<code>ci.yml:580</code>/<code>:734</code>). <strong>Stage B change:</strong>
+flip those two steps to <code>COSIM_SCOPE=all</code> (or a new <code>logic+io</code> scope that adds
+just UART/bus, deferring flash/JTAG to Stage C). The goldens at
+<code>tests/{dual_uart,apb_trace}/expected/</code> already exist (Phase-1 CPU goldens, =
+Metal). No new fixtures, no <code>compare_backend_vcds.py</code> change.</p>
+<hr />
+<h2 id="9-risks--open-questions-to-resolve-during-implementation"><a class="header" href="#9-risks--open-questions-to-resolve-during-implementation">9. Risks / open questions to resolve during implementation</a></h2>
+<ol>
+<li><strong>ulib stream/async semantics.</strong> The whole batching rework assumes the ucci
+launchers enqueue async on the default stream and <code>DEVICE.synchronize()</code> is the
+only barrier (true of the current launchers — they <code>&lt;&lt;&lt;&gt;&gt;&gt;</code> + <code>cudaGetLastError</code>,
+no inner sync). <strong>Verify</strong> ulib <code>UVec</code> host→device upload doesn't itself force a
+sync mid-batch (if <code>&amp;mut ops_uvec</code> triggers a blocking copy each call, the
+"batch" still serialises on the host — acceptable functionally, but not the
+perf win; flag if so). This is the one assumption that could force a design
+change (e.g. a single batched C launcher that loops internally).</li>
+<li><strong>VCD ring memory.</strong> <code>batch * 2 * state_size * 4 B</code> device-resident. Large
+designs × large batch could be significant; Metal already pays this. Size to
+the max batch lazily.</li>
+<li><strong>ABI drift</strong> — mitigated by §2 static asserts both sides + the byte-identical
+gate.</li>
+<li><strong><code>UartChannel</code> is 16 + UART_CHANNEL_CAP bytes</strong> — large struct in a <code>UVec</code>;
+confirm <code>UVec&lt;UartChannel&gt;</code> device alloc handles the <code>[u8; CAP]</code> inline array
+(vs a flat <code>UVec&lt;u8&gt;</code> view). A flat byte-buffer + manual offset (like the bus
+channel) may be cleaner than <code>UVec&lt;UartChannel&gt;</code>.</li>
+<li><strong>CUDA + HIP land together</strong> — shared <code>.cuh</code> kernel + ABI; HIP is a second
+launcher in <code>.hip.cpp</code> + <code>mod ucci_hip</code> in <code>hip.rs</code>. Keep <code>cuda.rs</code>/<code>hip.rs</code>
+diffs identical (they're 452-line twins today).</li>
+</ol>
+<hr />
+<h2 id="10-checkpoint-sequencing-each--one-ci-round-trip"><a class="header" href="#10-checkpoint-sequencing-each--one-ci-round-trip">10. Checkpoint sequencing (each = one CI round-trip)</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Step</th><th>Deliverable</th><th>Local gate</th><th>T4 gate</th></tr></thead><tbody>
+<tr><td>B0</td><td>Lift IO structs → <code>mod.rs</code> (agnostic) + ABI static-asserts; Metal still builds bit-identical</td><td><code>cargo test --features metal</code> (298), fixtures byte-identical</td><td>—</td></tr>
+<tr><td>B1</td><td><code>gpu_io_step</code> + <code>cosim_snapshot</code> kernels + <code>_cuda</code>/<code>_hip</code> launchers</td><td><code>cargo check</code> reasoning only</td><td>cuda+hip build green</td></tr>
+<tr><td>B2</td><td><code>CudaBackend</code>/<code>HipBackend</code> IO buffers + batched <code>run_edges</code> + drains</td><td>—</td><td><code>dual_uart</code>+<code>apb_trace</code> == golden on cuda+hip</td></tr>
+<tr><td>B3</td><td>CI: flip <code>COSIM_SCOPE</code> to include UART/bus on cuda/hip</td><td>—</td><td>green</td></tr>
+</tbody></table>
+</div>
+<p>B0 is local-verifiable (Metal) and de-risks the ABI before any T4 round-trip —
+do it first. B1+B2 batch into one push (kernel is useless without the backend).</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../plans/cosim-phase2-cuda-hip.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../plans/cosim-phase2-stageC-flash.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../plans/cosim-phase2-cuda-hip.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../plans/cosim-phase2-stageC-flash.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

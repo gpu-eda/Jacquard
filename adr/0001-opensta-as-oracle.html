@@ -156,7 +156,16 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="adr-0001--opensta-as-the-timing-correctness-oracle-and-sole-sta-path"><a class="header" href="#adr-0001--opensta-as-the-timing-correctness-oracle-and-sole-sta-path">ADR 0001 — OpenSTA as the timing correctness oracle and sole STA path</a></h1>
-<p><strong>Status:</strong> Accepted. Scope expanded 2026-05-01 — see Decision §3 below.</p>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25). Scope expanded 2026-05-01 — see
+Decision §3 below.</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> Decision §1's claim that "OpenSTA is never
+invoked from the <code>jacquard</code> runtime binary" is no longer true. <code>opensta-to-ir</code>
+is a direct dependency (<code>Cargo.toml</code>) and is the shipping SDF path
+(<code>src/sim/setup.rs</code> <code>load_sdf_via_opensta_to_ir</code>); ADR 0006's amendment
+ratified invoking it as a subprocess at runtime. The original §1 text is
+retained below as the record of the initial decision.</p>
+</blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p>Jacquard's current correctness validation for timing relies on its own CPU reference simulator (<code>--check-with-cpu</code>), which shares the Rust source tree, data structures, and parsers with the GPU simulation path. Representation bugs (e.g., hierarchical SDF prefix mismatch, inverter-collapse issues) have passed both paths silently because they affect both.</p>
 <p>Historical regressions have been caught only by comparing against genuinely external tools — specifically CVC for functional simulation and, by implication, OpenSTA for timing. No format or tool inside Jacquard is currently treated as authoritative.</p>
