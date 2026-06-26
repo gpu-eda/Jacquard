@@ -2,10 +2,12 @@
 
 **Active thread:** ADR 0019 "Cell-model IR" is **approved by the maintainer**
 (all four design open questions resolved) and **plan checkpoint C1 is
-COMPLETE** — the IR + converter foundation is built, and GF180 now
-simulates from a generated descriptor (issue #130 closed). All work is on
-branch `docs/cell-model-ir-adr` (worktree `../Jacquard-cellir`), pushed to
-**PR #132**. Next up is **C2** (L3 sequential + L4 timing schema).
+COMPLETE with all CI green** (verified at the job level, incl. Lint). The
+IR + converter foundation is built and GF180 now simulates from a generated
+descriptor (issue #130 closed). Work is on branch `docs/cell-model-ir-adr`
+(worktree `../Jacquard-cellir`), **PR #132 — MERGEABLE, 13 commits, rebased
+onto current main, all crates version-aligned at 0.2.3**. Next up is **C2**
+(L3 sequential + L4 timing schema).
 
 ## Design decisions resolved (ADR 0019, all four open questions closed)
 
@@ -90,6 +92,16 @@ path and the `--cell-descriptor` 9t path (matching MD5), and the full
   `--manifest-path crates/liberty-to-cellir/Cargo.toml -- <lib> --functional-v <cells> -o <json>`.
   GF180 ships per-cell split libs; the converter merges them.
 - CI runs the four pipeline crates' tests standalone in the Unit Tests job.
+- **CI gotchas (cost real time this session, avoid next time):** (1) the
+  **Lint** job runs `python3 scripts/bump_version.py --check` — the repo uses
+  **lockstep crate versions**; every new crate must match the root version or
+  Lint fails. (2) Verify CI at the **job level** (`gh run view <id> --json
+  jobs`), not a blind `gh run watch --limit 1` (it latches onto whatever
+  workflow registered last and can report a passing sub-run while the real CI
+  Lint job is red). (3) When the PR shows `mergeable=CONFLICTING`, GitHub
+  **won't dispatch `pull_request` CI at all** (can't build the merge ref) —
+  rebase onto *current* `origin/main` (re-fetch first; main moves) and resolve
+  before expecting CI to run.
 
 ## Loose ends
 
