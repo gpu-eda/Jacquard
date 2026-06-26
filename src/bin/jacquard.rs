@@ -208,6 +208,12 @@ struct SimArgs {
     #[clap(long = "cell-descriptor", value_name = "PATH")]
     cell_descriptor: Option<PathBuf>,
 
+    /// PVT corner to read L4 timing from when `--cell-descriptor` is set
+    /// (ADR 0019 D5). Names a corner in the descriptor's corner set; absent
+    /// uses the descriptor's `default_corner`. Ignored without a descriptor.
+    #[clap(long = "corner", value_name = "NAME")]
+    corner: Option<String>,
+
     /// Path to a file listing internal signals to surface in the
     /// output VCD. One hierarchical signal name per line (`.` for
     /// hierarchy, optional trailing `[N]` for bit index). `#`
@@ -1815,7 +1821,29 @@ fn run_timing_analysis(aig: &mut jacquard::aig::AIG, args: &SimArgs) {
     clilog::info!("Running timing analysis on GPU simulation results...");
     let timer_timing = clilog::stimer!("timing_analysis");
 
-    let lib = if let Some(lib_path) = &args.liberty {
+    // ADR 0019 D5: prefer the cell-model-IR descriptor's L4 timing (corner-
+    // selected via `--corner`, default `default_corner`) over a runtime `.lib`
+    // parse. Falls back to `--liberty` / the AIGPDK default when no descriptor
+    // was supplied.
+    let lib = if let Some(desc_path) = &args.cell_descriptor {
+        let ir = cell_model_ir::CellModelIr::read_from(desc_path)
+            .unwrap_or_else(|e| panic!("loading --cell-descriptor {}: {e}", desc_path.display()));
+        let corner_name = args.corner.as_deref().unwrap_or(&ir.default_corner);
+        let corner_index = ir.corner_index(corner_name).unwrap_or_else(|| {
+            panic!(
+                "--corner '{}' not found in descriptor corner set {:?}",
+                corner_name,
+                ir.corners.iter().map(|c| &c.name).collect::<Vec<_>>()
+            )
+        });
+        clilog::info!(
+            "L4 timing from cell-model-IR descriptor '{}' at corner '{}' (index {})",
+            ir.library.name,
+            corner_name,
+            corner_index
+        );
+        TimingLibrary::from_cell_model_ir(&ir, corner_index)
+    } else if let Some(lib_path) = &args.liberty {
         TimingLibrary::from_file(lib_path).expect("Failed to load Liberty library")
     } else {
         TimingLibrary::load_aigpdk().expect("Failed to load default AIGPDK library")
