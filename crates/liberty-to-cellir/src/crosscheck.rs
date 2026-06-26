@@ -11,13 +11,15 @@
 //! Wide cells (input count above [`MAX_EXHAUSTIVE_INPUTS`]) are skipped from
 //! exhaustive enumeration and reported as capped — never silently passed.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use cell_decomp::{
     eval_behavioral_model, parse_functional_model, parse_udp, BehavioralModel, UdpModel,
 };
 use cell_model_ir::{CellKind, CellModel};
+
+use crate::specify::{Arc, SpecifyIndex};
 
 /// Above this input count we do not enumerate all `2^n` assignments.
 pub const MAX_EXHAUSTIVE_INPUTS: usize = 16;
@@ -64,6 +66,9 @@ const EVALUATABLE_GATES: &[&str] = &["and", "or", "nand", "nor", "not", "buf", "
 pub struct ModelIndex {
     pub models: HashMap<String, BehavioralModel>,
     pub udps: HashMap<String, UdpModel>,
+    /// Per-module `.v` `specify` delay-arc sets, for the L4 arc-set agreement
+    /// check ([`check_cell_arcs`]).
+    pub specify: SpecifyIndex,
 }
 
 impl ModelIndex {
@@ -73,6 +78,7 @@ impl ModelIndex {
     pub fn scan(dir: &Path) -> std::io::Result<ModelIndex> {
         let mut models = HashMap::new();
         let mut udps = HashMap::new();
+        let mut specify = SpecifyIndex::default();
         let mut files = Vec::new();
         collect_v_files(dir, &mut files)?;
         for path in files {
@@ -83,17 +89,27 @@ impl ModelIndex {
             if let Some(udp) = parse_udp(&src) {
                 udps.insert(udp.name.clone(), udp);
             }
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             // Prefer the non-preprocessed `.functional.v` form for cell
             // models. `.pp.v` (preprocessed) and `.behavioral.v` are ignored
             // to avoid duplicate / timing-laden modules.
-            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if name.ends_with(".functional.v") && !name.ends_with(".pp.v") {
                 if let Some(model) = parse_functional_model(&src) {
                     models.insert(model.module_name.clone(), model);
                 }
             }
+            // `specify` delay-arc topology lives in `.behavioral.v` (the
+            // `.functional.v` carries only gate logic). Collect from the
+            // non-preprocessed behavioural form for the L4 arc-set check.
+            if name.ends_with(".behavioral.v") && !name.ends_with(".pp.v") {
+                specify.add_source(&src);
+            }
         }
-        Ok(ModelIndex { models, udps })
+        Ok(ModelIndex {
+            models,
+            udps,
+            specify,
+        })
     }
 }
 
@@ -197,6 +213,61 @@ pub fn check_cell(cell: &CellModel, index: &ModelIndex) -> CellCheck {
     }
 }
 
+/// Outcome of the L4 **arc-set agreement** check for one cell (ADR 0019 D6):
+/// does the Liberty-derived delay-arc set match the `.v` `specify` delay-path
+/// set?
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArcCheck {
+    /// No `.v` `specify` block found for this cell's module — nothing to
+    /// compare against.
+    NoSpecify,
+    /// The cell carries no L4 delay arcs (e.g. a physical / fill cell) — no
+    /// arcs to compare.
+    NoTiming,
+    /// Compared. `missing` are Liberty delay arcs with no `.v` specify path;
+    /// `extra` are `.v` specify paths with no Liberty delay arc. Both empty ⇒
+    /// the arc sets agree.
+    Checked {
+        cell: String,
+        liberty_arcs: usize,
+        specify_arcs: usize,
+        missing: Vec<Arc>,
+        extra: Vec<Arc>,
+    },
+}
+
+/// Compare a cell's Liberty-derived delay-arc set ([`CellModel::timing`]
+/// delays) against the `.v` `specify` delay-path set. Constraint arcs
+/// (setup/hold) are not part of this comparison — only propagation/delay
+/// paths, which the `.v` specify expresses as `(src => dst)`.
+pub fn check_cell_arcs(cell: &CellModel, specify: &SpecifyIndex) -> ArcCheck {
+    let Some(spec_arcs) = specify.get(&cell.cell_type) else {
+        return ArcCheck::NoSpecify;
+    };
+    let liberty_arcs: BTreeSet<Arc> = cell
+        .timing
+        .as_ref()
+        .map(|t| {
+            t.delays
+                .iter()
+                .map(|d| (d.from_pin.clone(), d.to_pin.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    if liberty_arcs.is_empty() {
+        return ArcCheck::NoTiming;
+    }
+    let missing: Vec<Arc> = liberty_arcs.difference(spec_arcs).cloned().collect();
+    let extra: Vec<Arc> = spec_arcs.difference(&liberty_arcs).cloned().collect();
+    ArcCheck::Checked {
+        cell: cell.cell_type.clone(),
+        liberty_arcs: liberty_arcs.len(),
+        specify_arcs: spec_arcs.len(),
+        missing,
+        extra,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,6 +339,7 @@ mod tests {
         ModelIndex {
             models,
             udps: HashMap::new(),
+            specify: SpecifyIndex::default(),
         }
     }
 
@@ -312,6 +384,7 @@ mod tests {
         let empty = ModelIndex {
             models: HashMap::new(),
             udps: HashMap::new(),
+            specify: SpecifyIndex::default(),
         };
         assert_eq!(check_cell(&cell, &empty), CellCheck::NoModel);
     }
@@ -340,6 +413,7 @@ mod tests {
         let index = ModelIndex {
             models,
             udps: HashMap::new(),
+            specify: SpecifyIndex::default(),
         };
         let cell = and2_cell("demo__bufz", false); // any comb logic with a model present
         match check_cell(&cell, &index) {
@@ -381,6 +455,7 @@ mod tests {
         let index = ModelIndex {
             models,
             udps: HashMap::new(),
+            specify: SpecifyIndex::default(),
         };
         assert_eq!(
             check_cell(&cell, &index),
@@ -388,6 +463,91 @@ mod tests {
                 cell: "demo__wide".into(),
                 inputs: n
             }
+        );
+    }
+
+    // --- L4 arc-set agreement (specify vs Liberty delay arcs) ---
+
+    use cell_model_ir::{CellTiming, DelayArc, DelayKind, TimingValue};
+
+    fn delay_cell(name: &str, arcs: &[(&str, &str)]) -> CellModel {
+        let delays = arcs
+            .iter()
+            .map(|(f, t)| DelayArc {
+                from_pin: f.to_string(),
+                to_pin: t.to_string(),
+                kind: DelayKind::Combinational,
+                rise: vec![TimingValue {
+                    corner_index: 0,
+                    min: 1.0,
+                    typ: 1.0,
+                    max: 1.0,
+                }],
+                fall: vec![],
+            })
+            .collect();
+        CellModel {
+            cell_type: name.into(),
+            kind: CellKind::Std,
+            pins: vec![],
+            logic: None,
+            sequential: None,
+            timing: Some(CellTiming {
+                delays,
+                constraints: vec![],
+                sram: None,
+            }),
+        }
+    }
+
+    fn specify_with(module: &str, body: &str) -> SpecifyIndex {
+        let src = format!("module {module}( A );\nspecify\n{body}\nendspecify\nendmodule\n");
+        let mut idx = SpecifyIndex::default();
+        idx.add_source(&src);
+        idx
+    }
+
+    #[test]
+    fn arc_sets_agree_is_clean() {
+        let cell = delay_cell("demo__nand2", &[("A1", "ZN"), ("A2", "ZN")]);
+        let spec = specify_with(
+            "demo__nand2",
+            "(A1 => ZN) = (1.0,1.0);\n(A2 => ZN) = (1.0,1.0);",
+        );
+        match check_cell_arcs(&cell, &spec) {
+            ArcCheck::Checked { missing, extra, .. } => {
+                assert!(missing.is_empty(), "missing: {missing:?}");
+                assert!(extra.is_empty(), "extra: {extra:?}");
+            }
+            other => panic!("expected Checked, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn arc_set_missing_and_extra_surfaced() {
+        // Liberty has A1->ZN and B->ZN; .v specify has A1->ZN and A2->ZN.
+        let cell = delay_cell("demo__x", &[("A1", "ZN"), ("B", "ZN")]);
+        let spec = specify_with(
+            "demo__x",
+            "(A1 => ZN) = (1.0,1.0);\n(A2 => ZN) = (1.0,1.0);",
+        );
+        match check_cell_arcs(&cell, &spec) {
+            ArcCheck::Checked { missing, extra, .. } => {
+                // B->ZN is in Liberty but not in .v (missing).
+                assert_eq!(missing, vec![("B".to_string(), "ZN".to_string())]);
+                // A2->ZN is in .v but not in Liberty (extra).
+                assert_eq!(extra, vec![("A2".to_string(), "ZN".to_string())]);
+            }
+            other => panic!("expected Checked, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_specify_reports_no_specify() {
+        let cell = delay_cell("demo__nand2", &[("A1", "ZN")]);
+        assert_eq!(
+            check_cell_arcs(&cell, &SpecifyIndex::default()),
+            ArcCheck::NoSpecify
         );
     }
 }
