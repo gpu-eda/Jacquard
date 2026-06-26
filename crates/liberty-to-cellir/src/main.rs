@@ -26,7 +26,7 @@ use clap::Parser as ClapParser;
 use liberty_parse::LibertyGroup;
 
 use liberty_to_cellir::convert::{convert_library, ConvertNote};
-use liberty_to_cellir::crosscheck::{check_cell, CellCheck, ModelIndex};
+use liberty_to_cellir::crosscheck::{check_cell, check_cell_arcs, ArcCheck, CellCheck, ModelIndex};
 use liberty_to_cellir::sequential::SeqNote;
 
 #[derive(ClapParser, Debug)]
@@ -139,6 +139,9 @@ fn run(cli: &Cli) -> Result<(), String> {
     let mut n_no_model = 0usize;
     let mut n_unevaluatable = 0usize;
     let mut mismatches = Vec::new();
+    let mut n_arc_checked = 0usize;
+    let mut n_arc_disagree = 0usize;
+    let mut n_arc_no_specify = 0usize;
     if let Some(fv_dir) = &cli.functional_v {
         // The cross-check guards `.v` evaluation with `catch_unwind`; suppress
         // the default panic hook so caught panics don't spam stderr. The guard
@@ -205,6 +208,36 @@ fn run(cli: &Cli) -> Result<(), String> {
                 CellCheck::NotComb => {}
             }
         }
+
+        // --- L4 arc-set agreement (specify vs Liberty delay arcs) ---
+        for cell in &ir.cells {
+            match check_cell_arcs(cell, &index.specify) {
+                ArcCheck::Checked {
+                    cell: name,
+                    missing,
+                    extra,
+                    ..
+                } => {
+                    n_arc_checked += 1;
+                    if !missing.is_empty() || !extra.is_empty() {
+                        n_arc_disagree += 1;
+                        let fmt = |arcs: &[(String, String)]| {
+                            arcs.iter()
+                                .map(|(f, t)| format!("{f}=>{t}"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        };
+                        eprintln!(
+                            "ARC-SET MISMATCH in {name}: missing(liberty-only)=[{}] extra(.v-only)=[{}]",
+                            fmt(&missing),
+                            fmt(&extra)
+                        );
+                    }
+                }
+                ArcCheck::NoSpecify => n_arc_no_specify += 1,
+                ArcCheck::NoTiming => {}
+            }
+        }
         // `_hook_guard` restores the default panic hook here on scope exit.
     }
 
@@ -227,7 +260,8 @@ fn run(cli: &Cli) -> Result<(), String> {
          no_model={n_no_model} skipped_no_function={} sequential_outputs={sequential_outputs} \
          function_parse_errors={parse_errors} clear_preset_divergent={clear_preset_divergent} \
          l3_unparsed_controls={unparsed_controls} l3_next_state_errors={next_state_errors} \
-         json_bytes={json_bytes}",
+         arc_checked={n_arc_checked} arc_disagree={n_arc_disagree} \
+         arc_no_specify={n_arc_no_specify} json_bytes={json_bytes}",
         mismatches.len(),
         skipped_no_fn.len(),
     );
