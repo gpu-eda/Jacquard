@@ -1,13 +1,15 @@
 # Handoff — Cell-model IR (ADR 0019)
 
 **Active thread:** ADR 0019 "Cell-model IR" is **approved by the maintainer**
-(all four design open questions resolved) and **plan checkpoint C1 is
-COMPLETE with all CI green** (verified at the job level, incl. Lint). The
-IR + converter foundation is built and GF180 now simulates from a generated
-descriptor (issue #130 closed). Work is on branch `docs/cell-model-ir-adr`
-(worktree `../Jacquard-cellir`), **PR #132 — MERGEABLE, 13 commits, rebased
-onto current main, all crates version-aligned at 0.2.3**. Next up is **C2**
-(L3 sequential + L4 timing schema).
+(all four design open questions resolved). **Plan checkpoints C1 and C2 are
+both COMPLETE.** The IR + converter foundation is built (C1, #130 closed) and
+GF180 now **simulates AND times** sequential cells from a generated descriptor
+with no per-PDK Rust DFF handling and no runtime `.lib` parse (C2). Work is on
+branch `docs/cell-model-ir-adr` (worktree `../Jacquard-cellir`), **PR #132 —
+MERGEABLE, 18 commits, rebased onto current main (2026-06-26), all crates
+version-aligned at 0.2.3**. Schema is now `SCHEMA 0.2` (`MAJOR=0, MINOR=2`).
+Next up is **C3** (bundle + cut over + CI-regen provenance) and **C3a** (IHP
+SG13G2, zero-Rust new PDK).
 
 ## Design decisions resolved (ADR 0019, all four open questions closed)
 
@@ -64,21 +66,72 @@ input vector), 212 KB JSON (→ JSON-first holds, no FlatBuffers needed). The
 path and the `--cell-descriptor` 9t path (matching MD5), and the full
 4M-edge descriptor run passes `data0_obs == 0xCAFEBABE`.
 
+## C2 — COMPLETE (4 commits on the branch: C2.1 schema, C2.2 ×2 converter, C2.3 consumer)
+
+1. **Schema (`cell-model-ir`, `SCHEMA_MINOR` 1→2, additive).** D4 L3
+   `Sequential { clock: Option<ClockPin{pin,edge}>, enable, next_state:
+   CombLogic, outputs: Vec<SeqOutput>, async_set, async_reset }` (scan-mux
+   `D_eff=SE?SI:D` and gated-clock `E|TE` fold into the `next_state` AIG — no
+   special-casing); `CellKind` enum; D5 L4 `CellTiming { delays, constraints,
+   sram }` with descriptor-level `corners: Vec<Corner>` + `default_corner` and
+   corner-indexed `TimingValue{corner_index,min,typ,max}` (f64 ps), mirroring
+   `crates/timing-ir`. Diff tool extended.
+2. **Converter (`liberty-to-cellir`): `sequential.rs` + `timing.rs` +
+   `specify.rs`.** Emits L3 from Liberty `ff`/`latch`, L4 (corner-keyed) from
+   `timing()` groups. D6 cross-check extended to L4 **arc-set agreement**
+   (parses `.v` `specify` paths). GF180 7t/9t regen: combinational
+   `cross_check_mismatches=0`, 48 cells emit L3, 211 emit L4, arc_disagree=0.
+3. **Consumer (`src/aig.rs`, `src/liberty_parser.rs`, `src/bin/jacquard.rs`).**
+   `wire_sequential_from_ir` drives DFF roles from the IR when
+   `--cell-descriptor` is set (legacy path is the untouched fallback —
+   per-PDK cutover). `TimingLibrary::from_cell_model_ir(ir, corner_index)`
+   projects L4 onto the views the runtime already consumes; new `--corner`
+   flag (default `default_corner`).
+
+**Proof (C2.4 gate, PASS):** `tests/jtag_minimal` 9t cosim **byte-identical
+MD5 `d87c9f75…`** legacy vs `--cell-descriptor` over 300k edges; full 4M-edge
+IR run passes `data0_obs == 0xCAFEBABE`; flipping a descriptor async polarity
+diverges the MD5 (roles are load-bearing). Timing equivalence vs the
+`TimingLibrary::from_file` oracle is structural-match with **two intended
+divergences, both fixes**: (a) the IR honours GF180 `time_unit : 1ns` (×1000
+to true ps) which the legacy `parse_float_to_ps` **ignored** (legacy GF180
+runtime timing was degenerate ≈0 ps); (b) negedge-DFF clk→Q arcs the oracle
+silently dropped are now surfaced. No green CI path consumes GF180 L4 from a
+descriptor yet, so neither regresses anything today.
+
+### C2 findings carried into C3
+
+- **GF180 set-dominant latches.** `latrsnq_1/2/4` are SET-dominant in Liberty
+  (`clear_preset_var1=H`) but Jacquard's `wire_dff_reset_set_overlay` is
+  reset-dominant. GEM simulates no true latches — the oracle treats them as
+  reset-dominant level-enabled DFFs, so the IR path matches bit-for-bit and
+  **no schema `clear_preset` field was needed**. The converter flags these as
+  `clear_preset_divergent=3` generation diagnostics. If a future PDK needs a
+  real set-dominant tie-break, add a `clear_preset` field then.
+- **Residual name-based matches NOT yet retired** (fine for GF180, generalise
+  in C3): `get_gf180mcu_dependencies` (`src/aig.rs` ~1524) still hardcodes
+  `RN`/`SETN` as Q deps; the upfront clock-domain registration loop
+  (`src/aig.rs` ~2090) still matches `"CLK"|"CLKN"|"PORT_*_CLK"` literally.
+  SKY130/AIGPDK sequential branches still on the legacy path (per-PDK cutover;
+  the IR helper is PDK-neutral — wiring SKY130 is a ~one-line dispatch add).
+- **Clock gates** (`icgtp`/`icgtn`) emit no L3 (GF180 ICGs use Liberty
+  `statetable`) → fall through to the unchanged legacy clock-gate path. No
+  GF180 ICG fixture exists in `tests/` — **add one in C3** to gate this.
+- **SKY130 end-to-end blocked in-worktree:** `vendor/sky130_fd_sc_hd/` ships
+  only `.lib.json`, but `liberty-parse` reads `.lib` text → SKY130 covered by
+  synthetic unit fixtures only this checkpoint.
+
 ## Next steps (in order)
 
-1. **C2 — L3 sequential + L4 timing schema.** Extend `cell-model-ir` with
-   the D4 sequential pin-role schema (clock+edge, D/next-state, Q, async
-   set/reset+polarity, enable) + classification kinds, AND the D5 L4 timing
-   block (corner-keyed). Extend the converter to emit both from Liberty
-   `ff`/`latch` + the timing groups `liberty-parse` already exposes. Wire the
-   consumer to replace the hardcoded DFF pin-name matches
-   (`src/aig.rs:2080-2260`) and read L4 from the IR instead of
-   `TimingLibrary::from_file`, selecting corner via `--corner`. Gate:
-   sequential GF180/SKY130 cells sim AND time from the IR with no per-PDK
-   Rust DFF handling and no runtime `.lib` parse.
-2. **C3 — bundle + cut over + selection** (incl. CI-regen provenance + drop
+1. **C3 — bundle + cut over + selection** (incl. CI-regen provenance + drop
    the runtime `vendor/` dep) and **C3a — IHP SG13G2** (new PDK, zero Rust).
-3. **C4 — proprietary-library workflow** doc + test.
+   Wire descriptor generation into the build/CI (build-time, not committed —
+   D7); add a clock-gate fixture; consider a committed end-to-end test
+   asserting `from_cell_model_ir == 1000× from_file` over GF180 views (needs a
+   crate that has both the descriptor and `TimingLibrary` — not co-located
+   today). Generalise the residual name-based matches; wire SKY130/AIGPDK onto
+   the IR path.
+2. **C4 — proprietary-library workflow** doc + test.
 
 ## Key anchors (verified this session)
 
