@@ -478,6 +478,21 @@ GPU backend (the "per-edge fallback" of the 2026-06-19 amendment), so it works
 on any cosim backend once the host-side plumbing lands — no kernel work.
 Implementation staging: [`docs/plans/jtag-debug-server.md`](../plans/jtag-debug-server.md).
 
+## Amendment 2026-06-26: open questions — cosim timing output
+
+Folded in from a now-deleted implementation-plan doc
+(`cosim-timing-support.md`) whose objective largely shipped. Open items
+remaining:
+
+- **Timed cosim is Metal-only.** Arrival-annotated VCD output works on the
+  Metal backend (`metal.rs` threads `arrival_state_offset`; the driver writes
+  per-net `arrival_ps`). The CPU, CUDA, and HIP backends assert
+  `!script.timing_arrivals_enabled` — they don't yet support timed cosim.
+  Extending arrival tracking to the other `CosimBackend` impls is open.
+- **Cosim `--timing-report` (structured JSON) is not wired.** The structured
+  report is `sim`-only; see ADR 0008's 2026-06-25 amendment. The cosim path
+  emits arrival-annotated VCD but not the JSON report.
+
 ## Cross-references
 
 - ADR 0012 — CDC jitter injection (uses the scheduler's edge
