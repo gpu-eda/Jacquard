@@ -9,6 +9,45 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-06-26
+
+Documentation, tooling, and submodule-hygiene release — no change to the
+simulation binary's behaviour.
+
+### Added
+
+- **`scripts/check_doc_links.py`** plus a CI step that validates documentation
+  links against the *rendered* mdBook page set, failing on links to pages
+  absent from `SUMMARY.md` (which 404 on the published site). Replaces the
+  previous file-existence-only check that missed this class of breakage.
+
+### Changed
+
+- Migrated the `eda-infra-rs` and benchmark `dataset` submodules from the
+  `ChipFlow` org to `gpu-eda` forks. `eda-infra-rs` was rebased onto its
+  upstream (`gzz2000/eda-infra-rs`), picking up the upstream license-string
+  fix; the integration patches (Metal + HIP backends, ANSI-port and unary-NOT
+  parser support) now ride a `jacquard-integration` branch. The parser fixes
+  were also submitted upstream.
+
+### Documentation
+
+- Fixed published-site 404s by adding orphaned pages to the mdBook
+  `SUMMARY.md` (project scope, timing correctness/validation, selective
+  X-propagation, X-debugging, release process, cosim backend-portability and
+  its phase plans, the JTAG debug server, netlist-graph xroots).
+- Corrected stale "cosim is Metal-only" claims — cosim is now backend-portable
+  (Metal/CUDA/HIP plus a CPU fallback) — and refreshed the Post-Phase-0
+  roadmap status line.
+- Removed the notional `GF130` commercial-PDK codename across the docs.
+- Refreshed the docs index (cosim Quick Reference; Known Issues now link to
+  GitHub; pruned Future Documentation Needs) and pointed the README's doc
+  links at the published mdBook.
+- Fixed the ADR 0011 `#80`→`#103` multi-SRAM cross-reference; folded the
+  shipped cosim / CUDA-HIP timing implementation-plan docs into an ADR 0017
+  amendment; repointed in-book links to repo files (CHANGELOG, tests,
+  packaging) at GitHub URLs.
+
 ## [0.2.3] - 2026-06-25
 
 Documentation release — no functional change to the binary.
@@ -365,7 +404,9 @@ runners land (ADR 0018).
   CUDA / HIP detect violations on the GPU but don't currently route
   them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/gpu-eda/Jacquard/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/gpu-eda/Jacquard/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/gpu-eda/Jacquard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/gpu-eda/Jacquard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gpu-eda/Jacquard/compare/v0.1.0...v0.2.0
