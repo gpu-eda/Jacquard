@@ -46,6 +46,21 @@ pub fn diff_irs(a: &CellModelIr, b: &CellModelIr) -> Diff {
             a.library, b.library
         ));
     }
+    // Corner set (L4, D5): order matters — a TimingValue's `corner_index` is an
+    // index into this list, so a reordering is a real change.
+    if a.corners != b.corners {
+        d.mismatches.push(format!(
+            "corner set differs: {:?} vs {:?}",
+            a.corners.iter().map(|c| &c.name).collect::<Vec<_>>(),
+            b.corners.iter().map(|c| &c.name).collect::<Vec<_>>(),
+        ));
+    }
+    if a.default_corner != b.default_corner {
+        d.mismatches.push(format!(
+            "default corner differs: {:?} vs {:?}",
+            a.default_corner, b.default_corner
+        ));
+    }
 
     // Cell-set comparison by name (order-independent, deterministic).
     let a_names: BTreeSet<&str> = a.cells.iter().map(|c| c.cell_type.as_str()).collect();
@@ -77,6 +92,14 @@ pub fn diff_irs(a: &CellModelIr, b: &CellModelIr) -> Diff {
                 d.mismatches
                     .push(format!("cell {name}: combinational AIG differs"));
             }
+            if ca.sequential != cb.sequential {
+                d.mismatches
+                    .push(format!("cell {name}: sequential (L3) block differs"));
+            }
+            if ca.timing != cb.timing {
+                d.mismatches
+                    .push(format!("cell {name}: timing (L4) block differs"));
+            }
         }
     }
 
@@ -88,7 +111,11 @@ pub fn diff_irs(a: &CellModelIr, b: &CellModelIr) -> Diff {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CellKind, CellModel, CombLogic, Direction, LibraryMeta, OutputPin, Pin, Ref};
+    use crate::{
+        ActiveLevel, AsyncControl, CellKind, CellModel, CellTiming, ClockEdge, ClockPin, CombLogic,
+        ConstraintArc, ConstraintKind, Corner, Direction, LibraryMeta, OutputPin, Pin, Ref,
+        SeqOutput, Sequential, TimingValue,
+    };
 
     fn lib() -> CellModelIr {
         let mut ir = CellModelIr::new(LibraryMeta {
@@ -116,6 +143,75 @@ mod tests {
                     r: Ref::inv(1),
                 }],
             }),
+            sequential: None,
+            timing: None,
+        });
+        ir
+    }
+
+    /// A minimal sequential cell with an async reset and a one-corner L4 block,
+    /// for exercising the L3/L4 diff paths.
+    fn seq_lib() -> CellModelIr {
+        let mut ir = CellModelIr::new(LibraryMeta {
+            name: "l".into(),
+            prefixes: vec!["l_".into()],
+        });
+        ir.corners = vec![Corner {
+            name: "tt".into(),
+            process: "tt".into(),
+            voltage: 1.8,
+            temperature: 25.0,
+        }];
+        ir.default_corner = "tt".into();
+        ir.cells.push(CellModel {
+            cell_type: "l_dffrnq".into(),
+            kind: CellKind::Dff,
+            pins: vec![Pin {
+                name: "Q".into(),
+                direction: Direction::Output,
+            }],
+            logic: None,
+            sequential: Some(Sequential {
+                clock: Some(ClockPin {
+                    pin: "CLK".into(),
+                    edge: ClockEdge::Rising,
+                }),
+                enable: None,
+                next_state: CombLogic {
+                    inputs: vec!["D".into()],
+                    and_nodes: vec![],
+                    outputs: vec![OutputPin {
+                        pin: "D".into(),
+                        r: Ref::node(1),
+                    }],
+                },
+                outputs: vec![SeqOutput {
+                    pin: "Q".into(),
+                    inverted: false,
+                }],
+                async_set: None,
+                async_reset: Some(AsyncControl {
+                    pin: "RN".into(),
+                    active: ActiveLevel::Low,
+                }),
+            }),
+            timing: Some(CellTiming {
+                delays: vec![],
+                constraints: vec![ConstraintArc {
+                    data_pin: "D".into(),
+                    related_pin: "CLK".into(),
+                    kind: ConstraintKind::Setup,
+                    edge: ClockEdge::Rising,
+                    rise: vec![TimingValue {
+                        corner_index: 0,
+                        min: 9.0,
+                        typ: 10.0,
+                        max: 11.0,
+                    }],
+                    fall: vec![],
+                }],
+                sram: None,
+            }),
         });
         ir
     }
@@ -134,6 +230,8 @@ mod tests {
             kind: CellKind::Comb,
             pins: vec![],
             logic: None,
+            sequential: None,
+            timing: None,
         });
         let d = diff_irs(&a, &b);
         assert!(!d.is_clean());
@@ -151,5 +249,60 @@ mod tests {
             .mismatches
             .iter()
             .any(|m| m.contains("combinational AIG differs")));
+    }
+
+    #[test]
+    fn seq_identical_is_clean() {
+        assert!(diff_irs(&seq_lib(), &seq_lib()).is_clean());
+    }
+
+    #[test]
+    fn changed_sequential_role_is_reported() {
+        let a = seq_lib();
+        let mut b = seq_lib();
+        // Flip the async-reset polarity: an L3 change.
+        b.cells[0]
+            .sequential
+            .as_mut()
+            .unwrap()
+            .async_reset
+            .as_mut()
+            .unwrap()
+            .active = ActiveLevel::High;
+        let d = diff_irs(&a, &b);
+        assert!(d
+            .mismatches
+            .iter()
+            .any(|m| m.contains("sequential (L3) block differs")));
+    }
+
+    #[test]
+    fn changed_timing_value_is_reported() {
+        let a = seq_lib();
+        let mut b = seq_lib();
+        // Nudge a setup constraint: an L4 change.
+        b.cells[0].timing.as_mut().unwrap().constraints[0].rise[0].typ = 99.0;
+        let d = diff_irs(&a, &b);
+        assert!(d
+            .mismatches
+            .iter()
+            .any(|m| m.contains("timing (L4) block differs")));
+    }
+
+    #[test]
+    fn changed_corner_set_is_reported() {
+        let a = seq_lib();
+        let mut b = seq_lib();
+        b.corners[0].name = "ss".into();
+        b.default_corner = "ss".into();
+        let d = diff_irs(&a, &b);
+        assert!(d
+            .mismatches
+            .iter()
+            .any(|m| m.contains("corner set differs")));
+        assert!(d
+            .mismatches
+            .iter()
+            .any(|m| m.contains("default corner differs")));
     }
 }
