@@ -16,3 +16,5 @@
 pub mod convert;
 pub mod crosscheck;
 pub mod function;
+pub mod sequential;
+pub mod timing;
