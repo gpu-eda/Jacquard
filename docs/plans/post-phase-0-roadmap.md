@@ -1,6 +1,6 @@
 # Roadmap — Post-Phase-0 work scheduling
 
-**Status:** Active. ADR 0008 accepted 2026-05-02. ADR 0007 still pending.
+**Status:** Active. Phase 1 (structured timing output, ADR 0008 — Accepted 2026-06-25) and release hardening (WS-RH.1) shipped; Pillar B Stages 1+2 (ADR 0007) landed early. Phase 2 (Pillar C Tier 1 — per-receiver wire delay) remains gated on ADR 0007 acceptance, which is still **Proposed** as of 2026-06-26.
 
 This document orders the work captured in those two ADRs alongside the in-flight tail of Phase 0. It is a **scheduling** doc, not a design doc — design lives in the ADRs and in `docs/timing-model-extensions.md` / `docs/why-jacquard.md`.
 

@@ -34,7 +34,7 @@ Spike criteria in `../spikes/opentimer-sky130.md`. On spike failure, fallback is
 - Direct linking preserves permissive licensing (MIT).
 - Three-way cross-check becomes the default in CI: Jacquard (SDF path) vs OpenTimer (Liberty+SPEF path) vs OpenSTA (subprocess, full ground truth). Three-way disagreement localises bugs to SDF parse / delay model / tool issue cleanly.
 - OpenTimer does not parse SDF. To use it in Jacquard's current flow, OpenLane2 (or equivalent) must produce SPEF alongside SDF. This plumbing change is tracked in the phase-0 plan.
-- OpenTimer's maturity is measured in contest benchmarks, not SKY130/GF130 real-flow output. Spike must verify it handles our actual Liberty and SPEF. The spike is structured to fail fast if it does not.
+- OpenTimer's maturity is measured in contest benchmarks, not SKY130 real-flow output. Spike must verify it handles our actual Liberty and SPEF. The spike is structured to fail fast if it does not.
 - If OpenTimer is dropped post-spike, alternative in-process references (libreda-sta, in-house) can be revisited; this ADR would be superseded rather than amended.
 
 ## Links

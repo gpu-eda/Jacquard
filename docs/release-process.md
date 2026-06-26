@@ -45,10 +45,10 @@ For maintainers cutting a release:
 1. **Verify CI is green** on `main` for all three GPU backends (Metal,
    CUDA, HIP) plus the unit-test, opensta-to-ir, and lint jobs. If any
    GPU runner is offline, hold the release until it's restored — see
-   [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Do not
+   [`.github/workflows/ci.yml`](https://github.com/gpu-eda/Jacquard/blob/main/.github/workflows/ci.yml). Do not
    ship a binary the CI hasn't built.
 
-2. **Roll the `[Unreleased]` section in [`CHANGELOG.md`](../CHANGELOG.md)
+2. **Roll the `[Unreleased]` section in [`CHANGELOG.md`](https://github.com/gpu-eda/Jacquard/blob/main/CHANGELOG.md)
    into a numbered version block.** Format follows
    [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Update
    the link references at the bottom of the file. Leave a fresh empty
@@ -137,12 +137,11 @@ These items are tracked in [`docs/plans/post-phase-0-roadmap.md`](plans/post-pha
       footnote in `NOTICE`. Maintainer acknowledged the typo on
       2026-05-02 but hasn't pushed the fix as of 2026-05-13. Verify
       with `git -C vendor/eda-infra-rs fetch && git log origin/master --oneline`.
-- [ ] **CUDA / HIP runtime violation routing** through
-      `process_events` (or document loudly that `--timing-report` is
-      Metal-only at release time). `sim_cuda` / `sim_hip` accept
-      `timing_constraints` but currently call the simple-scan path
-      instead of the timed-batched path. Blocked on the same GPU
-      runners as the CUDA/HIP CI jobs above.
+- [x] **CUDA / HIP runtime violation routing** through
+      `process_events` — done (commit `24723b5`, issue #104). `sim_cuda` /
+      `sim_hip` now dispatch the timed-batched path and drain violation
+      events, so `--timing-report` / `--timing-summary` / `--timed` are no
+      longer Metal-only.
 - [x] Bounded violations array (`--timing-report-max-violations`,
       default 100k).
 - [x] End-to-end `--timing-report` test on Metal CI. The
@@ -172,7 +171,7 @@ enumerated in `NOTICE`. Summary:
 
 ## Cross-references
 
-- [`CHANGELOG.md`](../CHANGELOG.md) — release log.
+- [`CHANGELOG.md`](https://github.com/gpu-eda/Jacquard/blob/main/CHANGELOG.md) — release log.
 - [`docs/adr/0008-structured-timing-output.md`](adr/0008-structured-timing-output.md)
   — `--timing-report` stability contract.
 - [`docs/adr/0002-timing-ir.md`](adr/0002-timing-ir.md) — IR schema

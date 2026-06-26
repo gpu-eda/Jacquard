@@ -70,7 +70,7 @@ For any sim run that reports timing violations, or for any user-requested critic
 
 ### R5 — Private PDK testing
 
-A private test track for commercial PDKs (initially GF130) exists, gated on environment variables such as `GF130_PDK_PATH`. Tests skip cleanly when PDK files are unavailable; CI runs with PDK access execute them. No PDK-derived artifacts are committed. Details: `docs/adr/0004-private-pdk-testing.md`.
+A private test track for commercial PDKs exists, gated on per-PDK environment variables (e.g. `<VENDOR>_PDK_PATH`). Tests skip cleanly when PDK files are unavailable; CI runs with PDK access execute them. No PDK-derived artifacts are committed. Details: `docs/adr/0004-private-pdk-testing.md`.
 
 ## Non-functional requirements
 
@@ -104,7 +104,7 @@ Phases 1 and beyond are planned at the start of each phase, not all up front.
 Items not settled by this document; they resolve in ADRs, spike outcomes, or phase plans:
 
 - Exact IR schema format (FlatBuffers / Cap'n Proto / other). Tracked in ADR 0002.
-- ~~Whether OpenTimer handles SKY130 and GF130 Liberty robustly.~~ Resolved: spike failed Q2 on SKY130; ADR 0003 Superseded.
+- ~~Whether OpenTimer handles SKY130 Liberty robustly.~~ Resolved: spike failed Q2 on SKY130; ADR 0003 Superseded.
 - Whether SPEF gets its own IR or is embedded in the timing IR. Deferred; likely separate.
 - Whether the IR is Jacquard-local or shared across a broader tooling ecosystem. External decision; answer affects investment level and schema stability requirements.
 

@@ -15,7 +15,7 @@ The outcome resolves ADR 0003's `Pending Spike` status to either `Accepted` or `
 - C++ FFI / bindgen integration work. Pure spike on OpenTimer's standalone behaviour.
 - Timing-IR integration. Establishing that OpenTimer produces usable arrival/slack output is sufficient; converting it to IR belongs in phase 1.
 - Performance measurement beyond rough "does it complete in reasonable time."
-- GF130 coverage. SKY130 is the spike target; GF130 private-track confirmation is later.
+- Commercial-PDK coverage. SKY130 is the spike target; private-track confirmation is later.
 
 ## Setup
 

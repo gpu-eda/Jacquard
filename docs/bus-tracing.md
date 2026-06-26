@@ -167,7 +167,7 @@ always-ready.
 `tests/apb_trace/` is a self-contained, synthesizable APB3 system used
 as the CI regression. Its master issues a fixed program — two writes
 then two reads — to a register-file slave, and `check.py` asserts the
-decoded CSV. See [`tests/apb_trace/README.md`](../tests/apb_trace/README.md).
+decoded CSV. See [`tests/apb_trace/README.md`](https://github.com/gpu-eda/Jacquard/blob/main/tests/apb_trace/README.md).
 
 ```bash
 yosys -s tests/apb_trace/synth.tcl          # (from tests/apb_trace/)
@@ -194,7 +194,8 @@ python3 tests/apb_trace/check.py apb.csv
 - APB3 only for now; AHB-Lite / AHB5 and annotated-VCD output are the
   next phases (see the [plan](plans/bus-transaction-tracing.md)).
 - Up to 4 buses per run, addresses/data up to 32 bits.
-- Cosim is Metal-only today, so bus tracing is Metal-only.
+- Cosim is now backend-portable (Metal, CUDA, HIP, plus a CPU fallback);
+  bus tracing is wired across the GPU backends (`cuda.rs`/`hip.rs`/`metal.rs`).
 - The legacy hardcoded Wishbone trace (a separate, SoC-specific path) is
   unaffected; folding it onto this general mechanism is a planned
   follow-up.

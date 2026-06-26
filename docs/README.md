@@ -74,6 +74,28 @@ cargo run -r --features metal --bin jacquard -- sim <args> --check-with-cpu
 grep '\$scope\|\$var' input.vcd | head -20
 ```
 
+### Cosim (reactive peripherals)
+
+`jacquard cosim` runs GPU-resident peripheral models (SPI flash, UART, Wishbone)
+alongside the design so inputs can react to outputs cycle-by-cycle. It runs on
+Metal, CUDA, and HIP (plus a CPU fallback).
+
+```bash
+# Drive the design from a JSON testbench config; write an output VCD
+cargo run -r --features metal --bin jacquard -- cosim \
+    design.v --config sim_config.json --output-vcd out.vcd
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--config <json>` | Testbench config: clock(s), reset, peripherals (required) |
+| `--output-vcd <path>` | Output VCD (chip outputs + any traced nets) |
+| `--trace-signals <path>` | Surface internal nets in the VCD ([Signal Tracing](signal-tracing.md)) |
+| `--bus-trace-csv <path>` | Decode on-chip bus transactions ([Bus Tracing](bus-tracing.md)) |
+| `--jtag-server <port>` / `--jtag-replay <path>` | Interactive / deterministic JTAG debug ([JTAG Debug](jtag-debug.md)) |
+| `--xprop` | Selective X-propagation for uninitialised state |
+| `--max-clock-edges <n>` | Limit simulation length (1 cycle = 2 edges) |
+
 ### Key Statistics
 
 When running Jacquard, look for these diagnostic outputs:
@@ -95,22 +117,23 @@ This documentation was created through systematic investigation of Jacquard's be
 4. **Comparative Testing**: Compared Jacquard vs iverilog outputs
 5. **Third-Party Validation**: Tested with real-world examples (sva-playground)
 
-## Known Issues Documented
+## Known Issues
 
-1. **VCD Hierarchy Mismatch** (CRITICAL):
-   - Jacquard expects flat VCD hierarchy
-   - Most testbenches generate hierarchical VCDs
-   - See troubleshooting-vcd.md for solutions
+Tracked live on GitHub — see the
+[open issues](https://github.com/gpu-eda/Jacquard/issues) and the
+[`priority:high`](https://github.com/gpu-eda/Jacquard/labels/priority%3Ahigh)
+label. The long-standing ones:
 
-2. **Complex FSM Simulation**:
-   - Some FSM designs don't simulate correctly
-   - Under investigation (safe.v example in third_party tests)
-   - May be related to synthesis optimization or reset handling
-
-3. **Format String Preservation**:
-   - Yosys may not preserve format attributes
-   - Display messages show placeholders
-   - Extract format strings from pre-synthesis JSON as workaround
+- **VCD hierarchy mismatch** — Jacquard expects a flat top-level VCD; most
+  testbenches emit hierarchical ones. Workaround: `--input-vcd-scope` (see
+  [Troubleshooting VCD](troubleshooting-vcd.md)). Tracking:
+  [#142](https://github.com/gpu-eda/Jacquard/issues/142).
+- **Complex FSM simulation** — some FSM designs (e.g. `safe.v`) don't simulate
+  correctly; under investigation. Tracking:
+  [#143](https://github.com/gpu-eda/Jacquard/issues/143).
+- **Format-string preservation** — Yosys may drop `gem_format` attributes, so
+  `$display` messages show placeholders. This is an upstream Yosys limitation;
+  the workaround is to extract format strings from the pre-synthesis JSON.
 
 ## Contributing
 
@@ -124,12 +147,16 @@ When adding documentation:
 
 ## Future Documentation Needs
 
-- [ ] Performance tuning guide (optimal `NUM_BLOCKS`, `--level-split`)
-- [ ] Memory (SRAM) modeling and synthesis
-- [ ] Custom cell library support beyond AIGPDK
-- [ ] Multi-clock domain handling
-- [ ] VCD scope option detailed behavior
-- [ ] GPU kernel optimization internals
+Dedicated guides not yet written (coverage today is scattered across ADRs and
+reference docs):
+
+- [ ] Performance tuning guide (choosing `NUM_BLOCKS`, `--level-split`)
+- [ ] SRAM modeling & synthesis (synthesis flow + preload + observability in one place)
+- [ ] Multi-clock domain user guide (config examples; cf. [#87](https://github.com/gpu-eda/Jacquard/issues/87) for test coverage)
+- [ ] GPU kernel optimization internals (profiling, backend-specific tuning)
+
+Now covered: custom cell libraries → [Adding a New PDK](adding-a-pdk.md) +
+ADR 0010/0011; VCD scope behaviour → [Troubleshooting VCD](troubleshooting-vcd.md).
 
 ## Related Resources
 
@@ -140,5 +167,5 @@ When adding documentation:
 
 ---
 
-**Last Updated**: 2026-02-16
-**Maintained By**: ChipFlow + Community Contributions
+**Last Updated**: 2026-06-26
+**Maintained By**: gpu-eda + community contributors

@@ -79,7 +79,7 @@ publishing). **Formula staged** at `packaging/homebrew/jacquard.rb`
   opens the PR automatically (stretch).
 - Then `brew install gpu-eda/tap/jacquard` → both bins on `PATH`.
 
-See [`../../packaging/README.md`](../../packaging/README.md).
+See [`packaging/README.md`](https://github.com/gpu-eda/Jacquard/blob/main/packaging/README.md).
 
 ## Phase 3 — netlist-graph → PyPI
 

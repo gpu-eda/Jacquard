@@ -21,7 +21,7 @@ The standard industry pattern for testing against proprietary PDKs is environmen
 
 ## Decision
 
-Establish a private PDK test track gated on per-PDK environment variables (e.g. `GF130_PDK_PATH`, `TSMC_PDK_PATH`, and similar — one per PDK).
+Establish a private PDK test track gated on per-PDK environment variables (e.g. `TSMC_PDK_PATH`, and similar — one per PDK).
 
 - Tests check for the required env var(s) and skip with a clear "PDK not available" message when unset.
 - When env vars point to a readable PDK directory, tests execute fully.

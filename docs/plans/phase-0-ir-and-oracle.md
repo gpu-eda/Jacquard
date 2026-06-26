@@ -181,7 +181,7 @@ Phase 0 is complete when **all** of the following hold:
 
 - Native Rust SDF→IR converter. The hand-rolled parser is **removed** in Phase 0 WS3 (per ADR 0006); the native Rust replacement is Phase 3 work, **deferred indefinitely** per ADR 0006 § Amendment (no longer release-gating). SDF input ships via the `opensta-to-ir` subprocess wrapper. See `post-phase-0-roadmap.md` § Phase 3 for revival triggers.
 - OpenTimer integration. Depends on the spike; tracked in `../spikes/opentimer-sky130.md` and its resulting phase-1 plan.
-- Private PDK (GF130) test track. Tracked in ADR 0004; plumbing deferred to its own phase.
+- Private PDK test track. Tracked in ADR 0004; plumbing deferred to its own phase.
 - SPEF IR. Separate from timing-annotation IR per ADR 0002.
 - Runtime violation reporting improvements (R4 critical-path refinement JSON). Phase 1 or 2.
 
