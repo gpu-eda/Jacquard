@@ -52,6 +52,12 @@ vcd-ng = { version = "0.2.0", path = "vendor/eda-infra-rs/vcd-ng" }
 [build-dependencies]
 ucc = { version = "0.2.5", path = "vendor/eda-infra-rs/ucc" }
 cc = "1.0"
+# ADR 0019 D7: bundled cell-model-IR descriptors are generated at build time
+# from the pinned vendored PDKs (NOT checked in). build.rs links the converter
+# as a library (no CLI/clap) and writes descriptors into OUT_DIR for
+# `include_str!`.
+liberty-to-cellir = { path = "crates/liberty-to-cellir", default-features = false }
+cell-model-ir = { path = "crates/cell-model-ir" }
 
 [features]
 cuda = ["ulib/cuda"]

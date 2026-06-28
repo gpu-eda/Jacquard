@@ -801,6 +801,7 @@ dependencies = [
  "indexmap 2.14.0",
  "itertools 0.13.0",
  "liberty-parse",
+ "liberty-to-cellir",
  "metal",
  "mt-kahypar",
  "netlistdb",
@@ -858,6 +859,16 @@ checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 [[package]]
 name = "liberty-parse"
 version = "0.2.3"
+
+[[package]]
+name = "liberty-to-cellir"
+version = "0.2.3"
+dependencies = [
+ "cell-decomp",
+ "cell-model-ir",
+ "liberty-parse",
+ "serde_json",
+]
 
 [[package]]
 name = "libm"
