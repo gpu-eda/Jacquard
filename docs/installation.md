@@ -108,4 +108,5 @@ jacquard cosim tests/apb_trace/apb_trace_synth.gv \
     --bus-trace-csv /tmp/apb.csv
 ```
 
-Then head to [Getting Started](usage.md) to run your own designs.
+Then head to [Getting Started](getting-started.md) to run bundled designs, or the
+[Synthesis Flow](synthesis-flow.md) to prepare your own RTL.

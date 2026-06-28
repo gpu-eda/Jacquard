@@ -85,7 +85,9 @@ cargo run -r --features metal --bin jacquard -- sim design.gv input.vcd output.v
 
 Partitioning (mapping the design to GPU blocks) happens automatically at startup.
 
-**See [Getting Started](https://gpu-eda.github.io/Jacquard/usage.html) for full documentation** including synthesis preparation, VCD scope handling, and troubleshooting.
+**See [Getting Started](https://gpu-eda.github.io/Jacquard/getting-started.html)** to run bundled
+designs in seconds, or the [Synthesis Flow](https://gpu-eda.github.io/Jacquard/synthesis-flow.html)
+for synthesis preparation, VCD scope handling, and running your own RTL.
 
 ## Documentation
 
@@ -107,7 +109,7 @@ mdbook serve   # opens at http://localhost:3000
   supported through their own paths: **clock gating** via the `CKLNQD`
   integrated clock-gating cell (below), and **latch / register-file memory**
   mapped through the memory-synthesis step (`memory_libmap` → RAM; see
-  [Getting Started](https://gpu-eda.github.io/Jacquard/usage.html)).
+  [Synthesis Flow](https://gpu-eda.github.io/Jacquard/synthesis-flow.html)).
 - Clock gates must use `CKLNQD` (from `aigpdk.v`) or the equivalent clock-gate
   cells from the SKY130 or GF180MCU PDKs.
 
