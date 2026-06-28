@@ -1,15 +1,36 @@
 # Handoff — Cell-model IR (ADR 0019)
 
 **Active thread:** ADR 0019 "Cell-model IR" is **approved by the maintainer**
-(all four design open questions resolved). **Plan checkpoints C1 and C2 are
-both COMPLETE.** The IR + converter foundation is built (C1, #130 closed) and
-GF180 now **simulates AND times** sequential cells from a generated descriptor
-with no per-PDK Rust DFF handling and no runtime `.lib` parse (C2). Work is on
-branch `docs/cell-model-ir-adr` (worktree `../Jacquard-cellir`), **PR #132 —
-MERGEABLE, 18 commits, rebased onto current main (2026-06-26), all crates
-version-aligned at 0.2.3**. Schema is now `SCHEMA 0.2` (`MAJOR=0, MINOR=2`).
-Next up is **C3** (bundle + cut over + CI-regen provenance) and **C3a** (IHP
-SG13G2, zero-Rust new PDK).
+(all four design open questions resolved). **Plan checkpoints C1, C2, and
+C3.1 are COMPLETE** (C2 CI-green, 19/19 jobs). The IR + converter foundation
+is built (C1, #130 closed); GF180 **simulates AND times** sequential cells
+from a generated descriptor with no per-PDK Rust DFF handling and no runtime
+`.lib` parse (C2); and descriptors are now **generated + embedded at build
+time** (C3.1, D7). Work is on branch `docs/cell-model-ir-adr` (worktree
+`../Jacquard-cellir`), **PR #132 — MERGEABLE, rebased onto current main, all
+crates version-aligned at 0.2.3**. Schema is `SCHEMA 0.2` (`MAJOR=0,
+MINOR=2`). Next: **C3.1b** (converter generalization from the GF130 findings
+below — corner-from-Liberty-PVT + ff-internal-state-var), then **C3.2/C3.3**
+(selection + cutover) and **C3a** (IHP SG13G2, zero-Rust, sparse checkout).
+
+## C3.1 — COMPLETE (commit 52be692)
+
+Build-time descriptor generation + embedding (ADR 0019 D7). `build.rs` links
+`liberty-to-cellir` (clap gated behind a `cli` feature) + `cell-model-ir` as
+build-deps and generates `gf180mcu_{7t,9t}.cellir.json` into `$OUT_DIR`;
+`src/bundled_descriptors.rs` `include_str!`s them and `resolve()` gives
+`--cell-descriptor <file>` precedence over a new `--bundled-descriptor <name>`
+flag (threaded through sim/cosim/xsources/timing). Converter loader extracted
+to `crates/liberty-to-cellir/src/load.rs` (`generate_descriptor`). Determinism:
+no `HashMap` into the descriptor (Vecs in Liberty order; split-lib discovery
+sorts); `tests/determinism.rs` asserts byte-identity; build-time artifact ==
+CLI output == `cell-model-ir-diff` clean. Cost ~0.55 s, only on vendored-lib
+change. Proof: jtag_minimal 9t `--bundled-descriptor gf180mcu_9t` (no file) is
+MD5 `d87c9f75…` — identical to the file/oracle runs. **Sits alongside the old
+pin-table gen** (retires in C3.3). SKY130 deferred (`vendor/sky130_fd_sc_hd/`
+ships only `.lib.json`, 0 `.lib` text — needs a `.lib.json` reader); AIGPDK
+deferred (hand-coded models, no cross-check oracle). CI needs no changes
+(GF180-less jobs get a valid empty descriptor; release jobs embed real ones).
 
 ## Design decisions resolved (ADR 0019, all four open questions closed)
 
@@ -132,6 +153,49 @@ descriptor yet, so neither regresses anything today.
    today). Generalise the residual name-based matches; wire SKY130/AIGPDK onto
    the IR path.
 2. **C4 — proprietary-library workflow** doc + test.
+
+## GF130 proprietary-PDK smoke test (2026-06-26) — converter generalizations it demands
+
+Ran the C2 converter against the **proprietary GF130 (GF013BCD)** stdcell
+library `~/Code/ChipFlow/PDK/pdk-gf130/IP005093` — a real commercial,
+**monolithic single-`.lib`-per-corner** library (50 MB TT lib; 11 corners
+FF/SS/TT; unified `GF013bcd_sc6_1p5_a0.v` with 2544 `module` defs). Generation
+succeeded (`cells=636 combinational=443 l3_sequential=158`, 724 KB JSON, 0.7 s)
+but exposed that the converter is still GF180/SKY130-shaped. Four findings, in
+priority order — these are the **C4 / proprietary-hardening** work:
+
+1. **L4 corner detection is filename-based (→ `corners=0, l4_timing=0` for
+   GF130).** `crates/liberty-to-cellir/src/timing.rs` derives the corner from
+   the GF180-style library *name* (`__tt_025C_5v00`). GF130's
+   `GF013bcd_sc6_1p5_a0_TT_1P50V_25C_max` doesn't match → no corner → **no L4
+   emitted at all**. The corner is in the Liberty itself:
+   `operating_conditions(TT_1P50V_25C)` { process/temperature/voltage } +
+   `default_operating_conditions` + `nom_process/nom_temperature/nom_voltage`.
+   **Fix: read the corner from the Liberty PVT groups, not the filename.** This
+   is the correct general source and also hardens the D5 multi-corner story for
+   the built-ins. **Highest-value generalization.**
+2. **`next_state` referencing the ff's internal state var (20 GF130 cells).**
+   Commercial flops write next_state over the ff's own state node, e.g.
+   `SEDFF_X4` → `((SE&SI)|((!SE)&((E&D)|((!E)&IQ))))` where `IQ` is the ff
+   state variable. The converter rejects `IQ` as "not in inputs". Register the
+   `ff(IQ,IQN)` variable names as known symbols (self-feedback) in the
+   next_state compile.
+3. **`.v` cross-check indexer found 0 models.** The GF130 `.v` is 2544 flat
+   `module NAME(ports);` defs in one file; the indexer (built for GF180's
+   per-cell `.behavioral.v` + UDP tree, single `--functional-v` dir) no-ops
+   silently → `arc_no_specify=636`. Low priority (Liberty-first; cross-check is
+   optional) but the silent 0 should at least warn.
+4. **`clear_preset` set-dominant now seen in TWO foundry libs.** GF130 has
+   **28** set-dominant latches (`TLATSR`/`TLATNSR`, `clear_preset_var1=H`),
+   GF180 had 3. Recurrence across independent commercial libraries makes the
+   case that a schema `clear_preset` tie-break field is genuinely needed for
+   proprietary support, not deferrable forever. (Built-in sim is unaffected —
+   GEM models no true latches — but a proprietary user simulating these would
+   get wrong results.)
+
+Descriptor at `/tmp/claude/gf130_sc6_tt.json` (NOT committed; proprietary —
+never vendor GF130). Converter CLI used:
+`cargo run --release --manifest-path crates/liberty-to-cellir/Cargo.toml -- <TT.lib> --functional-v <sc6.v> -o /tmp/claude/gf130_sc6_tt.json`.
 
 ## Key anchors (verified this session)
 
