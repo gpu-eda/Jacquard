@@ -17,10 +17,7 @@ fn main() {
             "vendor/gf180mcu_fd_sc_mcu7t5v0/cells",
             "vendor/gf180mcu_fd_sc_mcu9t5v0/cells",
         ],
-        prefixes: &[
-            "gf180mcu_fd_sc_mcu7t5v0__",
-            "gf180mcu_fd_sc_mcu9t5v0__",
-        ],
+        prefixes: &["gf180mcu_fd_sc_mcu7t5v0__", "gf180mcu_fd_sc_mcu9t5v0__"],
         skip_pins: &[],
     });
 
@@ -42,6 +39,12 @@ fn main() {
         ],
         skip_pins: &[],
     });
+
+    // ADR 0019 D7: generate the bundled cell-model-IR descriptors at build
+    // time from the pinned vendored PDKs and embed them into the binary (NOT
+    // checked in). Sits alongside the pin-table generators above in C3.1; the
+    // pin-table step retires in the C3.3 cutover. See `generate_cell_descriptors`.
+    generate_cell_descriptors();
 
     // Build the C++ SPI flash model
     cc::Build::new()
@@ -120,6 +123,119 @@ fn main() {
 }
 
 // -----------------------------------------------------------------------------
+// Bundled cell-model-IR descriptor generation (ADR 0019 D7)
+// -----------------------------------------------------------------------------
+//
+// Runs the `liberty-to-cellir` converter *as a library* over the pinned
+// vendored GF180 PDKs and writes the resulting cell-model-IR descriptors into
+// `$OUT_DIR` for `include_str!` by `src/bundled_descriptors.rs`. The
+// descriptors are NOT checked in (D7) — they are a deterministic function of
+// the pinned submodules.
+//
+// Gating: `cargo:rerun-if-changed` on each library's source directory means
+// this only re-runs when the vendored PDK changes (or csrc / build.rs itself),
+// so it does not balloon incremental build time. The generation itself is
+// ~0.1 s per library (229 GF180 cells -> ~1.5 MB JSON).
+
+struct DescriptorSpec {
+    /// Output filename under `$OUT_DIR`, embedded via `include_str!`.
+    out_filename: &'static str,
+    /// Top-level Liberty (`tt` corner) the descriptor is generated from. If it
+    /// carries no `cell` groups, the converter merges the sibling per-cell
+    /// `.lib` split layout (GF180/SKY130 shape).
+    top_lib: &'static str,
+    /// Source directories to watch for `rerun-if-changed` — the top-level
+    /// `liberty/` tree and the per-cell `cells/` tree.
+    watch_dirs: &'static [&'static str],
+}
+
+fn generate_cell_descriptors() {
+    // GF180 7-track (default) and 9-track. Both vendored submodules are already
+    // required by the pin-table generators above, so this adds no new
+    // source-build submodule requirement (ADR 0019 D7).
+    let specs = [
+        DescriptorSpec {
+            out_filename: "gf180mcu_7t.cellir.json",
+            top_lib: "vendor/gf180mcu_fd_sc_mcu7t5v0/liberty/\
+                      gf180mcu_fd_sc_mcu7t5v0__tt_025C_5v00.lib",
+            watch_dirs: &[
+                "vendor/gf180mcu_fd_sc_mcu7t5v0/liberty",
+                "vendor/gf180mcu_fd_sc_mcu7t5v0/cells",
+            ],
+        },
+        DescriptorSpec {
+            out_filename: "gf180mcu_9t.cellir.json",
+            top_lib: "vendor/gf180mcu_fd_sc_mcu9t5v0/liberty/\
+                      gf180mcu_fd_sc_mcu9t5v0__tt_025C_5v00.lib",
+            watch_dirs: &[
+                "vendor/gf180mcu_fd_sc_mcu9t5v0/liberty",
+                "vendor/gf180mcu_fd_sc_mcu9t5v0/cells",
+            ],
+        },
+    ];
+
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+    for spec in &specs {
+        for dir in spec.watch_dirs {
+            println!("cargo:rerun-if-changed={dir}");
+        }
+        generate_one_descriptor(spec, Path::new(&out_dir));
+    }
+}
+
+fn generate_one_descriptor(spec: &DescriptorSpec, out_dir: &Path) {
+    let top_lib = Path::new(spec.top_lib);
+    let out_path = out_dir.join(spec.out_filename);
+
+    // The vendored submodule may be uninitialised on a partial checkout (the
+    // CUDA/HIP/Lint CI jobs deliberately skip the heavy GF180 submodules).
+    // `include_str!` still needs the OUT_DIR file to exist, so mirror the
+    // pin-table generator's tolerance exactly: write a valid *empty*
+    // descriptor and let the consumer's runtime surface the missing-library
+    // error if a GF180 design is actually run. The Unit Tests + jtag cosim CI
+    // jobs (which DO check out GF180) cover the real-data path. Source builds
+    // keep the same vendored-submodule requirement they already have (D7).
+    if !top_lib.exists() {
+        let stem = top_lib
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+        let empty = cell_model_ir::CellModelIr::new(cell_model_ir::LibraryMeta {
+            name: stem.to_string(),
+            prefixes: Vec::new(),
+        });
+        let json = empty.to_json().expect("serialize empty descriptor");
+        std::fs::write(&out_path, &json)
+            .unwrap_or_else(|e| panic!("writing {}: {e}", out_path.display()));
+        println!(
+            "cargo:warning=cell-model-IR: {} not found — embedded an EMPTY {} \
+             descriptor (run `git submodule update --init` for the real one)",
+            top_lib.display(),
+            spec.out_filename
+        );
+        return;
+    }
+
+    let started = std::time::Instant::now();
+    // Empty prefix => derive the D8 selection prefix from the cell names.
+    let ir = liberty_to_cellir::load::generate_descriptor(top_lib, Vec::new())
+        .unwrap_or_else(|e| panic!("generating {}: {e}", spec.out_filename));
+    let json = ir
+        .to_json()
+        .unwrap_or_else(|e| panic!("serializing {}: {e}", spec.out_filename));
+    std::fs::write(&out_path, &json)
+        .unwrap_or_else(|e| panic!("writing {}: {e}", out_path.display()));
+    let elapsed = started.elapsed();
+    println!(
+        "cargo:warning=cell-model-IR: generated {} ({} cells, {} bytes) in {:.2}s",
+        spec.out_filename,
+        ir.cells.len(),
+        json.len(),
+        elapsed.as_secs_f64()
+    );
+}
+
+// -----------------------------------------------------------------------------
 // PDK pin-direction table generator
 // -----------------------------------------------------------------------------
 //
@@ -171,7 +287,10 @@ fn generate_pin_table(spec: PinTableSpec) {
             if !path.is_dir() {
                 continue;
             }
-            for entry in std::fs::read_dir(&path).expect("read cell variant dir").flatten() {
+            for entry in std::fs::read_dir(&path)
+                .expect("read cell variant dir")
+                .flatten()
+            {
                 let f = entry.path();
                 let Some(name) = f.file_name().and_then(|s| s.to_str()) else {
                     continue;
@@ -239,7 +358,9 @@ fn filter_skip(pins: Vec<String>, skip: &[&str]) -> Vec<String> {
     if skip.is_empty() {
         return pins;
     }
-    pins.into_iter().filter(|p| !skip.contains(&p.as_str())).collect()
+    pins.into_iter()
+        .filter(|p| !skip.contains(&p.as_str()))
+        .collect()
 }
 
 /// Parse one `.functional.v` cell model. Returns (module_name, inputs, outputs).

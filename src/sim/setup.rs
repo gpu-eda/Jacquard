@@ -67,6 +67,11 @@ pub struct DesignArgs {
     /// descriptor models are built from its pre-decomposed AIG instead of the
     /// hardcoded vendored `functional.v` path. Absent = today's behaviour.
     pub cell_descriptor: Option<PathBuf>,
+    /// Optional `--bundled-descriptor <NAME>` — select a build-time-embedded
+    /// cell-model-IR descriptor (ADR 0019 D7) by name (e.g. `gf180mcu_7t`)
+    /// instead of pointing at an on-disk file. `cell_descriptor` (an explicit
+    /// file) takes precedence when both are set. Absent = today's behaviour.
+    pub bundled_descriptor: Option<String>,
     /// Additional hierarchical signal names to register as observable,
     /// supplied programmatically rather than from a file. Any feature
     /// that needs specific nets to have state-buffer slots before
@@ -95,6 +100,7 @@ pub fn build_netlist_and_aig(
     top_module: Option<&str>,
     cell_library: &[PathBuf],
     cell_descriptor: Option<&Path>,
+    bundled_descriptor: Option<&str>,
 ) -> (NetlistDB, AIG) {
     // Detect cell library
     let lib = detect_library_from_file(netlist_verilog).expect("Failed to read netlist file");
@@ -161,21 +167,20 @@ pub fn build_netlist_and_aig(
         Some(&runtime_lib)
     };
 
-    // ADR 0019: optional cell-model-IR descriptor (`--cell-descriptor`).
-    // When supplied, GF180 combinational cells it models are spliced from the
+    // ADR 0019: optional cell-model-IR descriptor. Sourced either from an
+    // explicit `--cell-descriptor <path>` file or a build-time-embedded
+    // `--bundled-descriptor <name>` (D7); the explicit file wins. When
+    // supplied, GF180 combinational cells it models are spliced from the
     // descriptor's pre-decomposed AIG instead of the hardcoded `functional.v`
     // path. Absent = today's behaviour exactly.
-    let descriptor = cell_descriptor.map(|path| {
-        let ir = cell_model_ir::CellModelIr::read_from(path)
-            .unwrap_or_else(|e| panic!("loading --cell-descriptor {}: {e}", path.display()));
+    let descriptor = crate::bundled_descriptors::resolve(cell_descriptor, bundled_descriptor);
+    if let Some(ir) = &descriptor {
         clilog::info!(
-            "Loaded cell-model-IR descriptor '{}' ({} cells) from {}",
+            "Loaded cell-model-IR descriptor '{}' ({} cells)",
             ir.library.name,
-            ir.cells.len(),
-            path.display()
+            ir.cells.len()
         );
-        ir
-    });
+    }
     let aig = AIG::from_netlistdb_with_cells_and_descriptor(
         &netlistdb,
         cell_lib_ref,
@@ -195,6 +200,7 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
         args.top_module.as_deref(),
         &args.cell_library,
         args.cell_descriptor.as_deref(),
+        args.bundled_descriptor.as_deref(),
     );
 
     // Register user-supplied trace signals (--trace-signals). Must

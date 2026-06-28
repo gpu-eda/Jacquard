@@ -55,6 +55,8 @@ pub mod pdk;
 
 pub mod cell_library;
 
+pub mod bundled_descriptors;
+
 pub mod aig;
 
 pub mod liberty_parser;

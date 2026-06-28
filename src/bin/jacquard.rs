@@ -208,6 +208,12 @@ struct SimArgs {
     #[clap(long = "cell-descriptor", value_name = "PATH")]
     cell_descriptor: Option<PathBuf>,
 
+    /// Use a build-time-embedded cell-model-IR descriptor (ADR 0019 D7) by
+    /// name instead of an on-disk file: e.g. `gf180mcu_7t`, `gf180mcu_9t`.
+    /// `--cell-descriptor` (an explicit file) overrides this when both are set.
+    #[clap(long = "bundled-descriptor", value_name = "NAME")]
+    bundled_descriptor: Option<String>,
+
     /// PVT corner to read L4 timing from when `--cell-descriptor` is set
     /// (ADR 0019 D5). Names a corner in the descriptor's corner set; absent
     /// uses the descriptor's `default_corner`. Ignored without a descriptor.
@@ -379,6 +385,11 @@ struct CosimArgs {
     #[clap(long = "cell-descriptor", value_name = "PATH")]
     cell_descriptor: Option<PathBuf>,
 
+    /// Use a build-time-embedded cell-model-IR descriptor (ADR 0019 D7) by
+    /// name (e.g. `gf180mcu_9t`). See `jacquard sim --help`. Optional.
+    #[clap(long = "bundled-descriptor", value_name = "NAME")]
+    bundled_descriptor: Option<String>,
+
     /// Path to a file listing internal signals to surface in the
     /// output VCD. One hierarchical signal name per line; see
     /// `jacquard sim --trace-signals --help` for the full file
@@ -512,6 +523,11 @@ struct XsourcesArgs {
     /// Generated cell-model-IR descriptor (ADR 0019), same as `sim`/`cosim`.
     #[clap(long = "cell-descriptor", value_name = "PATH")]
     cell_descriptor: Option<PathBuf>,
+
+    /// Build-time-embedded cell-model-IR descriptor by name (ADR 0019 D7),
+    /// same as `sim`/`cosim`.
+    #[clap(long = "bundled-descriptor", value_name = "NAME")]
+    bundled_descriptor: Option<String>,
 }
 
 #[derive(Parser)]
@@ -572,6 +588,7 @@ fn cmd_sim(args: SimArgs) {
         timing_corner: args.timing_corner.clone(),
         cell_library: args.cell_library.clone(),
         cell_descriptor: args.cell_descriptor.clone(),
+        bundled_descriptor: args.bundled_descriptor.clone(),
         trace_signals: args.trace_signals.clone(),
         extra_observable_signals: Vec::new(),
     };
@@ -1825,9 +1842,11 @@ fn run_timing_analysis(aig: &mut jacquard::aig::AIG, args: &SimArgs) {
     // selected via `--corner`, default `default_corner`) over a runtime `.lib`
     // parse. Falls back to `--liberty` / the AIGPDK default when no descriptor
     // was supplied.
-    let lib = if let Some(desc_path) = &args.cell_descriptor {
-        let ir = cell_model_ir::CellModelIr::read_from(desc_path)
-            .unwrap_or_else(|e| panic!("loading --cell-descriptor {}: {e}", desc_path.display()));
+    let descriptor = jacquard::bundled_descriptors::resolve(
+        args.cell_descriptor.as_deref(),
+        args.bundled_descriptor.as_deref(),
+    );
+    let lib = if let Some(ir) = descriptor {
         let corner_name = args.corner.as_deref().unwrap_or(&ir.default_corner);
         let corner_index = ir.corner_index(corner_name).unwrap_or_else(|| {
             panic!(
@@ -1935,6 +1954,7 @@ fn cmd_dump_paths(args: DumpPathsArgs) {
         timing_corner: None,
         cell_library: Vec::new(),
         cell_descriptor: None,
+        bundled_descriptor: None,
         trace_signals: None,
         extra_observable_signals: Vec::new(),
     };
@@ -1976,6 +1996,7 @@ fn cmd_xsources(args: XsourcesArgs) {
         args.top_module.as_deref(),
         &args.cell_library,
         args.cell_descriptor.as_deref(),
+        args.bundled_descriptor.as_deref(),
     );
 
     let config: Option<TestbenchConfig> = args.config.as_ref().map(|path| {
@@ -2158,6 +2179,7 @@ fn cmd_cosim(args: CosimArgs) {
             timing_corner: None,
             cell_library: args.cell_library.clone(),
             cell_descriptor: args.cell_descriptor.clone(),
+            bundled_descriptor: args.bundled_descriptor.clone(),
             trace_signals: args.trace_signals.clone(),
             extra_observable_signals: bus_trace_signals,
         };
