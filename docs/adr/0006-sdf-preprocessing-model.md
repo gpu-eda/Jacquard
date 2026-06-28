@@ -23,7 +23,7 @@ The original Decision treated subprocess invocation of OpenSTA from the shipped 
 1. Hard-fail (not warn) when `--sdf` is requested and OpenSTA cannot be located.
 2. Probe OpenSTA's version on first invocation and fail with a remediation message if it is older than the version pinned in `vendor/opensta/` (per ADR 0005).
 3. Warn-but-proceed if the detected version is newer than the latest tested version, naming the version in the warning.
-4. Document the OpenSTA dependency in `docs/usage.md`.
+4. Document the OpenSTA dependency in `docs/synthesis-flow.md`.
 
 Tracked as **WS-RH.1** in `../plans/post-phase-0-roadmap.md` § Release hardening.
 

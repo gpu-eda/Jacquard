@@ -2,7 +2,7 @@
 
 Welcome to the documentation for Jacquard, a GPU-accelerated RTL logic simulator.
 
-Use the sidebar to navigate between topics, or start with the [Getting Started](usage.md) guide.
+Use the sidebar to navigate between topics, or start with the [Getting Started](getting-started.md) guide — it runs four bundled designs in a few seconds with no synthesis. To prepare and run your own RTL, see the [Synthesis Flow](synthesis-flow.md); for UVM/cocotb/SVA questions, [Testbench Interop](interop.md).
 
 ## Documents
 

@@ -129,7 +129,7 @@ Pre-first-release work that became necessary when ADR 0006 § Amendment relaxed 
   - If older than min-tested → hard error with remediation message ("rebuild via `scripts/build-opensta.sh` or upgrade your system OpenSTA").
   - If newer than max-tested → warn but proceed ("untested OpenSTA version vN.M; please report any timing discrepancies").
   - Cache the result for the rest of the process. ~1 day.
-- **Document the dependency in `docs/usage.md`.** Single section: required tooling, install paths, version range, what `jacquard sim` does and doesn't need OpenSTA for. ~0.5 day.
+- **Document the dependency in `docs/synthesis-flow.md`.** Single section: required tooling, install paths, version range, what `jacquard sim` does and doesn't need OpenSTA for. ~0.5 day.
 - **Test coverage:** unit tests for the version-string parser (with sample `-version` outputs from the pinned version and a synthetic too-old version); an integration test that points `JACQUARD_OPENSTA_BIN` at a stub script and confirms the error path. ~0.5 day.
 - **Stale-framing cleanup** (folded in here per 2026-05-02 decision rather than spun out separately):
   - Reword `INTERIM per ADR 0006` / `Pre-release only` markers in source: `src/sim/setup.rs:176,228,286`, `src/bin/jacquard.rs:187`, `src/sim/cosim_metal.rs:2053`, `src/testbench.rs:255-257`. Replace with "subprocess wrapper per ADR 0006 § Amendment" or similar — these paths are no longer interim.
