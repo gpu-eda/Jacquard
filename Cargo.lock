@@ -240,11 +240,11 @@ dependencies = [
 
 [[package]]
 name = "cell-decomp"
-version = "0.2.3"
+version = "0.2.4"
 
 [[package]]
 name = "cell-model-ir"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "clap",
  "serde",
@@ -858,11 +858,11 @@ checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "liberty-parse"
-version = "0.2.3"
+version = "0.2.4"
 
 [[package]]
 name = "liberty-to-cellir"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "cell-decomp",
  "cell-model-ir",

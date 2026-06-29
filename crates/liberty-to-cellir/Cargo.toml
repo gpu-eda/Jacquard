@@ -1,6 +1,6 @@
 [package]
 name = "liberty-to-cellir"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 description = "Build/CI-time tool that generates a cell-model-IR descriptor from a Liberty library (ADR 0019, D6). Lives outside the root cargo package; `cargo test` from the repo root does NOT run its tests — use `cargo test --manifest-path crates/liberty-to-cellir/Cargo.toml`. Not depended on by jacquard core."
 license = "Apache-2.0"
