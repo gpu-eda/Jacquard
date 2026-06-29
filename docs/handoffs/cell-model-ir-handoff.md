@@ -1,17 +1,38 @@
 # Handoff — Cell-model IR (ADR 0019)
 
 **Active thread:** ADR 0019 "Cell-model IR" is **approved by the maintainer**
-(all four design open questions resolved). **Plan checkpoints C1, C2, and
-C3.1 are COMPLETE** (C2 CI-green, 19/19 jobs). The IR + converter foundation
-is built (C1, #130 closed); GF180 **simulates AND times** sequential cells
-from a generated descriptor with no per-PDK Rust DFF handling and no runtime
-`.lib` parse (C2); and descriptors are now **generated + embedded at build
-time** (C3.1, D7). Work is on branch `docs/cell-model-ir-adr` (worktree
-`../Jacquard-cellir`), **PR #132 — MERGEABLE, rebased onto current main, all
-crates version-aligned at 0.2.3**. Schema is `SCHEMA 0.2` (`MAJOR=0,
-MINOR=2`). Next: **C3.1b** (converter generalization from the GF130 findings
-below — corner-from-Liberty-PVT + ff-internal-state-var), then **C3.2/C3.3**
-(selection + cutover) and **C3a** (IHP SG13G2, zero-Rust, sparse checkout).
+(all four design open questions resolved). **Plan checkpoints C1, C2, C3.1,
+and C3.1b are COMPLETE** (C2 was CI-green 19/19). The IR + converter
+foundation is built (C1, #130 closed); GF180 **simulates AND times**
+sequential cells from a generated descriptor with no per-PDK Rust DFF handling
+and no runtime `.lib` parse (C2); descriptors are **generated + embedded at
+build time** (C3.1, D7); and the converter now handles arbitrary commercial
+Liberty — corner from Liberty PVT, ff internal-state-var — proven on the
+proprietary GF130 (C3.1b). Work is on branch `docs/cell-model-ir-adr` (worktree
+`../Jacquard-cellir`), **PR #132 — MERGEABLE, rebased onto current main, all 7
+crates version-aligned at 0.2.4** (main released v0.2.4; see gotcha #4). Schema
+is `SCHEMA 0.2` (`MAJOR=0, MINOR=2`). Next: **C3.2/C3.3** (selection + cutover)
+and **C3a** (IHP SG13G2, zero-Rust, sparse checkout); the `clear_preset`
+set-dominant field and the GF130 sim/doc proof are **C4**.
+
+## C3.1b — COMPLETE (commit on branch)
+
+Generalized `crates/liberty-to-cellir` for commercial Liberty, driven by the
+GF130 findings below. (1) **Corner from Liberty PVT** —
+`timing::corner_from_library` reads `operating_conditions` named by
+`default_operating_conditions` (+ `nom_*` fallback), filename heuristic only
+last; GF130 TT now `l4_timing=615, corners=1` (`{TT_1P50V_25C, tt, 1.5, 25}`),
+GF130 SS a distinct corner; GF180 7t/9t L4 still emits (Liberty-derived corner
+name, PVT unchanged) with `cross_check_mismatches=0`. (2) **ff internal
+state-var** — `next_state` may reference the `ff(IQ,IQN)` state var; the
+compiler folds `IQN`→`!IQ` and admits `IQ` as a self-feedback input appended
+after real pins; GF130 `l3_next_state_errors` 20→0. **Consumer implication:**
+such cells' `next_state.inputs` carry a name that is NOT a cell pin (the state
+var) — a consumer must wire it to the flop's own current Q. GF180/SKY130 never
+do this, so no green consumer path is affected (arises only for commercial
+libs, which aren't on the consumer path until C3.3/C4). (3) cross-check now
+**warns** on 0 `.v` models indexed (used `eprintln!` not `clilog` — the
+converter deliberately doesn't depend on vendor `eda-infra-rs`).
 
 ## C3.1 — COMPLETE (commit 52be692)
 
@@ -218,7 +239,18 @@ never vendor GF130). Converter CLI used:
   Lint job is red). (3) When the PR shows `mergeable=CONFLICTING`, GitHub
   **won't dispatch `pull_request` CI at all** (can't build the merge ref) —
   rebase onto *current* `origin/main` (re-fetch first; main moves) and resolve
-  before expecting CI to run.
+  before expecting CI to run. (4) **Merge-ref version skew when main releases.**
+  CI builds the `pull_request` *merge ref* (main ⊕ branch), so when **main cuts
+  a release** (e.g. `aaa61b3 chore: release v0.2.4`) the merge ref takes main's
+  bumped **root** version while the branch's **new** crates keep the old one —
+  `bump_version.py --check` then fails **in CI even though it passes locally**
+  (the branch is internally consistent). Fix: rebase onto current main and
+  `python3 scripts/bump_version.py <new-version>` to re-align all 7 crates.
+  Watch for this whenever `gh run view` shows only Lint red with the four
+  cell-model-IR crates one patch behind root. (5) **`gh run watch
+  --exit-status` returns 0 on a CANCELLED run** (and superseded runs get
+  cancelled when you push again) — always confirm with `gh run view <id> --json
+  conclusion,jobs`, never trust the watch exit code alone.
 
 ## Loose ends
 
