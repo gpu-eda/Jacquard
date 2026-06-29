@@ -191,6 +191,7 @@ fn build_ff(
         ff.attr("next_state").and_then(|a| a.first_string()),
         cell_type,
         input_pins,
+        &[q_var.as_str(), qn_var.as_str()],
         notes,
     );
 
@@ -244,6 +245,7 @@ fn build_latch(
         latch.attr("data_in").and_then(|a| a.first_string()),
         cell_type,
         input_pins,
+        &[q_var.as_str(), qn_var.as_str()],
         notes,
     );
 
@@ -292,10 +294,29 @@ fn parse_clock(expr: &str, cell_type: &str, notes: &mut Vec<SeqNote>) -> Option<
 /// Build the next-state AIG from a Liberty function string, restricting the
 /// AIG inputs to the pins the expression actually references (in cell
 /// input-pin order).
+///
+/// `state_vars` are the flip-flop/latch state variable names from the
+/// `ff(IQ, IQN)` / `latch(IQ, IQN)` header: `[Q_var, QN_var]`. Commercial
+/// flops write their next_state over their own state node — e.g. GF130
+/// `SEDFF_X4` → `((SE&SI)|((!SE)&((E&D)|((!E)&IQ))))`, where `IQ` is the ff's
+/// current state. The Q state variable is admitted as an extra **self-feedback
+/// input** of the next-state cone (appended after the real input pins) so these
+/// cells compile to a structurally-valid next_state instead of erroring. The
+/// inverted state variable (`IQN`) is folded to `!IQ` first, so at most one
+/// feedback input is introduced.
+///
+/// **Consumer implication:** the resulting `next_state.inputs` may contain a
+/// name that is NOT a cell pin (the `IQ` state var). A descriptor consumer must
+/// wire that input to the flop's own current output (Q self-feedback). The
+/// GF180/SKY130 built-ins never reference their state var in `next_state`
+/// (their `next_state` is `D` / a scan-mux over real pins), so no consumed path
+/// is affected; this only arises for commercial libraries (GF130) not yet on
+/// the descriptor consumer path.
 fn build_next_state(
     expr_str: Option<&str>,
     cell_type: &str,
     input_pins: &[String],
+    state_vars: &[&str],
     notes: &mut Vec<SeqNote>,
 ) -> CombLogic {
     let Some(src) = expr_str else {
@@ -310,15 +331,32 @@ fn build_next_state(
             }],
         };
     };
+    let q_var = state_vars.first().copied().filter(|s| !s.is_empty());
+    let qn_var = state_vars.get(1).copied().filter(|s| !s.is_empty());
     match function::parse(src) {
-        Ok(expr) => {
-            // Restrict inputs to referenced pins, preserving cell input order.
+        Ok(mut expr) => {
+            // Fold the inverted state variable (`IQN`) to `!IQ` so only the Q
+            // state var can appear as a feedback input.
+            if let (Some(q), Some(qn)) = (q_var, qn_var) {
+                expr = expr.substitute_pin(
+                    qn,
+                    &function::Expr::Not(Box::new(function::Expr::Pin(q.into()))),
+                );
+            }
             let referenced = expr.pins();
-            let inputs: Vec<String> = input_pins
+            // Real cell input pins referenced, in cell input order.
+            let mut inputs: Vec<String> = input_pins
                 .iter()
                 .filter(|p| referenced.iter().any(|r| r == *p))
                 .cloned()
                 .collect();
+            // Append the Q state variable as a self-feedback input when the
+            // next_state references it (and it is not already an input pin).
+            if let Some(q) = q_var {
+                if referenced.iter().any(|r| r == q) && !inputs.iter().any(|p| p == q) {
+                    inputs.push(q.to_string());
+                }
+            }
             match function::compile("next_state", &expr, &inputs) {
                 Ok(logic) => logic,
                 Err(error) => {
@@ -633,6 +671,119 @@ mod tests {
             let out = ns.eval(&m).unwrap();
             let expected = if se { si } else { d };
             assert_eq!(out["next_state"], expected, "mux D={d} SE={se} SI={si}");
+        }
+    }
+
+    /// GF130-shaped scan/enable flop whose `next_state` writes over its own
+    /// `ff(IQ, IQN)` state node: `((SE&SI)|((!SE)&((E&D)|((!E)&IQ))))`. The `IQ`
+    /// state var must be admitted as a self-feedback input rather than erroring.
+    #[test]
+    fn next_state_references_ff_state_var() {
+        let src = r#"
+        library(demo) {
+          cell(demo__sedff) {
+            ff(IQ, IQN) {
+              clocked_on : "CLK" ;
+              next_state : "((SE&SI)|((!SE)&((E&D)|((!E)&IQ))))" ;
+            }
+            pin(CLK){ direction : input ; clock : true ; }
+            pin(D)  { direction : input ; }
+            pin(E)  { direction : input ; }
+            pin(SE) { direction : input ; }
+            pin(SI) { direction : input ; }
+            pin(Q)  { direction : output ; function : "IQ" ; }
+          }
+        }
+        "#;
+        let cell = parse_cell(src);
+        let ins = input_pins(&cell);
+        let r = build(&cell, "demo__sedff", &ins, false);
+        // No next_state compile error.
+        assert!(
+            r.notes.is_empty(),
+            "unexpected next_state notes: {:?}",
+            r.notes
+        );
+        let ns = &r.sequential.unwrap().next_state;
+        // The Q state var IQ is a self-feedback input, appended after the pins.
+        assert!(
+            ns.inputs.contains(&"IQ".to_string()),
+            "inputs={:?}",
+            ns.inputs
+        );
+        assert_eq!(ns.inputs.last().unwrap(), "IQ");
+        // Truth table: SE selects SI; else E selects D, else holds IQ.
+        use std::collections::HashMap;
+        for se in [false, true] {
+            for si in [false, true] {
+                for e in [false, true] {
+                    for d in [false, true] {
+                        for iq in [false, true] {
+                            let m = HashMap::from([
+                                ("SE".to_string(), se),
+                                ("SI".to_string(), si),
+                                ("E".to_string(), e),
+                                ("D".to_string(), d),
+                                ("IQ".to_string(), iq),
+                            ]);
+                            let out = ns.eval(&m).unwrap()["next_state"];
+                            let expected = if se {
+                                si
+                            } else if e {
+                                d
+                            } else {
+                                iq
+                            };
+                            assert_eq!(out, expected, "SE={se} SI={si} E={e} D={d} IQ={iq}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// When `next_state` references the inverted state var `IQN`, it folds to
+    /// `!IQ` — only the single Q self-feedback input is introduced.
+    #[test]
+    fn next_state_references_inverted_state_var() {
+        let src = r#"
+        library(demo) {
+          cell(demo__tdff) {
+            ff(IQ, IQN) {
+              clocked_on : "CLK" ;
+              next_state : "(T&IQN)|((!T)&IQ)" ;
+            }
+            pin(CLK){ direction : input ; clock : true ; }
+            pin(T)  { direction : input ; }
+            pin(Q)  { direction : output ; function : "IQ" ; }
+          }
+        }
+        "#;
+        let cell = parse_cell(src);
+        let ins = input_pins(&cell);
+        let r = build(&cell, "demo__tdff", &ins, false);
+        assert!(r.notes.is_empty(), "unexpected notes: {:?}", r.notes);
+        let ns = &r.sequential.unwrap().next_state;
+        // IQN folded to !IQ → IQ is the only state input; IQN absent.
+        assert!(
+            ns.inputs.contains(&"IQ".to_string()),
+            "inputs={:?}",
+            ns.inputs
+        );
+        assert!(
+            !ns.inputs.contains(&"IQN".to_string()),
+            "inputs={:?}",
+            ns.inputs
+        );
+        use std::collections::HashMap;
+        for t in [false, true] {
+            for iq in [false, true] {
+                let m = HashMap::from([("T".to_string(), t), ("IQ".to_string(), iq)]);
+                let out = ns.eval(&m).unwrap()["next_state"];
+                // T toggles: next = T ? !IQ : IQ.
+                let expected = if t { !iq } else { iq };
+                assert_eq!(out, expected, "T={t} IQ={iq}");
+            }
         }
     }
 
