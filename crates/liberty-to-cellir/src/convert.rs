@@ -64,13 +64,15 @@ pub fn convert_library(lib: &LibertyGroup, prefixes: Vec<String>) -> Conversion 
     assert_eq!(lib.group_type, "library", "expected a `library` group");
     let name = lib.first_name().unwrap_or("unnamed").to_string();
 
-    // L4 corner derivation (D5): a single corner taken from the library name,
-    // with the per-value ps scale from the library's `time_unit`. For a
-    // single-corner input `.lib` this is a one-entry corner set; a logic-only
-    // lib (no recognisable corner) emits no L4 timing.
+    // L4 corner derivation (D5, C3.1b): a single corner read from the library's
+    // own PVT metadata (`operating_conditions` / `nom_*`), falling back to the
+    // GF180/SKY130 filename heuristic. The per-value ps scale comes from the
+    // library's `time_unit`. For a single-corner input `.lib` this is a
+    // one-entry corner set; a logic-only lib (no PVT, no recognisable corner
+    // name) emits no L4 timing.
     let time_unit = lib.attr("time_unit").and_then(|a| a.first_string());
     let ps_scale = timing::ps_per_time_unit(time_unit);
-    let corner = timing::corner_from_library_name(&name);
+    let corner = timing::corner_from_library(lib);
     let corner_index = corner.as_ref().map(|_| 0u32);
 
     let mut cells = Vec::new();

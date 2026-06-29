@@ -93,6 +93,30 @@ impl Expr {
             }
         }
     }
+
+    /// Return a copy with every reference to pin `from` replaced by `to`.
+    /// Used to fold a flip-flop's inverted state variable (`IQN`) into
+    /// `!IQ` so the next-state AIG needs only a single self-feedback input
+    /// representing the current state.
+    pub fn substitute_pin(&self, from: &str, to: &Expr) -> Expr {
+        match self {
+            Expr::Pin(name) if name == from => to.clone(),
+            Expr::Const(_) | Expr::Pin(_) => self.clone(),
+            Expr::Not(e) => Expr::Not(Box::new(e.substitute_pin(from, to))),
+            Expr::And(a, b) => Expr::And(
+                Box::new(a.substitute_pin(from, to)),
+                Box::new(b.substitute_pin(from, to)),
+            ),
+            Expr::Xor(a, b) => Expr::Xor(
+                Box::new(a.substitute_pin(from, to)),
+                Box::new(b.substitute_pin(from, to)),
+            ),
+            Expr::Or(a, b) => Expr::Or(
+                Box::new(a.substitute_pin(from, to)),
+                Box::new(b.substitute_pin(from, to)),
+            ),
+        }
+    }
 }
 
 // ============================================================================

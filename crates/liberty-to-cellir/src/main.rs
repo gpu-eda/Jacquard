@@ -163,6 +163,22 @@ fn run(cli: &Cli) -> Result<(), String> {
             index.udps.len(),
             fv_dir.display()
         );
+        // A 0-model index means the cross-check silently did nothing — the
+        // requested `--functional-v` was a single flat-module `.v` file (e.g.
+        // GF130's `GF013bcd_sc6_1p5_a0.v`, 2544 `module NAME(ports);` defs in
+        // one file) or a directory with no per-cell `*.functional.v` models the
+        // indexer recognises. Warn rather than report a misleading all-clear.
+        // (Flat-module `.v` parsing is deferred to C4; this only surfaces it.)
+        if index.models.is_empty() {
+            eprintln!(
+                "warning: cross-check indexed 0 .v models from {} — the D6 \
+                 Liberty-vs-.v check did NOT run (the descriptor is unverified \
+                 against the functional `.v`). The indexer expects a directory \
+                 of per-cell `*.functional.v` models; a single flat-module `.v` \
+                 is not yet supported (C4).",
+                fv_dir.display()
+            );
+        }
         for cell in &ir.cells {
             match check_cell(cell, &index) {
                 CellCheck::Checked {

@@ -84,6 +84,111 @@ pub fn corner_from_library_name(lib_name: &str) -> Option<Corner> {
     })
 }
 
+/// Derive a single [`Corner`] from a Liberty `library` group's PVT metadata
+/// (ADR 0019 D5, C3.1b): the `operating_conditions` group named by
+/// `default_operating_conditions` (or the sole one present) gives the corner
+/// name + process/voltage/temperature; `nom_process`/`nom_voltage`/
+/// `nom_temperature` are per-field fallbacks. If neither source yields a
+/// voltage+temperature, falls back to the GF180/SKY130-style filename heuristic
+/// ([`corner_from_library_name`]).
+///
+/// This is the correct general source for *any* commercial Liberty: GF130's
+/// `GF013bcd_sc6_1p5_a0_TT_1P50V_25C_max` carries no filename corner suffix but
+/// declares `operating_conditions(TT_1P50V_25C) { process; temperature; voltage }`
+/// in the library header — so the filename heuristic alone emitted zero corners
+/// (and hence no L4) for it.
+pub fn corner_from_library(lib: &LibertyGroup) -> Option<Corner> {
+    let lib_name = lib.first_name().unwrap_or("");
+    corner_from_pvt(lib, lib_name).or_else(|| corner_from_library_name(lib_name))
+}
+
+/// Build a [`Corner`] from the library's `operating_conditions` / `nom_*`
+/// metadata. Returns `None` if no voltage *and* temperature can be read (the
+/// caller then tries the filename heuristic).
+fn corner_from_pvt(lib: &LibertyGroup, lib_name: &str) -> Option<Corner> {
+    let oc = select_operating_conditions(lib);
+
+    let nom_voltage = lib.attr("nom_voltage").and_then(|a| a.first_number());
+    let nom_temperature = lib.attr("nom_temperature").and_then(|a| a.first_number());
+    let nom_process = lib.attr("nom_process").and_then(|a| a.first_number());
+
+    let oc_voltage = oc
+        .and_then(|g| g.attr("voltage"))
+        .and_then(|a| a.first_number());
+    let oc_temperature = oc
+        .and_then(|g| g.attr("temperature"))
+        .and_then(|a| a.first_number());
+
+    let voltage = oc_voltage.or(nom_voltage)?;
+    let temperature = oc_temperature.or(nom_temperature)?;
+
+    // Corner name: prefer the `operating_conditions` group name (GF130's
+    // `TT_1P50V_25C`, GF180's `gf180mcu_..__tt_025C_5v00`); else the filename
+    // suffix; else the library name itself.
+    let oc_name = oc.and_then(|g| g.first_name()).map(str::to_string);
+    let name = oc_name
+        .clone()
+        .or_else(|| corner_from_library_name(lib_name).map(|c| c.name))
+        .unwrap_or_else(|| lib_name.to_string());
+
+    // Process *label* (`ss`/`tt`/`ff`/...): the operating_conditions `process`
+    // attribute is a numeric multiplier (`1`), not a label, so the human label
+    // lives in the corner / library name. Fall back to the numeric process.
+    let process = process_label_from_name(name.as_str())
+        .or_else(|| process_label_from_name(lib_name))
+        .or_else(|| {
+            oc.and_then(|g| g.attr("process"))
+                .and_then(|a| a.first_number())
+                .map(format_num)
+        })
+        .or_else(|| nom_process.map(format_num))
+        .unwrap_or_else(|| "nom".to_string());
+
+    Some(Corner {
+        name,
+        process,
+        voltage: voltage as f32,
+        temperature: temperature as f32,
+    })
+}
+
+/// The `operating_conditions` group named by `default_operating_conditions`,
+/// or the sole group present, or the first in source order. `None` if the
+/// library declares no operating conditions.
+fn select_operating_conditions(lib: &LibertyGroup) -> Option<&LibertyGroup> {
+    if let Some(def) = lib
+        .attr("default_operating_conditions")
+        .and_then(|a| a.first_string())
+    {
+        let def = def.trim().trim_matches('"');
+        if let Some(g) = lib
+            .groups_of_type("operating_conditions")
+            .find(|g| g.first_name() == Some(def))
+        {
+            return Some(g);
+        }
+    }
+    // No (or unresolved) default: take the first declared, deterministically.
+    lib.groups_of_type("operating_conditions").next()
+}
+
+/// Extract a known process label (`ss`/`tt`/`ff`/`sf`/`fs`) from a corner or
+/// library name by scanning its `_`/` `-delimited tokens (case-insensitive).
+fn process_label_from_name(name: &str) -> Option<String> {
+    name.split(['_', ' '])
+        .map(|t| t.to_lowercase())
+        .find(|t| matches!(t.as_str(), "ss" | "tt" | "ff" | "sf" | "fs"))
+}
+
+/// Render a Liberty numeric attribute compactly (`1.0` ⇒ `1`).
+fn format_num(n: f64) -> String {
+    if n.fract() == 0.0 {
+        format!("{}", n as i64)
+    } else {
+        format!("{n}")
+    }
+}
+
 /// Parse a Liberty corner temperature token: `025C` ⇒ 25.0, `n40C` ⇒ -40.0,
 /// `125C` ⇒ 125.0.
 fn parse_temp(tok: &str) -> Option<f32> {
@@ -301,6 +406,109 @@ mod tests {
     #[test]
     fn non_corner_name_is_none() {
         assert!(corner_from_library_name("some_random_lib").is_none());
+    }
+
+    /// GF130-shaped header: the corner is in `operating_conditions` + `nom_*`,
+    /// NOT the (non-suffixed) library name. The filename heuristic returns
+    /// `None` here, so this is the path that fixes `corners=0` for GF130.
+    #[test]
+    fn corner_from_gf130_operating_conditions() {
+        let src = r#"
+        library(GF013bcd_sc6_1p5_a0_TT_1P50V_25C_max) {
+          time_unit : 1ns ;
+          nom_process : 1 ;
+          nom_temperature : 25 ;
+          nom_voltage : 1.5 ;
+          operating_conditions(TT_1P50V_25C) {
+            process : 1 ;
+            temperature : 25 ;
+            voltage : 1.5 ;
+          }
+          default_operating_conditions : TT_1P50V_25C ;
+          cell(x) { }
+        }
+        "#;
+        let lib = liberty_parse::parse(src).unwrap();
+        // The library name carries no recognisable corner suffix.
+        assert!(corner_from_library_name(lib.first_name().unwrap()).is_none());
+        let c = corner_from_library(&lib).expect("PVT-derived corner");
+        assert_eq!(c.name, "TT_1P50V_25C");
+        assert_eq!(c.process, "tt");
+        assert_eq!(c.temperature, 25.0);
+        assert!((c.voltage - 1.5).abs() < 1e-6);
+    }
+
+    /// GF180-shaped header: `operating_conditions` is present too (in the
+    /// top-level lib), so the corner is now Liberty-derived, not filename-derived.
+    #[test]
+    fn corner_from_gf180_operating_conditions() {
+        let src = r#"
+        library(gf180mcu_fd_sc_mcu7t5v0__tt_025C_5v00) {
+          nom_process : 1 ;
+          nom_temperature : 25 ;
+          nom_voltage : 5 ;
+          operating_conditions(gf180mcu_fd_sc_mcu7t5v0__tt_025C_5v00) {
+            process : 1 ;
+            temperature : 25 ;
+            voltage : 5 ;
+          }
+          cell(x) { }
+        }
+        "#;
+        let lib = liberty_parse::parse(src).unwrap();
+        let c = corner_from_library(&lib).expect("corner");
+        assert_eq!(c.name, "gf180mcu_fd_sc_mcu7t5v0__tt_025C_5v00");
+        assert_eq!(c.process, "tt");
+        assert_eq!(c.temperature, 25.0);
+        assert!((c.voltage - 5.0).abs() < 1e-6);
+    }
+
+    /// nom_* present but no operating_conditions group: still derive a corner.
+    #[test]
+    fn corner_from_nom_only() {
+        let src = r#"
+        library(mylib_ss) {
+          nom_process : 1 ;
+          nom_temperature : 125 ;
+          nom_voltage : 1.08 ;
+          cell(x) { }
+        }
+        "#;
+        let lib = liberty_parse::parse(src).unwrap();
+        let c = corner_from_library(&lib).expect("nom-derived corner");
+        // No operating_conditions name → falls back to the library name.
+        assert_eq!(c.name, "mylib_ss");
+        assert_eq!(c.process, "ss");
+        assert_eq!(c.temperature, 125.0);
+        assert!((c.voltage - 1.08).abs() < 1e-6);
+    }
+
+    /// No PVT metadata at all, but a GF180-style filename corner suffix in the
+    /// library name → the filename heuristic still applies (no regression).
+    #[test]
+    fn corner_falls_back_to_library_name() {
+        let src = r#"
+        library(gf180mcu_fd_sc_mcu9t5v0__ss_n40C_1v62) {
+          cell(x) { }
+        }
+        "#;
+        let lib = liberty_parse::parse(src).unwrap();
+        let c = corner_from_library(&lib).expect("filename corner");
+        assert_eq!(c.process, "ss");
+        assert_eq!(c.temperature, -40.0);
+        assert!((c.voltage - 1.62).abs() < 1e-5);
+    }
+
+    /// A logic-only library with no PVT and no corner-suffixed name → no corner.
+    #[test]
+    fn corner_from_library_none_when_no_pvt() {
+        let src = r#"
+        library(some_random_lib) {
+          cell(x) { }
+        }
+        "#;
+        let lib = liberty_parse::parse(src).unwrap();
+        assert!(corner_from_library(&lib).is_none());
     }
 
     fn parse_cell(src: &str) -> LibertyGroup {
