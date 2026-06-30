@@ -7,3 +7,9 @@ self-hosted-runner:
     # (macos-latest-xlarge is a standard GitHub label — actionlint already
     # knows it, so it doesn't go here.)
     - tesla4-runner
+    # Self-hosted Blackwell (sm_120) runner on nvidia1.local, added 2026-06-30.
+    # Targeted as `runs-on: [self-hosted, cuda, blackwell]`; `self-hosted` is a
+    # standard label, these two are custom.
+    - cuda
+    - blackwell
+    - sm_120
