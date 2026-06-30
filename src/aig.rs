@@ -1139,9 +1139,24 @@ impl AIG {
                     // Process standard-cell PDK cells.
                     match PdkVariant::classify(celltype) {
                         Some(PdkVariant::Sky130) => {
-                            self.sky130_postprocess(
-                                netlistdb, pinid, cellid, celltype, pdk_models,
-                            );
+                            // ADR 0019 C3.3c: descriptor-driven combinational
+                            // splice first; legacy `sky130_postprocess` decompose
+                            // is the fallback for cells the descriptor doesn't
+                            // model with `logic` (sequential / tie / SRAM /
+                            // multi-output — handled by the postprocess).
+                            let base = extract_cell_type(celltype);
+                            if !self.try_descriptor_comb(
+                                netlistdb,
+                                pinid,
+                                cellid,
+                                celltype,
+                                base,
+                                cell_descriptor,
+                            ) {
+                                self.sky130_postprocess(
+                                    netlistdb, pinid, cellid, celltype, pdk_models,
+                                );
+                            }
                             topo_instack[pinid] = false;
                             continue;
                         }
@@ -1160,7 +1175,23 @@ impl AIG {
                         None => {}
                     }
 
-                    // Process AIGPDK combinational cells
+                    // ADR 0019 C3.3c: descriptor-driven combinational splice for
+                    // AIGPDK cells (AND2_* / INV / BUF). When the default-fallback
+                    // AIGPDK descriptor models this cell's `logic`, splice it in;
+                    // otherwise fall through to the legacy hardcoded match below.
+                    if self.try_descriptor_comb(
+                        netlistdb,
+                        pinid,
+                        cellid,
+                        celltype,
+                        celltype,
+                        cell_descriptor,
+                    ) {
+                        topo_instack[pinid] = false;
+                        continue;
+                    }
+
+                    // Process AIGPDK combinational cells (legacy hardcoded path)
                     let mut prev_a = usize::MAX;
                     let mut prev_b = usize::MAX;
                     for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
@@ -2100,6 +2131,70 @@ impl AIG {
                 )
             });
         resolve(&out.r, &node_iv)
+    }
+
+    /// PDK-neutral combinational descriptor splice (ADR 0019 C3.3c).
+    ///
+    /// If a cell-model-IR descriptor was supplied AND it carries this cell type
+    /// (keyed by the *full* netlist cell-type name) with a `logic` block, splice
+    /// the pre-decomposed AIG straight in for the requested output pin — no
+    /// runtime `functional.v` decomposition — and return `true`. Otherwise
+    /// return `false` so the caller falls back to its legacy per-PDK
+    /// combinational path UNCHANGED.
+    ///
+    /// This generalises the GF180-only splice in `gf180mcu_postprocess` to
+    /// *every* standard-cell PDK (GF180, SKY130, and the internal AIGPDK): the
+    /// splice is logic-equivalent to each PDK's legacy decompose, so a
+    /// descriptor-driven run produces the same AIG values. Cells with no `logic`
+    /// (sequential / tie / filler / IO-pad / SRAM) return `false` and are left
+    /// to the legacy path. `origin_type` is the cell-type label recorded for
+    /// SDF/timing back-annotation (the base type for the vendor PDKs; the full
+    /// type for AIGPDK).
+    fn try_descriptor_comb(
+        &mut self,
+        netlistdb: &NetlistDB,
+        pinid: usize,
+        cellid: usize,
+        celltype: &str,
+        origin_type: &str,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
+    ) -> bool {
+        let Some(comb) = cell_descriptor
+            .and_then(|d| d.cell(celltype))
+            .and_then(|c| c.logic.as_ref())
+        else {
+            return false;
+        };
+
+        // Build inputs map by pin name (Direction::I only — pin names are not
+        // unique across cells, so a name-based blacklist could drop a real
+        // input; mirror gf180mcu_postprocess's filter).
+        let mut inputs: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for ipin in netlistdb.cell2pin.iter_set(cellid) {
+            if netlistdb.pindirect[ipin] == Direction::I {
+                inputs.insert(
+                    netlistdb.pinnames[ipin].1.to_string(),
+                    self.pin2aigpin_iv[ipin],
+                );
+            }
+        }
+
+        let output_pin_name = netlistdb.pinnames[pinid].1.as_str();
+        let final_iv = self.splice_comb_logic(comb, &inputs, output_pin_name);
+        self.pin2aigpin_iv[pinid] = final_iv;
+
+        // Record cell origin for SDF / timing back-annotation, mirroring the
+        // per-PDK postprocess tails.
+        let output_aigpin = final_iv >> 1;
+        if output_aigpin > 0 && output_aigpin < self.aigpin_cell_origins.len() {
+            self.aigpin_cell_origins[output_aigpin].push((
+                cellid,
+                origin_type.to_string(),
+                output_pin_name.to_string(),
+            ));
+        }
+        true
     }
 
     /// Build an AIG from a netlistdb, using explicit PDK behavioral models for decomposition.
