@@ -183,7 +183,13 @@ pub fn build_netlist_and_aig(
         .or_else(|| {
             crate::bundled_descriptors::auto_select(netlistdb.celltypes.iter().map(|s| s.as_str()))
                 .unwrap_or_else(|e| panic!("{e}"))
-        });
+        })
+        // ADR 0019 C3.3c: no prefix-keyed descriptor matched → the AIGPDK
+        // default fallback (mirrors `pdk::resolve_library`, where AIGPDK is the
+        // default verdict). Harmless for unknown netlists: only cells whose
+        // type the AIGPDK descriptor models are spliced; the rest fall through
+        // to the legacy path.
+        .or_else(crate::bundled_descriptors::default_fallback);
     if let Some(ir) = &descriptor {
         clilog::info!(
             "Loaded cell-model-IR descriptor '{}' ({} cells)",
