@@ -172,9 +172,12 @@ struct DescriptorSpec {
 }
 
 fn generate_cell_descriptors() {
-    // GF180 7-track (default) and 9-track. Both vendored submodules are already
-    // required by the pin-table generators above, so this adds no new
-    // source-build submodule requirement (ADR 0019 D7).
+    // GF180 7-track (default) and 9-track, SKY130, and the internal AIGPDK.
+    // The GF180 vendored submodules are already required by the pin-table
+    // generators above, so they add no new source-build submodule requirement
+    // (ADR 0019 D7); SKY130 ships only `.lib.json` (routed through the converter
+    // loader's JSON path); AIGPDK is an in-repo `.lib` text library that is
+    // always present.
     let specs = [
         DescriptorSpec {
             out_filename: "gf180mcu_7t.cellir.json",
@@ -193,6 +196,29 @@ fn generate_cell_descriptors() {
                 "vendor/gf180mcu_fd_sc_mcu9t5v0/liberty",
                 "vendor/gf180mcu_fd_sc_mcu9t5v0/cells",
             ],
+        },
+        // SKY130: the converter loader recognises the `.lib.json` extension and
+        // assembles a per-corner library from the per-corner header plus every
+        // per-cell-per-corner `cells/**/*__tt_025C_1v80.lib.json` file. The
+        // submodule may be absent on a partial checkout, in which case an empty
+        // descriptor is embedded (mirrors GF180 below).
+        DescriptorSpec {
+            out_filename: "sky130.cellir.json",
+            top_lib: "vendor/sky130_fd_sc_hd/timing/\
+                      sky130_fd_sc_hd__tt_025C_1v80.lib.json",
+            watch_dirs: &[
+                "vendor/sky130_fd_sc_hd/timing",
+                "vendor/sky130_fd_sc_hd/cells",
+            ],
+        },
+        // AIGPDK: the internal cell library, an in-repo `.lib` text file (always
+        // present — not a submodule). Its cells have no common vendor prefix, so
+        // it declares no D8 selection prefix and serves as the no-prefix-match
+        // default fallback (wired in `bundled_descriptors`).
+        DescriptorSpec {
+            out_filename: "aigpdk.cellir.json",
+            top_lib: "aigpdk/aigpdk.lib",
+            watch_dirs: &["aigpdk"],
         },
     ];
 
