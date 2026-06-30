@@ -4680,6 +4680,14 @@ disabled in <code>.github/workflows/ci.yml</code> (<code>if: ${{ false }}</code>
 <strong>HIP CI</strong> on the AMD runner green on main. Currently disabled
 in <code>.github/workflows/ci.yml</code> (<code>if: ${{ false }}</code>, ~line 357).
 Re-enable when the AMD runner is online.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Prebuilt CUDA/HIP binaries</strong> (ADR 0018 Phase 4), when produced, must
+build with <code>JACQUARD_CUDA_ARCH=all-major</code> so the kernel ships portable
+SASS for every major arch (<code>sm_50</code>…<code>sm_120</code> on CUDA ≥ 12.8, Blackwell
+included) plus PTX for the newest — see the README § CUDA target
+architecture. Local dev uses <code>JACQUARD_CUDA_ARCH=native</code> instead. The
+<code>nvidia1.local</code> Blackwell box (<code>sm_120</code>, CUDA 12.8) is a candidate
+self-hosted CUDA release runner.</li>
 <li><input disabled="" type="checkbox" checked=""/>
 Vendored-dep license posture confirmed
 (<a href="https://github.com/gzz2000/eda-infra-rs/issues/2#issuecomment-4363789319">gzz2000/eda-infra-rs#2</a>
