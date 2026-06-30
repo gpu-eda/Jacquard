@@ -528,34 +528,33 @@ jobs:
             perf_metrics/
 
   # Build and run CUDA simulation on NVIDIA GPU
-  cuda:
+  # Compile the CUDA backend on a FREE standard runner. nvcc cross-compiles
+  # SASS without a GPU present, so the expensive part (Rust deps + kernel
+  # compile) costs no paid GPU-runner minutes — the `cuda` job below only runs
+  # the resulting binary. `all-major` SASS keeps the artifact portable across
+  # the GPU test runners (T4 sm_75 today, Blackwell sm_120 later). Built on
+  # ubuntu-22.04 (glibc 2.35) so the binary runs on the GPU runner regardless of
+  # its (>= 22.04) image.
+  cuda-build:
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
-    name: CUDA Tests
-    # Re-enabled 2026-06-05 on the GitHub-hosted T4 GPU runner
-    # (`tesla4-runner`, 4 vCPU + 1 NVIDIA T4). Runs on every push — CUDA
-    # had no CI coverage from 2026-05-01 (when self-hosted nvidia-runner-1
-    # went offline) until this runner landed.
-    runs-on: tesla4-runner
+    name: CUDA Build
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
         run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
-
-      - name: Install CUDA Toolkit (driver already present on GPU runner)
+      - name: Install CUDA Toolkit (no GPU needed to compile)
         run: |
-          nvidia-smi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cuda-toolkit-12-8
-          echo "PATH=/usr/local/cuda-12.8/bin:$PATH" >> $GITHUB_ENV
-          echo "CUDA_PATH=/usr/local/cuda-12.8" >> $GITHUB_ENV
+          echo "PATH=/usr/local/cuda-12.8/bin:$PATH" >> "$GITHUB_ENV"
+          echo "CUDA_PATH=/usr/local/cuda-12.8" >> "$GITHUB_ENV"
           /usr/local/cuda-12.8/bin/nvcc --version
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache cargo
         uses: actions/cache@v5
         with:
@@ -565,16 +564,57 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-cuda-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-cuda-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-cuda-
+            ${{ runner.os }}-cargo-cuda-build-
+      - name: Build jacquard (CUDA, all-major)
+        run: JACQUARD_CUDA_ARCH=all-major cargo build --release --features cuda --bin jacquard
+      - name: Upload jacquard-cuda binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacquard-cuda
+          path: target/release/jacquard
+          retention-days: 1
 
-      - name: Build jacquard (CUDA)
-        run: cargo build --release --features cuda --bin jacquard
+  cuda:
+    needs: [changes, cuda-build]
+    # always() + the code=='true' guard so a *failed* cuda-build surfaces as a
+    # FAILED "CUDA Tests" (via the gate step) rather than a skip — a skipped
+    # required check counts as passing and would hide build breakage. Docs-only
+    # PRs (code=='false') still skip the whole job.
+    if: always() && needs.changes.outputs.code == 'true'
+    name: CUDA Tests
+    # Runs the prebuilt binary on the GitHub-hosted T4 GPU runner
+    # (`tesla4-runner`); only the actual GPU execution spends paid minutes here.
+    runs-on: tesla4-runner
+    steps:
+      - name: Gate on the build
+        if: needs.cuda-build.result != 'success'
+        run: |
+          echo "cuda-build did not succeed (result: ${{ needs.cuda-build.result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      # Test fixtures live in the main repo; submodules are build-time only.
+      - name: Install CUDA runtime for the prebuilt binary
+        run: |
+          nvidia-smi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cuda-cudart-12-8 \
+            || sudo apt-get install -y --no-install-recommends cuda-toolkit-12-8
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+      - name: Download jacquard (CUDA)
+        uses: actions/download-artifact@v8
+        with:
+          name: jacquard-cuda
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/jacquard
 
       - name: Run CUDA simulation (timing test)
         run: |
-          time (cargo run --release --features cuda --bin jacquard -- sim \
+          time (target/release/jacquard sim \
             tests/timing_test/dff_test_synth.gv \
             tests/timing_test/dff_test.vcd \
             tests/timing_test/ci_cuda_output.vcd \
@@ -591,7 +631,7 @@ jobs:
 
       - name: Run CUDA simulation with X-propagation
         run: |
-          cargo run --release --features cuda --bin jacquard -- sim \
+          target/release/jacquard sim \
             tests/timing_test/dff_test_synth.gv \
             tests/timing_test/dff_test.vcd \
             tests/timing_test/ci_cuda_xprop_output.vcd \
@@ -615,7 +655,7 @@ jobs:
       - name: Run CUDA simulation with timing (inv_chain_pnr, #104)
         run: |
           set -o pipefail
-          cargo run --release --features cuda --bin jacquard -- sim \
+          target/release/jacquard sim \
             tests/timing_test/inv_chain_pnr/inv_chain.v \
             tests/timing_test/inv_chain_pnr/inv_chain_stimulus.vcd \
             tests/timing_test/inv_chain_pnr/jacquard_timed_output_cuda.vcd \
