@@ -126,6 +126,13 @@ These items are tracked in [`docs/plans/post-phase-0-roadmap.md`](plans/post-pha
 - [ ] **HIP CI** on the AMD runner green on main. Currently disabled
       in `.github/workflows/ci.yml` (`if: ${{ false }}`, ~line 357).
       Re-enable when the AMD runner is online.
+- [ ] **Prebuilt CUDA/HIP binaries** (ADR 0018 Phase 4), when produced, must
+      build with `JACQUARD_CUDA_ARCH=all-major` so the kernel ships portable
+      SASS for every major arch (`sm_50`…`sm_120` on CUDA ≥ 12.8, Blackwell
+      included) plus PTX for the newest — see the README § CUDA target
+      architecture. Local dev uses `JACQUARD_CUDA_ARCH=native` instead. The
+      `nvidia1.local` Blackwell box (`sm_120`, CUDA 12.8) is a candidate
+      self-hosted CUDA release runner.
 - [x] Vendored-dep license posture confirmed
       ([gzz2000/eda-infra-rs#2](https://github.com/gzz2000/eda-infra-rs/issues/2#issuecomment-4363789319)
       — sverilogparse AGPL declaration acknowledged as a typo; workspace

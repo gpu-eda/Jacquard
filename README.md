@@ -67,6 +67,26 @@ Requires CUDA toolkit installed.
 cargo build -r --features cuda --bin jacquard
 ```
 
+#### CUDA target architecture
+
+By default the kernel is built with PTX for `compute_50` plus SASS for `sm_70`
+and `sm_80`; newer GPUs run via PTX JIT at first load. To target a specific
+architecture, set `JACQUARD_CUDA_ARCH`, which is passed straight to `nvcc` as
+`-arch=<value>`:
+
+```sh
+# Local dev — build native SASS for the GPU in THIS machine (fastest, no
+# first-load JIT). Example: an sm_120 Blackwell card.
+JACQUARD_CUDA_ARCH=native cargo build -r --features cuda --bin jacquard
+
+# Distribution — portable SASS for every major arch the toolkit knows, plus
+# PTX for the newest (needs CUDA ≥ 12.8 to include Blackwell sm_100/sm_120).
+JACQUARD_CUDA_ARCH=all-major cargo build -r --features cuda --bin jacquard
+```
+
+Any `nvcc` `-arch` value works (`native`, `all-major`, `all`, `sm_120`, …).
+Leave it unset to keep the default behavior.
+
 ## Usage
 
 Simulate a gate-level netlist with a VCD input waveform:
