@@ -26,6 +26,8 @@
 //! - list-valued attributes such as `index_1 ("0.1, 0.2, 0.3")` and
 //!   comma/space-separated value lists.
 
+pub mod json;
+
 /// A single Liberty attribute: `name : value ... ;`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attribute {
@@ -412,11 +414,7 @@ impl<'a> Parser<'a> {
     /// Dispatch on what follows an already-read `keyword`: `:` => attribute,
     /// `(` => nested group (or paren'd attribute), `{` => bare block. Any
     /// other shape is skipped, matching the tolerant former parser.
-    fn parse_statement(
-        &mut self,
-        keyword: String,
-        group: &mut LibertyGroup,
-    ) -> Result<(), String> {
+    fn parse_statement(&mut self, keyword: String, group: &mut LibertyGroup) -> Result<(), String> {
         match self.peek_char() {
             Some(':') => {
                 // Attribute: name : value [, value ...] ;
