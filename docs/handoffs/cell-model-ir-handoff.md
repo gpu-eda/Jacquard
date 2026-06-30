@@ -2,7 +2,7 @@
 
 **Active thread:** ADR 0019 "Cell-model IR" is **approved by the maintainer**
 (all four design open questions resolved). **Plan checkpoints C1, C2, C3.1,
-and C3.1b are COMPLETE** (C2 was CI-green 19/19). The IR + converter
+C3.1b, and C3.2 are COMPLETE** (C2 was CI-green 19/19). The IR + converter
 foundation is built (C1, #130 closed); GF180 **simulates AND times**
 sequential cells from a generated descriptor with no per-PDK Rust DFF handling
 and no runtime `.lib` parse (C2); descriptors are **generated + embedded at
@@ -14,6 +14,59 @@ crates version-aligned at 0.2.4** (main released v0.2.4; see gotcha #4). Schema
 is `SCHEMA 0.2` (`MAJOR=0, MINOR=2`). Next: **C3.2/C3.3** (selection + cutover)
 and **C3a** (IHP SG13G2, zero-Rust, sparse checkout); the `clear_preset`
 set-dominant field and the GF130 sim/doc proof are **C4**.
+
+## C3.2 — COMPLETE (commit 5eb37d0)
+
+Descriptor auto-selection by declared cell-name prefix (ADR 0019 D8). New
+`bundled_descriptors::auto_select(cell_types) -> Result<Option<CellModelIr>,
+String>`: matches a netlist's distinct cell-type names against each embedded
+descriptor's declared D8 `library.prefixes`. `Ok(Some)` on a unique match,
+`Ok(None)` on no match (→ legacy fallback), `Err` on ambiguity (netlist mixing
+two descriptors' prefixes → actionable "pin with --bundled-descriptor/
+--cell-descriptor" message). Precedence chain (extends C3.1's `resolve`):
+explicit `--cell-descriptor` file > explicit `--bundled-descriptor` name >
+**auto-match (new)** > legacy `None`. Wired into both the functional load path
+(`src/sim/setup.rs::build_netlist_and_aig`, via `.or_else`) and the timing path
+(`src/bin/jacquard.rs::run_timing_analysis`, now takes `&netlistdb`). The
+`.cells.toml` hand-override (ADR 0010) is an orthogonal runtime-library layer
+(`cell_lib_ref`), unaffected.
+
+**7t-vs-9t disambiguation (the #130 crux) — declared prefixes ALONE suffice.**
+The track designation is *inside* the cell name: 7t cells are
+`gf180mcu_fd_sc_mcu7t5v0__*`, 9t are `gf180mcu_fd_sc_mcu9t5v0__*`. The
+converter's `derive_prefix` (longest common prefix trimmed to `__`) therefore
+yields disjoint declared prefixes — 7t descriptor declares
+`gf180mcu_fd_sc_mcu7t5v0__`, 9t declares `gf180mcu_fd_sc_mcu9t5v0__`. So a 9t
+netlist matches only the 9t descriptor. This is the whole point of #130: the
+legacy `detect_library`/`PdkVariant` collapsed both tracks to one
+`CellLibrary::GF180MCU` served by 7t models; prefix-keyed auto-match keys on the
+full vendor prefix and picks the right track. A netlist mixing 7t+9t cells
+(which `detect_library` does *not* flag as Mixed) is the only ambiguous case and
+is rejected with a clear error rather than guessed.
+
+**Equivalence proof (PASS).** `tests/jtag_minimal` (9t-only netlist) cosim over
+300k edges with **no descriptor flag** auto-selects `gf180mcu_9t` and produces
+output **byte-identical** (`md5 d87c9f75b4f6af415a9df2d3c728e906`) to the
+explicit `--bundled-descriptor gf180mcu_9t` run — the C2 oracle. The CI cosim
+(`.github/workflows/ci.yml`, no flag, 4M edges) thus now exercises the 9t
+descriptor by default and still passes `data0_obs == 0xCAFEBABE` (#130 fix
+becomes the default). No 7t end-to-end fixture exists in `tests/`; 7t selection
+is covered by `auto_select_picks_7t_for_a_7t_netlist` and the C1/C2 descriptor==
+legacy cross-checks. 5 new unit tests in `bundled_descriptors.rs` (9t/7t pick,
+AIGPDK no-match, mixed-track ambiguity, prefix-presence guard for
+submodule-absent builds). Full lib suite 314/314, version check 7 crates @
+0.2.4, `cargo clippy --lib` no new `^error`.
+
+**What C3.3 can now remove** once auto-select is the *only* descriptor source
+(today it's the default but the legacy `None` arm still backstops non-GF180):
+the GF180 branches of `PdkVariant` per-cell predicates + `gf180mcu_postprocess`
+legacy combinational/sequential splice (the `None`-descriptor arms), the 7t
+hardcoded `functional.v` default, and `build.rs`'s pin-table gen. **Still
+blocking SKY130/AIGPDK auto-selection:** no embedded descriptors exist for them
+(`bundled_descriptors::ALL` is GF180 7t/9t only) — SKY130 needs a `.lib.json`
+reader (vendor ships no `.lib` text), AIGPDK needs hand-coded models with no
+cross-check oracle (both noted in C3.1). Until those descriptors exist,
+auto_select returns `Ok(None)` for SKY130/AIGPDK and they ride the legacy path.
 
 ## C3.1b — COMPLETE (commit on branch)
 
