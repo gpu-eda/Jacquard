@@ -726,31 +726,31 @@ jobs:
   # Build and run HIP simulation on NVIDIA GPU (HIP's NVIDIA backend)
   # This validates the HIP code path using hipcc targeting NVIDIA via HIP_PLATFORM=nvidia.
   # When an AMD GPU runner becomes available, a native AMD job can be added.
-  hip-on-nvidia:
+  # HIP (NVIDIA backend) build on a FREE runner — like cuda-build. hipcc here
+  # targets nvcc (HIP_PLATFORM=nvidia); neither needs a GPU to compile, so the
+  # whole CUDA-toolkit + ROCm install + compile moves off the paid GPU runner —
+  # the biggest single saving, since the ROCm install is the heaviest setup.
+  hip-build:
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
-    name: HIP Tests (NVIDIA backend)
-    # Re-enabled 2026-06-05 on the GitHub-hosted T4 runner (`tesla4-runner`).
-    # This job builds the HIP code path with hipcc + HIP_PLATFORM=nvidia, so
-    # it validates the HIP backend on the same T4. A native AMD GPU job is
-    # still future work (needs an AMD/ROCm runner).
-    runs-on: tesla4-runner
+    name: HIP Build
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: false
       - name: Init required submodules
         run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
-
-      - name: Install CUDA Toolkit (driver already present on GPU runner)
+      - name: Install CUDA Toolkit (no GPU needed to compile)
         run: |
-          nvidia-smi
+          wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          rm -f cuda-keyring_1.1-1_all.deb
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cuda-toolkit-12-8
-          echo "PATH=/usr/local/cuda-12.8/bin:$PATH" >> $GITHUB_ENV
-          echo "CUDA_PATH=/usr/local/cuda-12.8" >> $GITHUB_ENV
+          echo "PATH=/usr/local/cuda-12.8/bin:$PATH" >> "$GITHUB_ENV"
+          echo "CUDA_PATH=/usr/local/cuda-12.8" >> "$GITHUB_ENV"
           /usr/local/cuda-12.8/bin/nvcc --version
-
       - name: Install ROCm/HIP (NVIDIA backend)
         run: |
           # Import ROCm GPG signing key
@@ -761,9 +761,9 @@ jobs:
           echo "deb [arch=amd64] https://repo.radeon.com/rocm/apt/6.2.4 ${CODENAME} main" | \
             sudo tee /etc/apt/sources.list.d/rocm.list
           sudo apt-get update
-          # hip-runtime-nvidia pulls nvidia driver packages that conflict with the
-          # server-variant drivers pre-installed on the GPU runner. Download the HIP
-          # .deb files individually and force-install, bypassing driver dep conflicts.
+          # hip-runtime-nvidia pulls nvidia driver packages; download the HIP
+          # .deb files individually and force-install, bypassing driver dep
+          # conflicts.
           DLDIR=$(mktemp -d)
           pushd "$DLDIR"
           for pkg in hip-runtime-nvidia hip-dev hipcc-nvidia rocm-core; do
@@ -774,18 +774,15 @@ jobs:
           ls -la *.deb 2>/dev/null || { echo "ERROR: No .deb files downloaded!"; exit 1; }
           sudo dpkg --force-depends --force-conflicts -i *.deb
           popd
-          # Verify hipcc is available
           /opt/rocm/bin/hipcc --version
-          echo "PATH=/opt/rocm/bin:$PATH" >> $GITHUB_ENV
-          echo "HIP_PLATFORM=nvidia" >> $GITHUB_ENV
-          echo "HIP_COMPILER=nvcc" >> $GITHUB_ENV
-          echo "HIP_RUNTIME=cuda" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=/opt/rocm/lib:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
-          echo "LIBRARY_PATH=/opt/rocm/lib:${LIBRARY_PATH:-}" >> $GITHUB_ENV
-
+          echo "PATH=/opt/rocm/bin:$PATH" >> "$GITHUB_ENV"
+          echo "HIP_PLATFORM=nvidia" >> "$GITHUB_ENV"
+          echo "HIP_COMPILER=nvcc" >> "$GITHUB_ENV"
+          echo "HIP_RUNTIME=cuda" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/opt/rocm/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=/opt/rocm/lib:${LIBRARY_PATH:-}" >> "$GITHUB_ENV"
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache cargo
         uses: actions/cache@v5
         with:
@@ -795,16 +792,57 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-hip-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-hip-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-hip-
-
+            ${{ runner.os }}-cargo-hip-build-
       - name: Build jacquard (HIP)
         run: cargo build --release --features hip --bin jacquard
+      - name: Upload jacquard-hip binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacquard-hip
+          path: target/release/jacquard
+          retention-days: 1
+
+  hip-on-nvidia:
+    needs: [changes, hip-build]
+    # See the cuda job: always() + the code guard so a failed build fails this
+    # required check instead of silently skipping.
+    if: always() && needs.changes.outputs.code == 'true'
+    name: HIP Tests (NVIDIA backend)
+    # Runs the prebuilt HIP-on-NVIDIA binary on the T4. HIP_PLATFORM=nvidia
+    # lowers HIP calls straight onto the CUDA runtime, so only cudart is needed
+    # at run time — no ROCm install on the paid runner.
+    runs-on: tesla4-runner
+    steps:
+      - name: Gate on the build
+        if: needs.hip-build.result != 'success'
+        run: |
+          echo "hip-build did not succeed (result: ${{ needs.hip-build.result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init runtime PDK models
+        run: git submodule update --init vendor/sky130_fd_sc_hd
+      - name: Install CUDA runtime for the prebuilt binary
+        run: |
+          nvidia-smi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cuda-cudart-12-8 \
+            || sudo apt-get install -y --no-install-recommends cuda-toolkit-12-8
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+      - name: Download jacquard (HIP)
+        uses: actions/download-artifact@v8
+        with:
+          name: jacquard-hip
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/jacquard
 
       - name: Run HIP simulation (timing test)
         run: |
-          time (cargo run --release --features hip --bin jacquard -- sim \
+          time (target/release/jacquard sim \
             tests/timing_test/dff_test_synth.gv \
             tests/timing_test/dff_test.vcd \
             tests/timing_test/ci_hip_output.vcd \
@@ -821,7 +859,7 @@ jobs:
 
       - name: Run HIP simulation with X-propagation
         run: |
-          cargo run --release --features hip --bin jacquard -- sim \
+          target/release/jacquard sim \
             tests/timing_test/dff_test_synth.gv \
             tests/timing_test/dff_test.vcd \
             tests/timing_test/ci_hip_xprop_output.vcd \
@@ -841,7 +879,7 @@ jobs:
       - name: Run HIP simulation with timing (inv_chain_pnr, #104)
         run: |
           set -o pipefail
-          cargo run --release --features hip --bin jacquard -- sim \
+          target/release/jacquard sim \
             tests/timing_test/inv_chain_pnr/inv_chain.v \
             tests/timing_test/inv_chain_pnr/inv_chain_stimulus.vcd \
             tests/timing_test/inv_chain_pnr/jacquard_timed_output_hip.vcd \
