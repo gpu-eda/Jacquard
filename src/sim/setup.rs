@@ -167,13 +167,23 @@ pub fn build_netlist_and_aig(
         Some(&runtime_lib)
     };
 
-    // ADR 0019: optional cell-model-IR descriptor. Sourced either from an
-    // explicit `--cell-descriptor <path>` file or a build-time-embedded
-    // `--bundled-descriptor <name>` (D7); the explicit file wins. When
-    // supplied, GF180 combinational cells it models are spliced from the
-    // descriptor's pre-decomposed AIG instead of the hardcoded `functional.v`
-    // path. Absent = today's behaviour exactly.
-    let descriptor = crate::bundled_descriptors::resolve(cell_descriptor, bundled_descriptor);
+    // ADR 0019: optional cell-model-IR descriptor. Precedence (D8 + C3.2):
+    //   1. explicit `--cell-descriptor <path>` file (incl. proprietary),
+    //   2. explicit `--bundled-descriptor <name>` selector,
+    //   3. auto-match the netlist's cell-name prefixes against the bundled
+    //      descriptors' declared D8 `library.prefixes` (the C3.2 default —
+    //      a 9t netlist now auto-selects the 9t descriptor, fixing #130),
+    //   4. legacy per-PDK path (`None`) when nothing matches — today's
+    //      behaviour, kept so non-GF180 designs stay green (C3.3 cutover).
+    // When supplied, GF180 combinational cells the descriptor models are
+    // spliced from its pre-decomposed AIG instead of the hardcoded
+    // `functional.v` path. The `.cells.toml` hand-override (ADR 0010) is a
+    // separate runtime-library layer (`cell_lib_ref`) and composes orthogonally.
+    let descriptor = crate::bundled_descriptors::resolve(cell_descriptor, bundled_descriptor)
+        .or_else(|| {
+            crate::bundled_descriptors::auto_select(netlistdb.celltypes.iter().map(|s| s.as_str()))
+                .unwrap_or_else(|e| panic!("{e}"))
+        });
     if let Some(ir) = &descriptor {
         clilog::info!(
             "Loaded cell-model-IR descriptor '{}' ({} cells)",
