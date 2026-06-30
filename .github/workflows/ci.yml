@@ -556,6 +556,11 @@ jobs:
         run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
       - name: Install CUDA Toolkit (no GPU needed to compile)
         run: |
+          # Standard ubuntu runners don't carry NVIDIA's CUDA apt repo (the
+          # tesla4 GPU image does), so add it before installing the toolkit.
+          wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          rm -f cuda-keyring_1.1-1_all.deb
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cuda-toolkit-12-8
           echo "PATH=/usr/local/cuda-12.8/bin:$PATH" >> "$GITHUB_ENV"
