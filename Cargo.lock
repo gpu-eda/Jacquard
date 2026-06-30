@@ -859,6 +859,9 @@ checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 [[package]]
 name = "liberty-parse"
 version = "0.2.4"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "liberty-to-cellir"

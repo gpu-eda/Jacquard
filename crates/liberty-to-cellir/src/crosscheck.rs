@@ -129,6 +129,19 @@ fn collect_v_files(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Strip a trailing `_<digits>` drive-strength suffix from a cell type, if
+/// present: `sky130_fd_sc_hd__nand3_1` ⇒ `sky130_fd_sc_hd__nand3`. Returns
+/// `None` when there is no such suffix (so callers only try the fallback when
+/// it differs from the original).
+fn strip_drive_strength(cell_type: &str) -> Option<&str> {
+    let (base, suffix) = cell_type.rsplit_once('_')?;
+    if !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()) {
+        Some(base)
+    } else {
+        None
+    }
+}
+
 /// Cross-check one cell against the model index.
 pub fn check_cell(cell: &CellModel, index: &ModelIndex) -> CellCheck {
     let Some(logic) = &cell.logic else {
@@ -137,8 +150,18 @@ pub fn check_cell(cell: &CellModel, index: &ModelIndex) -> CellCheck {
     if cell.kind != CellKind::Std {
         return CellCheck::NotComb;
     }
-    let Some(model) = index.models.get(&cell.cell_type) else {
-        return CellCheck::NoModel;
+    // Exact module-name match first (GF180's per-drive `.functional.v`); then
+    // fall back to the drive-strength-less base name. SKY130 shares one
+    // `sky130_fd_sc_hd__nand3.functional.v` across `nand3_1`/`_2`/`_4` — the
+    // functional logic is identical across drive strengths, so the base-name
+    // model is the correct oracle for every drive variant.
+    let model = match index
+        .models
+        .get(&cell.cell_type)
+        .or_else(|| strip_drive_strength(&cell.cell_type).and_then(|b| index.models.get(b)))
+    {
+        Some(m) => m,
+        None => return CellCheck::NoModel,
     };
 
     // Guard against models the oracle cannot evaluate as 2-state logic
@@ -387,6 +410,36 @@ mod tests {
             specify: SpecifyIndex::default(),
         };
         assert_eq!(check_cell(&cell, &empty), CellCheck::NoModel);
+    }
+
+    #[test]
+    fn drive_strength_fallback_matches_baseless_model() {
+        // SKY130: cell `..__nand3_1` (drive `_1`) but the functional model
+        // module is the drive-less `..__nand3`. The exact lookup misses; the
+        // drive-strength-strip fallback finds the shared base model.
+        let cell = and2_cell("demo__and2_1", false);
+        let index = index_with("demo__and2"); // model has no `_1` drive suffix
+        match check_cell(&cell, &index) {
+            CellCheck::Checked { mismatches, .. } => {
+                assert!(mismatches.is_empty(), "expected clean via fallback");
+            }
+            other => panic!("expected Checked via drive fallback, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn strip_drive_strength_only_strips_trailing_digits() {
+        assert_eq!(
+            strip_drive_strength("sky130_fd_sc_hd__nand3_1"),
+            Some("sky130_fd_sc_hd__nand3")
+        );
+        assert_eq!(
+            strip_drive_strength("sky130_fd_sc_hd__a2111o_4"),
+            Some("sky130_fd_sc_hd__a2111o")
+        );
+        // No trailing `_<digits>` ⇒ no fallback (a drive-less name stays as-is).
+        assert_eq!(strip_drive_strength("sky130_fd_sc_hd__nand3"), None);
+        assert_eq!(strip_drive_strength("nodigits"), None);
     }
 
     #[test]
