@@ -3,16 +3,13 @@ name: CI
 on:
   push:
     branches: [main, staged-aig-release]
-    # Docs-only pushes (e.g. handoff updates pushed straight to main) skip the
-    # full matrix — a push is ignored only when ALL changed files match.
-    # `pull_request` deliberately has NO paths-ignore: a workflow-level skip
-    # never creates the required check runs, so a docs-only PR would deadlock on
-    # GitHub's "required check never reported" rule. Docs-only PRs are instead
-    # gated per-job via the `changes` job below (a *skipped* required job counts
-    # as passing), which keeps the `docs` job running to validate the build.
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
+    # No paths-ignore: docs-only pushes must still trigger the workflow so the
+    # `docs` job runs and deploys the mdBook to GitHub Pages — a workflow-level
+    # skip would block the deploy and leave the published site stale (e.g. a
+    # renamed page would 404). The heavy code/GPU jobs are skipped per-job via
+    # the `changes` job below — the same gate as pull requests — so a docs-only
+    # push runs just the cheap `changes` + `docs` jobs, while a code push runs
+    # the full matrix.
   # No base-branch filter: run CI on every PR regardless of its base, so
   # stacked PRs (based on other feature branches) get CI automatically.
   pull_request:
