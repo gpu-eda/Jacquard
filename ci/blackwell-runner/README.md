@@ -30,10 +30,12 @@ These are defence-in-depth: keep both.
 Prerequisites (already true on `nvidia1.local`): Docker + `nvidia-container-toolkit`,
 verified with `docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi`.
 
-1. **Create a PAT.** Fine-grained, resource owner `gpu-eda`, repository
-   `Jacquard` only, **Repository permissions → Administration: Read and write**
-   (required to mint runner registration tokens). Nothing else. Short expiry +
-   calendar reminder to rotate.
+1. **Create a PAT.** Fine-grained, resource owner `gpu-eda`. The runner is
+   registered **org-level** (shared across gpu-eda repos), so grant
+   **Organization permissions → Self-hosted runners: Read and write** (mints org
+   runner registration tokens). For a single-repo runner instead, grant
+   **Repository → Administration: Read and write** and set `GH_REPO` below.
+   Nothing else. Short expiry + a reminder to rotate.
 
 2. **Build the image** (from a repo checkout on the host):
    ```sh
@@ -46,7 +48,9 @@ verified with `docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nv
    sudo tee /etc/blackwell-runner/env >/dev/null <<'EOF'
    RUNNER_PAT=github_pat_REPLACE_ME
    GH_OWNER=gpu-eda
-   GH_REPO=Jacquard
+   # GH_REPO empty → org-level runner (all gpu-eda repos).
+   # Set GH_REPO=Jacquard for a single-repo runner instead.
+   GH_REPO=
    EOF
    sudo chmod 600 /etc/blackwell-runner/env
    sudo cp ci/blackwell-runner/blackwell-runner.service /etc/systemd/system/
@@ -55,10 +59,18 @@ verified with `docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nv
    ```
 
 4. **Verify** the runner appears online with labels `cuda, blackwell, sm_120`
-   under the repo's Settings → Actions → Runners, or:
+   under the org's Settings → Actions → Runners, or:
    ```sh
-   gh api repos/gpu-eda/Jacquard/actions/runners -q '.runners[].name'
+   gh api orgs/gpu-eda/actions/runners -q '.runners[].name'   # org-level
+   # gh api repos/gpu-eda/Jacquard/actions/runners ...         # if repo-level
    ```
+
+> **Org-level blast radius.** An org runner is reachable by *every* gpu-eda repo
+> (per the runner group's visibility). The ephemeral-container isolation still
+> protects the host, but each consuming repo must keep the fork-PR gating on its
+> `cuda-blackwell` job so untrusted PRs never auto-run. Consider a dedicated
+> runner group with selected-repo visibility if you want to limit which repos
+> can target it.
 
 ## Operating
 
