@@ -1,0 +1,41 @@
+# systemd unit for the Blackwell ephemeral GitHub Actions runner.
+#
+# Install on the runner host (nvidia1.local):
+#   sudo cp ci/blackwell-runner/blackwell-runner.service /etc/systemd/system/
+#   sudo install -d -m 700 /etc/blackwell-runner
+#   # create /etc/blackwell-runner/env (root:root 600):
+#   #   RUNNER_PAT=github_pat_xxx
+#   #   GH_OWNER=gpu-eda
+#   #   GH_REPO=Jacquard
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now blackwell-runner
+#
+# Each `docker run` is one ephemeral runner: it picks up a single job in a
+# fresh container, then exits; Restart=always re-spawns a clean container.
+[Unit]
+Description=Blackwell ephemeral GitHub Actions runner (Docker, GPU)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/blackwell-runner/env
+# Pre-pull/build is done out of band (docker build -t blackwell-runner:latest …).
+ExecStartPre=-/usr/bin/docker rm -f blackwell-runner
+ExecStart=/usr/bin/docker run --rm --name blackwell-runner \
+    --gpus all \
+    --pull never \
+    -e RUNNER_PAT \
+    -e GH_OWNER \
+    -e GH_REPO \
+    -e RUNNER_LABELS=self-hosted,cuda,blackwell,sm_120 \
+    blackwell-runner:latest
+ExecStop=/usr/bin/docker stop blackwell-runner
+Restart=always
+RestartSec=10
+# Don't hammer the API if something is wedged.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Install]
+WantedBy=multi-user.target
