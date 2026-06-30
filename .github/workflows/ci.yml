@@ -49,9 +49,14 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          # `every`: a changed file counts toward `code` only if it matches
+          # ALL patterns — i.e. it is NOT under docs/ AND NOT a markdown file.
+          # `code` is then true iff at least one such non-docs file changed.
+          # (The default `some` quantifier OR-combines patterns, so a `'**'`
+          # catch-all would match every file and `code` would always be true.)
+          predicate-quantifier: 'every'
           filters: |
             code:
-              - '**'
               - '!docs/**'
               - '!**/*.md'
 
