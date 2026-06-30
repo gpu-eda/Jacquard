@@ -723,6 +723,45 @@ jobs:
             cuda_timed.txt
             perf_metrics/
 
+  # Real NVIDIA Blackwell (sm_120) coverage on the self-hosted nvidia1.local
+  # runner — reuses cuda-build's all-major artifact (already has sm_120 SASS),
+  # so no extra compile and no GitHub GPU-minute cost. The ephemeral runner
+  # container ships the CUDA runtime, so the job just runs the binary.
+  #
+  # NOT a required check. Fork-PR gated: untrusted fork code never auto-runs on
+  # the self-hosted box — only pushes, same-repo PRs, or a maintainer-applied
+  # `ci:blackwell` label trigger it.
+  cuda-blackwell:
+    needs: [changes, cuda-build]
+    if: >-
+      needs.changes.outputs.code == 'true' &&
+      (github.event_name == 'push' ||
+       github.event.pull_request.head.repo.full_name == github.repository ||
+       contains(github.event.pull_request.labels.*.name, 'ci:blackwell'))
+    name: CUDA Blackwell Tests
+    runs-on: [self-hosted, cuda, blackwell]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init runtime PDK models
+        run: git submodule update --init vendor/sky130_fd_sc_hd
+      - name: Download jacquard (CUDA, all-major)
+        uses: actions/download-artifact@v8
+        with:
+          name: jacquard-cuda
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/jacquard
+      - name: CUDA sim on Blackwell (sm_120) with CPU cross-check
+        run: |
+          nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader
+          target/release/jacquard sim \
+            tests/timing_test/dff_test_synth.gv \
+            tests/timing_test/dff_test.vcd \
+            /tmp/blackwell_cuda_out.vcd \
+            1 --check-with-cpu
+
   # Build and run HIP simulation on NVIDIA GPU (HIP's NVIDIA backend)
   # This validates the HIP code path using hipcc targeting NVIDIA via HIP_PLATFORM=nvidia.
   # When an AMD GPU runner becomes available, a native AMD job can be added.
