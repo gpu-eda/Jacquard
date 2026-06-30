@@ -57,7 +57,29 @@ fn main() {
     {
         println!("Building CUDA source files for GEM...");
         let csrc_headers = ucc::import_csrc();
-        let mut cl_cuda = ucc::cl_cuda();
+        // CUDA target architecture.
+        //
+        // `JACQUARD_CUDA_ARCH`, when set, is passed straight through to nvcc as
+        // `-arch=<value>` and overrides ucc's numeric gencode/PTX defaults.
+        // Accepts any nvcc `-arch` value:
+        //   - `native`     — build SASS for the GPU(s) in THIS machine. Best for
+        //                    local dev (e.g. an `sm_120` Blackwell box); fastest
+        //                    kernel, no first-load JIT, but not portable.
+        //   - `all-major`  — SASS for every major arch the toolkit knows plus PTX
+        //                    for the newest. Portable; use for distribution.
+        //   - `sm_120` / `compute_90` / … — an explicit single target.
+        // Unset → ucc defaults (PTX compute_50 + SASS sm_70/sm_80), which run on
+        // newer GPUs via PTX JIT.
+        println!("cargo:rerun-if-env-changed=JACQUARD_CUDA_ARCH");
+        let mut cl_cuda = match std::env::var("JACQUARD_CUDA_ARCH") {
+            Ok(arch) if !arch.is_empty() => {
+                println!("Using CUDA -arch={arch} (JACQUARD_CUDA_ARCH)");
+                let mut b = ucc::cl_cuda_arch(None, None);
+                b.flag(&format!("-arch={arch}"));
+                b
+            }
+            _ => ucc::cl_cuda(),
+        };
         cl_cuda.ccbin(false);
         cl_cuda.flag("-lineinfo");
         cl_cuda.flag("-maxrregcount=128");
