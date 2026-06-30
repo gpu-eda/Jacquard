@@ -2,7 +2,7 @@
 
 **Active thread:** ADR 0019 "Cell-model IR" is **approved by the maintainer**
 (all four design open questions resolved). **Plan checkpoints C1, C2, C3.1,
-C3.1b, and C3.2 are COMPLETE** (C2 was CI-green 19/19). The IR + converter
+C3.1b, C3.2, C3.3a, C3.3b, and C3.3c are COMPLETE.** The IR + converter
 foundation is built (C1, #130 closed); GF180 **simulates AND times**
 sequential cells from a generated descriptor with no per-PDK Rust DFF handling
 and no runtime `.lib` parse (C2); descriptors are **generated + embedded at
@@ -67,6 +67,71 @@ blocking SKY130/AIGPDK auto-selection:** no embedded descriptors exist for them
 reader (vendor ships no `.lib` text), AIGPDK needs hand-coded models with no
 cross-check oracle (both noted in C3.1). Until those descriptors exist,
 auto_select returns `Ok(None)` for SKY130/AIGPDK and they ride the legacy path.
+
+## C3.3a/b/c — COMPLETE (branch `feat/cell-model-ir-c3`)
+
+All three built-in PDKs now build **combinational** cells from a generated
+cell-model-IR descriptor. The cutover is **additive** — legacy stays as the
+fallback; nothing was deleted yet (that is C3.3d).
+
+**C3.3a (AIGPDK descriptor, prior agent, validated).** `liberty-to-cellir
+aigpdk/aigpdk.lib` → 11 cells (7 comb, 2 L3, 10 L4), `cross_check_mismatches=0`,
+no converter change. Comb cells match `aigpdk.v` truth tables; DFF/DFFSR roles
+match the legacy `aig.rs` overlay + `aigpdk.v`. RAM (`$__RAMGEM_SYNC_`), clock
+gate (`CKLNQD`), and side-effect (`GEM_*`) cells are correctly excluded.
+
+**C3.3b (embed, commit 4edf7f99).** `build.rs` now generates+embeds two more
+descriptors into `$OUT_DIR` alongside GF180 7t/9t: **SKY130** (from the vendored
+`.lib.json` per-corner layout, 428 cells, declared prefix `sky130_fd_sc_hd__`)
+and **AIGPDK** (from in-repo `aigpdk/aigpdk.lib`, 11 cells, **no** prefix).
+`bundled_descriptors::ALL` gains both; AIGPDK carries `is_default_fallback=true`
+and a new `default_fallback()` returns it. SKY130 auto-selects by prefix;
+AIGPDK is the no-prefix-match default (mirrors `pdk::resolve_library`).
+Behaviour-neutral (consumer still GF180-gated). `cargo test --lib` 316 (+2).
+
+**C3.3c (wire, commit 649d9986).** New PDK-neutral `AIG::try_descriptor_comb`
+splices a descriptor `logic` block for ANY stdcell; wired into the `Process`
+dispatch for SKY130 (before `sky130_postprocess`) and AIGPDK (before the
+hardcoded AND2/INV/BUF match). `setup.rs` adds `.or_else(default_fallback)` so
+AIGPDK netlists resolve the AIGPDK descriptor. Cells with no `logic` (seq / tie
+/ SRAM / multi-output / IO-pad) return false → legacy path UNCHANGED.
+
+**Gate (all green).** SKY130 `mcu_soc` flash cosim == committed golden (165
+sky130 types — the descriptor's combinational logic, **never cross-checked at
+generation**, is now proven byte-identical to legacy); AIGPDK xprop_cosim ×4 +
+dual_uart + apb_trace(±xprop) == goldens; GF180 jtag_minimal 9t MD5
+`d87c9f75b4f6af415a9df2d3c728e906` (`--features metal`, 300k edges), GF180
+untouched; `cargo test --lib` 316; four pipeline crates green; 7 crates @ 0.2.4.
+
+### What C3.3d (DESTRUCTIVE — not started) still needs
+
+The additive landing means the legacy is all still present and load-bearing:
+- **SKY130/AIGPDK *sequential* is still legacy.** Only *combinational* is
+  descriptor-driven for them. Wiring seq needs coordinated changes to BOTH the
+  input-side (`from_netlistdb_impl` seq branches ~2360 sky130 / ~2332 aigpdk)
+  and the output-side overlay (`sky130_postprocess` ~1344, aigpdk `Process`
+  ~1100), the way GF180 does both (`wire_sequential_from_ir` + the
+  `gf180mcu_postprocess` IR overlay). GF180 seq is already IR-driven.
+- **`PdkVariant` is NOT removed** (`grep -rn PdkVariant src/` still ~71 hits) —
+  the dispatch classifies (is_sequential / is_tie / is_multi_output / is_io_pad
+  / extract_cell_type) via PdkVariant + the build.rs-generated pin/classifier
+  tables BEFORE consulting the descriptor.
+- **Runtime `vendor/` stdcell dep still load-bearing.** `load_pdk_models`
+  (`aig.rs` ~2158 sky130 / ~2179 gf180) still reads the vendored cells for the
+  legacy decompose fallback AND the `LeafPinProvider` L1 pin directions. Before
+  deleting it, confirm the descriptor carries L1 directions for the leaf-pin
+  provider.
+- **Residual name-matches still present:** the clock-tracing loop
+  (`"CLK"|"CLKN"|"PORT_*_CLK"`, `aig.rs` ~2263), `get_gf180mcu_dependencies`
+  `"RN"|"SETN"` (~1635), `sky130_postprocess` `SET_B`/`RESET_B` (~1361). These
+  run during dependency/clock ordering before the splice and are intricate to
+  make descriptor-driven.
+- Then: remove `PdkVariant` + all uses, `build.rs::generate_pin_table` +
+  `GF180MCU_PIN_TABLE`/`SKY130_PIN_TABLE` + the `generated` modules, the stdcell
+  classifiers, and the `None`-descriptor fallback (only after every built-in PDK
+  resolves a descriptor). PRESERVE per the boundary: `$__RAMGEM_SYNC_` + GF180
+  SRAM macros, `GEM_ASSERT/DISPLAY`, `CKLNQD`/`icgtp`/`icgtn`, `bi_24t`/`in_c`/
+  `in_s` IO pads, `.cells.toml` / `RuntimeCellLibrary`.
 
 ## C3.1b — COMPLETE (commit on branch)
 
