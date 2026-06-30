@@ -609,7 +609,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      # Test fixtures live in the main repo; submodules are build-time only.
+      # Test fixtures live in the main repo, but sky130-cell sims (inv_chain_pnr)
+      # read the PDK functional models at runtime, so that submodule is needed
+      # here too. (eda-infra-rs is build-time only — not needed in the test job.)
+      - name: Init runtime PDK models
+        run: git submodule update --init vendor/sky130_fd_sc_hd
       - name: Install CUDA runtime for the prebuilt binary
         run: |
           nvidia-smi
