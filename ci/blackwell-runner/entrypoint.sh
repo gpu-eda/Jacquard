@@ -17,7 +17,10 @@ set -euo pipefail
 : "${RUNNER_PAT:?RUNNER_PAT is required}"
 : "${GH_OWNER:?GH_OWNER is required}"
 LABELS="${RUNNER_LABELS:-self-hosted,cuda,blackwell,sm_120}"
-NAME="${RUNNER_NAME:-blackwell-$(tr -dc a-z0-9 </dev/urandom | head -c 8)}"
+# Pipe-free random suffix: `tr … | head` would SIGPIPE under `set -o pipefail`
+# and kill the script. ${HOSTNAME} is the ephemeral container's id (unique per
+# run); ${RANDOM} guards against collisions.
+NAME="${RUNNER_NAME:-blackwell-${HOSTNAME}-${RANDOM}}"
 
 if [ -n "${GH_REPO:-}" ]; then
     SCOPE_URL="https://github.com/${GH_OWNER}/${GH_REPO}"
