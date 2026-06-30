@@ -176,7 +176,7 @@
 <li>Hard-fail (not warn) when <code>--sdf</code> is requested and OpenSTA cannot be located.</li>
 <li>Probe OpenSTA's version on first invocation and fail with a remediation message if it is older than the version pinned in <code>vendor/opensta/</code> (per ADR 0005).</li>
 <li>Warn-but-proceed if the detected version is newer than the latest tested version, naming the version in the warning.</li>
-<li>Document the OpenSTA dependency in <code>docs/usage.md</code>.</li>
+<li>Document the OpenSTA dependency in <code>docs/synthesis-flow.md</code>.</li>
 </ol>
 <p>Tracked as <strong>WS-RH.1</strong> in <code>../plans/post-phase-0-roadmap.md</code> § Release hardening.</p>
 <p><strong>Code-comment cleanup follow-up.</strong> The <code>INTERIM per ADR 0006</code> / <code>Pre-release only</code> tags in <code>src/sim/setup.rs</code> (lines ~176, ~228, ~286) and <code>src/bin/jacquard.rs</code> (~187) describe a premise that no longer applies. Folded into WS-RH.1 (<code>../plans/post-phase-0-roadmap.md</code> § Release hardening) rather than spun out as a separate cleanup commit.</p>

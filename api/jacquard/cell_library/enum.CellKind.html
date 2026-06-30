@@ -22,7 +22,7 @@ metadata alongside.</p>
 (<code>"ram"</code>, <code>"filler"</code>, …). Unknown values fail the manifest
 parse rather than degrading silently.</p>
 </div></details><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.Std" class="variant"><a href="#variant.Std" class="anchor">§</a><h3 class="code-header">Std</h3></section><div class="docblock"><p>Standard combinational logic cell. Default-routed through
-<code>pdk_decomp::decompose_with_pdk</code>; manifests will rarely need
+the per-PDK <code>decompose_with_pdk</code>; manifests will rarely need
 to declare this explicitly.</p>
 </div><section id="variant.Dff" class="variant"><a href="#variant.Dff" class="anchor">§</a><h3 class="code-header">Dff</h3></section><div class="docblock"><p>Edge-triggered flip-flop.</p>
 </div><section id="variant.Latch" class="variant"><a href="#variant.Latch" class="anchor">§</a><h3 class="code-header">Latch</h3></section><div class="docblock"><p>Level-sensitive latch.</p>

@@ -299,7 +299,7 @@
 <a href=#299 id=299 data-nosnippet>299</a>        <span class="macro">concat!</span>(<span class="macro">env!</span>(<span class="string">"CARGO_MANIFEST_DIR"</span>), <span class="string">"/tests/xprop_cosim/sim_config.json"</span>);
 <a href=#300 id=300 data-nosnippet>300</a>
 <a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">fn </span>demo_manifest(with_config: bool) -&gt; XSourceManifest {
-<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">let </span>(netlistdb, aig) = build_netlist_and_aig(Path::new(DEMO_NETLIST), <span class="prelude-val">None</span>, <span class="kw-2">&amp;</span>[]);
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">let </span>(netlistdb, aig) = build_netlist_and_aig(Path::new(DEMO_NETLIST), <span class="prelude-val">None</span>, <span class="kw-2">&amp;</span>[], <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
 <a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">let </span>config: <span class="prelude-ty">Option</span>&lt;TestbenchConfig&gt; = <span class="kw">if </span>with_config {
 <a href=#304 id=304 data-nosnippet>304</a>            <span class="kw">let </span>f = std::fs::File::open(DEMO_CONFIG).unwrap();
 <a href=#305 id=305 data-nosnippet>305</a>            <span class="prelude-val">Some</span>(serde_json::from_reader(std::io::BufReader::new(f)).unwrap())

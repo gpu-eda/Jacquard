@@ -27,7 +27,7 @@
 <a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">use </span>std::collections::HashMap;
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>std::path::Path;
 <a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span><span class="kw">crate</span>::pdk_decomp::{
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>cell_decomp::{
 <a href=#31 id=31 data-nosnippet>31</a>    build_chain_gate, build_udp_aig, build_xor_chain, finalize_decomp_result, parse_udp,
 <a href=#32 id=32 data-nosnippet>32</a>    BehavioralGate, BehavioralModel, DecompResult, UdpModel, WireVal,
 <a href=#33 id=33 data-nosnippet>33</a>};
@@ -97,7 +97,7 @@
 <a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let </span>src = std::fs::read_to_string(<span class="kw-2">&amp;</span>entry).unwrap_or_else(|e| {
 <a href=#98 id=98 data-nosnippet>98</a>            <span class="macro">panic!</span>(<span class="string">"read {}: {e}"</span>, entry.display());
 <a href=#99 id=99 data-nosnippet>99</a>        });
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span>model = <span class="kw">crate</span>::pdk_decomp::parse_functional_model(<span class="kw-2">&amp;</span>src).unwrap_or_else(|| {
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span>model = cell_decomp::parse_functional_model(<span class="kw-2">&amp;</span>src).unwrap_or_else(|| {
 <a href=#101 id=101 data-nosnippet>101</a>            <span class="macro">panic!</span>(<span class="string">"parse {}: returned None"</span>, entry.display())
 <a href=#102 id=102 data-nosnippet>102</a>        });
 <a href=#103 id=103 data-nosnippet>103</a>
@@ -574,7 +574,7 @@
 <a href=#574 id=574 data-nosnippet>574</a>    /// downstream) or needs explicit prefix configuration.
 <a href=#575 id=575 data-nosnippet>575</a>    </span><span class="attr">#[test]
 <a href=#576 id=576 data-nosnippet>576</a>    </span><span class="kw">fn </span>sky130_parser_reads_gf180mcu_dff_with_udp() {
-<a href=#577 id=577 data-nosnippet>577</a>        <span class="kw">use </span><span class="kw">crate</span>::sky130_pdk::parse_functional_model;
+<a href=#577 id=577 data-nosnippet>577</a>        <span class="kw">use </span>cell_decomp::parse_functional_model;
 <a href=#578 id=578 data-nosnippet>578</a>        <span class="kw">let </span>path = <span class="string">"vendor/gf180mcu_fd_sc_mcu7t5v0/cells/dffq/\
 <a href=#579 id=579 data-nosnippet>579</a>                    gf180mcu_fd_sc_mcu7t5v0__dffq_1.functional.v"</span>;
 <a href=#580 id=580 data-nosnippet>580</a>        <span class="kw">let </span>src = std::fs::read_to_string(path)
@@ -652,7 +652,7 @@
 <a href=#652 id=652 data-nosnippet>652</a>
 <a href=#653 id=653 data-nosnippet>653</a>    <span class="attr">#[test]
 <a href=#654 id=654 data-nosnippet>654</a>    </span><span class="kw">fn </span>sky130_parser_reads_gf180mcu_simple_gate() {
-<a href=#655 id=655 data-nosnippet>655</a>        <span class="kw">use </span><span class="kw">crate</span>::sky130_pdk::parse_functional_model;
+<a href=#655 id=655 data-nosnippet>655</a>        <span class="kw">use </span>cell_decomp::parse_functional_model;
 <a href=#656 id=656 data-nosnippet>656</a>        <span class="kw">let </span>path = <span class="string">"vendor/gf180mcu_fd_sc_mcu7t5v0/cells/nand2/\
 <a href=#657 id=657 data-nosnippet>657</a>                    gf180mcu_fd_sc_mcu7t5v0__nand2_1.functional.v"</span>;
 <a href=#658 id=658 data-nosnippet>658</a>        <span class="kw">let </span>src = std::fs::read_to_string(path)
@@ -693,7 +693,7 @@
 <a href=#693 id=693 data-nosnippet>693</a>    //   5. Decompose to AIG via decompose_combinational.
 <a href=#694 id=694 data-nosnippet>694</a>    //   6. Walk the AIG and compare outputs.
 <a href=#695 id=695 data-nosnippet>695</a>    //
-<a href=#696 id=696 data-nosnippet>696</a>    // The AIG walker matches the encoding in sky130_pdk::finalize_decomp_result.
+<a href=#696 id=696 data-nosnippet>696</a>    // The AIG walker matches the encoding in cell_decomp::finalize_decomp_result.
 <a href=#697 id=697 data-nosnippet>697</a>    // -------------------------------------------------------------------------
 <a href=#698 id=698 data-nosnippet>698</a>
 <a href=#699 id=699 data-nosnippet>699</a>    </span><span class="kw">fn </span>load_cell_model(cell_type: <span class="kw-2">&amp;</span>str) -&gt; BehavioralModel {
@@ -701,7 +701,7 @@
 <a href=#701 id=701 data-nosnippet>701</a>        <span class="kw">let </span>path = pick_smallest_drive_functional(<span class="kw-2">&amp;</span>dir)
 <a href=#702 id=702 data-nosnippet>702</a>            .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"no functional.v under {}"</span>, dir.display()));
 <a href=#703 id=703 data-nosnippet>703</a>        <span class="kw">let </span>src = std::fs::read_to_string(<span class="kw-2">&amp;</span>path).unwrap();
-<a href=#704 id=704 data-nosnippet>704</a>        <span class="kw">crate</span>::pdk_decomp::parse_functional_model(<span class="kw-2">&amp;</span>src)
+<a href=#704 id=704 data-nosnippet>704</a>        cell_decomp::parse_functional_model(<span class="kw-2">&amp;</span>src)
 <a href=#705 id=705 data-nosnippet>705</a>            .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"parse {}"</span>, path.display()))
 <a href=#706 id=706 data-nosnippet>706</a>    }
 <a href=#707 id=707 data-nosnippet>707</a>
@@ -771,7 +771,7 @@
 <a href=#771 id=771 data-nosnippet>771</a>                bool_inputs.insert(name.clone(), bit);
 <a href=#772 id=772 data-nosnippet>772</a>                pin_values.insert(pin_index_for[name], bit);
 <a href=#773 id=773 data-nosnippet>773</a>            }
-<a href=#774 id=774 data-nosnippet>774</a>            <span class="kw">let </span>expected = <span class="kw">crate</span>::sky130_pdk::eval_behavioral_model(
+<a href=#774 id=774 data-nosnippet>774</a>            <span class="kw">let </span>expected = cell_decomp::eval_behavioral_model(
 <a href=#775 id=775 data-nosnippet>775</a>                <span class="kw-2">&amp;</span>model,
 <a href=#776 id=776 data-nosnippet>776</a>                <span class="kw-2">&amp;</span>bool_inputs,
 <a href=#777 id=777 data-nosnippet>777</a>                output_pin,

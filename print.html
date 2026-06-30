@@ -158,7 +158,7 @@
                     <main>
                         <h1 id="jacquard-documentation"><a class="header" href="#jacquard-documentation">Jacquard Documentation</a></h1>
 <p>Welcome to the documentation for Jacquard, a GPU-accelerated RTL logic simulator.</p>
-<p>Use the sidebar to navigate between topics, or start with the <a href="usage.html">Getting Started</a> guide.</p>
+<p>Use the sidebar to navigate between topics, or start with the <a href="getting-started.html">Getting Started</a> guide — it runs four bundled designs in a few seconds with no synthesis. To prepare and run your own RTL, see the <a href="synthesis-flow.html">Synthesis Flow</a>; for UVM/cocotb/SVA questions, <a href="interop.html">Testbench Interop</a>.</p>
 <h2 id="documents"><a class="header" href="#documents">Documents</a></h2>
 <h3 id="project-scope--planning"><a class="header" href="#project-scope--planning">Project Scope &amp; Planning</a></h3>
 <p>Start here if you're considering a feature contribution or want to understand Jacquard's overall direction.</p>
@@ -467,8 +467,131 @@ jacquard cosim tests/apb_trace/apb_trace_synth.gv \
     --top-module apb_trace --max-clock-edges 200 \
     --bus-trace-csv /tmp/apb.csv
 </code></pre>
-<p>Then head to <a href="usage.html">Getting Started</a> to run your own designs.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="getting-started-with-jacquard"><a class="header" href="#getting-started-with-jacquard">Getting Started with Jacquard</a></h1>
+<p>Then head to <a href="getting-started.html">Getting Started</a> to run bundled designs, or the
+<a href="synthesis-flow.html">Synthesis Flow</a> to prepare your own RTL.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h1>
+<p>This guide gets you from a fresh clone to <strong>four working simulations</strong>, in
+increasing order of realism. Every command here runs against designs that ship
+<strong>in the repository</strong> — no synthesis, no large downloads, no extra EDA tools.
+Each one is also a CI job, so it is known-green.</p>
+<blockquote>
+<p><strong>Already have your own RTL?</strong> This page runs <em>bundled</em> designs to prove your
+build works. To prepare and run <em>your own</em> design (memory + logic synthesis,
+VCD scope handling, timing back-annotation) see the
+<a href="synthesis-flow.html">Synthesis Flow</a>. For UVM/cocotb/SVA questions see
+<a href="interop.html">Testbench Interop</a>.</p>
+</blockquote>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>A built <code>jacquard</code> binary. Either install it (see <a href="installation.html">Installation</a>)
+or build from a clone:</p>
+<pre><code class="language-sh">git clone https://github.com/gpu-eda/Jacquard.git
+cd Jacquard
+git submodule update --init --recursive
+cargo build -r --features metal --bin jacquard   # macOS / Apple Silicon
+</code></pre>
+<p>The examples below use <code>cargo run -r --features metal --bin jacquard -- …</code> so
+they work straight from a clone. If you installed the binary (e.g.
+<code>brew install gpu-eda/homebrew-tap/jacquard</code>), replace that prefix with just
+<code>jacquard</code>. On Linux, swap <code>--features metal</code> for <code>--features cuda</code> (NVIDIA) or
+<code>--features hip</code> (AMD), and replace the trailing <code>1</code> (NUM_BLOCKS) with 2× your
+GPU's SM/CU count.</p>
+<hr />
+<h2 id="tier-1--your-first-simulation-a-flip-flop"><a class="header" href="#tier-1--your-first-simulation-a-flip-flop">Tier 1 — Your first simulation (a flip-flop)</a></h2>
+<p>The smallest possible run: a single D flip-flop. <code>jacquard sim</code> reads a
+gate-level netlist plus a static input waveform (VCD) and writes an output VCD.</p>
+<pre><code class="language-sh">cargo run -r --features metal --bin jacquard -- sim \
+    tests/timing_test/dff_test_synth.gv \
+    tests/timing_test/dff_test.vcd \
+    /tmp/dff_out.vcd \
+    1
+</code></pre>
+<p>It finishes in well under a second (6 cycles). Confirm the captured <code>q</code> matches
+the golden waveform:</p>
+<pre><code class="language-sh">diff &lt;(grep -E '^[01]!' tests/timing_test/dff_test.vcd) \
+     &lt;(grep -E '^[01]!' /tmp/dff_out.vcd) &amp;&amp; echo "MATCH"
+</code></pre>
+<p>That <code>MATCH</code> is your "Jacquard runs on this machine" checkpoint. The last
+argument, <code>1</code>, is <code>NUM_BLOCKS</code> — always <code>1</code> for Metal; on CUDA/HIP set it to 2×
+your GPU's SM/CU count.</p>
+<hr />
+<h2 id="tier-2--a-reactive-testbench-cosim"><a class="header" href="#tier-2--a-reactive-testbench-cosim">Tier 2 — A reactive testbench (<code>cosim</code>)</a></h2>
+<p><code>jacquard sim</code> drives the design from a <em>fixed</em> input waveform. Real testbenches
+need to <em>react</em> to the design's outputs. That is what <code>jacquard cosim</code> is for: it
+runs peripheral models (UART, SPI flash, JTAG, bus monitors) as GPU kernels
+alongside the design, so inputs can depend on outputs cycle-by-cycle.</p>
+<p>The <code>dual_uart</code> design is two independent UART transmitters that send <code>"Hi"</code> and
+<code>"OK"</code>. Cosim decodes the serial bits back into bytes — no input VCD required;
+clock and reset come from the config.</p>
+<pre><code class="language-sh">cargo run -r --features metal --bin jacquard -- cosim \
+    tests/dual_uart/dual_uart_synth.gv \
+    --config tests/dual_uart/sim_config.json \
+    --top-module dual_uart_top \
+    --max-clock-edges 10000
+</code></pre>
+<p>Verify both channels decoded correctly:</p>
+<pre><code class="language-sh">python3 tests/dual_uart/check_pass.py target/test-out/dual_uart_events.json
+# console: b'Hi' OK
+# debug:   b'OK' OK
+# PASS: both UART channels decoded correctly
+</code></pre>
+<p>The peripherals, pin mapping, baud rates, and clock are all declared in
+<a href="https://github.com/gpu-eda/Jacquard/blob/main/tests/dual_uart/sim_config.json"><code>tests/dual_uart/sim_config.json</code></a>.
+See <a href="adr/0017-cosim-execution-model.html">Cosim execution model</a> and
+<a href="bus-tracing.html">Bus Transaction Tracing</a> for the full peripheral set.</p>
+<hr />
+<h2 id="tier-3--a-real-open-source-pdk"><a class="header" href="#tier-3--a-real-open-source-pdk">Tier 3 — A real open-source PDK</a></h2>
+<p>Tiers 1 and 2 use Jacquard's abstract AIG cell library. Real designs come out of
+synthesis mapped to a real <strong>PDK</strong> (process design kit). Jacquard decomposes
+real standard cells — <strong>SKY130</strong> and <strong>GF180MCU</strong> today — into its AIG
+representation directly, so a synthesized netlist simulates as-is.</p>
+<h3 id="3a-pre-pr-post-synthesis--runs-from-the-repo"><a class="header" href="#3a-pre-pr-post-synthesis--runs-from-the-repo">3a. Pre-P&amp;R (post-synthesis) — runs from the repo</a></h3>
+<p>A <em>pre-place-and-route</em> netlist is the output of logic synthesis, before layout
+and before any SDF timing annotation. This is the fastest, most common
+gate-level verification step. <code>logic_cone</code> is a small <strong>SKY130</strong> netlist (real
+<code>sky130_fd_sc_hd__*</code> cells) that ships in the repo:</p>
+<pre><code class="language-sh">cargo run -r --features metal --bin jacquard -- sim \
+    tests/timing_test/sky130_timing/logic_cone.v \
+    tests/timing_test/sky130_timing/logic_cone.vcd \
+    /tmp/logic_cone_out.vcd \
+    1 --input-vcd-scope logic_cone
+</code></pre>
+<p>No <code>--sdf</code> flag: this is pure functional simulation of a real-PDK netlist. The
+circuit is <code>4 DFFs → nand2/nor2/and2/inv cone → DFF</code>, computing
+<code>Q = a &amp; !b &amp; !c &amp; !d</code> (registered). Its sibling <code>inv_chain.v</code> (16 SKY130
+inverters = identity) is a cleaner "output tracks input, delayed two cycles"
+check if you want one.</p>
+<blockquote>
+<p>Add <code>--sdf logic_cone.sdf --sdf-corner typ</code> to layer Liberty cell delays on
+top — that moves you from functional to <strong>timing-aware</strong> simulation, covered
+in <a href="timing-simulation.html">Timing Simulation</a>.</p>
+</blockquote>
+<h3 id="3b-a-full-chip-on-gf180mcu"><a class="header" href="#3b-a-full-chip-on-gf180mcu">3b. A full chip on GF180MCU</a></h3>
+<p>To see Jacquard handle a real, large design on a real PDK end-to-end, the
+<strong>wafer.space chess <code>chip_top</code></strong> (~227,000 cells, GlobalFoundries open-source
+<strong>GF180MCU</strong> PDK) is wired up as a smoke-test recipe. The post-P&amp;R netlist is
+~200 MB so it is not committed — you regenerate it from the upstream
+<a href="https://github.com/Ravenslofty/gf180mcu-chess">LibreLane</a> flow. Full
+step-by-step recipe, expected timings, and what it exercises:
+<a href="https://github.com/gpu-eda/Jacquard/blob/main/tests/gf180mcu_chess_chip_top/README.md"><code>tests/gf180mcu_chess_chip_top/README.md</code></a>.</p>
+<p>This is the bridge to your own designs: synthesize to SKY130 or GF180MCU, then
+run <code>jacquard sim</code> exactly as in 3a.</p>
+<hr />
+<h2 id="where-to-next"><a class="header" href="#where-to-next">Where to next</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>You want to…</th><th>Go to</th></tr></thead><tbody>
+<tr><td>Prepare and run <strong>your own RTL</strong> (synthesis, memory mapping, scopes)</td><td><a href="synthesis-flow.html">Synthesis Flow</a></td></tr>
+<tr><td>Run the large research <strong>benchmarks</strong> (NVDLA, Rocket, Gemmini)</td><td><a href="https://github.com/gpu-eda/Jacquard/blob/main/benchmarks/README.md"><code>benchmarks/README.md</code></a></td></tr>
+<tr><td>Add <strong>timing</strong> (Liberty / SDF / violation checks)</td><td><a href="timing-simulation.html">Timing Simulation</a></td></tr>
+<tr><td>Use <strong>UVM / cocotb / SVA</strong>, or understand interop limits</td><td><a href="interop.html">Testbench Interop</a></td></tr>
+<tr><td>Add support for a <strong>new PDK</strong></td><td><a href="adding-a-pdk.html">Adding a New PDK</a></td></tr>
+<tr><td>Understand <strong>how it works</strong></td><td><a href="simulation-architecture.html">Simulation Architecture</a></td></tr>
+</tbody></table>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="synthesis-flow--running-your-own-design"><a class="header" href="#synthesis-flow--running-your-own-design">Synthesis Flow — Running Your Own Design</a></h1>
+<blockquote>
+<p><strong>New to Jacquard?</strong> Start with <a href="getting-started.html">Getting Started</a>, which
+runs bundled designs in a few seconds with no synthesis. This page is the
+deeper path: preparing <strong>your own RTL</strong> — memory and logic synthesis, scope
+handling, and timing — for simulation.</p>
+</blockquote>
 <p><strong>Caveats</strong>: <code>jacquard sim</code> drives the design from a static input waveform (e.g. VCD); for reactive testbenches use <code>jacquard cosim</code>. Storage must be <strong>edge-triggered flip-flops</strong> — <em>latches</em> (level-sensitive storage) are not supported. Asynchronous <strong>set/reset on flip-flops is fine</strong> (async reset is <em>not</em> the restriction); what's excluded is latch-based / level-sensitive sequential logic.</p>
 <p><strong>Dataset</strong>: Some (namely, netlists after AIG transformation in Steps 1-2 below, and reference VCDs) input data is available <a href="https://drive.google.com/drive/folders/1M42vFoVZhG4ZjyD1hqYD0Hrw8F1rwNXd?usp=drive_link">here</a> .</p>
 <h2 id="step-0-download-the-aig-process-kit"><a class="header" href="#step-0-download-the-aig-process-kit">Step 0. Download the AIG Process Kit</a></h2>
@@ -627,6 +750,58 @@ cargo run -r --features cuda --bin jacquard -- sim path/to/gatelevel.gv path/to/
 </tbody></table>
 </div>
 <p>For licensing context (Jacquard is permissively-licensed, OpenSTA is GPL-3, and Jacquard's runtime subprocess invocation is permitted but bundling is not), see <a href="adr/0006-sdf-preprocessing-model.html"><code>adr/0006-sdf-preprocessing-model.md</code></a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="testbench-interop-uvm-cocotb-sva"><a class="header" href="#testbench-interop-uvm-cocotb-sva">Testbench Interop (UVM, cocotb, SVA)</a></h1>
+<p>A common first question: <em>"Can I point my existing UVM / cocotb / SVA testbench
+at Jacquard?"</em></p>
+<p><strong>Short answer: not today.</strong> Jacquard is a gate-level <em>engine</em>, not a drop-in
+replacement for a SystemVerilog or Python simulator's testbench runtime. This
+page explains what works now, what is on the roadmap, and the fallback that
+works for any flow today.</p>
+<h2 id="what-jacquard-drives-today"><a class="header" href="#what-jacquard-drives-today">What Jacquard drives today</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Mechanism</th><th>What it is</th><th>Reactive?</th></tr></thead><tbody>
+<tr><td><code>jacquard sim</code> + input VCD</td><td>Replay a recorded input waveform through the netlist</td><td>No — inputs are fixed</td></tr>
+<tr><td><code>jacquard cosim</code> + peripheral models</td><td>UART, SPI flash, JTAG, Wishbone / APB3 monitors run as GPU kernels beside the design</td><td>Yes — inputs can depend on outputs cycle-by-cycle</td></tr>
+</tbody></table>
+</div>
+<p>So <em>reactive</em> stimulus is supported — but through Jacquard's own
+<a href="adr/0013-plural-peripheral-configs.html">peripheral model architecture</a> and
+<a href="adr/0017-cosim-execution-model.html">cosim execution model</a>, not through an
+external testbench framework.</p>
+<h2 id="the-fallback-that-works-for-any-flow-record-and-replay"><a class="header" href="#the-fallback-that-works-for-any-flow-record-and-replay">The fallback that works for any flow: record-and-replay</a></h2>
+<p>You do <strong>not</strong> need framework integration to use Jacquard with a UVM, cocotb, or
+plain-Verilog testbench. The universal path:</p>
+<ol>
+<li>Run your existing testbench against any simulator that can dump a VCD
+(Verilator, Icarus, a commercial simulator, …).</li>
+<li>Dump the design's <strong>top-level input</strong> pins to a VCD.</li>
+<li>Replay that VCD through Jacquard with <code>jacquard sim</code>.</li>
+</ol>
+<p>This is exactly what <code>jacquard sim</code> already is — a recorded-waveform replay — so
+it works regardless of how the stimulus was generated. The trade-off is that the
+replay is open-loop: it reproduces the <em>recorded</em> inputs, so it can't react to
+divergent design behaviour. For closed-loop reactive stimulus, model the
+peripheral as a cosim kernel instead.</p>
+<h2 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h2>
+<p>These are directions under consideration, not commitments or dated milestones:</p>
+<ul>
+<li><strong>SVA (SystemVerilog Assertions)</strong> — <em>planned.</em> Jacquard already lowers a class
+of immediate assertions through synthesis (<code>GEM_ASSERT</code> cells; see the
+assertion handling in <code>aigpdk.rs</code>). Broader SVA support is the next step here.</li>
+<li><strong>Running UVM test suites</strong> — <em>being explored.</em> The open question is which
+parts of the UVM runtime can be driven against a gate-level GPU engine versus
+what has to be reworked.</li>
+<li><strong>cocotb</strong> — <em>needs more work.</em> A naive bridge would marshal Python ↔ GPU every
+cycle, which would dominate runtime and erase the GPU speedup. Making cocotb
+<em>performant</em> against Jacquard needs more design thinking, not just a shim.</li>
+</ul>
+<p>If any of these is blocking for you, the record-and-replay path above is the
+recommended interim approach.</p>
+<h2 id="see-also"><a class="header" href="#see-also">See also</a></h2>
+<ul>
+<li><a href="getting-started.html">Getting Started</a> — <code>sim</code> and <code>cosim</code> walkthroughs</li>
+<li><a href="bus-tracing.html">Bus Transaction Tracing</a> — protocol-aware observation of on-chip buses</li>
+<li><a href="adr/0017-cosim-execution-model.html">Cosim execution model</a> — how peripheral kernels run</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="why-jacquard--positioning-and-output-interface"><a class="header" href="#why-jacquard--positioning-and-output-interface">Why Jacquard — positioning and output interface</a></h1>
 <p><strong>Status:</strong> Honest assessment of where Jacquard fits in an EDA flow alongside dedicated STA tools (OpenTimer/OpenSTA) and event-driven simulators (Verilator, iverilog, CVC). Includes a survey of what timing information Jacquard exposes today and what would let users actually consume it.</p>
 <p>This is not a marketing document. The goal is for a contributor or user to read it and decide accurately whether Jacquard helps them — and, if it does, how to extract the answer they need.</p>
@@ -1659,7 +1834,7 @@ Band 3: 30+ps    → Threads 192-255
 <p>Setup and hold violations occur when data arrives too late (setup) or too early (hold) relative to the clock edge at a flip-flop. GEM checks for these violations during GPU simulation by tracking <strong>arrival times</strong> — the accumulated gate delay from primary inputs or DFF outputs through combinational logic to the next DFF data input.</p>
 <p><strong>Approximation model</strong>: GEM tracks one arrival time per 32-signal group (one GPU thread position). The arrival is the <strong>maximum</strong> across all 32 signals in the group. This is conservative: it may over-report violations but will never miss a real one. See <a href="timing-violations.html#the-approximation-caveat">Reducing False Positives</a> for details.</p>
 <h2 id="enabling-timing-checks"><a class="header" href="#enabling-timing-checks">Enabling Timing Checks</a></h2>
-<h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
+<h3 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h3>
 <ol>
 <li><strong>SDF file</strong> with back-annotated delays from your place-and-route tool</li>
 <li><strong>Gate-level netlist</strong> synthesized to <code>aigpdk.lib</code> cells</li>
@@ -3607,7 +3782,7 @@ alongside their netlist.</li>
 <p>If you're adding just a memory macro or other behaviourally-opaque IP,
 <strong>skip ahead to "Adding third-party IP via runtime manifest"</strong> at the
 end of this document — it's a 6-line TOML entry, not a Rust PR.</p>
-<h2 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h2>
+<h2 id="prerequisites-2"><a class="header" href="#prerequisites-2">Prerequisites</a></h2>
 <p>You need:</p>
 <ul>
 <li>The PDK's Verilog cell library (behavioral or functional models)</li>
@@ -4748,6 +4923,7 @@ the code before writing it.</p>
 <tr><td><a href="adr/0016-selective-x-propagation.html">0016</a></td><td>Selective X-propagation</td><td>Accepted (amended 2026-06-25)</td></tr>
 <tr><td><a href="adr/0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted (amended 2026-06-25)</td></tr>
 <tr><td><a href="adr/0018-distribution-and-installation.html">0018</a></td><td>Distribution and installation model</td><td>Accepted (amended 2026-06-25) — Phase 4 &amp; 7 open</td></tr>
+<tr><td><a href="adr/0019-cell-model-ir.html">0019</a></td><td>Cell-model IR: a complete per-cell-type library descriptor</td><td>Proposed</td></tr>
 </tbody></table>
 </div>
 <h2 id="how-the-adrs-relate"><a class="header" href="#how-the-adrs-relate">How the ADRs relate</a></h2>
@@ -4895,13 +5071,38 @@ the <code>Mentor</code> variant was added and isn't mentioned in the original te
 <li>Adopting FlatBuffers adds a code-generation step to the build, via <code>flatc</code>. Build hygiene (checked-in generated code, pinned <code>flatc</code> version, or a build-script integration) is required.</li>
 <li>If the IR is ever shared across other tooling beyond Jacquard, its stability contract tightens. Flagged in open questions on <code>timing-correctness.md</code>; not resolved here.</li>
 </ul>
+<h2 id="amendment-2026-06-23-cell-characterization-is-adr-0019-not-this-ir"><a class="header" href="#amendment-2026-06-23-cell-characterization-is-adr-0019-not-this-ir">Amendment 2026-06-23: cell characterization is ADR 0019, not this IR</a></h2>
+<p>The scope boundary above ("not cell characterization … they become
+separate IRs if needed") is now realised by
+<a href="adr/0019-cell-model-ir.html">ADR 0019</a>. Two timing artifacts must not be
+conflated: this IR is <strong>per-design instance annotation</strong> (<code>TimingArc { cell_instance }</code>, SDF-equivalent for a specific netlist), whereas
+<strong>per-cell-type</strong> timing characterization (setup/hold, clock→Q, today's
+<code>liberty_parser::TimingLibrary</code>) is a <em>library</em> property and lives in the
+ADR-0019 cell-model IR alongside the cell's logic. The two are orthogonal
+axes — per-design vs per-library — not two halves of one scope. This
+ADR's decision is unchanged.</p>
 <h2 id="links-1"><a class="header" href="#links-1">Links</a></h2>
 <ul>
-<li><code>../project-scope.md</code> — validation and permissive-license constraints.</li>
-<li><code>../timing-correctness.md</code> — requirement R1, principle P5 (multi-corner).</li>
-<li>ADR 0001 — OpenSTA oracle (IR is the diff format).</li>
-<li>ADR 0003 — <strong>Superseded.</strong> OpenTimer was the proposed in-process reference STA; spike Q2 fail moved Jacquard to OpenSTA-only via <code>opensta-to-ir</code>. See <code>../spikes/opentimer-sky130.md</code>.</li>
-<li>ADR 0004 — private PDK testing (IR enables portable fixtures without leaking PDK data).</li>
+<li>
+<p><a href="adr/0019-cell-model-ir.html">ADR 0019</a> — cell-model IR (per-cell-type
+characterization; the "separate IR" this ADR's scope boundary
+anticipated).</p>
+</li>
+<li>
+<p><code>../project-scope.md</code> — validation and permissive-license constraints.</p>
+</li>
+<li>
+<p><code>../timing-correctness.md</code> — requirement R1, principle P5 (multi-corner).</p>
+</li>
+<li>
+<p>ADR 0001 — OpenSTA oracle (IR is the diff format).</p>
+</li>
+<li>
+<p>ADR 0003 — <strong>Superseded.</strong> OpenTimer was the proposed in-process reference STA; spike Q2 fail moved Jacquard to OpenSTA-only via <code>opensta-to-ir</code>. See <code>../spikes/opentimer-sky130.md</code>.</p>
+</li>
+<li>
+<p>ADR 0004 — private PDK testing (IR enables portable fixtures without leaking PDK data).</p>
+</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0003--opentimer-as-in-process-reference-sta"><a class="header" href="#adr-0003--opentimer-as-in-process-reference-sta">ADR 0003 — OpenTimer as in-process reference STA</a></h1>
 <p><strong>Status:</strong> Superseded (2026-05-01). Spike (<code>../spikes/opentimer-sky130.md</code>) failed Q2 — OpenTimer's input pipeline cannot handle real OpenROAD-flow <code>.v</code>/<code>.spef</code> for SKY130 designs with bus ports. Fallback is OpenSTA subprocess validation only (ADR 0001); a future ADR may revisit libreda-sta or an in-house walker if an in-process reference is wanted later.</p>
@@ -5080,7 +5281,7 @@ corpus-split <em>architecture</em> is implemented as described.</p>
 <li>Hard-fail (not warn) when <code>--sdf</code> is requested and OpenSTA cannot be located.</li>
 <li>Probe OpenSTA's version on first invocation and fail with a remediation message if it is older than the version pinned in <code>vendor/opensta/</code> (per ADR 0005).</li>
 <li>Warn-but-proceed if the detected version is newer than the latest tested version, naming the version in the warning.</li>
-<li>Document the OpenSTA dependency in <code>docs/usage.md</code>.</li>
+<li>Document the OpenSTA dependency in <code>docs/synthesis-flow.md</code>.</li>
 </ol>
 <p>Tracked as <strong>WS-RH.1</strong> in <code>../plans/post-phase-0-roadmap.md</code> § Release hardening.</p>
 <p><strong>Code-comment cleanup follow-up.</strong> The <code>INTERIM per ADR 0006</code> / <code>Pre-release only</code> tags in <code>src/sim/setup.rs</code> (lines ~176, ~228, ~286) and <code>src/bin/jacquard.rs</code> (~187) describe a premise that no longer applies. Folded into WS-RH.1 (<code>../plans/post-phase-0-roadmap.md</code> § Release hardening) rather than spun out as a separate cleanup commit.</p>
@@ -7418,6 +7619,363 @@ layer to remove.</li>
 <li>Implementation phasing: <a href="adr/../plans/distribution.html"><code>../plans/distribution.md</code></a>.</li>
 <li>Release mechanics: <a href="adr/../release-process.html"><code>../release-process.md</code></a>.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0019--cell-model-ir-a-complete-per-cell-type-library-descriptor"><a class="header" href="#adr-0019--cell-model-ir-a-complete-per-cell-type-library-descriptor">ADR 0019 — Cell-model IR: a complete per-cell-type library descriptor</a></h1>
+<p><strong>Status:</strong> Proposed — all four design open questions resolved (see below);
+pending maintainer approval to start implementation (plan C1).</p>
+<h2 id="context-18"><a class="header" href="#context-18">Context</a></h2>
+<p>Everything Jacquard needs to know about a standard cell is a <strong>property
+of the cell type</strong> and comes from the <strong>same Liberty library</strong> — its pin
+directions, its combinational logic, its sequential/classification
+nature, <em>and</em> its timing characterization:</p>
+<div class="table-wrapper"><table><thead><tr><th>Per-cell-type fact</th><th>What Jacquard needs</th><th>Where it lives today</th></tr></thead><tbody>
+<tr><td><strong>L1 — pin directions</strong></td><td>input vs output per pin</td><td>build-time baked from vendored submodules (<code>build.rs</code> → <code>GF180MCU_PIN_TABLE</code>/<code>SKY130_PIN_TABLE</code>), hand-coded for AIGPDK; partly user-suppliable via <code>--cell-library &lt;v&gt;</code> (ADR 0010 Tier 1)</td></tr>
+<tr><td><strong>L2 — combinational logic</strong></td><td>the boolean function of each output, to build the AIG</td><td>read at runtime from a <strong>hardcoded</strong> <code>vendor/…/&lt;cell&gt;.functional.v</code> and decomposed by <code>pdk_decomp</code> (<code>src/aig.rs:1895</code>); fully hand-coded for AIGPDK</td></tr>
+<tr><td><strong>L3 — sequential &amp; classification</strong></td><td>is the cell a DFF/latch/clock-gate/SRAM/tie/filler, and what are its pin roles (clock, D, Q, async set/reset, enable; SRAM ports)?</td><td>hand-coded per-PDK Rust (<code>src/pdk.rs</code>, <code>src/gf180mcu_pdk.rs</code>, <code>src/sky130_pdk.rs</code>, pin-name matches in <code>src/aig.rs:2080-2260</code>) — <em>data masquerading as code</em> (ADR 0010's framing)</td></tr>
+<tr><td><strong>L4 — timing characterization</strong></td><td>per-cell-type setup/hold, clock→Q, DFF/SRAM timing</td><td>parsed at runtime from a <code>.lib</code> into <code>liberty_parser::TimingLibrary</code> (<code>src/liberty_parser.rs</code>), consumed in <code>src/aig.rs:2793</code> / <code>src/flatten.rs</code> (incl. as a <code>liberty_fallback</code>); already user-suppliable via a <code>.lib</code> path</td></tr>
+</tbody></table>
+</div>
+<h3 id="two-different-timing-artifacts--only-one-is-per-cell-type"><a class="header" href="#two-different-timing-artifacts--only-one-is-per-cell-type">Two different "timing" artifacts — only one is per-cell-type</a></h3>
+<p>This is the easy thing to conflate. There are two:</p>
+<ul>
+<li><strong>Per-cell-type characterization</strong> (L4 above) — setup/hold, clock→Q,
+delays — a <strong>library</strong> property, one value per cell type, straight from
+the <code>.lib</code>.</li>
+<li><strong>Per-design annotation</strong> — the <strong>timing IR</strong> (ADR 0002),
+<code>TimingArc { cell_instance: "&lt;hierarchical instance path&gt;" }</code> — SDF for
+<em>a specific netlist's instances</em>, produced per-design by SDF/OpenSTA.</li>
+</ul>
+<p>Only L4 is a cell-library fact. The timing IR is <strong>orthogonal</strong> to a cell
+library — it annotates a design, not a library — and stays its own IR.
+ADR 0002 drew exactly this line and predicted this ADR:</p>
+<blockquote>
+<p>"The IR represents <em>timing annotation data only</em>. It is <strong>not</strong> … cell
+characterization. Attempts to extend it toward those adjacent formats
+are rejected — <strong>they become separate IRs if needed</strong>."</p>
+</blockquote>
+<p>Cell characterization is that separate IR. It is <strong>not a sibling</strong> of the
+timing IR (same scope, different half); it is a <strong>different axis</strong>
+entirely — per-cell-type library facts vs per-instance design annotation.</p>
+<h3 id="where-the-declarative-path-got-to"><a class="header" href="#where-the-declarative-path-got-to">Where the declarative path got to</a></h3>
+<p>ADR 0010 opened a <strong>declarative path</strong> for some of L1–L3 (<code>--cell-library</code>
+for L1, a <code>.cells.toml</code> manifest for cell <em>kind</em>), and ADR 0011 added a
+real port-mapping schema for <code>kind = "ram"</code>. But ADR 0010 explicitly
+<strong>deferred the larger schema</strong> — sequential pin-roles, full L3 — "to a
+future ADR after real adoption data", L2 was never addressed (functional
+models still come from a hardcoded <code>vendor/</code> path), and L4 lives in a
+parallel runtime <code>.lib</code> parser. Four facts about one cell type, from one
+Liberty file, arrive through four different mechanisms.</p>
+<p>Two concrete gaps make this acute, both surfaced by
+issue <a href="https://github.com/gpu-eda/Jacquard/issues/130">#130</a>:</p>
+<ul>
+<li><strong>Selection.</strong> A post-P&amp;R netlist built against the 9-track library
+(<code>gf180mcu_fd_sc_mcu9t5v0</code>) is simulated against the <strong>7-track</strong>
+functional models, because the path is hardcoded
+(<code>src/aig.rs:1895</code>). There is no way to point cosim at the library the
+netlist actually instantiates. (<code>build.rs</code> only <code>assert_eq!</code>s <em>ports</em>,
+not functional bodies, so "7t == 9t" is unenforced for logic.)</li>
+<li><strong>Libraries we cannot vendor.</strong> A proprietary/NDA foundry library can
+never live in <code>jacquard/vendor/</code>. Today L2 and L3 are <em>only</em> satisfiable
+by baking the library into the binary, so such libraries simply cannot
+be simulated — there is no all-runtime path.</li>
+</ul>
+<p>The project already proved the <em>shape</em> of the fix on the timing side: the
+timing IR (ADR 0002) is a portable, versioned, generated, diff-able
+structured form produced from Liberty by a focused converter crate, with
+the vendored sources demoted to a generation-time input. This ADR applies
+the same shape to the cell library — but to <strong>all</strong> of its per-cell-type
+facts at once, in <strong>one</strong> descriptor, because they share one source.</p>
+<h2 id="decision-17"><a class="header" href="#decision-17">Decision</a></h2>
+<p>Introduce a <strong>cell-model IR</strong>: a portable, versioned, <strong>generated</strong>,
+JSON-first structured descriptor that carries <strong>everything per-cell-type
+about a library</strong> — L1 directions, L2 combinational logic, L3
+sequential/classification, <strong>and L4 timing characterization</strong> — in one
+file per library. Jacquard core consumes the cell-model IR (and the
+hand-override manifest from ADR 0010/0011) as its <strong>only</strong> source of cell
+semantics: no per-PDK Rust classifiers, no <code>build.rs</code> pin-table
+generation, no runtime <code>functional.v</code> parsing, and no runtime <code>.lib</code>
+parsing.</p>
+<p>The ADR-0002 timing IR is <strong>unchanged and orthogonal</strong> — it annotates a
+specific design's instances; nothing in it is per-library.</p>
+<p>The sub-decisions:</p>
+<h3 id="d1--one-descriptor-for-all-per-cell-type-facts-the-timing-ir-stays-orthogonal"><a class="header" href="#d1--one-descriptor-for-all-per-cell-type-facts-the-timing-ir-stays-orthogonal">D1 — One descriptor for all per-cell-type facts; the timing IR stays orthogonal</a></h3>
+<p>All five facts (L1–L4 + classification) live in <strong>one</strong> cell-model IR per
+library, because they all come from one Liberty file and are all keyed by
+cell type. This <em>folds in</em> <code>liberty_parser::TimingLibrary</code> (L4): the
+runtime stops parsing <code>.lib</code> and reads pre-extracted timing from the
+descriptor. It does <strong>not</strong> touch the per-design timing IR (ADR 0002),
+which is a different axis (per-instance design annotation) and keeps its
+own crate/format. The only cross-reference the two need is the netlist
+itself — an instance knows its cell type — so there is no shared-schema
+join to co-design between them.</p>
+<h3 id="d2--json-first"><a class="header" href="#d2--json-first">D2 — JSON-first</a></h3>
+<p>The cell-model IR is <strong>machine-generated, not hand-written</strong>, so its
+primary on-disk form is <strong>JSON</strong> — diff-able, inspectable, no <code>flatc</code>
+dependency to read. (This differs from the timing IR, which went
+FlatBuffers-first because timing data is per-instance and large; cell
+models are per-cell-<em>type</em> and small.) A FlatBuffers encoding is a
+<strong>deferred escape hatch</strong> if size or startup cost ever demands it (see
+D3). Schema is explicitly versioned, same evolution discipline as ADR
+0002.</p>
+<h3 id="d3--l2-as-a-pre-built-aig"><a class="header" href="#d3--l2-as-a-pre-built-aig">D3 — L2 as a pre-built AIG</a></h3>
+<p>Each combinational cell's logic is stored as a <strong>pre-decomposed AIG</strong>
+(and-inverter nodes, with input-pin → node and output-pin → node maps),
+<strong>not</strong> as boolean expressions or truth tables. Rationale: the runtime
+splices the cell's AIG directly into the design AIG with no
+decomposition work — minimal startup time and memory, and it removes
+<code>pdk_decomp</code> / functional-Verilog parsing from jacquard core entirely.
+Decomposition moves into the generator (D6). If the aggregate AIG payload
+grows unwieldy in JSON, encode it with FlatBuffers (the D2 escape hatch).</p>
+<h3 id="d4--l3-schema-sequential-pin-roles--classification"><a class="header" href="#d4--l3-schema-sequential-pin-roles--classification">D4 — L3 schema: sequential pin-roles + classification</a></h3>
+<p>Sequential cells carry <strong>pin-role metadata</strong> — clock pin + edge, D /
+next-state, Q/QN, async set/reset pin + polarity, enable — plus their
+combinational next-state function as the same pre-built AIG (D3),
+consumed by the existing <code>DriverType::DFF</code> path (replacing the hardcoded
+pin-name matches in <code>src/aig.rs:2080-2260</code>). Cell <strong>classification</strong>
+(<code>std</code>, <code>dff</code>, <code>latch</code>, <code>clock_gate</code>, <code>ram</code>, <code>tie_high/low</code>, <code>filler</code>,
+<code>endcap</code>, <code>tap</code>, <code>io_pad_*</code>) is a declared kind. This is the sequential
+analogue of ADR 0011's RAM port schema, which stands as the worked
+precedent; RAM keeps its ADR-0011 schema.</p>
+<h3 id="d5--l4-timing-characterization-in-the-same-descriptor"><a class="header" href="#d5--l4-timing-characterization-in-the-same-descriptor">D5 — L4 timing characterization, in the same descriptor</a></h3>
+<p>The descriptor carries the per-cell-type timing — setup/hold, clock→Q,
+DFF/SRAM timing — keyed by the same cell type as the logic; this is the
+data <code>liberty_parser::TimingLibrary</code> holds today, extracted once by the
+generator instead of parsed from a <code>.lib</code> at every run. At runtime this
+<em>replaces</em> <code>TimingLibrary::from_file</code>; the per-design timing IR (ADR 0002)
+still layers a specific design's instance arrivals on top, unchanged.</p>
+<p><strong>Multi-corner lives in the one descriptor, keyed by corner</strong> — the same
+shape the timing IR already uses (<code>crates/timing-ir</code>: an ordered corner-name
+set + a <code>corner_index</code> per value, with <code>min/typ/max</code> as the <em>within-corner</em>
+derate triple). Corner is the outer key; min/typ/max is the orthogonal inner
+derate — not a reinterpretation of the triple. File-per-corner is rejected
+because L1–L3 (directions, function, sequential roles, and especially the
+D3 AIG — the bulk of the descriptor) are <strong>corner-invariant</strong>: only L4's
+numbers vary across <code>ss</code>/<code>tt</code>/<code>ff</code>, so a per-corner file would duplicate the
+<em>expensive</em> AIG to vary the <em>cheap</em> timing. Corner-keyed L4 dedups the AIG,
+keeps <strong>one descriptor = one library</strong> (which D8 selection assumes), and
+degrades to a one-entry corner map for the common single-corner flow. A
+corner-overlay-file split is a <em>deferred size escape hatch</em> (parallel to D2),
+to be decided from a real descriptor size — not built now.</p>
+<p><strong>The simulation corner is user-selected, not read from the netlist or
+SDF.</strong> A <code>--corner &lt;name&gt;</code> run flag picks among the descriptor's corner set,
+defaulting to a descriptor-declared <code>default_corner</code> (typically <code>tt</code>). The
+netlist is structural and records no corner; synthesis <em>used</em> a setup corner
+to choose cells but writes it nowhere Jacquard reads. SDF carries PVT header
+fields (<code>VOLTAGE</code>/<code>PROCESS</code>/<code>TEMPERATURE</code>), but they are the wrong source on
+both counts: when an SDF <em>is</em> present its delays already encode the corner
+and feed the orthogonal timing IR (ADR 0002), so L4 corner selection does
+not apply to annotated instances; and L4 matters precisely in the <strong>no-SDF</strong>
+cosim path (today's <code>liberty_fallback</code>), where there is no SDF header to
+read. There are two different corners — the <strong>setup corner</strong> synthesis
+chose for (a flow fact, recorded nowhere) and the <strong>simulation corner</strong> the
+user wants to observe — and only the user knows the latter, so user-passed
+is the <em>correct</em> source, not a fallback. This also makes today's implicit
+single-corner choice (whatever <code>.lib</code> was passed) explicit. When an SDF is
+supplied, its PVT header may be surfaced as an informational cross-check
+(<code>SDF says ss_125C, you selected tt_025C</code>), never as the selector. This
+mirrors <code>opensta-to-ir</code>, which already treats corner identity as declared
+input, not auto-detected.</p>
+<h3 id="d6--a-separate-generator-converter-crate"><a class="header" href="#d6--a-separate-generator-converter-crate">D6 — A separate generator (converter crate)</a></h3>
+<p>The IR is produced by a <strong>converter crate</strong> mirroring <code>opensta-to-ir</code>:
+Liberty → cell-model IR — emitting <strong>all of L1–L4 from a single pass over
+the <code>.lib</code></strong>, with <code>functional.v</code> consulted only as a fallback for the L2
+combinational cases Liberty under-specifies (see the resolved L2 open
+question below). It <strong>reuses, not reimplements</strong>, the existing machinery:
+<code>pdk_decomp</code> relocates into a shared library the generator links, and the
+Liberty group-walker (<code>src/liberty_parser.rs</code>, which today reads only the
+L4 timing groups) is extended to also read <code>function</code> / <code>ff</code> / <code>latch</code> /
+cell-class. The generator — not jacquard core — owns all Verilog/Liberty
+parsing and AIG decomposition; it is unit-testable in isolation, off the
+runtime critical path.</p>
+<p><strong>Cross-check when both sources are present.</strong> For a library that ships
+both Liberty and <code>functional.v</code> (the open PDKs), the generator validates
+the two against each other and <strong>surfaces any disagreement</strong> as a
+generation-time diagnostic rather than silently trusting one. Two checks:</p>
+<ul>
+<li><strong>Logic (L2/L3).</strong> Build the combinational AIG from the Liberty
+<code>function</code> <em>and</em> from the <code>.v</code> gate/UDP netlist and check the two for
+logical equivalence; likewise the sequential next-state/reset from
+Liberty <code>ff</code>/<code>latch</code> against the <code>.v</code> sequential UDP.</li>
+<li><strong>Timing (L4).</strong> For <strong>standard cells</strong>, the <code>.v</code> <code>specify</code> block carries
+timing <em>arc topology</em> but no values (zero-placeholder SDF scaffold), so
+the check is <strong>arc-set agreement</strong>, not value comparison: every Liberty
+<code>timing()</code> group (<code>related_pin</code> + <code>timing_type</code>) should correspond to a
+<code>.v</code> <code>specify</code> path or timing check and vice versa, and across a
+multi-corner library every corner <code>.lib</code> should carry the <strong>same
+cell/arc set</strong> (only the values differ). For <strong>macros/SRAM</strong>, whose
+behavioural <code>.v</code> often embeds <em>real</em> hardcoded timing (access time,
+setup/hold) that can diverge from the macro's Liberty, the check extends
+to a <strong>value comparison</strong> and flags the divergence. A missing, extra, or
+mis-typed arc, a cross-corner arc-set difference, or a macro value
+divergence — on either source — is surfaced. Liberty remains the
+authoritative L4 source either way.</li>
+</ul>
+<p>This is the same diff discipline ADR 0001/0002 use, applied across the L2
+logic sources, the L4 arc topology, and the corner set; it is the
+structural check <code>build.rs</code>'s port-only <code>assert_eq!</code> never had — directly
+the silent-substitution class #130 names.</p>
+<h3 id="d7--bundled-descriptors-regenerated-in-ci-from-pinned-vendored-pdks"><a class="header" href="#d7--bundled-descriptors-regenerated-in-ci-from-pinned-vendored-pdks">D7 — Bundled descriptors regenerated in CI from pinned vendored PDKs</a></h3>
+<p>The built-in PDKs — AIGPDK, SKY130, GF180MCU, and <strong>IHP SG13G2</strong> (added
+through the IR; see D7a) — are bundled as generated cell-model-IR files,
+<strong>regenerated in CI from the pinned vendored PDKs rather than checked in as
+artifacts</strong>. CI runs the converter (D6) over the pinned submodules and
+embeds the resulting descriptors into the binary at build time; the
+descriptors are <em>not</em> committed blobs. The vendored PDKs therefore become
+inputs to <em>cell-library generation</em>, not a runtime dependency of jacquard
+core — core depends on neither the cell submodules nor <code>pdk_decomp</code> at
+runtime, and a released binary is self-contained.</p>
+<p>This is the deliberate contrast with the timing-IR bindings (which are
+checked in): cell descriptors are larger, fully derived, and have a
+deterministic generator, so committing them would only add generated blobs
+and drift risk. Build-time generation replaces today's <code>build.rs</code>
+pin-table generation, so source builds keep the same vendored-submodule
+requirement they already have. Diff-ability (D2) is preserved as a
+<em>capability</em> — CI regenerates deterministically and the generator ships a
+descriptor diff tool (mirroring <code>timing-ir-diff</code>) — rather than via git
+history; drift and provenance are enforced by the CI regeneration + the D6
+cross-check, not by a committed reference.</p>
+<h3 id="d7a--ihp-sg13g2-as-a-new-pdk-added-with-zero-per-pdk-rust"><a class="header" href="#d7a--ihp-sg13g2-as-a-new-pdk-added-with-zero-per-pdk-rust">D7a — IHP SG13G2 as a new PDK added with zero per-PDK Rust</a></h3>
+<p>IHP's open SG13G2 PDK (<a href="https://github.com/IHP-GmbH/IHP-Open-PDK">IHP-Open-PDK</a>)
+is added as a <strong>new</strong> built-in target — Jacquard has no existing per-PDK
+Rust for it — so it is the proof of the headline consequence that <em>adding
+a PDK is no longer a Jacquard code change</em>: it is onboarded purely by
+vendoring its submodule and generating a descriptor. It is also the
+cleanest <strong>Liberty-first</strong> validation: every SG13G2 combinational cell
+carries a <code>function</code> string and every sequential cell a complete <code>ff</code>
+group (with reset polarity), exercising the D6 Liberty-first path end to
+end, in contrast to GF180's <code>functional.v</code>-primary legacy path.</p>
+<h3 id="d8--selection-by-declared-prefix--explicit-override"><a class="header" href="#d8--selection-by-declared-prefix--explicit-override">D8 — Selection by declared prefix + explicit override</a></h3>
+<p>Each descriptor <strong>declares the cell-name prefix(es) it covers</strong>. Jacquard
+auto-matches a netlist against the bundled descriptors (replacing the
+hardcoded prefix detection in <code>src/pdk.rs</code>); <code>--cell-descriptor &lt;foo.json&gt;</code> is the explicit override and the path for proprietary
+libraries. The ADR-0010 <code>.cells.toml</code> becomes the <strong>hand-authored
+override layer</strong> over the generated IR — same data model, different
+provenance.</p>
+<h2 id="consequences-18"><a class="header" href="#consequences-18">Consequences</a></h2>
+<ul>
+<li><strong>Library-agnostic binary.</strong> A proprietary library works with <strong>zero
+Jacquard changes</strong>: the user generates a descriptor on their own machine
+from their Liberty (which never leaves it) and points jacquard at it. The
+generator is the only tool that touches raw foundry files.</li>
+<li><strong>Large core simplification.</strong> <code>src/gf180mcu.rs</code>, <code>src/gf180mcu_pdk.rs</code>,
+<code>src/sky130*.rs</code> special-cases, the <code>PdkVariant</code> enum, the <code>build.rs</code>
+pin-table generators, and the hardcoded vendor paths all retire in
+favour of one IR consumer. Adding a PDK stops being a Jacquard PR — and
+<strong>IHP SG13G2 (D7a) is the worked proof</strong>: a new built-in PDK onboarded
+with zero per-PDK Rust, purely by vendoring + generating a descriptor.</li>
+<li><strong>#130 dissolves.</strong> "Which functional models?" becomes "which descriptor
+matches this netlist" — derived or <code>--cell-descriptor</code>-overridden — and
+the 7t/9t silent-substitution risk goes away because each library has
+its own generated descriptor.</li>
+<li><strong>Retires the runtime <code>.lib</code> parse and unifies "bring your own
+library."</strong> L4 folds in, so <code>liberty_parser::TimingLibrary</code> leaves the
+runtime for the generator. Today you already point at your own <code>.lib</code>
+for timing while the logic is baked from <code>vendor/</code>; now both come from
+one descriptor — exactly the proprietary-library goal.</li>
+<li><strong>New schema + converter crate to maintain,</strong> under the same scope
+discipline ADR 0002 demands: the cell-model IR is <em>per-cell-type library
+facts only</em> — not a netlist, not per-design annotation, not a
+placement/physical model. Creep is rejected.</li>
+<li><strong>Verification moves to a diff/round-trip discipline</strong> (ADR 0001/0002
+pattern): since descriptors are CI-regenerated rather than committed
+(D7), the gate is that <strong>CI regeneration is deterministic</strong> plus a logic
+round-trip — does the IR's AIG reproduce a reference of the cell? — and
+the D6 cross-check across sources. Together these generalise today's
+<code>build.rs</code> port-only <code>assert_eq!</code> into an actual logic check, closing the
+gap #130 names.</li>
+<li><strong>Sequential fidelity is the risk surface.</strong> Mapping Liberty <code>ff</code>
+(<code>clear</code> / <code>preset</code> / <code>clear_preset_var</code>) onto Jacquard's DFF +
+async-reset model is where bugs will hide; it gets dedicated generator
+tests against the existing GF180/SKY130 behaviour as the oracle.</li>
+</ul>
+<h2 id="open-questions-2"><a class="header" href="#open-questions-2">Open questions</a></h2>
+<ul>
+<li>
+<p><del><strong>L2 source of truth</strong></del> — <strong>Resolved (D6): Liberty-first, <code>.v</code> as a
+bounded fallback.</strong> A survey of open and commercial (Liberate-generated)
+standard-cell libraries found the same shape in all of them: Liberty
+carries <code>function</code> for every combinational cell and <code>ff</code>/<code>latch</code> groups
+(<code>clocked_on</code>/<code>next_state</code>/<code>clear</code>/<code>preset</code>, with reset polarity) for
+every sequential cell, while the behavioural <code>.v</code> models sequential cells
+as a vendor UDP wrapped in <code>notifier</code>/<code>$setuphold</code> timing-check
+machinery. So <strong>Liberty is the cleaner and sufficient source for L2
+<code>function</code> and L3 <code>ff</code>/<code>latch</code></strong> — it states the next-state/reset logic
+directly, whereas the <code>.v</code> buries it in simulation scaffolding. The
+generator reads Liberty first and consults <code>.v</code>/UDP <strong>only</strong> for the L2
+combinational cases Liberty under-specifies (cells with no <code>function</code>
+string, or UDP truth tables whose exact X-semantics you want, e.g. some
+muxes). This is the converter's <em>target</em>; the existing GF180/SKY130
+<code>functional.v</code> path is fine as the first converter input in plan C1.</p>
+<p>Two bounded sub-points:</p>
+<ul>
+<li><strong>L4 timing is Liberty-exclusive for standard cells.</strong> A stdcell <code>.v</code>
+<code>specify</code> block carries timing <em>arc topology</em> (which arcs/checks exist)
+but <strong>zero/placeholder values</strong> — it is an SDF back-annotation scaffold,
+redundant with the <code>.lib</code>'s own arc set. So the cross-check on stdcell
+timing is arc-set agreement, not value comparison (see D6).
+<strong>Exception — macros/SRAM.</strong> A memory/macro behavioural <code>.v</code> often
+<strong>embeds real, hardcoded timing</strong> (access time, setup/hold) that can
+<em>diverge</em> from the macro's Liberty — here the two sources disagree on
+<em>values</em>, not just topology. (The GF180 SRAM model is a suspected case,
+not yet diffed; SRAM timing is already a special path in Jacquard, with
+a hardcoded conservative read-delay fallback in
+<code>src/liberty_parser.rs</code>.) The generator must surface that disagreement
+(D6); L4 still comes from Liberty as the single authoritative source,
+but the divergence is a real correctness signal worth flagging rather
+than hiding.</li>
+<li><strong>Violation-response is out of scope.</strong> The <code>.v</code>'s <code>notifier</code>→UDP-<code>x</code>
+corruption-on-violation is a <em>simulator policy</em>, not a per-cell-type
+library fact: the constraint <em>values</em> it needs are already L4 from
+Liberty, and the <em>response</em> is owned by Jacquard's own timing-violation
+subsystem (<code>docs/timing-violations.md</code>: report-based, X only under
+<code>--xprop</code>). It is not extracted into the IR.</li>
+</ul>
+</li>
+<li>
+<p><del><strong>L4 multi-corner shape</strong></del> — <strong>Resolved (D5):</strong> all corners in the one
+descriptor, L4 keyed by corner (mirroring the timing IR's corner-set +
+<code>corner_index</code>; min/typ/max stays the orthogonal within-corner derate).
+Simulation corner is user-selected via <code>--corner</code> (default
+<code>default_corner</code>), <em>not</em> inferred from the netlist or SDF — the setup
+corner is recorded nowhere Jacquard reads, and SDF delays already encode
+the corner via the orthogonal timing IR. Corner-overlay-file split deferred
+as a size escape hatch.</p>
+</li>
+<li>
+<p><del><strong>Bundled-descriptor provenance</strong></del> — <strong>Resolved (D7): regenerated in
+CI</strong> from pinned vendored PDKs and embedded at build time, <em>not</em> checked
+in as artifacts. Build-time generation replaces the <code>build.rs</code> pin-table
+step (source builds keep the existing submodule requirement); diff-ability
+and drift control move to deterministic CI regeneration + the generator's
+descriptor diff tool + the D6 cross-check.</p>
+</li>
+<li>
+<p><del><strong>Migration shape</strong></del> — <strong>Resolved: per-PDK cutover.</strong> The IR consumer
+runs alongside the per-PDK Rust and each PDK is migrated independently,
+keeping the suite green throughout, rather than a single switch. <strong>IHP
+SG13G2 (D7a) is added in the same per-PDK fashion</strong> — but greenfield (no
+existing Rust to retire), so it doubles as the zero-per-PDK-Rust proof.</p>
+</li>
+</ul>
+<h2 id="relationship-to-other-adrs"><a class="header" href="#relationship-to-other-adrs">Relationship to other ADRs</a></h2>
+<ul>
+<li><strong>Orthogonal to <a href="adr/0002-timing-ir.html">ADR 0002</a></strong> — the timing IR is
+per-design instance annotation; the cell-model IR is per-cell-type
+library facts (incl. L4 timing characterization). Different axes, not
+siblings — but the cell-model IR <em>realises</em> 0002's predicted "separate
+IR for cell characterization", and reuses its versioning + diff
+discipline.</li>
+<li><strong>Extends <a href="adr/0010-declarative-cell-metadata.html">ADR 0010</a></strong> — supplies the
+"future ADR" 0010 deferred for the heavy (L2/L3) schema, folds in the L4
+<code>.lib</code> characterization, and recasts the <code>.cells.toml</code> path as a
+hand-override over generated IR.</li>
+<li><strong>Builds on <a href="adr/0011-ram-port-mapping-schema.html">ADR 0011</a></strong> — RAM keeps its
+port schema; it is the worked precedent for the D4 sequential schema.</li>
+<li><strong>Feeds <a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a></strong> — the cell-model IR's
+L2 payload <em>is</em> AIG (D3), spliced into the design AIG at load.</li>
+</ul>
+<p>Staged delivery: <a href="adr/../plans/cell-model-ir.html"><code>docs/plans/cell-model-ir.md</code></a>.
+Tracks <a href="https://github.com/gpu-eda/Jacquard/issues/130">#130</a> and
+<a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="implementation-plans"><a class="header" href="#implementation-plans">Implementation Plans</a></h1>
 <p>Phased implementation plans with entry and exit criteria. Plans live
 here when the work spans multiple commits and needs an explicit
@@ -7445,6 +8003,7 @@ persistent plans here.</p>
 <tr><td><a href="plans/ws3-cosim-sdf-followup.html">WS3 follow-up: re-add cosim <code>--sdf</code> via <code>opensta-to-ir</code></a></td><td>Deferred</td></tr>
 <tr><td><a href="plans/multi-clock-and-stimulus-architecture.html">Multi-clock and stimulus architecture</a></td><td>Exploratory — demand-driven</td></tr>
 <tr><td><a href="plans/cosim-backend-portability.html">Cosim backend portability</a></td><td>Active — design captured (#105); see ADR 0017 amendment</td></tr>
+<tr><td><a href="plans/cell-model-ir.html">Cell-model IR</a></td><td>Proposed — realises ADR 0019 (#130, #67)</td></tr>
 </tbody></table>
 </div>
 <h2 id="reading-order-for-new-contributors"><a class="header" href="#reading-order-for-new-contributors">Reading order for new contributors</a></h2>
@@ -7581,7 +8140,7 @@ status in the file and here in the same commit.</li>
 <li>Cache the result for the rest of the process. ~1 day.</li>
 </ul>
 </li>
-<li><strong>Document the dependency in <code>docs/usage.md</code>.</strong> Single section: required tooling, install paths, version range, what <code>jacquard sim</code> does and doesn't need OpenSTA for. ~0.5 day.</li>
+<li><strong>Document the dependency in <code>docs/synthesis-flow.md</code>.</strong> Single section: required tooling, install paths, version range, what <code>jacquard sim</code> does and doesn't need OpenSTA for. ~0.5 day.</li>
 <li><strong>Test coverage:</strong> unit tests for the version-string parser (with sample <code>-version</code> outputs from the pinned version and a synthetic too-old version); an integration test that points <code>JACQUARD_OPENSTA_BIN</code> at a stub script and confirms the error path. ~0.5 day.</li>
 <li><strong>Stale-framing cleanup</strong> (folded in here per 2026-05-02 decision rather than spun out separately):
 <ul>
@@ -7917,7 +8476,7 @@ markers below are preserved for the implementation record.</p>
 <li>Parser-success assertions on the SDF and Liberty paths.</li>
 </ol>
 <p>After phase 0, Jacquard's timing pipeline has an enforced external reference. Silent failures (zero-match SDF, mis-scoped hierarchical prefixes, unexpected cell drops) surface as CI failures rather than correctness regressions detected in the field.</p>
-<h2 id="prerequisites-2"><a class="header" href="#prerequisites-2">Prerequisites</a></h2>
+<h2 id="prerequisites-3"><a class="header" href="#prerequisites-3">Prerequisites</a></h2>
 <ul>
 <li>Requirements doc (<code>../timing-correctness.md</code>) accepted.</li>
 <li>ADR 0001 (OpenSTA oracle) accepted.</li>
@@ -8372,7 +8931,7 @@ flat.load_timing_from_ir(&amp;aig, &amp;netlistdb, &amp;ir, ...);
 </tbody></table>
 </div>
 <p>Each phase exits cleanly. Phase 3.4 is the irreversible deletion — gates on phases 3.1-3.3 having green CI on the migration tests.</p>
-<h2 id="open-questions-2"><a class="header" href="#open-questions-2">Open questions</a></h2>
+<h2 id="open-questions-3"><a class="header" href="#open-questions-3">Open questions</a></h2>
 <ul>
 <li><strong>Hierarchy separator</strong>: SDF uses <code>.</code>, OpenSTA's default divider is <code>/</code>. Our IR's <code>cell_instance</code> strings come from OpenSTA so use <code>/</code>. The flatten.rs hierarchy-prefix detection logic uses <code>.</code>. After cutover, the logic needs to use <code>/</code>. Verify by running on a hierarchical design (MCU SoC) before declaring 3.4 ready.</li>
 <li><strong><code>--sdf-corner</code> semantics under IR</strong>: today this picks one of <code>Min/Typ/Max</code> from SDF triples. The IR has min/typ/max per <code>TimingValue</code> already; the corner selection becomes "pick which of the three to use" applied per-arc rather than per-file. Document the mapping.</li>
@@ -9238,7 +9797,7 @@ assert the expected DMI register accesses (DMCONTROL/DMSTATUS) appear.</li>
 <li>Build: <code>cargo build --release --features metal</code> clean; existing cosim tests
 (single-UART, WbTrace) unaffected since <code>bus_traces</code> defaults empty.</li>
 </ul>
-<h2 id="open-questions-3"><a class="header" href="#open-questions-3">Open questions</a></h2>
+<h2 id="open-questions-4"><a class="header" href="#open-questions-4">Open questions</a></h2>
 <ul>
 <li><strong>AHB integration test design.</strong> APB3 validates on the existing Hazard3
 JTAG-DM. Phase 2 needs an AHB-Lite/AHB5 design — do we have one, or synthesize
@@ -10985,6 +11544,69 @@ debugging-tools section.</li>
 <li>Dominator analysis (decision 2).</li>
 <li>Wire-bundle reconstruction of multi-bit X-source buses (tracked separately).</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="cell-model-ir--staged-delivery-plan"><a class="header" href="#cell-model-ir--staged-delivery-plan">Cell-model IR — staged delivery plan</a></h1>
+<p><strong>Status:</strong> Proposed — not started. Realises
+<a href="plans/../adr/0019-cell-model-ir.html">ADR 0019</a>. Tracks
+<a href="https://github.com/gpu-eda/Jacquard/issues/130">#130</a> and
+<a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a>.</p>
+<p><strong>Goal:</strong> make Jacquard core consume a single, generated, JSON cell-model
+IR carrying <em>all</em> per-cell-type facts of a library — L1 directions, L2
+combinational AIG, L3 sequential/classification, <strong>and L4 timing
+characterization</strong> — so any library, including proprietary ones the
+authors can't vendor, is selectable at runtime, and the per-PDK Rust, the
+hardcoded <code>vendor/</code> paths, <em>and</em> the runtime <code>.lib</code> parse all retire.</p>
+<h2 id="why-staged"><a class="header" href="#why-staged">Why staged</a></h2>
+<p>Each step is independently useful and de-risks the next: step 1 ships the
+#130 fix and <em>validates the format on real cells</em> before the heavier L3
+schema is committed; step 2 is the schema-fidelity work; step 3 is the
+cleanup that the first two earn.</p>
+<h2 id="staged-checkpoints-each--one-reviewable-pr-1"><a class="header" href="#staged-checkpoints-each--one-reviewable-pr-1">Staged checkpoints (each ≈ one reviewable PR)</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>#</th><th>Scope</th><th>Gate</th></tr></thead><tbody>
+<tr><td><strong>C1 — foundation + #130</strong></td><td>Relocate <code>pdk_decomp</code> into a shared lib. Define the cell-model-IR JSON schema for <strong>L1 directions + L2 combinational AIG</strong> (D3) — the corner of the schema needed to build the AIG. Write the converter crate (Liberty <code>function</code>/<code>functional.v</code> → IR). Redirect <em>one</em> PDK's (GF180MCU) stdcell logic to consume the IR.</td><td>A 9T netlist (e.g. <code>tests/jtag_minimal</code>) simulates against its <strong>own</strong> generated 9T descriptor; result byte-identical to the current 7T-substituted run where they truly agree, and the round-trip logic check passes.</td></tr>
+<tr><td><strong>C2 — L3 sequential + L4 timing schema</strong></td><td>Add the D4 sequential pin-role schema (clock+edge, D/next-state, Q, async set/reset+polarity, enable) + classification kinds, <strong>and the D5 L4 timing block</strong> (setup/hold, clock→Q, DFF/SRAM timing). Extend the converter to emit both from Liberty <code>ff</code>/<code>latch</code> and the timing groups it already parses, with <strong>L4 keyed by corner</strong> (one descriptor, all corners; mirrors the timing IR). Wire the consumer to replace the hardcoded DFF pin-name matches (<code>src/aig.rs:2080-2260</code>) and to read L4 from the IR instead of <code>TimingLibrary::from_file</code>, selecting the corner via <code>--corner</code> (default <code>default_corner</code>).</td><td>A design with sequential GF180/SKY130 cells simulates <strong>and times</strong> from the IR with <strong>no per-PDK Rust DFF handling and no runtime <code>.lib</code> parse</strong>; equivalence vs the current hardcoded + <code>liberty_parser</code> path (the oracle).</td></tr>
+<tr><td><strong>C3 — bundle + cut over + selection</strong></td><td><strong>Regenerate</strong> bundled descriptors for all built-in PDKs (AIGPDK/SKY130/GF180) <strong>in CI from the pinned vendored submodules and embed at build time — not checked in</strong> (D7); build-time generation replaces the <code>build.rs</code> pin-table step. Selection by descriptor-declared prefix + <code>--cell-descriptor</code> (D8). Drop the runtime <code>vendor/</code> cell dependency, <code>pdk_decomp</code>, and <code>liberty_parser::TimingLibrary</code> from core; retire <code>gf180mcu*.rs</code>/<code>sky130*.rs</code> classifiers, <code>PdkVariant</code>, and the <code>build.rs</code> pin-table generators.</td><td>The existing PDK regression suite (incl. timed runs) passes consuming <strong>only</strong> build-time-generated descriptors; vendored cell submodules are no longer a <em>runtime</em> dependency of jacquard core, and CI regeneration is deterministic.</td></tr>
+<tr><td><strong>C3a — IHP SG13G2 (new PDK, zero Rust)</strong></td><td>Vendor the <a href="https://github.com/IHP-GmbH/IHP-Open-PDK">IHP-Open-PDK</a> SG13G2 stdcells as a submodule; add it to the bundle by <strong>generating a descriptor only — no per-PDK Rust</strong> (D7a). Exercises the Liberty-first path cleanly (every SG13G2 cell has <code>function</code>; every flop a full <code>ff</code> group with reset polarity).</td><td>An SG13G2 gate-level design simulates <strong>and times</strong> purely from its generated descriptor, with no <code>ihp_*.rs</code> in core — the worked proof that adding a PDK is no longer a Jacquard code change.</td></tr>
+<tr><td><strong>C4 (later)</strong></td><td>A documented proprietary-library workflow: user runs the generator on their own Liberty, gets a descriptor, simulates — no Jacquard build. Honesty fix: the round-trip logic check replaces <code>build.rs</code>'s port-only <code>assert_eq!</code>.</td><td><code>docs/adding-a-pdk.md</code> recipe; a synthetic "private" library exercised end-to-end in a test.</td></tr>
+</tbody></table>
+</div>
+<h2 id="risks--open-questions-2"><a class="header" href="#risks--open-questions-2">Risks / open questions</a></h2>
+<ul>
+<li><strong>Sequential fidelity (C2).</strong> Liberty <code>ff</code> <code>clear</code>/<code>preset</code>/
+<code>clear_preset_var</code> → Jacquard async-reset DFF is the bug-prone mapping;
+gate it on equivalence against the current hardcoded behaviour.</li>
+<li><strong>L2 source (Liberty-first; resolved in ADR 0019 D6).</strong> The converter
+reads Liberty <code>function</code>/<code>ff</code>/<code>latch</code> first and falls back to
+<code>functional.v</code>/UDP only where Liberty under-specifies. C1 must therefore
+exercise both ends: a clean <code>function</code> cell <em>and</em> a cell that needs the
+<code>.v</code>/UDP fallback (a UDP-modelled mux). Where both sources exist, the
+converter cross-checks them (logic equivalence; timing arc-set agreement;
+macro/SRAM timing-value divergence) and <strong>surfaces disagreement</strong> — the
+structural check <code>build.rs</code>'s port-only <code>assert_eq!</code> never had (#130).</li>
+<li><strong>AIG payload size (D2/D3).</strong> If the JSON AIG is unwieldy for a full
+library, switch that payload to the FlatBuffers escape hatch — decide at
+C1 from the real GF180 descriptor size.</li>
+<li><strong>Migration ordering (C3) — resolved: per-PDK cutover.</strong> Each PDK
+migrates independently with the IR consumer running alongside the per-PDK
+Rust, keeping the suite green; a single switch is riskier. IHP (C3a) is
+added the same way but greenfield (no Rust to retire).</li>
+<li><strong>Bundled-descriptor provenance — resolved: CI-regenerated (D7).</strong> Not
+checked in; embedded at build time from pinned submodules. C3 must wire
+the generation into the build/CI and prove it deterministic.</li>
+<li><strong>Identifier alignment (D1).</strong> The shared cell/pin-name fragment must be
+fixed in C1 before two IRs exist that would diverge.</li>
+</ul>
+<h2 id="references-11"><a class="header" href="#references-11">References</a></h2>
+<ul>
+<li><a href="plans/../adr/0019-cell-model-ir.html">ADR 0019 — Cell-model IR</a>.</li>
+<li><a href="plans/../adr/0002-timing-ir.html">ADR 0002 — Timing IR</a> (the pattern + scope
+boundary this realises), <a href="plans/../adr/0010-declarative-cell-metadata.html">ADR 0010</a>
+/ <a href="plans/../adr/0011-ram-port-mapping-schema.html">ADR 0011</a> (the declarative path
+this extends).</li>
+<li>Current state: <code>src/aig.rs:1895</code> (hardcoded 7T path), <code>build.rs</code>
+(port-only pin gen), <code>src/pdk.rs</code> / <code>src/gf180mcu_pdk.rs</code> (hardcoded
+classifiers), <code>src/liberty_parser.rs</code> (Liberty group-walker to extend),
+<code>crates/opensta-to-ir</code> + <code>crates/timing-ir</code> (the sibling pattern).</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="spike--opentimer-on-sky130-and-mcu-soc"><a class="header" href="#spike--opentimer-on-sky130-and-mcu-soc">Spike — OpenTimer on SKY130 and MCU SoC</a></h1>
 <p><strong>Status:</strong> Proposed. Not yet executed.</p>
 <p><strong>Time box:</strong> Half a day. Extend by up to one day if initial signs are positive but hitting specific SKY130 quirks. Abort and fall back if first-four-hours progress is blocked.</p>
@@ -11123,7 +11745,7 @@ it's the surrounding ecosystem that doesn't.</p>
 <p>Q3 (cross-check vs OpenSTA) and Q4 (correlation with Jacquard's
 <code>timing-analysis</code>) both depend on OpenTimer producing arrivals. With Q2
 unable to produce a single path, they're moot for this spike.</p>
-<h3 id="decision-17"><a class="header" href="#decision-17">Decision</a></h3>
+<h3 id="decision-18"><a class="header" href="#decision-18">Decision</a></h3>
 <p><strong>ADR 0003 → Superseded.</strong> Per the spike's decision matrix
 ("Fail on any → ADR 0003 → Superseded. Fall back to OpenSTA-subprocess-only
 validation"), the right move is to retire the in-process-OpenTimer plan
