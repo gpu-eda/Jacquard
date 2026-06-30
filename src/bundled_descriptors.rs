@@ -30,6 +30,19 @@ pub const GF180MCU_7T_JSON: &str =
 pub const GF180MCU_9T_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/gf180mcu_9t.cellir.json"));
 
+/// SKY130 high-density descriptor, generated from
+/// `vendor/sky130_fd_sc_hd` at the `tt_025C_1v80` corner (assembled from the
+/// vendor's `.lib.json` per-cell layout). Selected by the `sky130_fd_sc_hd__`
+/// cell-name prefix.
+pub const SKY130_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/sky130.cellir.json"));
+
+/// AIGPDK (internal cell library) descriptor, generated from the in-repo
+/// `aigpdk/aigpdk.lib`. AIGPDK cells have no common vendor prefix (bare `INV`,
+/// `BUF`, `AND2_*`, …), so this descriptor declares no D8 selection prefix and
+/// is the **no-prefix-match default fallback** (see [`default_fallback`]) —
+/// mirroring `pdk::resolve_library`, where AIGPDK is already the default.
+pub const AIGPDK_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/aigpdk.cellir.json"));
+
 /// A bundled descriptor's stable selector name and embedded JSON, paired so
 /// callers can list, match, or load them uniformly.
 pub struct BundledDescriptor {
@@ -37,17 +50,36 @@ pub struct BundledDescriptor {
     pub name: &'static str,
     /// The embedded JSON (the byte-for-byte build-time artifact).
     pub json: &'static str,
+    /// When `true`, this descriptor is the no-prefix-match default fallback
+    /// (AIGPDK): it declares no D8 selection prefix, never participates in
+    /// prefix auto-matching, and is selected only when no other descriptor's
+    /// declared prefix matches the netlist. See [`default_fallback`].
+    pub is_default_fallback: bool,
 }
 
-/// All descriptors embedded at build time. Order is stable.
+/// All descriptors embedded at build time. Order is stable. Prefix-keyed
+/// descriptors (GF180 7t/9t, SKY130) auto-match by declared D8 prefix; the
+/// `is_default_fallback` AIGPDK entry matches no prefix and is the fallback.
 pub const ALL: &[BundledDescriptor] = &[
     BundledDescriptor {
         name: "gf180mcu_7t",
         json: GF180MCU_7T_JSON,
+        is_default_fallback: false,
     },
     BundledDescriptor {
         name: "gf180mcu_9t",
         json: GF180MCU_9T_JSON,
+        is_default_fallback: false,
+    },
+    BundledDescriptor {
+        name: "sky130",
+        json: SKY130_JSON,
+        is_default_fallback: false,
+    },
+    BundledDescriptor {
+        name: "aigpdk",
+        json: AIGPDK_JSON,
+        is_default_fallback: true,
     },
 ];
 
@@ -180,6 +212,24 @@ pub fn auto_select<'a>(
     }
 }
 
+/// The no-prefix-match default-fallback descriptor (AIGPDK).
+///
+/// AIGPDK cells (`INV`, `BUF`, `AND2_*`, `DFF`, …) carry no common vendor
+/// prefix, so they cannot be auto-selected by [`auto_select`] (which keys on
+/// declared D8 prefixes). Instead, AIGPDK is the descriptor a run consumes when
+/// no prefix-keyed descriptor matches — mirroring `pdk::resolve_library`, where
+/// AIGPDK is already the default verdict. Returns `None` only if the embedded
+/// AIGPDK descriptor is empty (it never is — `aigpdk/aigpdk.lib` is in-repo, so
+/// this is always `Some` in a real build).
+pub fn default_fallback() -> Option<CellModelIr> {
+    let entry = ALL.iter().find(|d| d.is_default_fallback)?;
+    let ir = load(entry.name).expect("default-fallback descriptor must load");
+    if ir.cells.is_empty() {
+        return None;
+    }
+    Some(ir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,30 +241,91 @@ mod tests {
             // otherwise).
             let ir = load(d.name).expect("listed descriptor must load");
 
-            // A build without the GF180 submodules embeds a valid *empty*
-            // descriptor (see build.rs). The real-data assertions only apply
-            // when the submodule was present at build time; the Unit Tests CI
-            // job checks GF180 out, so they are live there.
+            // A build without a vendored submodule (GF180 / SKY130) embeds a
+            // valid *empty* descriptor (see build.rs). The real-data assertions
+            // only apply when the submodule was present at build time; the Unit
+            // Tests CI job checks the submodules out, so they are live there.
+            // (The AIGPDK fallback is in-repo and so is never empty.)
             if ir.cells.is_empty() {
                 eprintln!(
                     "skipping non-empty assertions for {}: empty descriptor \
-                     (GF180 submodule absent at build time)",
+                     (vendored submodule absent at build time)",
                     d.name
                 );
                 continue;
             }
-            assert!(
-                ir.cells.len() > 100,
-                "{} embedded descriptor has only {} cells",
-                d.name,
-                ir.cells.len()
-            );
-            assert!(
-                !ir.library.prefixes.is_empty(),
-                "{} descriptor should declare a D8 selection prefix",
-                d.name
-            );
+
+            if d.is_default_fallback {
+                // AIGPDK: a small internal library (11 cells) with NO common
+                // vendor prefix — it is the no-prefix-match default fallback, so
+                // it deliberately declares no D8 selection prefix.
+                assert!(
+                    !ir.cells.is_empty(),
+                    "{} default-fallback descriptor is empty",
+                    d.name
+                );
+                assert!(
+                    ir.library.prefixes.is_empty(),
+                    "{} default-fallback descriptor must declare NO D8 prefix",
+                    d.name
+                );
+            } else {
+                // Prefix-keyed descriptors (GF180 7t/9t, SKY130) are full
+                // standard-cell libraries selected by their declared prefix.
+                assert!(
+                    ir.cells.len() > 100,
+                    "{} embedded descriptor has only {} cells",
+                    d.name,
+                    ir.cells.len()
+                );
+                assert!(
+                    !ir.library.prefixes.is_empty(),
+                    "{} descriptor should declare a D8 selection prefix",
+                    d.name
+                );
+            }
         }
+    }
+
+    #[test]
+    fn default_fallback_is_aigpdk_with_no_prefix() {
+        // The default fallback is present in ALL and flagged.
+        let entry = ALL
+            .iter()
+            .find(|d| d.is_default_fallback)
+            .expect("ALL must contain a default-fallback descriptor");
+        assert_eq!(entry.name, "aigpdk");
+
+        // It loads, carries cells, and declares no D8 prefix (so it never
+        // participates in prefix auto-matching).
+        let ir = default_fallback().expect("AIGPDK fallback is in-repo, never empty");
+        assert!(!ir.cells.is_empty());
+        assert!(ir.library.prefixes.is_empty());
+
+        // An AIGPDK-shaped netlist therefore gets `Ok(None)` from auto_select
+        // (no prefix match) and the caller resolves the fallback instead.
+        let cells = ["AND2_00_0", "INV", "BUF", "DFF"];
+        assert_eq!(auto_select(cells.iter().copied()), Ok(None));
+    }
+
+    #[test]
+    fn sky130_auto_selects_by_prefix() {
+        // SKY130 may be empty in a submodule-absent build; only assert when its
+        // declared prefix is present.
+        let sky = load("sky130").expect("sky130 descriptor must load");
+        if sky.library.prefixes.is_empty() {
+            eprintln!("skipping: sky130 submodule absent at build time");
+            return;
+        }
+        let cells = [
+            "sky130_fd_sc_hd__inv_2",
+            "sky130_fd_sc_hd__nand2_1",
+            "sky130_fd_sc_hd__dfxtp_1",
+        ];
+        let ir = auto_select(cells.iter().copied())
+            .expect("sky130 netlist must auto-match without ambiguity")
+            .expect("sky130 netlist must match a bundled descriptor");
+        assert!(ir.library.name.starts_with("sky130_fd_sc_hd__"));
     }
 
     #[test]
@@ -224,13 +335,16 @@ mod tests {
     }
 
     /// True only when the GF180 submodules were present at build time, so the
-    /// embedded descriptors carry real D8 prefixes. In a submodule-absent build
-    /// (some CI jobs) the descriptors are empty and auto-match is a no-op; the
-    /// real-data assertions are skipped there (mirrors
-    /// `embedded_descriptors_parse_and_are_nonempty`).
+    /// embedded GF180 descriptors carry real D8 prefixes. In a submodule-absent
+    /// build (some CI jobs) those descriptors are empty and auto-match is a
+    /// no-op; the real-data assertions are skipped there (mirrors
+    /// `embedded_descriptors_parse_and_are_nonempty`). Scoped to the GF180
+    /// descriptors specifically — the AIGPDK fallback deliberately has no prefix
+    /// and SKY130's presence is independent of GF180's.
     fn descriptors_have_prefixes() -> bool {
-        ALL.iter()
-            .all(|d| !load(d.name).unwrap().library.prefixes.is_empty())
+        ["gf180mcu_7t", "gf180mcu_9t"]
+            .iter()
+            .all(|n| !load(n).unwrap().library.prefixes.is_empty())
     }
 
     #[test]
