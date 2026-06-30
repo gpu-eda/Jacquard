@@ -4,10 +4,12 @@ on:
   push:
     branches: [main, staged-aig-release]
     # Docs-only pushes (e.g. handoff updates pushed straight to main) skip the
-    # full matrix — a push is ignored only when ALL changed files match. NOT
-    # applied to `pull_request` on purpose: the matrix jobs are required status
-    # checks, so a paths-ignored docs PR would never report them and could
-    # never merge (GitHub's required-checks-never-run deadlock).
+    # full matrix — a push is ignored only when ALL changed files match.
+    # `pull_request` deliberately has NO paths-ignore: a workflow-level skip
+    # never creates the required check runs, so a docs-only PR would deadlock on
+    # GitHub's "required check never reported" rule. Docs-only PRs are instead
+    # gated per-job via the `changes` job below (a *skipped* required job counts
+    # as passing), which keeps the `docs` job running to validate the build.
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
@@ -29,8 +31,34 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Detect whether anything outside docs/ and markdown changed. The heavy
+  # code/GPU jobs below are gated on `code == 'true'`, so a docs-only pull
+  # request skips them — and a *skipped* required check counts as passing for
+  # branch protection, avoiding the deadlock a workflow-level paths-ignore would
+  # cause. The `docs` job stays ungated so the mdBook build + link check still
+  # run. Mirrors the push-event paths-ignore at the top of this file.
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!docs/**'
+              - '!**/*.md'
+
   # Run library unit tests on Linux (no GPU required)
   test:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
@@ -70,6 +98,8 @@ jobs:
   # Those goldens are byte-identical to the Metal backend (Phase 1, #105), so
   # this job locks in cross-backend equivalence without a GPU runner.
   cosim-cpu:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: Cosim CpuBackend (Linux, no GPU)
     runs-on: ubuntu-latest
     steps:
@@ -124,6 +154,8 @@ jobs:
   # (WS4), the CLI tests, and the OpenSTA-driven integration tests need a
   # dedicated job that builds OpenSTA + CUDD on the runner.
   opensta-to-ir-tests:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: opensta-to-ir Tests
     runs-on: ubuntu-latest
     steps:
@@ -213,6 +245,8 @@ jobs:
 
   # Build and run Metal simulation on macOS
   metal:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: Metal Tests (macOS)
     # Routine PR pushes run on the free self-hosted macos-runner-1
     # (Apple Silicon + Metal GPU). On `main` — or any PR carrying the
@@ -490,6 +524,8 @@ jobs:
 
   # Build and run CUDA simulation on NVIDIA GPU
   cuda:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: CUDA Tests
     # Re-enabled 2026-06-05 on the GitHub-hosted T4 GPU runner
     # (`tesla4-runner`, 4 vCPU + 1 NVIDIA T4). Runs on every push — CUDA
@@ -629,6 +665,8 @@ jobs:
   # This validates the HIP code path using hipcc targeting NVIDIA via HIP_PLATFORM=nvidia.
   # When an AMD GPU runner becomes available, a native AMD job can be added.
   hip-on-nvidia:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: HIP Tests (NVIDIA backend)
     # Re-enabled 2026-06-05 on the GitHub-hosted T4 runner (`tesla4-runner`).
     # This job builds the HIP code path with hipcc + HIP_PLATFORM=nvidia, so
@@ -791,6 +829,8 @@ jobs:
   # Check formatting and clippy
   # Note: Currently set to warn-only due to existing issues in codebase
   lint:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: Lint
     runs-on: ubuntu-latest
     steps:
@@ -826,6 +866,8 @@ jobs:
 
   # Run benchmarks and track performance
   benchmark:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: Benchmarks
     runs-on: ubuntu-latest
     steps:
@@ -878,6 +920,8 @@ jobs:
   # (see `docs/plans/post-phase-0-roadmap.md` — adding a subprocess
   # wrapper is tracked there as a follow-up).
   prepare-mcu-soc-jtir:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: Prepare MCU SoC timing IR
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1002,7 +1046,8 @@ jobs:
     # (mcu-soc-cvc, mcu-soc-comparison) gate on this via `needs:`.
     runs-on: macos-runner-1
     timeout-minutes: 30
-    needs: [prepare-mcu-soc-jtir]
+    needs: [changes, prepare-mcu-soc-jtir]
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -1159,6 +1204,8 @@ jobs:
   #   - Reset / TRST sequencing
   # See tests/jtag_minimal/README.md for full design + regen flow.
   jtag-minimal-cosim:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: JTAG Minimal Cosim (Hazard3 DTM+DM)
     # HEAVY Metal cosim (4M edges, ~10min self-hosted). On `main` / `ci:metal-xl`
     # it offloads to the GitHub-hosted macos-latest-xlarge so it runs in
@@ -1247,6 +1294,8 @@ jobs:
   # tooling. Mirrors jtag-minimal-cosim's cost (per-edge dispatch while
   # the session is live); runs in parallel as an independent signal.
   jtag-minimal-cosim-server:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: JTAG Minimal Cosim Server (live remote_bitbang)
     runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
     timeout-minutes: 45
@@ -1336,6 +1385,8 @@ jobs:
   # examination stops at MISA; the script asserts IDCODE=0xdeadbeef and
   # DMI read-back=0xcafebabe instead.
   jtag-minimal-openocd:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: JTAG Minimal OpenOCD (real remote_bitbang attach)
     runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
     timeout-minutes: 45
@@ -1491,6 +1542,8 @@ jobs:
 
   # CVC reference simulation for timing correctness validation
   cvc-reference:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     name: CVC Reference Simulation
     runs-on: ubuntu-latest
     steps:
