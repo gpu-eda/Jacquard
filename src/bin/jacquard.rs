@@ -803,7 +803,7 @@ fn cmd_sim(args: SimArgs) {
     // Post-simulation timing analysis
     #[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
     if args.enable_timing {
-        run_timing_analysis(&mut design.aig, &args);
+        run_timing_analysis(&mut design.aig, &design.netlistdb, &args);
     }
 
     // Write output VCD
@@ -1832,7 +1832,11 @@ fn sim_hip(
 }
 
 #[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
-fn run_timing_analysis(aig: &mut jacquard::aig::AIG, args: &SimArgs) {
+fn run_timing_analysis(
+    aig: &mut jacquard::aig::AIG,
+    netlistdb: &netlistdb::NetlistDB,
+    args: &SimArgs,
+) {
     use jacquard::liberty_parser::TimingLibrary;
 
     clilog::info!("Running timing analysis on GPU simulation results...");
@@ -1840,12 +1844,18 @@ fn run_timing_analysis(aig: &mut jacquard::aig::AIG, args: &SimArgs) {
 
     // ADR 0019 D5: prefer the cell-model-IR descriptor's L4 timing (corner-
     // selected via `--corner`, default `default_corner`) over a runtime `.lib`
-    // parse. Falls back to `--liberty` / the AIGPDK default when no descriptor
-    // was supplied.
+    // parse. Descriptor selection mirrors the functional path's C3.2 precedence
+    // (explicit file > bundled name > netlist-prefix auto-match); the same
+    // descriptor that built the AIG also supplies its timing. Falls back to
+    // `--liberty` / the AIGPDK default when nothing matches.
     let descriptor = jacquard::bundled_descriptors::resolve(
         args.cell_descriptor.as_deref(),
         args.bundled_descriptor.as_deref(),
-    );
+    )
+    .or_else(|| {
+        jacquard::bundled_descriptors::auto_select(netlistdb.celltypes.iter().map(|s| s.as_str()))
+            .unwrap_or_else(|e| panic!("{e}"))
+    });
     let lib = if let Some(ir) = descriptor {
         let corner_name = args.corner.as_deref().unwrap_or(&ir.default_corner);
         let corner_index = ir.corner_index(corner_name).unwrap_or_else(|| {

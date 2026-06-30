@@ -97,6 +97,89 @@ pub fn resolve(explicit: Option<&Path>, bundled: Option<&str>) -> Option<CellMod
     None
 }
 
+/// Auto-select a bundled descriptor by matching a netlist's cell-type names
+/// against each descriptor's declared D8 `library.prefixes` (ADR 0019 D8).
+///
+/// This is the automatic tier of the C3.2 precedence chain, sitting *below*
+/// the explicit `--cell-descriptor <file>` and `--bundled-descriptor <name>`
+/// selectors handled by [`resolve`] and *above* the legacy per-PDK Rust path.
+/// It replaces `pdk::PdkVariant`'s hardcoded prefix detection for the descriptor
+/// choice: instead of collapsing every GF180 cell to one variant (the #130 bug,
+/// where a 9t netlist was served by 7t models), it keys on the full vendor
+/// prefix — which carries the track designation (`…mcu7t5v0__` vs `…mcu9t5v0__`)
+/// — so a 9t netlist auto-selects the 9t descriptor.
+///
+/// Outcomes:
+/// - `Ok(Some(ir))` — exactly one bundled descriptor's declared prefixes cover
+///   the netlist; its parsed [`CellModelIr`] is returned.
+/// - `Ok(None)` — no bundled descriptor declares a prefix the netlist uses
+///   (e.g. an AIGPDK or SKY130 netlist, or a submodule-absent build whose
+///   embedded descriptors declare no prefixes). The caller falls back to the
+///   legacy per-PDK path, keeping today's behaviour.
+/// - `Err(msg)` — the netlist matches more than one bundled descriptor (e.g. a
+///   netlist mixing GF180 7t and 9t cells). That can't be auto-resolved, so the
+///   message tells the user to pin the choice with `--bundled-descriptor` or
+///   `--cell-descriptor`.
+pub fn auto_select<'a>(
+    cell_types: impl Iterator<Item = &'a str>,
+) -> Result<Option<CellModelIr>, String> {
+    // Parse each bundled descriptor once (there are only a handful). A
+    // submodule-absent build embeds valid *empty* descriptors that declare no
+    // prefixes; those match nothing and drop out below.
+    let mut parsed: Vec<(&'static str, CellModelIr)> = ALL
+        .iter()
+        .map(|d| {
+            (
+                d.name,
+                load(d.name).expect("listed bundled descriptor must load"),
+            )
+        })
+        .collect();
+
+    // Collect distinct cell types so the match scan is O(types × descriptors)
+    // rather than O(cells × descriptors) on a million-instance netlist.
+    let mut distinct: Vec<&str> = cell_types.collect();
+    distinct.sort_unstable();
+    distinct.dedup();
+
+    // A descriptor matches when any netlist cell type starts with one of its
+    // declared (non-empty) D8 prefixes.
+    let matched: Vec<usize> = parsed
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, ir))| {
+            ir.library
+                .prefixes
+                .iter()
+                .any(|p| !p.is_empty() && distinct.iter().any(|ct| ct.starts_with(p.as_str())))
+        })
+        .map(|(i, _)| i)
+        .collect();
+
+    match matched.as_slice() {
+        [] => Ok(None),
+        &[i] => {
+            let (name, ir) = parsed.swap_remove(i);
+            clilog::info!(
+                "Auto-selected bundled cell-model-IR descriptor '{}' \
+                 ({}) from netlist cell-name prefix",
+                name,
+                ir.library.name
+            );
+            Ok(Some(ir))
+        }
+        many => {
+            let names: Vec<&str> = many.iter().map(|&i| parsed[i].0).collect();
+            Err(format!(
+                "netlist cell-name prefixes match multiple bundled descriptors \
+                 ({}); cannot auto-select. Pin the choice with \
+                 --bundled-descriptor <name> or --cell-descriptor <file>.",
+                names.join(", ")
+            ))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,5 +221,82 @@ mod tests {
     fn unknown_name_is_none() {
         assert!(load("nonexistent_pdk").is_none());
         assert!(json_by_name("nonexistent_pdk").is_none());
+    }
+
+    /// True only when the GF180 submodules were present at build time, so the
+    /// embedded descriptors carry real D8 prefixes. In a submodule-absent build
+    /// (some CI jobs) the descriptors are empty and auto-match is a no-op; the
+    /// real-data assertions are skipped there (mirrors
+    /// `embedded_descriptors_parse_and_are_nonempty`).
+    fn descriptors_have_prefixes() -> bool {
+        ALL.iter()
+            .all(|d| !load(d.name).unwrap().library.prefixes.is_empty())
+    }
+
+    #[test]
+    fn auto_select_picks_9t_for_a_9t_netlist() {
+        if !descriptors_have_prefixes() {
+            eprintln!("skipping: GF180 submodules absent at build time");
+            return;
+        }
+        // A 9t netlist's cell types carry the 9t track in their prefix; the 9t
+        // descriptor's declared prefix is `gf180mcu_fd_sc_mcu9t5v0__`, the 7t's
+        // is `gf180mcu_fd_sc_mcu7t5v0__` — disjoint, so exactly one matches.
+        let cells = [
+            "gf180mcu_fd_sc_mcu9t5v0__inv_2",
+            "gf180mcu_fd_sc_mcu9t5v0__nand2_1",
+            "gf180mcu_fd_sc_mcu9t5v0__dffq_1",
+        ];
+        let ir = auto_select(cells.iter().copied())
+            .expect("9t netlist must auto-match without ambiguity")
+            .expect("9t netlist must match a bundled descriptor");
+        assert_eq!(ir.library.name, "gf180mcu_fd_sc_mcu9t5v0__tt_025C_5v00");
+    }
+
+    #[test]
+    fn auto_select_picks_7t_for_a_7t_netlist() {
+        if !descriptors_have_prefixes() {
+            eprintln!("skipping: GF180 submodules absent at build time");
+            return;
+        }
+        let cells = [
+            "gf180mcu_fd_sc_mcu7t5v0__inv_2",
+            "gf180mcu_fd_sc_mcu7t5v0__nand2_1",
+        ];
+        let ir = auto_select(cells.iter().copied())
+            .expect("7t netlist must auto-match without ambiguity")
+            .expect("7t netlist must match a bundled descriptor");
+        assert_eq!(ir.library.name, "gf180mcu_fd_sc_mcu7t5v0__tt_025C_5v00");
+    }
+
+    #[test]
+    fn auto_select_no_match_for_aigpdk() {
+        // AIGPDK / unknown cells declare no GF180 prefix → no bundled match,
+        // caller falls back to the legacy per-PDK path.
+        let cells = ["AND2_00_0", "INV", "DFF"];
+        let r = auto_select(cells.iter().copied());
+        assert_eq!(r, Ok(None));
+    }
+
+    #[test]
+    fn auto_select_mixed_tracks_are_ambiguous() {
+        if !descriptors_have_prefixes() {
+            eprintln!("skipping: GF180 submodules absent at build time");
+            return;
+        }
+        // A netlist mixing 7t and 9t cells matches BOTH descriptors; neither can
+        // be auto-chosen, so the caller must pin the choice explicitly.
+        let cells = [
+            "gf180mcu_fd_sc_mcu7t5v0__inv_2",
+            "gf180mcu_fd_sc_mcu9t5v0__nand2_1",
+        ];
+        let r = auto_select(cells.iter().copied());
+        assert!(
+            r.is_err(),
+            "mixed-track netlist must be ambiguous, got {r:?}"
+        );
+        let msg = r.unwrap_err();
+        assert!(msg.contains("gf180mcu_7t") && msg.contains("gf180mcu_9t"));
+        assert!(msg.contains("--bundled-descriptor"));
     }
 }
