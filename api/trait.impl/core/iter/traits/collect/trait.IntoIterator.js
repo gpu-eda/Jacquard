@@ -1,5 +1,5 @@
 (function() {
-    const implementors = Object.fromEntries([["jacquard",[["impl&lt;'i&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.96.0/core/iter/traits/collect/trait.IntoIterator.html\" title=\"trait core::iter::traits::collect::IntoIterator\">IntoIterator</a> for &amp;'i <a class=\"struct\" href=\"jacquard/sim/vcd_io/struct.VCDHier.html\" title=\"struct jacquard::sim::vcd_io::VCDHier\">VCDHier</a>",0]]]]);
+    const implementors = Object.fromEntries([["jacquard",[["impl&lt;'i&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.96.1/core/iter/traits/collect/trait.IntoIterator.html\" title=\"trait core::iter::traits::collect::IntoIterator\">IntoIterator</a> for &amp;'i <a class=\"struct\" href=\"jacquard/sim/vcd_io/struct.VCDHier.html\" title=\"struct jacquard::sim::vcd_io::VCDHier\">VCDHier</a>",0]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
