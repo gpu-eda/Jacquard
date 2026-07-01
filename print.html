@@ -585,7 +585,119 @@ run <code>jacquard sim</code> exactly as in 3a.</p>
 <tr><td>Add support for a <strong>new PDK</strong></td><td><a href="adding-a-pdk.html">Adding a New PDK</a></td></tr>
 <tr><td>Understand <strong>how it works</strong></td><td><a href="simulation-architecture.html">Simulation Architecture</a></td></tr>
 </tbody></table>
-</div><div style="break-before: page; page-break-before: always;"></div><h1 id="synthesis-flow--running-your-own-design"><a class="header" href="#synthesis-flow--running-your-own-design">Synthesis Flow — Running Your Own Design</a></h1>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="input-netlist-language--rtl"><a class="header" href="#input-netlist-language--rtl">Input: netlist language &amp; RTL</a></h1>
+<h2 id="what-jacquard-reads"><a class="header" href="#what-jacquard-reads">What Jacquard reads</a></h2>
+<p>Jacquard is a gate-level <strong>emulator</strong> — it maps a <em>synthesized</em> and-inverter
+graph onto a virtual manycore GPU processor (see
+<a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a>). So the direct input to
+<code>jacquard sim</code> / <code>cosim</code> / <code>map</code> is a <strong>gate-level Verilog netlist</strong>: structural
+Verilog whose leaf cells are <code>aigpdk</code>, SKY130, or GF180MCU standard cells.</p>
+<p><strong>Behavioral RTL is the intended design input — via a synthesis step.</strong> You
+bring your RTL, synthesize it to a gate-level netlist (memory mapping +
+logic synthesis to <code>aigpdk.lib</code> cells), and Jacquard emulates the result at
+5–40×. Synthesis is currently a <strong>separate, documented step</strong> — see
+<a href="synthesis-flow.html">Synthesis Flow</a> — because synthesis <em>quality</em> directly sets
+Jacquard's performance, so it's a deliberate knob (open-source Yosys works;
+a commercial tool like DC gives better QoR).</p>
+<blockquote>
+<p><strong>Roadmap:</strong> an integrated <code>jacquard build design.v</code> on-ramp (Yosys via
+YoWASP, no manual synthesis) is planned — see
+<a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> and
+<a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a>. Until then, synthesize
+first, then <code>sim</code>.</p>
+</blockquote>
+<p>Behavioral constructs (<code>always</code>, <code>if</code>/<code>case</code>, <code>reg</code>, parameters, <code>generate</code>,
+<code>function</code>/<code>task</code>, <code>#delay</code>) are <strong>not read by Jacquard directly</strong> — the
+synthesizer elaborates them away. If you feed raw behavioral RTL to <code>sim</code>, it
+will fail to parse; run it through synthesis first.</p>
+<h2 id="supported-netlist-syntax"><a class="header" href="#supported-netlist-syntax">Supported netlist syntax</a></h2>
+<p>The netlist parser (<code>sverilogparse</code>, consumed by <code>netlistdb</code>) accepts the
+structural subset a synthesizer emits:</p>
+<p><strong>Structure</strong></p>
+<ul>
+<li>Multiple <code>module … endmodule</code> per file; <code>//</code> and <code>/* */</code> comments; <code>(* … *)</code>
+attributes (parsed and ignored).</li>
+<li>Both port-list styles: non-ANSI (<code>module m(a, b);</code> with body <code>input</code>/<code>output</code>
+decls) and ANSI (<code>module m(input [7:0] a, output b);</code>). A <code>wire</code>/<code>reg</code>
+net-type keyword in an ANSI header is accepted and ignored.</li>
+</ul>
+<p><strong>Declarations</strong></p>
+<ul>
+<li><code>input</code> / <code>output</code> / <code>inout</code> / <code>wire</code>, scalar or bus (<code>[hi:lo]</code>), with
+comma-separated names (<code>wire a, b, c;</code>).</li>
+</ul>
+<p><strong>Cell instantiations</strong></p>
+<ul>
+<li><code>CELL_TYPE inst (.pin(expr), …);</code> — <strong>named-port connections only</strong>. An empty
+<code>.pin()</code> (unconnected) is accepted and dropped.</li>
+</ul>
+<p><strong>Assigns</strong></p>
+<ul>
+<li><code>assign lhs = rhs;</code>, both sides full wire expressions.</li>
+</ul>
+<p><strong>Wire expressions</strong> (in assigns, port connections, and <code>.name(expr)</code> hookups)</p>
+<div class="table-wrapper"><table><thead><tr><th>Form</th><th>Example</th></tr></thead><tbody>
+<tr><td>Identifier (scalar or whole bus)</td><td><code>w</code></td></tr>
+<tr><td>Bit-select</td><td><code>w[3]</code></td></tr>
+<tr><td>Part-select / slice (<code>[hi:lo]</code> or <code>[lo:hi]</code>)</td><td><code>w[7:0]</code></td></tr>
+<tr><td>Concatenation</td><td><code>{a, b[3:1], 4'b0101}</code></td></tr>
+<tr><td>Sized literal (x/z allowed for bin/oct/hex)</td><td><code>4'b01xz</code>, <code>8'hFF</code>, <code>10'd42</code></td></tr>
+<tr><td>Unary NOT</td><td><code>~w</code></td></tr>
+<tr><td>Parenthesised grouping</td><td><code>(w)</code></td></tr>
+</tbody></table>
+</div>
+<p><strong>Identifiers</strong> — standard (<code>[A-Za-z_][A-Za-z0-9_$]*</code>) and escaped
+(<code>\name-until-whitespace </code>).</p>
+<h2 id="not-supported-in-the-netlist"><a class="header" href="#not-supported-in-the-netlist">Not supported in the netlist</a></h2>
+<p>Beyond the behavioral constructs above (which belong in <em>pre</em>-synthesis RTL),
+the parser does <strong>not</strong> accept:</p>
+<ul>
+<li><strong>Positional port connections</strong> — <code>CELL inst(a, b, c)</code>; use <code>.pin(expr)</code>.</li>
+<li><strong>Parameters</strong> — <code>parameter</code> / <code>localparam</code>, or <code>#(…)</code> overrides on instances.</li>
+<li><strong>Preprocessor</strong> — <code>`define</code> / <code>`ifdef</code> (no preprocessor).</li>
+<li><strong>Net types</strong> beyond <code>input</code>/<code>output</code>/<code>inout</code>/<code>wire</code> — no <code>supply0/1</code>, <code>tri</code>,
+<code>wand</code>/<code>wor</code>, <code>trireg</code>.</li>
+<li><strong>Multi-dimensional / memory arrays</strong> — one <code>[hi:lo]</code> range per declaration.</li>
+<li><strong>Bare unsized decimal literals</strong> — write <code>1'b1</code>, not <code>1</code>.</li>
+<li><strong>Replication</strong> — <code>{4{a}}</code>.</li>
+<li><strong><code>~</code> inside a concatenation</strong> — <code>{~a, b}</code> (use an explicit inverter cell).</li>
+<li><strong>Operators</strong> — <code>&amp;</code>, <code>|</code>, <code>?:</code>, arithmetic; and base-10 literals with x/z
+(<code>8'dx</code>).</li>
+</ul>
+<h2 id="design-level-constraints-netlistdb"><a class="header" href="#design-level-constraints-netlistdb">Design-level constraints (<code>netlistdb</code>)</a></h2>
+<ul>
+<li><strong>Single top module</strong> — auto-detected as the module no other instantiates; pass
+<code>--top-module &lt;name&gt;</code> if ambiguous. Cyclic instantiation is rejected.</li>
+<li><strong>Hierarchy is flattened</strong> — multi-level module hierarchy is supported and
+flattened at load.</li>
+<li><strong>Leaf-cell pin directions come from the cell library</strong> (<code>aigpdk</code> / SKY130 /
+GF180MCU); an unknown cell's pins default to <code>Unknown</code> with a warning.</li>
+<li><strong><code>inout</code> on the design boundary</strong> is parsed but modelled as <code>Unknown</code>
+(not fully supported); prefer split <code>input</code>/<code>output</code> where possible.</li>
+<li><strong>Edge-triggered flops only</strong> — a raw <code>LATCH</code> cell is rejected (async
+set/reset is fine). Clock gating uses <code>CKLNQD</code>; latch/register-file memory maps
+to RAM through the memory-synthesis step (see <a href="synthesis-flow.html">Synthesis Flow</a>).</li>
+</ul>
+<h2 id="systemverilog--assertions-sva"><a class="header" href="#systemverilog--assertions-sva">SystemVerilog &amp; assertions (SVA)</a></h2>
+<ul>
+<li><strong>Immediate assertions</strong> are already lowered through synthesis today, as
+<code>GEM_ASSERT</code> cells (see the assertion handling in <code>src/aigpdk.rs</code>).</li>
+<li><strong>Broader SVA</strong> (SystemVerilog Assertions) is <strong>planned</strong> — see
+<a href="interop.html">Testbench Interop § Roadmap</a>. The concrete near-term slice is the
+<strong>X-barrier <code>$isunknown</code> assertion</strong> work: a spec-file-driven <code>!$isunknown</code>
+check against the X-mask (<a href="https://github.com/gpu-eda/Jacquard/issues/106">#106</a>)
+and lowering an <code>$isunknown</code> SVA subset from RTL to that spec
+(<a href="https://github.com/gpu-eda/Jacquard/issues/107">#107</a>), building on selective
+X-propagation (<a href="adr/0016-selective-x-propagation.html">ADR 0016</a>).</li>
+</ul>
+<h2 id="see-also"><a class="header" href="#see-also">See also</a></h2>
+<ul>
+<li><a href="synthesis-flow.html">Synthesis Flow</a> — RTL → gate-level netlist (the step above).</li>
+<li><a href="interop.html">Testbench Interop</a> — UVM / cocotb / SVA, and record-and-replay.</li>
+<li><a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a> — why the input is a synthesized AIG.</li>
+<li><a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> — the planned integrated RTL on-ramp.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="synthesis-flow--running-your-own-design"><a class="header" href="#synthesis-flow--running-your-own-design">Synthesis Flow — Running Your Own Design</a></h1>
 <blockquote>
 <p><strong>New to Jacquard?</strong> Start with <a href="getting-started.html">Getting Started</a>, which
 runs bundled designs in a few seconds with no synthesis. This page is the
@@ -796,7 +908,7 @@ cycle, which would dominate runtime and erase the GPU speedup. Making cocotb
 </ul>
 <p>If any of these is blocking for you, the record-and-replay path above is the
 recommended interim approach.</p>
-<h2 id="see-also"><a class="header" href="#see-also">See also</a></h2>
+<h2 id="see-also-1"><a class="header" href="#see-also-1">See also</a></h2>
 <ul>
 <li><a href="getting-started.html">Getting Started</a> — <code>sim</code> and <code>cosim</code> walkthroughs</li>
 <li><a href="bus-tracing.html">Bus Transaction Tracing</a> — protocol-aware observation of on-chip buses</li>
@@ -5050,6 +5162,7 @@ the code before writing it.</p>
 <tr><td><a href="adr/0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted (amended 2026-06-25)</td></tr>
 <tr><td><a href="adr/0018-distribution-and-installation.html">0018</a></td><td>Distribution and installation model</td><td>Accepted (amended 2026-06-25) — Phase 4 &amp; 7 open</td></tr>
 <tr><td><a href="adr/0019-cell-model-ir.html">0019</a></td><td>Cell-model IR: a complete per-cell-type library descriptor</td><td>Proposed</td></tr>
+<tr><td><a href="adr/0021-behavioral-rtl-support.html">0021</a></td><td>Behavioral RTL support via an embedded synthesis front-end (YoWASP)</td><td>Proposed</td></tr>
 </tbody></table>
 </div>
 <h2 id="how-the-adrs-relate"><a class="header" href="#how-the-adrs-relate">How the ADRs relate</a></h2>
@@ -8102,6 +8215,133 @@ L2 payload <em>is</em> AIG (D3), spliced into the design AIG at load.</li>
 <p>Staged delivery: <a href="adr/../plans/cell-model-ir.html"><code>docs/plans/cell-model-ir.md</code></a>.
 Tracks <a href="https://github.com/gpu-eda/Jacquard/issues/130">#130</a> and
 <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0021--behavioral-rtl-support-via-an-embedded-synthesis-front-end"><a class="header" href="#adr-0021--behavioral-rtl-support-via-an-embedded-synthesis-front-end">ADR 0021 — Behavioral RTL support via an embedded synthesis front-end</a></h1>
+<p><strong>Status:</strong> Proposed</p>
+<p><strong>Relates to:</strong> <a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a> (AIG / emulator model —
+why synthesis is a front-end at all), the Python-engine work
+(<a href="https://github.com/gpu-eda/Jacquard/issues/161">#161</a>, ADR 0020 pending) that
+hosts this, <a href="adr/0018-distribution-and-installation.html">ADR 0018</a> (distribution),
+<a href="adr/../synthesis-flow.html"><code>docs/synthesis-flow.md</code></a> (the manual flow this wraps),
+<a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a> (implementation tracking).</p>
+<h2 id="context-19"><a class="header" href="#context-19">Context</a></h2>
+<p>Jacquard is described as a "GPU-accelerated <strong>RTL</strong> simulator", and behavioral
+RTL <em>is</em> the intended design input. But it is an <strong>emulator</strong> (GEM =
+GPU-Emulator-inspired; <a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a>): it maps a
+<em>synthesized</em> and-inverter graph onto a virtual manycore, exactly as an
+FPGA-based emulator runs a synthesized bitstream, not behavioral source. So the
+input to <code>jacquard sim</code> / <code>cosim</code> / <code>map</code> is a <strong>gate-level netlist</strong> —
+structural Verilog mapped to <code>aigpdk</code> / SKY130 / GF180MCU cells — and the parser
+(<code>sverilogparse</code>) is structural-only.</p>
+<p>Behavioral RTL reaches that point through <strong>synthesis</strong>, which today is a
+<strong>manual, external step</strong>: the user runs Yosys (<code>memory_libmap</code> → <code>aigpdk.lib</code>
+logic synthesis) or a commercial tool per <code>docs/synthesis-flow.md</code>. This is a
+genuine capability — RTL designs run fine — but it is a <strong>UX cliff</strong>:</p>
+<ul>
+<li>Newcomers can't tell what the tool accepts. (Repeated external feedback: "it
+wasn't clear what your netlist input language support was.")</li>
+<li>"Bring RTL, then run this Yosys script, then point <code>sim</code> at the output" is a
+multi-tool ceremony before the first waveform.</li>
+</ul>
+<p>Two forces shape the fix:</p>
+<ol>
+<li><strong>Synthesis quality drives Jacquard's speed.</strong> <code>synthesis-flow.md</code> is
+explicit: the AIG the GPU emulates is only as good as the mapping, and a
+commercial synthesizer (DC) yields better QoR than Yosys. So synthesis is a
+real <em>quality knob</em>, not pure friction — we must not hide it in a way that
+silently caps performance.</li>
+<li><strong>A synthesizer is embeddable now, cheaply.</strong> <a href="https://yowasp.org">YoWASP</a>
+ships Yosys as WebAssembly wheels (<code>yowasp-yosys</code>) — no system Yosys, no C++
+vendoring, cross-platform. It is <strong>already in this workspace's <code>uv.lock</code></strong>
+(transitively via <code>amaranth[builtin-yosys]</code> in the mcu_soc design).</li>
+</ol>
+<h2 id="decision-18"><a class="header" href="#decision-18">Decision</a></h2>
+<p>Add an <strong>embedded synthesis front-end</strong> so behavioral RTL is a first-class
+input, while keeping the emulator's synthesized-netlist core unchanged:</p>
+<ol>
+<li>
+<p><strong><code>jacquard build &lt;design.v…&gt;</code></strong> drives Yosys through the <em>existing</em>
+<code>docs/synthesis-flow.md</code> scripts (<code>memlib_yosys.txt</code> memory synthesis →
+<code>aigpdk.lib</code> logic synthesis) to produce <code>gatelevel.gv</code>, which then feeds
+<code>sim</code> / <code>cosim</code> unchanged. RTL in, netlist out, one command.</p>
+</li>
+<li>
+<p><strong>Yosys via YoWASP</strong>, not a vendored native build — WASM wheels the workspace
+already resolves. The front-end <strong>lives in the Python engine</strong> (ADR 0020 P0 /
+#161), because YoWASP is Python-distributed: <code>pip install jacquard</code> then
+<code>jacquard build design.v &amp;&amp; jacquard sim …</code> is RTL-to-waves from one install.</p>
+</li>
+<li>
+<p><strong>Two synthesis tracks, kept explicit</strong> (honouring force #1):</p>
+<ul>
+<li><strong>On-ramp:</strong> YoWASP Yosys — easy, functional, the default <code>jacquard build</code>.</li>
+<li><strong>Performance:</strong> bring-your-own DC (or native Yosys) → <code>gatelevel.gv</code> →
+<code>jacquard sim</code> directly. Documented as the path to peak GPU speed.</li>
+</ul>
+</li>
+<li>
+<p><strong>The emulator core does not change.</strong> <code>jacquard build</code> is a <em>pre-processor</em>
+that produces the same structural netlist users synthesize by hand today; the
+AIG/boomerang pipeline (ADR 0014/0015) and the structural <code>sverilogparse</code>
+input are untouched. Behavioral elaboration stays Yosys's job — we do not
+reimplement an RTL front-end.</p>
+</li>
+</ol>
+<p>Implementation phasing lives in <strong><a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a></strong>.</p>
+<h3 id="phase-2--rtl-source-provenance-roadmap-not-this-decisions-gate"><a class="header" href="#phase-2--rtl-source-provenance-roadmap-not-this-decisions-gate">Phase 2 — RTL-source provenance (roadmap, not this decision's gate)</a></h3>
+<p>A patched toolchain carrying the <a href="https://github.com/robtaylor/origin-shell">origin-shell</a>
+<code>\src</code> pass-through — berkeley-abc <strong>#487</strong> (<code>vOrigins</code>/<code>&amp;origins</code>) +
+<code>robtaylor/yosys@src-retention-y-ext</code> — keeps RTL source locations alive through
+std-cell mapping. Jacquard could then thread <code>\src</code> through <code>netlistdb</code>/AIG so
+GPU-sim results <strong>speak RTL</strong> — <code>--trace-signals</code>, timing violations, and
+X-debugging reporting source lines instead of flattened gate names.</p>
+<p>The tractable route is <strong>building our own YoWASP from source</strong> rather than
+depending on the upstream <code>yowasp-yosys</code> wheels: the same custom WASM build that
+carries the patched yosys can compile the patched abc (#487) alongside it, so
+provenance ships <strong>self-contained in one wheel</strong> — we are not blocked on upstream
+YoWASP adopting the patches, only on the patches themselves (abc#487 is in
+review). Differentiator, but a large build effort; tracked as Phase 2 in #162,
+out of scope for ratifying the on-ramp.</p>
+<h2 id="consequences-19"><a class="header" href="#consequences-19">Consequences</a></h2>
+<ul>
+<li><strong>RTL becomes a first-class, single-command input</strong> — the onboarding cliff is
+removed, and "what does it accept?" has a clean answer: <em>your RTL</em> (or a
+pre-synthesized netlist).</li>
+<li><strong>A QoR ceiling on the easy path.</strong> YoWASP Yosys is functional-grade; peak GPU
+performance still wants DC. The docs must state this so <code>jacquard build</code> isn't
+mistaken for the performance path.</li>
+<li><strong>A Python-layer dependency</strong> (<code>yowasp-yosys</code>) — but one already in the
+workspace, and optional (the native <code>sim</code>/<code>cosim</code>/<code>map</code> binary keeps working on
+a pre-synthesized netlist with no Python).</li>
+<li><strong>Reinforces ADR 0020 / #161:</strong> the Python package is now more than a thin
+binding — it hosts the synthesis front-end. A point in favour of a rich Python
+layer regardless of the subprocess-vs-PyO3 call.</li>
+<li><strong>Provenance (Phase 2)</strong> is a large, dependency-gated follow-on, not promised
+by this ADR.</li>
+</ul>
+<h2 id="alternatives-considered-1"><a class="header" href="#alternatives-considered-1">Alternatives considered</a></h2>
+<ul>
+<li><strong>Keep synthesis external (status quo), document better.</strong> The honest interim
+and still the <em>performance</em> path — but rejected as the end state: it leaves the
+onboarding cliff that prompted this.</li>
+<li><strong>Vendor/embed native Yosys (C++).</strong> Heavy build + distribution burden across
+macOS/Linux/arch. YoWASP's WASM wheels are the lightweight embed that makes
+this decision cheap.</li>
+<li><strong>A Nix environment instead of (or alongside) YoWASP.</strong> origin-shell is itself
+a Nix flake pinning patched yosys + abc + librelane. A Nix devshell is a viable
+alternative back-end for <code>jacquard build</code>: <strong>native</strong> binaries (better QoR and
+wall-clock than WASM), fully reproducible, and it carries the same patches with
+far less build engineering than a bespoke WASM toolchain — at the cost of
+requiring Nix on the user's machine. The two are complementary — YoWASP:
+zero-install, cross-platform, <code>pip</code>-native, with a WASM speed/QoR ceiling; Nix:
+native performance + reproducibility for users already in a Nix flow, and the
+natural vehicle for the Phase-2 patched (<code>\src</code>) toolchain before/without a
+WASM build. <code>jacquard build</code> should abstract the synthesis back-end so it can
+dispatch to whichever (YoWASP wheel, Nix devshell, or a plain system Yosys/DC)
+is present.</li>
+<li><strong>Elaborate behavioral RTL directly inside Jacquard</strong> (no synthesis). Rejected:
+it contradicts the emulator model (ADR 0014) and would reimplement a Verilog
+front-end Yosys already provides — enormous scope for no architectural gain.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="implementation-plans"><a class="header" href="#implementation-plans">Implementation Plans</a></h1>
 <p>Phased implementation plans with entry and exit criteria. Plans live
 here when the work spans multiple commits and needs an explicit
@@ -11871,7 +12111,7 @@ it's the surrounding ecosystem that doesn't.</p>
 <p>Q3 (cross-check vs OpenSTA) and Q4 (correlation with Jacquard's
 <code>timing-analysis</code>) both depend on OpenTimer producing arrivals. With Q2
 unable to produce a single path, they're moot for this spike.</p>
-<h3 id="decision-18"><a class="header" href="#decision-18">Decision</a></h3>
+<h3 id="decision-19"><a class="header" href="#decision-19">Decision</a></h3>
 <p><strong>ADR 0003 → Superseded.</strong> Per the spike's decision matrix
 ("Fail on any → ADR 0003 → Superseded. Fall back to OpenSTA-subprocess-only
 validation"), the right move is to retire the in-process-OpenTimer plan
