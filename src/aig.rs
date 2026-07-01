@@ -577,6 +577,102 @@ impl AIG {
         dff.d_iv = d_in;
     }
 
+    /// Whether a cell's L3 [`Sequential`](cell_model_ir::Sequential) block can
+    /// be wired *input-side* by [`Self::wire_sequential_from_ir`] for this
+    /// instance (ADR 0019 C3.3d). True iff every `next_state` combinational
+    /// input, plus the clock / enable / async control pins, resolves to a real
+    /// `Direction::I` pin of the cell.
+    ///
+    /// This guards the C3.1b "ff internal state var" case: a cell like SKY130
+    /// `edfxtp` folds its data-enable into `next_state` with a self-feedback
+    /// reference to the flop's own state node (`IQ`), which is **not** a cell
+    /// pin. `splice_comb_logic` would panic resolving it, so such cells stay on
+    /// the legacy input-side path (which models the enable as a clock gate).
+    /// GF180 and the plain SKY130 flops (`dfxtp`/`dfrtp`/`dfstp`) fold nothing
+    /// exotic, so this is always true for them — behaviour-identical.
+    fn ir_seq_input_wireable(
+        netlistdb: &NetlistDB,
+        cellid: usize,
+        seq: &cell_model_ir::Sequential,
+    ) -> bool {
+        let mut input_pins: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for pinid in netlistdb.cell2pin.iter_set(cellid) {
+            if netlistdb.pindirect[pinid] == Direction::I {
+                input_pins.insert(netlistdb.pinnames[pinid].1.as_str());
+            }
+        }
+        if !seq
+            .next_state
+            .inputs
+            .iter()
+            .all(|p| input_pins.contains(p.as_str()))
+        {
+            return false;
+        }
+        if let Some(clk) = &seq.clock {
+            if !input_pins.contains(clk.pin.as_str()) {
+                return false;
+            }
+        }
+        for ctrl in [seq.enable.as_ref().map(|e| &e.pin)]
+            .into_iter()
+            .flatten()
+            .chain(seq.async_set.as_ref().map(|c| &c.pin))
+            .chain(seq.async_reset.as_ref().map(|c| &c.pin))
+        {
+            if !input_pins.contains(ctrl.as_str()) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Apply a cell-model-IR sequential cell's *async output overlay* to the
+    /// pre-created Q aigpin, writing the resolved read value into
+    /// `pin2aigpin_iv[pinid]` for the requested output pin (ADR 0019 C3.3d).
+    ///
+    /// Output-side companion to [`Self::wire_sequential_from_ir`]: the Q *read*
+    /// reflects async set/reset immediately (asynchronous). This is the exact
+    /// PDK-neutral extraction of the GF180 overlay that previously lived inline
+    /// in `gf180mcu_postprocess`, now shared by GF180 / SKY130 / any
+    /// descriptor-driven PDK (IHP). The formula is reset-dominant
+    /// `Q_read = AND(OR(q, NOT set_n), reset_n)`, identical to the legacy
+    /// SKY130 `SET_B`/`RESET_B` and GF180 `SETN`/`RN` output overlays — so
+    /// switching those PDKs to this path is byte-identical. A `QN`-style output
+    /// reads the inverted post-overlay state.
+    fn apply_ir_seq_output(
+        &mut self,
+        netlistdb: &NetlistDB,
+        pinid: usize,
+        cellid: usize,
+        seq: &cell_model_ir::Sequential,
+    ) {
+        let q = self.dffs.get(&cellid).unwrap().q;
+        let mut inputs: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for ipin in netlistdb.cell2pin.iter_set(cellid) {
+            if netlistdb.pindirect[ipin] == Direction::I {
+                inputs.insert(
+                    netlistdb.pinnames[ipin].1.to_string(),
+                    self.pin2aigpin_iv[ipin],
+                );
+            }
+        }
+        let reset_n = self.resolve_async_n(&inputs, seq.async_reset.as_ref());
+        let set_n = self.resolve_async_n(&inputs, seq.async_set.as_ref());
+        let mut q_read = q << 1;
+        q_read = self.add_and_gate(q_read ^ 1, set_n) ^ 1;
+        q_read = self.add_and_gate(q_read, reset_n);
+        let out_name = netlistdb.pinnames[pinid].1.as_str();
+        let inverted = seq
+            .outputs
+            .iter()
+            .find(|o| o.pin == out_name)
+            .map(|o| o.inverted)
+            .unwrap_or(false);
+        self.pin2aigpin_iv[pinid] = if inverted { q_read ^ 1 } else { q_read };
+    }
+
     /// given a clock pin, trace back to clock root and return its
     /// enable signal (with invert bit).
     ///
@@ -1126,6 +1222,40 @@ impl AIG {
                         }
                     }
 
+                    // Descriptor-driven *sequential* cell outside the vendored
+                    // PDKs (e.g. IHP SG13G2 `ff` cells, ADR 0019 C3.3d). Pre-
+                    // create the stateful Q aigpin (mirroring `gf180mcu_preprocess`
+                    // / `sky130_preprocess`) and depend only on the async set/reset
+                    // pins — the D / clock / enable inputs are wired in the post-DFS
+                    // DFF setup loop and must NOT be dependencies of the Q output or
+                    // we'd build a topological cycle through registered state.
+                    if let Some(seq) = cell_descriptor
+                        .and_then(|d| d.cell(celltype))
+                        .and_then(|c| c.sequential.as_ref())
+                    {
+                        let q = self.add_aigpin(DriverType::DFF(cellid));
+                        let out_name = seq
+                            .outputs
+                            .first()
+                            .map(|o| o.pin.clone())
+                            .unwrap_or_else(|| "Q".to_string());
+                        self.aigpin_cell_origins[q].push((cellid, celltype.to_string(), out_name));
+                        self.dffs.entry(cellid).or_default().q = q;
+                        work_stack.push(WorkItem::Process(pinid));
+                        for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
+                            let pn = netlistdb.pinnames[dep_pinid].1.as_str();
+                            let is_async = seq
+                                .async_set
+                                .as_ref()
+                                .is_some_and(|c| c.pin == pn)
+                                || seq.async_reset.as_ref().is_some_and(|c| c.pin == pn);
+                            if is_async {
+                                work_stack.push(WorkItem::Visit(dep_pinid));
+                            }
+                        }
+                        continue;
+                    }
+
                     // Combinational cell outside the vendored PDKs: the internal
                     // AIGPDK cells (AND2 / INV / BUF) *and* any stdcell an
                     // auto-selected cell-model-IR descriptor models — e.g. IHP
@@ -1211,7 +1341,7 @@ impl AIG {
                             // model with `logic` (sequential / tie / SRAM /
                             // multi-output — handled by the postprocess).
                             let base = extract_cell_type(celltype);
-                            if !self.try_descriptor_comb(
+                            if self.try_descriptor_comb(
                                 netlistdb,
                                 pinid,
                                 cellid,
@@ -1219,6 +1349,17 @@ impl AIG {
                                 base,
                                 cell_descriptor,
                             ) {
+                                // combinational splice done
+                            } else if let Some(seq) = cell_descriptor
+                                .and_then(|d| d.cell(celltype))
+                                .and_then(|c| c.sequential.as_ref())
+                            {
+                                // ADR 0019 C3.3d: descriptor-driven async *output*
+                                // overlay for SKY130 flops — byte-identical to the
+                                // legacy `SET_B`/`RESET_B` read below, now shared
+                                // with GF180 / IHP via `apply_ir_seq_output`.
+                                self.apply_ir_seq_output(netlistdb, pinid, cellid, seq);
+                            } else {
                                 self.sky130_postprocess(
                                     netlistdb, pinid, cellid, celltype, pdk_models,
                                 );
@@ -1239,6 +1380,20 @@ impl AIG {
                             continue;
                         }
                         None => {}
+                    }
+
+                    // ADR 0019 C3.3d: descriptor-driven sequential *output* overlay
+                    // for a stdcell outside the vendored PDKs (e.g. IHP SG13G2 `ff`
+                    // cells). The Q aigpin was pre-created in the Visit phase; here
+                    // we layer the async set/reset read. Combinational descriptor
+                    // cells (no `sequential`) fall through to `try_descriptor_comb`.
+                    if let Some(seq) = cell_descriptor
+                        .and_then(|d| d.cell(celltype))
+                        .and_then(|c| c.sequential.as_ref())
+                    {
+                        self.apply_ir_seq_output(netlistdb, pinid, cellid, seq);
+                        topo_instack[pinid] = false;
+                        continue;
                     }
 
                     // ADR 0019 C3.3c: descriptor-driven combinational splice for
@@ -1880,33 +2035,7 @@ impl AIG {
                 .and_then(|d| d.cell(celltype))
                 .and_then(|c| c.sequential.as_ref())
             {
-                let mut inputs: std::collections::HashMap<String, usize> =
-                    std::collections::HashMap::new();
-                for ipin in netlistdb.cell2pin.iter_set(cellid) {
-                    if netlistdb.pindirect[ipin] == Direction::I {
-                        inputs.insert(
-                            netlistdb.pinnames[ipin].1.to_string(),
-                            self.pin2aigpin_iv[ipin],
-                        );
-                    }
-                }
-                let reset_n = self.resolve_async_n(&inputs, seq.async_reset.as_ref());
-                let set_n = self.resolve_async_n(&inputs, seq.async_set.as_ref());
-                let mut q_read = q << 1;
-                q_read = self.add_and_gate(q_read ^ 1, set_n) ^ 1;
-                q_read = self.add_and_gate(q_read, reset_n);
-                // `QN` outputs read the inverted (post-overlay) state — async
-                // reset → Q=0 ⇒ QN=1, set → Q=1 ⇒ QN=0. GF180 dff/latch cells
-                // only expose `Q`, so this is inert for the gated suite but
-                // keeps the role honest for QN-bearing libraries.
-                let out_name = netlistdb.pinnames[pinid].1.as_str();
-                let inverted = seq
-                    .outputs
-                    .iter()
-                    .find(|o| o.pin == out_name)
-                    .map(|o| o.inverted)
-                    .unwrap_or(false);
-                self.pin2aigpin_iv[pinid] = if inverted { q_read ^ 1 } else { q_read };
+                self.apply_ir_seq_output(netlistdb, pinid, cellid, seq);
                 return;
             }
 
@@ -2389,8 +2518,16 @@ impl AIG {
                 Some(variant) => variant.is_sequential(variant.extract_cell_type(celltype)),
                 None => false,
             };
+            // ADR 0019 C3.3d: descriptor-driven sequential classification for
+            // stdcells outside the vendored PDKs (e.g. IHP SG13G2 `ff` cells),
+            // so their clock pins are traced here like any other flop. Additive:
+            // GF180/SKY130/AIGPDK flops already match `is_pdk_seq`/`is_aigpdk_seq`,
+            // so this changes nothing for them.
+            let is_ir_seq = cell_descriptor
+                .and_then(|d| d.cell(celltype))
+                .is_some_and(|c| c.sequential.is_some());
 
-            if !is_aigpdk_seq && !is_pdk_seq {
+            if !is_aigpdk_seq && !is_pdk_seq && !is_ir_seq {
                 continue;
             }
 
@@ -2517,6 +2654,23 @@ impl AIG {
             } else if PdkVariant::classify(celltype) == Some(PdkVariant::Sky130)
                 && PdkVariant::Sky130.is_sequential(PdkVariant::Sky130.extract_cell_type(celltype))
             {
+                // ADR 0019 C3.3d: IR-driven sequential input wiring (D / clock-
+                // enable / async), the SKY130 twin of the GF180 branch below.
+                // Byte-identical to the legacy `dfxtp`/`dfrtp`/`dfstp` handling.
+                // `edfxtp` folds its data-enable into `next_state` via the ff
+                // state var `IQ` (not a cell pin), so `ir_seq_input_wireable`
+                // returns false for it and it stays on the legacy clock-gate path.
+                if let Some(seq) = cell_descriptor
+                    .and_then(|d| d.cell(celltype))
+                    .and_then(|c| c.sequential.as_ref())
+                    .filter(|seq| Self::ir_seq_input_wireable(netlistdb, cellid, seq))
+                {
+                    aig.wire_sequential_from_ir(netlistdb, cellid, seq);
+                    let dff = aig.dffs.entry(cellid).or_default();
+                    assert_ne!(dff.q, 0, "SKY130 DFF {cellid} (IR-driven) has no Q output");
+                    continue;
+                }
+
                 // Handle SKY130 DFFs (dfxtp, edfxtp, dfrtp, etc.)
                 let cell_type = PdkVariant::Sky130.extract_cell_type(celltype);
                 let mut ap_d_iv = 0;
@@ -2697,6 +2851,21 @@ impl AIG {
                 dff.en_iv = ap_clken_iv;
                 dff.d_iv = d_in;
                 assert_ne!(dff.q, 0, "GF180MCU DFF {cellid} has no Q output built");
+            } else if let Some(seq) = cell_descriptor
+                .and_then(|d| d.cell(celltype))
+                .and_then(|c| c.sequential.as_ref())
+                .filter(|_| PdkVariant::classify(celltype).is_none())
+                .filter(|seq| Self::ir_seq_input_wireable(netlistdb, cellid, seq))
+            {
+                // ADR 0019 C3.3d: IR-driven sequential input wiring for a stdcell
+                // outside the vendored PDKs (e.g. IHP SG13G2 `ff` cells). The
+                // `PdkVariant::classify().is_none()` filter keeps GF180/SKY130 on
+                // their dedicated branches above; only non-vendored descriptor
+                // flops reach here. AIGPDK `DFF`/`DFFSR` are handled by the
+                // literal-match branch at the top of this loop, not here.
+                aig.wire_sequential_from_ir(netlistdb, cellid, seq);
+                let dff = aig.dffs.entry(cellid).or_default();
+                assert_ne!(dff.q, 0, "IR-driven DFF {cellid} has no Q output built");
             } else if celltype == "$__RAMGEM_SYNC_" {
                 let mut sram = aig.srams.entry(cellid).or_default().clone();
                 let mut write_clken_iv = 0;
