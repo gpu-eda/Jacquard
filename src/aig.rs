@@ -2462,7 +2462,21 @@ impl AIG {
         netlistdb: &NetlistDB,
         cell_library: Option<&crate::cell_library::RuntimeCellLibrary>,
     ) -> AIG {
-        Self::from_netlistdb_with_cells_and_descriptor(netlistdb, cell_library, None)
+        // ADR 0019 C3.3d: resolve the embedded cell-model-IR descriptor here
+        // (auto-select by declared cell-name prefix, else the AIGPDK default
+        // fallback) so every no-descriptor entry point — library callers and
+        // unit tests — still builds stdcells from the IR, now that the runtime
+        // vendored behavioural-model read is gone. `setup.rs` resolves + passes
+        // a descriptor explicitly (with `--cell-descriptor` / `--bundled-
+        // descriptor` precedence); this covers the plain-API paths with the
+        // same auto-select + default-fallback chain.
+        let auto = crate::bundled_descriptors::auto_select(
+            netlistdb.celltypes.iter().map(|s| s.as_str()),
+        )
+        .ok()
+        .flatten()
+        .or_else(crate::bundled_descriptors::default_fallback);
+        Self::from_netlistdb_with_cells_and_descriptor(netlistdb, cell_library, auto.as_ref())
     }
 
     /// As [`Self::from_netlistdb_with_cells`], but also accepts an optional
@@ -2475,58 +2489,20 @@ impl AIG {
         cell_library: Option<&crate::cell_library::RuntimeCellLibrary>,
         cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) -> AIG {
-        let has_sky130 = (1..netlistdb.num_cells).any(|cid| {
-            PdkVariant::classify(netlistdb.celltypes[cid].as_str()) == Some(PdkVariant::Sky130)
-        });
-        let has_gf180mcu = (1..netlistdb.num_cells).any(|cid| {
-            PdkVariant::classify(netlistdb.celltypes[cid].as_str()) == Some(PdkVariant::Gf180Mcu)
-        });
-
-        if has_sky130 {
-            let pdk_path = pdk_vendor_root().join("sky130_fd_sc_hd/cells");
-            let mut cell_types: Vec<String> = Vec::new();
-            for cellid in 1..netlistdb.num_cells {
-                let celltype = netlistdb.celltypes[cellid].as_str();
-                if PdkVariant::classify(celltype) == Some(PdkVariant::Sky130) {
-                    let ct = PdkVariant::Sky130.extract_cell_type(celltype).to_string();
-                    if !cell_types.contains(&ct) {
-                        cell_types.push(ct);
-                    }
-                }
-            }
-            cell_types.sort();
-            let pdk_models = crate::sky130_pdk::load_pdk_models(&pdk_path, &cell_types);
-            Self::from_netlistdb_impl(
-                netlistdb,
-                Some(&pdk_models),
-                None,
-                cell_library,
-                cell_descriptor,
-            )
-        } else if has_gf180mcu {
-            let pdk_path = pdk_vendor_root().join("gf180mcu_fd_sc_mcu7t5v0");
-            let mut cell_types: Vec<String> = Vec::new();
-            for cellid in 1..netlistdb.num_cells {
-                let celltype = netlistdb.celltypes[cellid].as_str();
-                if PdkVariant::classify(celltype) == Some(PdkVariant::Gf180Mcu) {
-                    let ct = PdkVariant::Gf180Mcu.extract_cell_type(celltype).to_string();
-                    if !cell_types.contains(&ct) {
-                        cell_types.push(ct);
-                    }
-                }
-            }
-            cell_types.sort();
-            let gf180_pdk = crate::gf180mcu_pdk::load_pdk_models(&pdk_path, &cell_types);
-            Self::from_netlistdb_impl(
-                netlistdb,
-                None,
-                Some(&gf180_pdk),
-                cell_library,
-                cell_descriptor,
-            )
-        } else {
-            Self::from_netlistdb_impl(netlistdb, None, None, cell_library, cell_descriptor)
-        }
+        // ADR 0019 C3.3d: standard-cell combinational (C3.3c), sequential
+        // (C3.3d steps 1-2) and timing all come from the embedded cell-model-IR
+        // descriptor now, so the runtime vendored-PDK behavioural-model read
+        // (`sky130_pdk::load_pdk_models` / `gf180mcu_pdk::load_pdk_models`,
+        // which opened `vendor/sky130_fd_sc_hd` / `vendor/gf180mcu_fd_sc_mcu7t5v0`
+        // at simulation time) is gone — a released binary is self-contained for
+        // stdcells. The legacy `decompose_with_pdk` fallback in
+        // `sky130_postprocess` / `gf180mcu_postprocess` remains only for a
+        // `None`-descriptor run; the built-in PDKs always resolve a descriptor
+        // (auto-select or the AIGPDK default fallback), so it is never reached
+        // for them (proven by the gate — the goldens hold with no PDK models
+        // loaded). The `from_netlistdb_with_pdk` API keeps working for callers
+        // that pass explicit models.
+        Self::from_netlistdb_impl(netlistdb, None, None, cell_library, cell_descriptor)
     }
 
     /// Build an AIG from a netlistdb.

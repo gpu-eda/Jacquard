@@ -1288,16 +1288,41 @@ mod tests {
         let pins = &[("E", "e"), ("D", "d"), ("Q", "q"), ("notifier", "notif")];
         let (aig, nl, port) = build_one_cell_aig("latq", pins);
         let dff_cellid = find_cell_id(&nl, "latq");
+        let q_pinid = port["q"];
 
-        // E=1, D=1 → next state = D = 1.
-        let inputs = HashMap::from([(port["d"], true), (port["e"], true)]);
-        let next = step_dff(&aig, dff_cellid, &inputs, false);
-        assert!(next, "latq E=1 must pass D=1 through");
+        // ADR 0019 C3.3d: the cell-model-IR `latq` stores the *inverted* data
+        // internally (`next_state = !D`, `seq.outputs Q inverted = true`) and
+        // inverts it back at the Q output, so the observable Q is D — but the
+        // raw internal DFF state (`step_dff`) is `!D`. Assert on the observable
+        // Q output pin, not the internal state, so the check is
+        // representation-agnostic (this is the descriptor-driven path the
+        // production build has used since C2.3; only the plain-API unit path
+        // moved onto it in C3.3d step 3).
+        let observe_q = |inputs: &HashMap<usize, bool>, prev: bool| -> bool {
+            let new_state = step_dff(&aig, dff_cellid, inputs, prev);
+            let mut clock_flags = HashMap::new();
+            for (clk_pin, &(pos_id, neg_id)) in aig.clock_pin2aigpins.iter() {
+                if pos_id != usize::MAX {
+                    clock_flags.insert((*clk_pin, 0u8), true);
+                }
+                if neg_id != usize::MAX {
+                    clock_flags.insert((*clk_pin, 1u8), true);
+                }
+            }
+            let dff_state = HashMap::from([(dff_cellid, new_state)]);
+            let vals = eval_aig_combinational(&aig, inputs, &clock_flags, &dff_state);
+            read_iv(aig.pin2aigpin_iv[q_pinid], &vals)
+        };
 
-        // E=0 → holds previous state regardless of D.
-        let inputs_hold = HashMap::from([(port["d"], false), (port["e"], false)]);
-        let held = step_dff(&aig, dff_cellid, &inputs_hold, true);
-        assert!(held, "latq E=0 must hold previous state");
+        // E=1 → transparent: observable Q follows D.
+        let d1 = HashMap::from([(port["d"], true), (port["e"], true)]);
+        assert!(observe_q(&d1, false), "latq E=1 must pass D=1 through to Q");
+        let d0 = HashMap::from([(port["d"], false), (port["e"], true)]);
+        assert!(!observe_q(&d0, true), "latq E=1 must pass D=0 through to Q");
+
+        // E=0 → holds previous Q (prev internal state false ⇒ observable Q=1).
+        let hold = HashMap::from([(port["d"], false), (port["e"], false)]);
+        assert!(observe_q(&hold, false), "latq E=0 must hold previous Q");
         let _ = nl;
     }
 

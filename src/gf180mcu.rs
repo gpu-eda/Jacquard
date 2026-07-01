@@ -501,17 +501,19 @@ mod tests {
 
     #[test]
     fn aig_builds_from_combinational_gf180mcu_netlist() {
-        // End-to-end: gf180mcu Verilog → NetlistDB → AIG. Exercises
-        // the full Phase 4 path: GF180MCULeafPins, library detection,
-        // load_pdk_models, decompose_combinational, AIG integration.
+        // End-to-end: gf180mcu Verilog → NetlistDB → AIG. Exercises the
+        // full path: GF180MCULeafPins, library detection, cell-model-IR
+        // descriptor auto-select + combinational splice, AIG integration.
+        // Single-track (9t) — a mix of 7t+9t cell types in one module has no
+        // single descriptor and is rejected as ambiguous (ADR 0019 C3.2).
         const VERILOG: &str = r#"
 module tiny(A, B, C, Y, Z);
   input A, B, C;
   output Y, Z;
   wire mid;
-  gf180mcu_fd_sc_mcu7t5v0__nand2_1 u1 (.A1(A), .A2(B), .ZN(mid));
+  gf180mcu_fd_sc_mcu9t5v0__nand2_1 u1 (.A1(A), .A2(B), .ZN(mid));
   gf180mcu_fd_sc_mcu9t5v0__inv_1   u2 (.I(mid), .ZN(Y));
-  gf180mcu_fd_sc_mcu7t5v0__or3_1   u3 (.A1(A), .A2(B), .A3(C), .Z(Z));
+  gf180mcu_fd_sc_mcu9t5v0__or3_1   u3 (.A1(A), .A2(B), .A3(C), .Z(Z));
 endmodule
 "#;
         let nl =
@@ -546,7 +548,7 @@ module tiny(CLK_PAD, D, Q);
   gf180mcu_fd_sc_mcu9t5v0__clkbuf_8 CLKBUF_1 (
       .I(CLK_PAD), .Z(CLK_INTERNAL), .VDD(VDD), .VSS(VSS), .VNW(VDD), .VPW(VSS)
   );
-  gf180mcu_fd_sc_mcu7t5v0__dffq_1 DFF_1 (
+  gf180mcu_fd_sc_mcu9t5v0__dffq_1 DFF_1 (
       .CLK(CLK_INTERNAL), .D(D), .Q(Q), .notifier(notifier)
   );
 endmodule
@@ -587,7 +589,7 @@ module tiny(CLK_PAD, D, Q);
   gf180mcu_fd_sc_mcu9t5v0__dlyd_1 DLY_1 (
       .I(CLK_BUF), .Z(CLK_DLY), .VDD(VDD), .VSS(VSS), .VNW(VDD), .VPW(VSS)
   );
-  gf180mcu_fd_sc_mcu7t5v0__dffq_1 DFF_1 (
+  gf180mcu_fd_sc_mcu9t5v0__dffq_1 DFF_1 (
       .CLK(CLK_DLY), .D(D), .Q(Q), .notifier(notifier)
   );
 endmodule
