@@ -20,3 +20,7 @@
 [submodule "vendor/gf180mcu_fd_sc_mcu9t5v0"]
 	path = vendor/gf180mcu_fd_sc_mcu9t5v0
 	url = https://github.com/google/globalfoundries-pdk-libs-gf180mcu_fd_sc_mcu9t5v0.git
+[submodule "vendor/IHP-Open-PDK"]
+	path = vendor/IHP-Open-PDK
+	url = https://github.com/IHP-GmbH/IHP-Open-PDK.git
+	shallow = true
