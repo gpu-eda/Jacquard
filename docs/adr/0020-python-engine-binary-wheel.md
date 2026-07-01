@@ -1,10 +1,23 @@
 # ADR 0020 — Python engine as a bundled binary wheel
 
-**Status:** Proposed
+**Status:** Draft — decision deferred (2026-07-01). Not ratified; not scheduled.
+
+> **Direction note (2026-07-01).** This ADR drafts a *subprocess-bundled binary
+> wheel* (embed the CLI, keep PR #53's subprocess API). On review, a **native
+> PyO3 binding** is the preferred long-term direction — an in-process engine is
+> a materially better "first-class" Python surface than shelling out to a
+> bundled binary, and if we're going to invest in per-platform wheels
+> (cibuildwheel + dylib repair) either way, doing it once for a PyO3 extension
+> avoids building the subprocess-wheel machinery only to replace it. We are
+> **not doing this now**; the decision (subprocess-wheel-first vs. straight to
+> PyO3) is deferred and tracked in the issue linked from PR #158. The
+> subprocess-wheel design below is preserved as the worked alternative and as
+> the analysis of the shared hard part (per-platform wheels + vendoring the
+> `libc++`/`libomp` runtime tail), which a PyO3 binding faces too.
 
 **Relates to:** [ADR 0018](0018-distribution-and-installation.md) (distribution
 model — this extends it with a Python channel), PR #53 (the subprocess API this
-adopts), [`docs/plans/python-engine-binary-wheel.md`](../plans/python-engine-binary-wheel.md)
+would adopt), [`docs/plans/python-engine-binary-wheel.md`](../plans/python-engine-binary-wheel.md)
 (implementation phases + tracking).
 
 ## Context
