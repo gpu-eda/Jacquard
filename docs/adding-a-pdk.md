@@ -11,32 +11,145 @@ SRAMs). Supporting a foundry PDK like SKY130 requires teaching the simulator how
 to interpret the PDK's standard cells: their pin directions, their boolean
 function, and which ones are sequential.
 
-There are now **two pathways** for enabling new cells; pick based on what
+There are **three pathways** for enabling new cells; pick based on what
 you're adding:
 
-- **Built-in PDK enablement** (this guide). For full standard-cell
-  libraries — AND gates, DFFs, sequential cells with explicit AIG
-  decomposition rules. Requires Rust code: pin tables, classifiers,
-  decomposition functions, AIG builder hooks.
+- **Cell-model IR descriptor** (**recommended — the modern path**, ADR
+  0019). A standard-cell library — pin directions, boolean functions,
+  sequential roles, and timing — is captured in one **generated JSON
+  descriptor** produced from the library's Liberty by the
+  `liberty-to-cellir` converter. Jacquard consumes the descriptor at
+  runtime; **no per-PDK Rust is required.** This is how a brand-new PDK is
+  added (vendor the library + generate a descriptor) *and* how a
+  proprietary library you cannot vendor is simulated (`--cell-descriptor`).
+  See **"Pathway A"** below. This supersedes the legacy Rust workflow
+  (Steps 1–8) for all combinational logic today, with sequential
+  consumption completing across the built-in PDKs in the ADR 0019 C3
+  series.
 - **Runtime cell library** (`--cell-library` + `.cells.toml`
   manifest). For third-party IP, hard macros, foundry memories, and
   any other cells that *don't* need new AIG decomposition rules — i.e.
   cells that act as opaque outputs (RAM macros), filler/cap blocks,
   or IO pads. See **ADR 0010** and `docs/plans/declarative-cell-metadata.md`
   for the recipe. **No Jacquard PR required** — users ship a manifest
-  alongside their netlist.
-
-This guide covers the built-in pathway, which touches five areas:
-
-1. **Library detection** -- recognizing cell names from a netlist
-2. **Pin direction provider** -- telling the netlist parser which pins are inputs/outputs
-3. **Cell classification** -- identifying sequential, tie, and multi-output cells
-4. **Behavioral decomposition** -- converting PDK cells to AIG (AND/NOT) primitives
-5. **CLI wiring** -- connecting it all together
+  alongside their netlist. See **"Adding third-party IP via runtime
+  manifest"** at the end.
+- **Legacy per-PDK Rust** (Steps 1–8 below). The original pathway: pin
+  tables, classifiers, decomposition functions, and AIG builder hooks
+  hand-written in Rust. **Being retired** by the cell-model IR cutover
+  (ADR 0019) — retained here as reference for the machinery the
+  descriptor replaces. Do not add a new PDK this way; use Pathway A.
 
 If you're adding just a memory macro or other behaviourally-opaque IP,
 **skip ahead to "Adding third-party IP via runtime manifest"** at the
 end of this document — it's a 6-line TOML entry, not a Rust PR.
+
+---
+
+## Pathway A: Cell-model IR descriptor (recommended)
+
+A cell-model IR descriptor is a portable, versioned, **generated** JSON
+file carrying *everything per-cell-type* about a library — L1 pin
+directions, L2 combinational logic (as a pre-decomposed AIG), L3
+sequential roles/classification, and L4 timing characterization — from
+one source: the library's Liberty. Adding a PDK is no longer a Jacquard
+code change; it is a *data* generation step. (ADR 0019.)
+
+### Generate a descriptor from Liberty
+
+The `liberty-to-cellir` converter reads a Liberty `.lib` (Liberty-first;
+a functional `.v` is consulted only as a fallback / cross-check) and emits
+the descriptor:
+
+```sh
+cargo run --release --manifest-path crates/liberty-to-cellir/Cargo.toml -- \
+    path/to/mylib_typ_1p20V_25C.lib \
+    --functional-v path/to/mylib_stdcell.v \
+    -o mylib.cellir.json
+```
+
+The converter derives the corner (PVT) from the Liberty's
+`operating_conditions`/`default_operating_conditions`, compiles each cell's
+`function` into an AIG, extracts `ff`/`latch` sequential roles, and (where a
+`.v` is present and per-cell) cross-checks logic + timing-arc topology,
+surfacing any disagreement. It prints a summary
+(`cells=… combinational=… l3_sequential=… l4_timing=… corners=…
+cross_check_mismatches=…`). A monolithic single-`.lib`-per-corner
+commercial library and a per-cell split library are both handled.
+
+### Selection: how Jacquard picks a descriptor for a netlist
+
+Each descriptor **declares the cell-name prefix(es) it covers** (D8).
+Jacquard auto-matches a netlist's cell types against the bundled
+descriptors by prefix; `--cell-descriptor <file.json>` is the explicit
+override (and the path for proprietary libraries). Precedence:
+`--cell-descriptor` (explicit file) > `--bundled-descriptor <name>`
+(explicit bundled) > **auto-match by prefix** > the **default-fallback**
+descriptor (used when no vendor prefix matches — this is how AIGPDK, whose
+cells have no common prefix, is selected).
+
+### Worked example — a built-in PDK (IHP SG13G2, zero per-PDK Rust)
+
+IHP's open SG13G2 PDK was added as a built-in with **no Rust**:
+
+1. **Vendor the library** as a sparse/shallow git submodule (only the
+   stdcell Liberty + `.v` are checked out — ~10 MB, not the multi-GB PDK):
+
+   ```sh
+   git submodule add https://github.com/IHP-GmbH/IHP-Open-PDK.git vendor/IHP-Open-PDK
+   git -C vendor/IHP-Open-PDK sparse-checkout set \
+       ihp-sg13g2/libs.ref/sg13g2_stdcell/lib \
+       ihp-sg13g2/libs.ref/sg13g2_stdcell/verilog
+   ```
+
+2. **Generate + embed at build time.** `build.rs` runs the converter over
+   the pinned vendored `.lib` and embeds the descriptor into the binary
+   (descriptors are **not** checked in — CI regenerates them
+   deterministically, D7). Add the descriptor to `bundled_descriptors::ALL`
+   with its declared prefix (`sg13g2_`).
+
+3. **That's it.** A SG13G2 netlist auto-selects the descriptor by prefix;
+   combinational cells splice from it with no IHP-specific code. Adding the
+   PDK touched no `ihp_*.rs` — only a submodule, a `build.rs` generation
+   line, and a registry entry.
+
+### Worked example — a proprietary library you cannot vendor (GF130)
+
+A foundry/NDA library that can never live in `vendor/` is simulated
+entirely at runtime — the Liberty never leaves your machine:
+
+```sh
+# 1. Generate a descriptor from your own Liberty (offline, on your machine):
+cargo run --release --manifest-path crates/liberty-to-cellir/Cargo.toml -- \
+    /path/to/pdk-gf130/.../GF013bcd_sc6_1p5_a0_TT_1P50V_25C_max.lib \
+    --functional-v /path/to/pdk-gf130/.../GF013bcd_sc6_1p5_a0.v \
+    -o gf130.cellir.json
+
+# 2. Point jacquard at it — no Jacquard build, no vendoring:
+jacquard sim my_chip.gv stim.vcd out.vcd 1 --cell-descriptor gf130.cellir.json
+```
+
+The generator is the only tool that touches raw foundry files; the
+released `jacquard` binary is library-agnostic. (A `--corner <name>` flag
+selects among a multi-corner descriptor's corners, defaulting to the
+descriptor's `default_corner`.)
+
+### Current status & limits
+
+- **Combinational** logic is fully descriptor-driven for every built-in PDK
+  (GF180, SKY130, AIGPDK, IHP) and for proprietary libraries via
+  `--cell-descriptor`.
+- **Sequential** consumption is descriptor-driven for GF180 today and is
+  being wired for the other PDKs in the ADR 0019 C3 series; the descriptor
+  already *carries* the L3 sequential data for all of them.
+- A library whose functional `.v` is a single flat-module file (common for
+  commercial PDKs) skips the optional `.v` logic cross-check at generation
+  (the descriptor is still emitted; validate via simulation) — improving the
+  flat-`.v` indexer is tracked follow-up.
+- RAM/SRAM macros are **not** covered by the descriptor — they use the
+  runtime manifest (ADR 0011), below.
+
+---
 
 ## Prerequisites
 
@@ -47,6 +160,15 @@ You need:
 - The cell naming convention (prefix, drive strength suffix format)
 
 For SKY130, the PDK data lives in `vendor/sky130_fd_sc_hd/` as a git submodule.
+
+## Legacy pathway: per-PDK Rust (Steps 1–8)
+
+> **This section documents the original hand-written-Rust workflow, which the
+> cell-model IR (Pathway A, above) is retiring under ADR 0019.** It is kept as
+> a reference for the machinery the descriptor replaces and for the
+> still-live paths during the cutover. **To add a new PDK, use Pathway A —
+> do not write per-PDK Rust.** The RAM/macro manifest section that follows
+> Step 8 remains fully current.
 
 ## Step 1: Library Detection
 
