@@ -183,7 +183,7 @@ tolerate this, but RTL bugs (missing synchronizers, gray-code errors,
 handshake protocol violations) only surface when edge alignment varies
 from the ideal.</p>
 <p>The motivating incident was
-<a href="https://github.com/ChipFlow/Jacquard/actions/runs/26413667030">PR #89 / run 26413667030</a>:
+<a href="https://github.com/gpu-eda/Jacquard/actions/runs/26413667030">PR #89 / run 26413667030</a>:
 a scheduler index bug caused sys_clk to fire at TCK's period, making
 CDC synchronizers between the JTAG and system clock domains marginal.
 The test passed intermittently because Metal GPU scheduling jitter

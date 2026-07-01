@@ -5786,7 +5786,7 @@ Edwards' OCD 3.3V port of the GF180MCU SRAM IP, used in a downstream
 wafer.space tapeout. The cell is third-party IP (not in Jacquard's
 <code>vendor/</code>), doesn't match <code>is_gf180mcu_cell</code>'s prefix walk
 (<code>fd_*</code> / <code>ws_*</code> only), has no pin table, and isn't filler-stubbable.
-Issue <a href="https://github.com/ChipFlow/Jacquard/issues/67">#67</a> captures
+Issue <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a> captures
 the discussion.</p>
 <p>The same pattern will repeat for every wafer.space tapeout that
 includes IP outside Jacquard's vendored library — hazard3, future
@@ -5894,7 +5894,7 @@ flows during the migration.</li>
 </ul>
 <h2 id="links-9"><a class="header" href="#links-9">Links</a></h2>
 <ul>
-<li>Issue <a href="https://github.com/ChipFlow/Jacquard/issues/67">#67</a> —
+<li>Issue <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a> —
 design discussion.</li>
 <li>PR #64 (<code>9281e57</code>) — most recent per-PDK-code-as-data workaround
 this ADR resolves.</li>
@@ -5924,12 +5924,12 @@ resolving read/write port semantics. That's sufficient for "design
 boots from ROM, never reads SRAM contents" cases but <strong>fails the
 moment a real CPU writes to SRAM and expects to read its data back</strong>.</p>
 <p>The acute trigger is the JTAG-DM firmware-load path enabled by
-<a href="https://github.com/ChipFlow/Jacquard/pull/78">PR #78</a>: OpenOCD
+<a href="https://github.com/gpu-eda/Jacquard/pull/78">PR #78</a>: OpenOCD
 walks a debug-module sequence that culminates in abstract-memory
 writes into the design's SRAM, then jumps the CPU to that memory.
 Because the SRAM is opaque (no backing storage, writes go nowhere),
 the CPU boots to garbage. Issue
-<a href="https://github.com/ChipFlow/Jacquard/issues/80">#80</a> captures the
+<a href="https://github.com/gpu-eda/Jacquard/issues/80">#80</a> captures the
 symptom and notes that wiring <code>SramInitConfig</code> is the smaller sibling
 problem — pre-loading SRAM contents at tick 0 — but the bigger gap
 is that <code>kind = "ram"</code> doesn't model writes at all.</p>
@@ -6041,7 +6041,7 @@ flagged cells as opaque RAMs, which is a graceful degradation.</p>
 <h3 id="sram-preload-sibling-work"><a class="header" href="#sram-preload-sibling-work">SRAM preload (sibling work)</a></h3>
 <p><code>TestbenchConfig::sram_init</code> (an existing schema field declared in
 <code>src/testbench.rs</code> but unwired today — issue
-<a href="https://github.com/ChipFlow/Jacquard/issues/80">#80</a>) becomes
+<a href="https://github.com/gpu-eda/Jacquard/issues/80">#80</a>) becomes
 load-bearing once explicit-port RAMs have backing storage. The
 preload path:</p>
 <ol>
@@ -6088,9 +6088,9 @@ manifest-declared RAMs supplement, don't replace.</li>
 <ul>
 <li>ADR 0010 — Declarative cell metadata (the parent decision deferring
 this schema).</li>
-<li>Issue <a href="https://github.com/ChipFlow/Jacquard/issues/80">#80</a> —
+<li>Issue <a href="https://github.com/gpu-eda/Jacquard/issues/80">#80</a> —
 driving consumer.</li>
-<li>PR <a href="https://github.com/ChipFlow/Jacquard/pull/78">#78</a> — the
+<li>PR <a href="https://github.com/gpu-eda/Jacquard/pull/78">#78</a> — the
 JTAG-DM workflow that surfaced the schema need.</li>
 <li>Upstream OCD SRAM behavioural model:
 <a href="https://github.com/RTimothyEdwards/gf180mcu_ocd_ip_sram">RTimothyEdwards/gf180mcu_ocd_ip_sram</a>.</li>
@@ -6123,7 +6123,7 @@ tolerate this, but RTL bugs (missing synchronizers, gray-code errors,
 handshake protocol violations) only surface when edge alignment varies
 from the ideal.</p>
 <p>The motivating incident was
-<a href="https://github.com/ChipFlow/Jacquard/actions/runs/26413667030">PR #89 / run 26413667030</a>:
+<a href="https://github.com/gpu-eda/Jacquard/actions/runs/26413667030">PR #89 / run 26413667030</a>:
 a scheduler index bug caused sys_clk to fire at TCK's period, making
 CDC synchronizers between the JTAG and system clock domains marginal.
 The test passed intermittently because Metal GPU scheduling jitter
@@ -9577,8 +9577,8 @@ and the port-mapping schema have all landed.
 (Tier 1 + minimal Tier 2)</li>
 <li><a href="plans/../adr/0011-ram-port-mapping-schema.html">0011 — RAM port-mapping schema</a>
 (the port-mapping extension originally deferred by ADR 0010)
-<strong>Issues:</strong> <a href="https://github.com/ChipFlow/Jacquard/issues/67">#67</a>,
-<a href="https://github.com/ChipFlow/Jacquard/issues/80">#80</a>.
+<strong>Issues:</strong> <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a>,
+<a href="https://github.com/gpu-eda/Jacquard/issues/80">#80</a>.
 <strong>Driving designs:</strong> the wafer.space <code>chip_top.pnl.v</code> blocked on
 <code>gf180mcu_ocd_ip_sram__sram1024x8m8wm1</code>, then the JTAG-DM workflow
 in PR #78 surfacing the need for real RAM backing storage.</li>
