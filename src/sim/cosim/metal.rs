@@ -1148,8 +1148,7 @@ impl MetalBackend {
             p._pad = [0; 2];
             p.channels = [UartPerChannelConfig::default(); MAX_UARTS];
             for (i, (_, tx_gpio, _, cpb)) in uart_configs.iter().enumerate() {
-                p.channels[i].tx_out_pos =
-                    gpio_map.output_bits.get(tx_gpio).copied().unwrap_or(0);
+                p.channels[i].tx_out_pos = gpio_map.output_bits.get(tx_gpio).copied().unwrap_or(0);
                 // GPU decoder counts scheduler edges, not clock cycles
                 p.channels[i].cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle as u32;
             }
@@ -1184,8 +1183,10 @@ impl MetalBackend {
         // WbTraceChannel: header (16 bytes) + entries array
         let wb_channel_byte_size = std::mem::size_of::<WbTraceChannel>()
             + WB_TRACE_CHANNEL_CAP * std::mem::size_of::<WbTraceEntry>();
-        let wb_trace_channel_buffer =
-            device.new_buffer(wb_channel_byte_size as u64, MTLResourceOptions::StorageModeShared);
+        let wb_trace_channel_buffer = device.new_buffer(
+            wb_channel_byte_size as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
         unsafe {
             let ch = &mut *(wb_trace_channel_buffer.contents() as *mut WbTraceChannel);
             ch.write_head = 0;
@@ -1209,8 +1210,10 @@ impl MetalBackend {
         }
         let bus_channel_byte_size = std::mem::size_of::<BusTraceChannel>()
             + BUS_TRACE_CHANNEL_CAP * std::mem::size_of::<BusTraceEntry>();
-        let bus_trace_channel_buffer =
-            device.new_buffer(bus_channel_byte_size as u64, MTLResourceOptions::StorageModeShared);
+        let bus_trace_channel_buffer = device.new_buffer(
+            bus_channel_byte_size as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
         unsafe {
             let ch = &mut *(bus_trace_channel_buffer.contents() as *mut BusTraceChannel);
             ch.write_head = 0;
@@ -1422,7 +1425,6 @@ impl MetalBackend {
             event_buffer_ptr,
         )
     }
-
 }
 
 impl CosimBackend for MetalBackend {
@@ -1668,7 +1670,10 @@ impl CosimBackend for MetalBackend {
 
     fn sram(&self) -> &[u32] {
         unsafe {
-            std::slice::from_raw_parts(self.sram_data_buffer.contents() as *const u32, self.sram_len)
+            std::slice::from_raw_parts(
+                self.sram_data_buffer.contents() as *const u32,
+                self.sram_len,
+            )
         }
     }
 
@@ -1684,10 +1689,11 @@ impl CosimBackend for MetalBackend {
             return;
         }
         let ring_bytes = BATCH_SIZE * 2 * self.state_size * std::mem::size_of::<u32>();
-        self.vcd_ring = Some(self.sim.device.new_buffer(
-            ring_bytes as u64,
-            MTLResourceOptions::StorageModeShared,
-        ));
+        self.vcd_ring = Some(
+            self.sim
+                .device
+                .new_buffer(ring_bytes as u64, MTLResourceOptions::StorageModeShared),
+        );
         clilog::info!(
             "VCD ring buffer: {} ticks × {} words = {:.1} MB",
             BATCH_SIZE,
@@ -1749,10 +1755,14 @@ impl CosimBackend for MetalBackend {
                 std::mem::size_of::<FlashState>(),
             );
             eprintln!("  FlashState raw bytes (tick 0): {:02X?}", raw);
-            eprintln!("  FlashState fields: bit_count={}, byte_count={}, data_width={}, addr=0x{:08X}",
-                fs.bit_count, fs.byte_count, fs.data_width, fs.addr);
-            eprintln!("  FlashState fields: curr_byte=0x{:02X}, command=0x{:02X}, out_buffer=0x{:02X}",
-                fs.curr_byte, fs.command, fs.out_buffer);
+            eprintln!(
+                "  FlashState fields: bit_count={}, byte_count={}, data_width={}, addr=0x{:08X}",
+                fs.bit_count, fs.byte_count, fs.data_width, fs.addr
+            );
+            eprintln!(
+                "  FlashState fields: curr_byte=0x{:02X}, command=0x{:02X}, out_buffer=0x{:02X}",
+                fs.curr_byte, fs.command, fs.out_buffer
+            );
             eprintln!(
                 "  FlashState fields: prev_clk={}, prev_csn={}, d_i=0x{:02X}",
                 fs.prev_clk, fs.prev_csn, fs.d_i
@@ -1812,8 +1822,8 @@ impl CosimBackend for MetalBackend {
     fn drain_wb_trace_debug(&mut self) {
         unsafe {
             let ch = &*(self.wb_trace_channel_buffer.contents() as *const WbTraceChannel);
-            let entries_ptr =
-                (self.wb_trace_channel_buffer.contents() as *const u8).add(16) as *const WbTraceEntry;
+            let entries_ptr = (self.wb_trace_channel_buffer.contents() as *const u8).add(16)
+                as *const WbTraceEntry;
             while self.wb_trace_read_head < ch.write_head {
                 let idx = (self.wb_trace_read_head % ch.capacity) as usize;
                 let e = &*entries_ptr.add(idx);

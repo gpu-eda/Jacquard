@@ -143,40 +143,52 @@ pub fn extract_cell_type(name: &str) -> &str {
 /// `LeafPinProvider::direction_of`. They are still classified as
 /// filler in [`crate::gf180mcu_pdk::is_filler_cell`].
 const GF180MCU_PAD_PIN_TABLE: &[(&str, &[(&str, Direction)])] = &[
-    ("in_c", &[
-        ("PAD", Direction::I),
-        ("PU", Direction::I),
-        ("PD", Direction::I),
-        ("Y", Direction::O),
-    ]),
-    ("in_s", &[
-        ("PAD", Direction::I),
-        ("PU", Direction::I),
-        ("PD", Direction::I),
-        ("Y", Direction::O),
-    ]),
-    ("bi_24t", &[
-        // PAD is inout in Verilog. For digital sim with no tristate, we
-        // treat it as an *input* to the cell — its value comes from the
-        // top-level inout port, which Jacquard exposes as a primary
-        // input.
-        ("PAD", Direction::I),
-        // The cell's `A` net comes from the core. In digital sim with
-        // no tristate we discard it (the cell does not drive Y from A).
-        ("A", Direction::I),
-        ("OE", Direction::I),
-        ("IE", Direction::I),
-        ("CS", Direction::I),
-        ("SL", Direction::I),
-        ("PU", Direction::I),
-        ("PD", Direction::I),
-        ("Y", Direction::O),
-    ]),
-    ("asig_5p0", &[
-        // Analog passthrough — has one port. Classified as filler,
-        // contributes no logic.
-        ("ASIG5V", Direction::I),
-    ]),
+    (
+        "in_c",
+        &[
+            ("PAD", Direction::I),
+            ("PU", Direction::I),
+            ("PD", Direction::I),
+            ("Y", Direction::O),
+        ],
+    ),
+    (
+        "in_s",
+        &[
+            ("PAD", Direction::I),
+            ("PU", Direction::I),
+            ("PD", Direction::I),
+            ("Y", Direction::O),
+        ],
+    ),
+    (
+        "bi_24t",
+        &[
+            // PAD is inout in Verilog. For digital sim with no tristate, we
+            // treat it as an *input* to the cell — its value comes from the
+            // top-level inout port, which Jacquard exposes as a primary
+            // input.
+            ("PAD", Direction::I),
+            // The cell's `A` net comes from the core. In digital sim with
+            // no tristate we discard it (the cell does not drive Y from A).
+            ("A", Direction::I),
+            ("OE", Direction::I),
+            ("IE", Direction::I),
+            ("CS", Direction::I),
+            ("SL", Direction::I),
+            ("PU", Direction::I),
+            ("PD", Direction::I),
+            ("Y", Direction::O),
+        ],
+    ),
+    (
+        "asig_5p0",
+        &[
+            // Analog passthrough — has one port. Classified as filler,
+            // contributes no logic.
+            ("ASIG5V", Direction::I),
+        ],
+    ),
 ];
 
 /// LeafPinProvider for the full GF180MCU library — standard cells,
@@ -322,7 +334,10 @@ mod tests {
     fn extracts_base_cell_type_across_variants() {
         assert_eq!(extract_cell_type("gf180mcu_fd_sc_mcu7t5v0__inv_1"), "inv");
         assert_eq!(extract_cell_type("gf180mcu_fd_sc_mcu7t5v0__inv_20"), "inv");
-        assert_eq!(extract_cell_type("gf180mcu_fd_sc_mcu9t5v0__nand2_4"), "nand2");
+        assert_eq!(
+            extract_cell_type("gf180mcu_fd_sc_mcu9t5v0__nand2_4"),
+            "nand2"
+        );
         assert_eq!(extract_cell_type("gf180mcu_fd_sc_mcu9t5v0__dffq_1"), "dffq");
         assert_eq!(
             extract_cell_type("gf180mcu_fd_sc_mcu7t5v0__aoi222_1"),
@@ -334,8 +349,14 @@ mod tests {
     fn extraction_handles_dff_with_polarity_in_name() {
         // The 'n' in dffnq / dffnrnq is part of the cell type, not a
         // drive-strength suffix — the drive number is the trailing _1.
-        assert_eq!(extract_cell_type("gf180mcu_fd_sc_mcu7t5v0__dffnq_1"), "dffnq");
-        assert_eq!(extract_cell_type("gf180mcu_fd_sc_mcu7t5v0__dffnrsnq_2"), "dffnrsnq");
+        assert_eq!(
+            extract_cell_type("gf180mcu_fd_sc_mcu7t5v0__dffnq_1"),
+            "dffnq"
+        );
+        assert_eq!(
+            extract_cell_type("gf180mcu_fd_sc_mcu7t5v0__dffnrsnq_2"),
+            "dffnrsnq"
+        );
     }
 
     #[test]
@@ -385,11 +406,7 @@ mod tests {
     fn pin_provider_returns_expected_directions() {
         let provider = GF180MCULeafPins;
         let dir = |cell: &str, pin: &str| {
-            provider.direction_of(
-                &CompactString::from(cell),
-                &CompactString::from(pin),
-                None,
-            )
+            provider.direction_of(&CompactString::from(cell), &CompactString::from(pin), None)
         };
         // Spot-check across cell families.
         assert_eq!(dir("gf180mcu_fd_sc_mcu7t5v0__inv_1", "I"), Direction::I);
@@ -401,7 +418,10 @@ mod tests {
         assert_eq!(dir("gf180mcu_fd_sc_mcu7t5v0__dffq_1", "Q"), Direction::O);
         // notifier is in the cell's port list — must be modeled as an input
         // so synthesis output naming it doesn't reject as unknown.
-        assert_eq!(dir("gf180mcu_fd_sc_mcu7t5v0__dffq_1", "notifier"), Direction::I);
+        assert_eq!(
+            dir("gf180mcu_fd_sc_mcu7t5v0__dffq_1", "notifier"),
+            Direction::I
+        );
     }
 
     #[test]
@@ -435,11 +455,7 @@ mod tests {
         // NetlistDB parse panics.
         let provider = GF180MCULeafPins;
         let dir = |cell: &str, pin: &str| {
-            provider.direction_of(
-                &CompactString::from(cell),
-                &CompactString::from(pin),
-                None,
-            )
+            provider.direction_of(&CompactString::from(cell), &CompactString::from(pin), None)
         };
 
         // in_c (CMOS input pad): PAD in, Y out, plus sim-irrelevant
@@ -498,12 +514,9 @@ module tiny(A, B, C, Y, Z);
   gf180mcu_fd_sc_mcu7t5v0__or3_1   u3 (.A1(A), .A2(B), .A3(C), .Z(Z));
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("tiny"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("tiny"), &GF180MCULeafPins)
+                .expect("netlist parse");
         let aig = crate::aig::AIG::from_netlistdb(&nl);
         // NAND2 + INV cancel out (NAND followed by INV = AND), and OR3
         // decomposes to a chain of AND gates with input/output inversion.
@@ -538,12 +551,9 @@ module tiny(CLK_PAD, D, Q);
   );
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("tiny"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("tiny"), &GF180MCULeafPins)
+                .expect("netlist parse");
         // The actual test: this used to panic. After the fix, AIG
         // construction completes without error.
         let aig = crate::aig::AIG::from_netlistdb(&nl);
@@ -582,12 +592,9 @@ module tiny(CLK_PAD, D, Q);
   );
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("tiny"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("tiny"), &GF180MCULeafPins)
+                .expect("netlist parse");
         // Used to panic in clock tracing on the dlyd_1 cell.
         let aig = crate::aig::AIG::from_netlistdb(&nl);
         assert!(
@@ -628,12 +635,9 @@ module tiny(TCK_PAD, D, Q);
   );
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("tiny"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("tiny"), &GF180MCULeafPins)
+                .expect("netlist parse");
         // Used to panic in clock tracing — bi_24t wasn't on the
         // is_io_pad_buf whitelist.
         let aig = crate::aig::AIG::from_netlistdb(&nl);
@@ -706,15 +710,11 @@ endmodule
         // NetlistDB parse panics on the first wired `.VDD(...)`.
         let provider = GF180MCULeafPins;
         let dir = |cell: &str, pin: &str| {
-            provider.direction_of(
-                &CompactString::from(cell),
-                &CompactString::from(pin),
-                None,
-            )
+            provider.direction_of(&CompactString::from(cell), &CompactString::from(pin), None)
         };
         for pin in [
-            "VDD", "VSS", "VNW", "VPW", "VPB", "VNB", "VPWR", "VGND",
-            "DVDD", "DVSS", "AVDD", "AVSS",
+            "VDD", "VSS", "VNW", "VPW", "VPB", "VNB", "VPWR", "VGND", "DVDD", "DVSS", "AVDD",
+            "AVSS",
         ] {
             // Shortcut is per-pin-name, not per-cell, so any cell works.
             assert_eq!(
@@ -738,11 +738,7 @@ endmodule
         // are all "constant external driver" from the AIG's perspective.
         let provider = GF180MCULeafPins;
         let dir = |cell: &str, pin: &str| {
-            provider.direction_of(
-                &CompactString::from(cell),
-                &CompactString::from(pin),
-                None,
-            )
+            provider.direction_of(&CompactString::from(cell), &CompactString::from(pin), None)
         };
         // Corner pad (`cor`) — wired with DVDD / DVSS / VDD / VSS.
         for pin in ["DVDD", "DVSS", "VDD", "VSS"] {
@@ -825,7 +821,8 @@ module tiny(A, B, CLK, Y, Q);
   gf180mcu_fd_sc_mcu9t5v0__inv_1   u4 (.I(q1), .ZN(Q));
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("tiny"), &GF180MCULeafPins);
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("tiny"), &GF180MCULeafPins);
         assert!(nl.is_some(), "NetlistDB construction failed");
     }
 }

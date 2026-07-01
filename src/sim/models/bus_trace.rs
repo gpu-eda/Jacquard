@@ -126,7 +126,11 @@ impl BusTraceDecoder {
                 dir: if beat.write { Dir::Write } else { Dir::Read },
                 addr: beat.addr,
                 data: if beat.write { beat.wdata } else { beat.rdata },
-                resp: if beat.err { BusResp::Error } else { BusResp::Ok },
+                resp: if beat.err {
+                    BusResp::Error
+                } else {
+                    BusResp::Ok
+                },
                 burst: None,
             }),
             // Phase 2: pipeline pairing + burst tracking.
@@ -279,9 +283,27 @@ mod tests {
     fn apb3_decodes_a_sequence_of_beats() {
         let mut dec = BusTraceDecoder::new(BusProtocol::Apb3);
         let beats = [
-            RawBeat { tick: 1, write: true, addr: 0x0, wdata: 0xAA, ..Default::default() },
-            RawBeat { tick: 5, write: false, addr: 0x0, rdata: 0xAA, ..Default::default() },
-            RawBeat { tick: 9, write: true, addr: 0x4, wdata: 0xBB, ..Default::default() },
+            RawBeat {
+                tick: 1,
+                write: true,
+                addr: 0x0,
+                wdata: 0xAA,
+                ..Default::default()
+            },
+            RawBeat {
+                tick: 5,
+                write: false,
+                addr: 0x0,
+                rdata: 0xAA,
+                ..Default::default()
+            },
+            RawBeat {
+                tick: 9,
+                write: true,
+                addr: 0x4,
+                wdata: 0xBB,
+                ..Default::default()
+            },
         ];
         let txns: Vec<_> = beats.iter().filter_map(|b| dec.push(*b)).collect();
         assert_eq!(txns.len(), 3);
@@ -300,8 +322,7 @@ mod tests {
     #[test]
     fn pin_override_replaces_default() {
         let mut cfg = apb_cfg();
-        cfg.signals
-            .insert("psel".into(), "top.custom_sel".into());
+        cfg.signals.insert("psel".into(), "top.custom_sel".into());
         assert_eq!(pin_basename(&cfg, "psel"), "top.custom_sel");
         // Non-overridden pins still derive from prefix.
         assert_eq!(pin_basename(&cfg, "penable"), "soc.dm.penable");

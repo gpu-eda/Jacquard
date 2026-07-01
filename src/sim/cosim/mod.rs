@@ -522,7 +522,6 @@ pub(crate) fn build_bus_trace(
     (positions, lanes)
 }
 
-
 /// Per-clock-domain flag bit positions in the packed state buffer.
 ///
 /// Each clock domain (identified by its netlistdb pin ID) has its own set of
@@ -1075,7 +1074,8 @@ pub(crate) fn host_bytes_to_dev(bytes: Vec<u8>, device: ulib::Device) -> ulib::U
 #[cfg(any(feature = "cuda", feature = "hip"))]
 fn pod_slice_bytes<T>(v: &[T]) -> Vec<u8> {
     // SAFETY: `T` is a `#[repr(C)]` POD struct; reading the slice bytes is sound.
-    unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }.to_vec()
+    unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
+        .to_vec()
 }
 
 /// Serialize a host `#[repr(C)]` value's raw bytes into a device `UVec<u8>`.
@@ -1122,7 +1122,12 @@ pub(crate) fn build_flash_buffers_dev(
     state_size: usize,
     gpio_map: &GpioMapping,
     device: ulib::Device,
-) -> (ulib::UVec<u8>, ulib::UVec<u8>, ulib::UVec<u8>, ulib::UVec<u8>) {
+) -> (
+    ulib::UVec<u8>,
+    ulib::UVec<u8>,
+    ulib::UVec<u8>,
+    ulib::UVec<u8>,
+) {
     // FlashState (shared, persistent across edges) — mirror build_flash_buffers.
     let mut fs: FlashState = unsafe { std::mem::zeroed() };
     fs.data_width = 1; // SPI single-bit mode
@@ -1177,10 +1182,10 @@ pub(crate) fn build_flash_buffers_dev(
     if let Some(ref flash_cfg) = config.flash {
         use std::io::Read;
         let firmware_path = std::path::Path::new(&flash_cfg.firmware);
-        let mut file =
-            std::fs::File::open(firmware_path).expect("Failed to open firmware file");
+        let mut file = std::fs::File::open(firmware_path).expect("Failed to open firmware file");
         let mut data = Vec::new();
-        file.read_to_end(&mut data).expect("Failed to read firmware");
+        file.read_to_end(&mut data)
+            .expect("Failed to read firmware");
         let offset = flash_cfg.firmware_offset;
         assert!(
             offset + data.len() <= FLASH_DATA_SIZE,
@@ -1195,7 +1200,12 @@ pub(crate) fn build_flash_buffers_dev(
     }
     let flash_data = host_bytes_to_dev(firmware, device);
 
-    (flash_state, flash_din_params, flash_model_params, flash_data)
+    (
+        flash_state,
+        flash_din_params,
+        flash_model_params,
+        flash_data,
+    )
 }
 
 // `FlashState` field byte offsets (mirror the `#[repr(C)]` layout above; the
@@ -1374,7 +1384,11 @@ impl MultiClockScheduler {
             schedule_len
         );
 
-        let num_domains = timings.iter().map(|t| t.domain_index + 1).max().unwrap_or(0);
+        let num_domains = timings
+            .iter()
+            .map(|t| t.domain_index + 1)
+            .max()
+            .unwrap_or(0);
         let mut schedule = Vec::with_capacity(schedule_len);
 
         for tick in 0..schedule_len {
@@ -1730,7 +1744,11 @@ fn simulate_block_v1(
     sram_data: &mut [u32],
 ) {
     crate::sim::cpu_reference::simulate_block_v1(
-        script, input_state, output_state, sram_data, false,
+        script,
+        input_state,
+        output_state,
+        sram_data,
+        false,
     );
 }
 
@@ -1741,7 +1759,11 @@ fn simulate_block_v1_diag(
     sram_data: &mut [u32],
 ) {
     crate::sim::cpu_reference::simulate_block_v1(
-        script, input_state, output_state, sram_data, true,
+        script,
+        input_state,
+        output_state,
+        sram_data,
+        true,
     );
 }
 
@@ -2141,13 +2163,14 @@ fn run_cosim_generic<B: CosimBackend>(
             let cpb = u
                 .cycles_per_bit
                 .unwrap_or_else(|| (clock_hz / baud as u64) as u32);
-            let name = u
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("uart_{}", i));
+            let name = u.name.clone().unwrap_or_else(|| format!("uart_{}", i));
             clilog::info!(
                 "UART '{}': tx_gpio={}, rx_gpio={}, baud={}, cycles_per_bit={}",
-                name, u.tx_gpio, u.rx_gpio, baud, cpb
+                name,
+                u.tx_gpio,
+                u.rx_gpio,
+                baud,
+                cpb
             );
             (name, u.tx_gpio, u.rx_gpio, cpb)
         })
@@ -2174,8 +2197,7 @@ fn run_cosim_generic<B: CosimBackend>(
     // a per-block write log at end of simulation. See
     // `src/sim/sram_dump.rs` for the report format. (Borrows aig/netlist/
     // script only — no `states` dependency, so it stays here.)
-    let mut sram_dumper =
-        crate::sim::sram_dump::SramDumper::from_env(aig, netlistdb, script);
+    let mut sram_dumper = crate::sim::sram_dump::SramDumper::from_env(aig, netlistdb, script);
 
     // ── Build GPU-side state_prep + IO model buffers ──────────────────────
 
@@ -2258,12 +2280,22 @@ fn run_cosim_generic<B: CosimBackend>(
     let run_params = {
         use crate::sim::run_params::RunParams;
         if let Some(ref path) = opts.run_params {
-            RunParams::load_or_generate(path)
-                .unwrap_or_else(|e| panic!("Failed to load/write run-params at {}: {}", path.display(), e))
+            RunParams::load_or_generate(path).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to load/write run-params at {}: {}",
+                    path.display(),
+                    e
+                )
+            })
         } else if let Some(ref output_vcd_path) = opts.output_vcd {
             let default_path = output_vcd_path.with_file_name("run_params.json");
-            RunParams::load_or_generate(&default_path)
-                .unwrap_or_else(|e| panic!("Failed to write default run-params at {}: {}", default_path.display(), e))
+            RunParams::load_or_generate(&default_path).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to write default run-params at {}: {}",
+                    default_path.display(),
+                    e
+                )
+            })
         } else {
             RunParams::generate()
         }
@@ -2301,7 +2333,10 @@ fn run_cosim_generic<B: CosimBackend>(
                 let rng = ChaCha8Rng::seed_from_u64(sub_seed);
                 clilog::info!(
                     "  domain '{}' (idx={}): jitter_ps={}, sub_seed={}",
-                    domain.name, i, jitter_ps, sub_seed
+                    domain.name,
+                    i,
+                    jitter_ps,
+                    sub_seed
                 );
                 Some((rng, jitter_ps as i64))
             } else {
@@ -2344,20 +2379,20 @@ fn run_cosim_generic<B: CosimBackend>(
         if let Some(&rx_pos) = gpio_map.input_bits.get(rx_gpio) {
             let sched_ticks_per_sys_clk = (clock_period_ps / scheduler.gcd_ps) as u32;
             let baud_div_edges = cpb * sched_ticks_per_sys_clk;
-            let driver = crate::sim::models::uart::UartRxDriver::new(
-                name.clone(),
-                rx_pos,
-                baud_div_edges,
-            );
+            let driver =
+                crate::sim::models::uart::UartRxDriver::new(name.clone(), rx_pos, baud_div_edges);
             clilog::info!(
                 "UART RX driver `{}` baud_div_edges={} (rx_gpio={})",
-                name, baud_div_edges, rx_gpio
+                name,
+                baud_div_edges,
+                rx_gpio
             );
             register_model(Box::new(driver), &mut models, &mut model_driven_positions);
         } else {
             clilog::warn!(
                 "UART '{}' rx_gpio={} not in input mapping; RX driver disabled",
-                name, rx_gpio
+                name,
+                rx_gpio
             );
         }
     }
@@ -2382,10 +2417,12 @@ fn run_cosim_generic<B: CosimBackend>(
         let tck = resolve_pin(jtag_cfg.tck_gpio, "tck");
         let tms = resolve_pin(jtag_cfg.tms_gpio, "tms");
         let tdi = resolve_pin(jtag_cfg.tdi_gpio, "tdi");
-        let trst = jtag_cfg.trst_gpio.map(|g| crate::sim::models::jtag::TrstPin {
-            position: resolve_pin(g, "trst"),
-            active_low: jtag_cfg.trst_active_low,
-        });
+        let trst = jtag_cfg
+            .trst_gpio
+            .map(|g| crate::sim::models::jtag::TrstPin {
+                position: resolve_pin(g, "trst"),
+                active_low: jtag_cfg.trst_active_low,
+            });
         let tdo = jtag_cfg.tdo_gpio.map(|g| {
             *gpio_map.output_bits.get(&g).unwrap_or_else(|| {
                 panic!(
@@ -2407,9 +2444,9 @@ fn run_cosim_generic<B: CosimBackend>(
             match (opts.jtag_replay.as_ref(), opts.jtag_server) {
                 // `conflicts_with` in clap normally rejects this at parse
                 // time; keep a defensive guard for non-CLI callers.
-                (Some(_), Some(_)) => panic!(
-                    "jtag: --jtag-replay and --jtag-server are mutually exclusive"
-                ),
+                (Some(_), Some(_)) => {
+                    panic!("jtag: --jtag-replay and --jtag-server are mutually exclusive")
+                }
                 // Deterministic file replay (discussion #77 stage 1).
                 (Some(replay_path), None) => {
                     let bytes = std::fs::read(replay_path).unwrap_or_else(|e| {
@@ -2456,11 +2493,9 @@ fn run_cosim_generic<B: CosimBackend>(
                     // (or in CI) so they never collide on a fixed port. The
                     // actual bound port is logged below for the operator/script
                     // to point OpenOCD at.
-                    let listener = std::net::TcpListener::bind(("127.0.0.1", port))
-                        .unwrap_or_else(|e| {
-                            let hint = if e.kind()
-                                == std::io::ErrorKind::AddrInUse
-                            {
+                    let listener =
+                        std::net::TcpListener::bind(("127.0.0.1", port)).unwrap_or_else(|e| {
+                            let hint = if e.kind() == std::io::ErrorKind::AddrInUse {
                                 " — already in use (another jacquard server? \
                                  pick a different --jtag-server <PORT>, or 0 to \
                                  auto-assign a free one)"
@@ -2469,10 +2504,7 @@ fn run_cosim_generic<B: CosimBackend>(
                             };
                             panic!("jtag server: cannot bind 127.0.0.1:{port}: {e}{hint}")
                         });
-                    let port = listener
-                        .local_addr()
-                        .map(|a| a.port())
-                        .unwrap_or(port);
+                    let port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
                     clilog::info!(
                         "JTAG server `jtag_0`: listening on 127.0.0.1:{port}, \
                          hold_edges={} reconnect={} ({pins}); waiting for a \
@@ -2651,7 +2683,11 @@ fn run_cosim_generic<B: CosimBackend>(
                             bit_name
                         )
                     });
-                    let val = if b < 64 { ((entry.value >> b) & 1) as u8 } else { 0 };
+                    let val = if b < 64 {
+                        ((entry.value >> b) & 1) as u8
+                    } else {
+                        0
+                    };
                     // Deposit the value into both slots' value sections.
                     set_bit(&mut states[..state_size], pos, val);
                     set_bit(&mut states[state_size..2 * state_size], pos, val);
@@ -2751,7 +2787,11 @@ fn run_cosim_generic<B: CosimBackend>(
         Vec<u8>, // prev_values for change detection
     )> = if let Some(ref stim_path) = opts.stimulus_vcd {
         crate::sim::vcd_io::ensure_parent_dir(stim_path).unwrap_or_else(|e| {
-            panic!("Failed to create stimulus VCD dir for {}: {}", stim_path.display(), e)
+            panic!(
+                "Failed to create stimulus VCD dir for {}: {}",
+                stim_path.display(),
+                e
+            )
         });
         let file = std::fs::File::create(stim_path).unwrap_or_else(|e| {
             panic!(
@@ -2793,7 +2833,11 @@ fn run_cosim_generic<B: CosimBackend>(
         Vec<u32>, // prev_values for change detection (0=V0, 1=V1, 2=initial)
     )> = if let Some(ref output_path) = opts.output_vcd {
         crate::sim::vcd_io::ensure_parent_dir(output_path).unwrap_or_else(|e| {
-            panic!("Failed to create output VCD dir for {}: {}", output_path.display(), e)
+            panic!(
+                "Failed to create output VCD dir for {}: {}",
+                output_path.display(),
+                e
+            )
         });
         let file = std::fs::File::create(output_path).unwrap_or_else(|e| {
             panic!(
@@ -2845,8 +2889,13 @@ fn run_cosim_generic<B: CosimBackend>(
         usize, // max cycles to dump
     )> = if let Some(ref dump_path) = opts.dump_dff {
         use std::io::Write;
-        crate::sim::vcd_io::ensure_parent_dir(dump_path)
-            .unwrap_or_else(|e| panic!("Failed to create DFF dump dir for {}: {}", dump_path.display(), e));
+        crate::sim::vcd_io::ensure_parent_dir(dump_path).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create DFF dump dir for {}: {}",
+                dump_path.display(),
+                e
+            )
+        });
         let file = std::fs::File::create(dump_path)
             .unwrap_or_else(|e| panic!("Failed to create DFF dump {}: {}", dump_path.display(), e));
         let mut writer = std::io::BufWriter::new(file);
@@ -2957,7 +3006,8 @@ fn run_cosim_generic<B: CosimBackend>(
                     clilog::info!(
                         "Clock domain `{}` is model-driven (pos={}); \
                          edge flags will track model transitions",
-                        domain.name, pos
+                        domain.name,
+                        pos
                     );
                     model_driven_clocks.push(ModelDrivenClockState {
                         clock_input_pos: pos,
@@ -2992,7 +3042,10 @@ fn run_cosim_generic<B: CosimBackend>(
 
     // UART event collection (CPU-side, populated from channel drain)
     let mut uart_events: Vec<UartEvent> = Vec::new();
-    let uart_names: Vec<String> = uart_configs.iter().map(|(name, _, _, _)| name.clone()).collect();
+    let uart_names: Vec<String> = uart_configs
+        .iter()
+        .map(|(name, _, _, _)| name.clone())
+        .collect();
 
     // Profiling accumulators
     let mut prof_batch_encode: u64 = 0;
@@ -3067,8 +3120,7 @@ fn run_cosim_generic<B: CosimBackend>(
     // out from under the debugger; honour the cap only once it disconnects.
     let jtag_server_enabled = opts.jtag_server.is_some();
     loop {
-        let jtag_attached =
-            jtag_server_enabled && models.iter().any(|m| m.is_active());
+        let jtag_attached = jtag_server_enabled && models.iter().any(|m| m.is_active());
         if tick >= max_edges && !jtag_attached {
             break;
         }
@@ -3239,17 +3291,14 @@ fn run_cosim_generic<B: CosimBackend>(
 
                 // Stimulus VCD
                 let t_stim = std::time::Instant::now();
-                if let Some((ref mut writer, ref mapping, ref mut prev_values)) =
-                    stimulus_vcd_state
+                if let Some((ref mut writer, ref mapping, ref mut prev_values)) = stimulus_vcd_state
                 {
                     let t_edge = edge_tick as u64 * backend.gcd_ps();
                     writer.timestamp(t_edge).unwrap();
                     for (sig_idx, &(pos, vid, _is_clock)) in mapping.signals.iter().enumerate() {
                         let val = ((input_state[(pos >> 5) as usize] >> (pos & 31)) & 1) as u8;
                         if val != prev_values[sig_idx] {
-                            writer
-                                .change_scalar(vid, bit_to_vcd_value(val))
-                                .unwrap();
+                            writer.change_scalar(vid, bit_to_vcd_value(val)).unwrap();
                             prev_values[sig_idx] = val;
                         }
                     }
@@ -3258,17 +3307,15 @@ fn run_cosim_generic<B: CosimBackend>(
 
                 // Output VCD
                 let t_timing = std::time::Instant::now();
-                if let Some((ref mut writer, ref mapping, ref mut prev_values)) =
-                    output_vcd_state
-                {
+                if let Some((ref mut writer, ref mapping, ref mut prev_values)) = output_vcd_state {
                     let half_period = clock_period_ps / 2;
                     let base_timestamp = edge_tick as u64 * clock_period_ps + half_period;
 
                     // ADR 0012: apply jitter displacement to base timestamp.
                     // Draw from each domain's PRNG at every tick to keep
                     // streams stable regardless of which domain fires.
-                    let sched_idx = (batch_schedule_start + edge_in_batch)
-                        % backend.edges_per_period();
+                    let sched_idx =
+                        (batch_schedule_start + edge_in_batch) % backend.edges_per_period();
                     let mut jitter_displacement: i64 = 0;
                     if jitter_active {
                         use rand::Rng;
@@ -3730,8 +3777,10 @@ fn run_cosim_generic<B: CosimBackend>(
             // Track address changes
             if fs.addr != diag_prev_flash_addr || fs.command != diag_prev_flash_cmd {
                 if fs.command != 0 {
-                    eprintln!("DIAG T{}: Flash addr changed: cmd=0x{:02X} addr=0x{:06X} bytes={} bitc={}",
-                        tick, fs.command, fs.addr, fs.byte_count, fs.bit_count);
+                    eprintln!(
+                        "DIAG T{}: Flash addr changed: cmd=0x{:02X} addr=0x{:06X} bytes={} bitc={}",
+                        tick, fs.command, fs.addr, fs.byte_count, fs.bit_count
+                    );
                 }
                 diag_prev_flash_addr = fs.addr;
                 diag_prev_flash_cmd = fs.command;
@@ -4393,8 +4442,14 @@ impl CosimBackend for CpuBackend {
         } else {
             1
         };
-        let mut sram_xmask =
-            vec![if script.xprop_enabled { 0xFFFF_FFFFu32 } else { 0u32 }; sram_xmask_len];
+        let mut sram_xmask = vec![
+            if script.xprop_enabled {
+                0xFFFF_FFFFu32
+            } else {
+                0u32
+            };
+            sram_xmask_len
+        ];
 
         // SRAM preload (issue #80) — same path as build_state_buffers. The
         // logic fixtures declare no `sram_init`, so this is untaken; wired for
@@ -4799,8 +4854,7 @@ impl CosimBackend for CpuBackend {
             for (ui, cfg) in self.uart_configs.iter().enumerate() {
                 let cycles_per_bit = cfg.cycles_per_bit;
                 let tx = if cfg.tx_out_pos != u32::MAX {
-                    (state[state_size + (cfg.tx_out_pos >> 5) as usize]
-                        >> (cfg.tx_out_pos & 31))
+                    (state[state_size + (cfg.tx_out_pos >> 5) as usize] >> (cfg.tx_out_pos & 31))
                         & 1
                 } else {
                     0

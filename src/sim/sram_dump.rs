@@ -80,11 +80,7 @@ impl SramDumper {
     /// Construct a dumper if `JACQUARD_SRAM_DUMP=<path>` is set in
     /// the environment. Returns `None` to skip the entire mechanism
     /// (zero per-batch overhead) when the env var is absent.
-    pub fn from_env(
-        aig: &AIG,
-        netlistdb: &NetlistDB,
-        script: &FlattenedScriptV1,
-    ) -> Option<Self> {
+    pub fn from_env(aig: &AIG, netlistdb: &NetlistDB, script: &FlattenedScriptV1) -> Option<Self> {
         let path_str = std::env::var("JACQUARD_SRAM_DUMP").ok()?;
         let output_path = PathBuf::from(path_str);
         let max_events: usize = std::env::var("JACQUARD_SRAM_DUMP_MAX_EVENTS")
@@ -199,7 +195,9 @@ impl SramDumper {
         // Find the rightmost block whose storage_offset <= abs_word.
         // partition_point returns index of first element NOT
         // satisfying the predicate.
-        let pp = self.offset_index.partition_point(|&(off, _)| off <= abs_word);
+        let pp = self
+            .offset_index
+            .partition_point(|&(off, _)| off <= abs_word);
         debug_assert!(pp > 0, "abs_word {} below all block offsets", abs_word);
         let (_off, block_idx) = self.offset_index[pp - 1];
         block_idx
@@ -445,10 +443,7 @@ mod tests {
     fn block_lookup_is_offset_keyed_not_cellid_keyed() {
         // High-cellid block at the low offset; low-cellid block at
         // the high offset. Demonstrates the offset_index sort.
-        let blocks = vec![
-            mk_block(99, "u_first", 0),
-            mk_block(7, "u_second", 8192),
-        ];
+        let blocks = vec![mk_block(99, "u_first", 0), mk_block(7, "u_second", 8192)];
         let d = SramDumper::with_blocks_for_test(blocks, 16384);
 
         assert_eq!(d.lookup_block(0), 0);

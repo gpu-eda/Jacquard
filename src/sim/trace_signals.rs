@@ -231,12 +231,10 @@ pub fn register_trace_signals(
         // wins. Both flat-leaf and dotted-hierarchy shapes are
         // attempted so the same syntax works for Yosys-flattened
         // and structurally-hierarchical netlists.
-        let netid = candidates
-            .iter()
-            .find_map(|c| {
-                let key = (c.hier.clone(), c.leaf.clone(), c.bit);
-                netlistdb.netname2id.get(&key).copied()
-            });
+        let netid = candidates.iter().find_map(|c| {
+            let key = (c.hier.clone(), c.leaf.clone(), c.bit);
+            netlistdb.netname2id.get(&key).copied()
+        });
         let Some(netid) = netid else {
             clilog::warn!(
                 "--trace-signals: `{raw}` — not found in netlistdb \
@@ -528,9 +526,9 @@ endmodule
         let mut aig = crate::aig::AIG::from_netlistdb(&nl);
 
         let names = vec![
-            "q".to_string(),                    // resolves
-            "this.does.not.exist".to_string(),  // doesn't
-            "d".to_string(),                    // resolves (input port net)
+            "q".to_string(),                   // resolves
+            "this.does.not.exist".to_string(), // doesn't
+            "d".to_string(),                   // resolves (input port net)
         ];
         let (registered, dropped) = register_trace_signals(&mut aig, &nl, &names);
         assert_eq!(registered, 2);

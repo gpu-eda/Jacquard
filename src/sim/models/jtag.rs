@@ -48,9 +48,7 @@
 //! corner case.
 
 use crate::sim::input_stim::QueuedAction;
-use crate::sim::models::{
-    read_bit, warn_unhandled, EmittedEvent, ModelOverrides, PeripheralModel,
-};
+use crate::sim::models::{read_bit, warn_unhandled, EmittedEvent, ModelOverrides, PeripheralModel};
 use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 
@@ -178,9 +176,7 @@ impl JtagSource {
                         Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                         Err(e) => {
                             *closed = true;
-                            clilog::warn!(
-                                "jtag server: socket read error: {e}; ending session"
-                            );
+                            clilog::warn!("jtag server: socket read error: {e}; ending session");
                             return None;
                         }
                     }
@@ -350,8 +346,8 @@ impl JtagReplayModel {
         listener: std::net::TcpListener,
         persist: bool,
     ) -> Self {
-        let (stream, peer) = accept_client(&listener)
-            .unwrap_or_else(|e| panic!("jtag server: accept failed: {e}"));
+        let (stream, peer) =
+            accept_client(&listener).unwrap_or_else(|e| panic!("jtag server: accept failed: {e}"));
         clilog::info!("JTAG server `{name}`: client connected from {peer}");
         // Default power-on TRST pulse: hold TRST deasserted for a few
         // edges (so the assertion is a clean `negedge`), then assert it
@@ -675,12 +671,7 @@ mod tests {
     fn consume_byte_decodes_tck_tms_tdi_packing() {
         // '0' = 0b000 → all zero. '7' = 0b111 → all one.
         // Bit assignment per OpenOCD: TDI=bit0, TMS=bit1, TCK=bit2.
-        let mut m = JtagReplayModel::new(
-            "jtag_0".into(),
-            10, 11, 12, None, None,
-            4,
-            vec![],
-        );
+        let mut m = JtagReplayModel::new("jtag_0".into(), 10, 11, 12, None, None, 4, vec![]);
         m.consume_byte(b'0');
         assert_eq!(driven(&m), (0, 0, 0));
         m.consume_byte(b'5'); // 0b101 → TCK=1, TMS=0, TDI=1
@@ -695,8 +686,13 @@ mod tests {
     fn consume_byte_handles_trst_codes() {
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12,
-            Some(TrstPin { position: 13, active_low: true }),
+            10,
+            11,
+            12,
+            Some(TrstPin {
+                position: 13,
+                active_low: true,
+            }),
             None,
             4,
             vec![],
@@ -715,12 +711,7 @@ mod tests {
 
     #[test]
     fn consume_byte_counts_tdo_reads_and_quit() {
-        let mut m = JtagReplayModel::new(
-            "jtag_0".into(),
-            10, 11, 12, None, None,
-            4,
-            vec![],
-        );
+        let mut m = JtagReplayModel::new("jtag_0".into(), 10, 11, 12, None, None, 4, vec![]);
         m.consume_byte(b'R');
         m.consume_byte(b'R');
         m.consume_byte(b'R');
@@ -732,12 +723,7 @@ mod tests {
 
     #[test]
     fn consume_byte_blink_is_noop() {
-        let mut m = JtagReplayModel::new(
-            "jtag_0".into(),
-            10, 11, 12, None, None,
-            4,
-            vec![],
-        );
+        let mut m = JtagReplayModel::new("jtag_0".into(), 10, 11, 12, None, None, 4, vec![]);
         m.consume_byte(b'5');
         let before = (m.tck, m.tms, m.tdi, m.trst_active);
         m.consume_byte(b'B');
@@ -754,12 +740,8 @@ mod tests {
         // TCK deferral adds an extra edge when TCK changes: the
         // consume edge applies TMS/TDI but holds old TCK; the next
         // edge applies the new TCK.
-        let mut m = JtagReplayModel::new(
-            "jtag_0".into(),
-            10, 11, 12, None, None,
-            2,
-            b"07".to_vec(),
-        );
+        let mut m =
+            JtagReplayModel::new("jtag_0".into(), 10, 11, 12, None, None, 2, b"07".to_vec());
         // edges_held starts at hold_edges (2), so first step_edge
         // consumes byte '0'. TCK was 0, stays 0 → no deferral.
         m.step_edge();
@@ -783,7 +765,11 @@ mod tests {
     fn step_edge_stops_at_quit() {
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None, None,
+            10,
+            11,
+            12,
+            None,
+            None,
             1,
             b"05Q07".to_vec(),
         );
@@ -803,12 +789,8 @@ mod tests {
         // same edge as TMS changing — the TAP could sample stale TMS.
         //
         // Stream: '2' (TCK=0,TMS=1) '0' (TCK=0,TMS=0) '4' (TCK=1,TMS=0)
-        let mut m = JtagReplayModel::new(
-            "jtag_0".into(),
-            10, 11, 12, None, None,
-            1,
-            b"204".to_vec(),
-        );
+        let mut m =
+            JtagReplayModel::new("jtag_0".into(), 10, 11, 12, None, None, 1, b"204".to_vec());
         // Byte '2': TCK=0, TMS=1. Initial TCK=0 → no deferral.
         m.step_edge();
         assert_eq!(driven(&m), (0, 1, 0));
@@ -828,12 +810,8 @@ mod tests {
     fn step_edge_no_deferral_when_tck_unchanged() {
         // When TCK doesn't change, no deferral needed.
         // Stream: '0' (TCK=0) '2' (TCK=0,TMS=1) — TCK stays 0.
-        let mut m = JtagReplayModel::new(
-            "jtag_0".into(),
-            10, 11, 12, None, None,
-            1,
-            b"02".to_vec(),
-        );
+        let mut m =
+            JtagReplayModel::new("jtag_0".into(), 10, 11, 12, None, None, 1, b"02".to_vec());
         m.step_edge();
         assert_eq!(driven(&m), (0, 0, 0));
         // Byte '2': TCK stays 0, TMS changes → applied immediately.
@@ -845,8 +823,13 @@ mod tests {
     fn contribute_overrides_applies_trst_polarity() {
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12,
-            Some(TrstPin { position: 13, active_low: true }),
+            10,
+            11,
+            12,
+            Some(TrstPin {
+                position: 13,
+                active_low: true,
+            }),
             None,
             4,
             vec![],
@@ -868,7 +851,11 @@ mod tests {
     fn diagnostics_counts_match_stream() {
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12, None, None,
+            10,
+            11,
+            12,
+            None,
+            None,
             1,
             b"05R7RsuQ".to_vec(),
         );
@@ -884,13 +871,7 @@ mod tests {
     #[test]
     fn sample_tdo_reads_configured_output_bit() {
         // tdo_pos = 33 → word 1, bit 1 of the output-state slice.
-        let m = JtagReplayModel::new(
-            "jtag_0".into(),
-            10, 11, 12, None,
-            Some(33),
-            4,
-            vec![],
-        );
+        let m = JtagReplayModel::new("jtag_0".into(), 10, 11, 12, None, Some(33), 4, vec![]);
         // bit 33 set → sample 1.
         let mut out = vec![0u32, 0u32];
         out[1] = 1 << 1;
@@ -905,13 +886,7 @@ mod tests {
 
     #[test]
     fn sample_tdo_none_without_configured_pin() {
-        let m = JtagReplayModel::new(
-            "jtag_0".into(),
-            10, 11, 12, None,
-            None,
-            4,
-            vec![],
-        );
+        let m = JtagReplayModel::new("jtag_0".into(), 10, 11, 12, None, None, 4, vec![]);
         assert_eq!(m.sample_tdo(&[0xFFFF_FFFF]), None);
     }
 
@@ -921,8 +896,13 @@ mod tests {
         // not inject a pulse (would corrupt a byte-exact replay).
         let m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12,
-            Some(TrstPin { position: 13, active_low: true }),
+            10,
+            11,
+            12,
+            Some(TrstPin {
+                position: 13,
+                active_low: true,
+            }),
             None,
             4,
             vec![],
@@ -938,8 +918,13 @@ mod tests {
         // TAP. Drive the window logic directly (socket-free).
         let mut m = JtagReplayModel::new(
             "jtag_0".into(),
-            10, 11, 12,
-            Some(TrstPin { position: 13, active_low: true }),
+            10,
+            11,
+            12,
+            Some(TrstPin {
+                position: 13,
+                active_low: true,
+            }),
             None,
             4,
             vec![],
@@ -1001,7 +986,10 @@ mod tests {
         // the socket → EOF unblocks the model.
         let mut m = JtagReplayModel::new_live(
             "jtag_0".into(),
-            10, 11, 12, None,
+            10,
+            11,
+            12,
+            None,
             Some(33), // TDO at output-state bit 33 (word 1, bit 1)
             1,
             listener,
@@ -1042,7 +1030,11 @@ mod tests {
         });
         let mut m = JtagReplayModel::new_live(
             "jtag_0".into(),
-            10, 11, 12, None, None,
+            10,
+            11,
+            12,
+            None,
+            None,
             1,
             listener,
             true, // persist

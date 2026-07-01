@@ -11,9 +11,9 @@ use crate::aigpdk::AIGPDKLeafPins;
 use crate::cell_library::{ChainedPinProvider, RuntimeCellLibrary};
 use crate::display::extract_display_info_from_json;
 use crate::flatten::FlattenedScriptV1;
+use crate::pdk::{detect_library_from_file, CellLibrary};
 use crate::pe::{process_partitions, Partition};
 use crate::repcut::RCHyperGraph;
-use crate::pdk::{detect_library_from_file, CellLibrary};
 use crate::sky130::SKY130LeafPins;
 use crate::staging::{build_staged_aigs, StagedAIG};
 use netlistdb::NetlistDB;
@@ -227,11 +227,7 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
         match crate::sim::trace_signals::read_trace_file(trace_path) {
             Ok(names) => {
                 let (registered, dropped) =
-                    crate::sim::trace_signals::register_trace_signals(
-                        &mut aig,
-                        &netlistdb,
-                        &names,
-                    );
+                    crate::sim::trace_signals::register_trace_signals(&mut aig, &netlistdb, &names);
                 clilog::info!(
                     "--trace-signals: registered {} signal(s), dropped {} (file: {})",
                     registered,

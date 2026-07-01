@@ -298,19 +298,11 @@ mod tests {
     fn bufinv_resolves_after_table_switch() {
         let provider = SKY130LeafPins;
         assert_eq!(
-            provider.direction_of(
-                &"sky130_fd_sc_hd__bufinv_1".into(),
-                &"A".into(),
-                None,
-            ),
+            provider.direction_of(&"sky130_fd_sc_hd__bufinv_1".into(), &"A".into(), None,),
             Direction::I,
         );
         assert_eq!(
-            provider.direction_of(
-                &"sky130_fd_sc_hd__bufinv_1".into(),
-                &"Y".into(),
-                None,
-            ),
+            provider.direction_of(&"sky130_fd_sc_hd__bufinv_1".into(), &"Y".into(), None,),
             Direction::O,
         );
     }

@@ -1075,8 +1075,8 @@ impl AIG {
                     // Handle standard-cell PDK cells (combinational + sequential).
                     match PdkVariant::classify(celltype) {
                         Some(PdkVariant::Sky130) => {
-                            let deps = self
-                                .get_sky130_dependencies(netlistdb, pinid, cellid, celltype);
+                            let deps =
+                                self.get_sky130_dependencies(netlistdb, pinid, cellid, celltype);
                             self.sky130_preprocess(netlistdb, pinid, cellid, celltype);
                             work_stack.push(WorkItem::Process(pinid));
                             for dep in deps {
@@ -1085,8 +1085,8 @@ impl AIG {
                             continue;
                         }
                         Some(PdkVariant::Gf180Mcu) => {
-                            let deps = self
-                                .get_gf180mcu_dependencies(netlistdb, pinid, cellid, celltype);
+                            let deps =
+                                self.get_gf180mcu_dependencies(netlistdb, pinid, cellid, celltype);
                             self.gf180mcu_preprocess(netlistdb, pinid, cellid, celltype);
                             work_stack.push(WorkItem::Process(pinid));
                             for dep in deps {
@@ -1115,9 +1115,7 @@ impl AIG {
                                         pin_name,
                                     ));
                                     let sram = self.srams.entry(cellid).or_default();
-                                    let bit_idx = netlistdb.pinnames[pinid]
-                                        .2
-                                        .unwrap_or(0) as usize;
+                                    let bit_idx = netlistdb.pinnames[pinid].2.unwrap_or(0) as usize;
                                     if bit_idx < sram.port_r_rd_data.len() {
                                         sram.port_r_rd_data[bit_idx] = o;
                                     }
@@ -2005,7 +2003,7 @@ impl AIG {
                 if let (Some(a_iv), Some(oe_iv)) = (a_iv, oe_iv) {
                     let drive = self.add_and_gate(oe_iv, a_iv); // OE & A
                     let ext = self.add_and_gate(oe_iv ^ 1, pad_iv); // !OE & ext
-                    // Y = drive | ext = !(!drive & !ext)
+                                                                    // Y = drive | ext = !(!drive & !ext)
                     self.pin2aigpin_iv[pinid] = self.add_and_gate(drive ^ 1, ext ^ 1) ^ 1;
                 }
 
@@ -2038,8 +2036,7 @@ impl AIG {
         // `mux2` uses `S` as a select *input* while `addf` uses `S`
         // as a sum *output* — so a name-based blacklist can drop a
         // real input.
-        let mut inputs: std::collections::HashMap<String, usize> =
-            std::collections::HashMap::new();
+        let mut inputs: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for ipin in netlistdb.cell2pin.iter_set(cellid) {
             if netlistdb.pindirect[ipin] == Direction::I {
                 let pin_name = netlistdb.pinnames[ipin].1.as_str();
@@ -2237,8 +2234,7 @@ impl AIG {
         // Build inputs map by pin name (Direction::I only — pin names are not
         // unique across cells, so a name-based blacklist could drop a real
         // input; mirror gf180mcu_postprocess's filter).
-        let mut inputs: std::collections::HashMap<String, usize> =
-            std::collections::HashMap::new();
+        let mut inputs: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for ipin in netlistdb.cell2pin.iter_set(cellid) {
             if netlistdb.pindirect[ipin] == Direction::I {
                 inputs.insert(
@@ -2297,12 +2293,10 @@ impl AIG {
         cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) -> AIG {
         let has_sky130 = (1..netlistdb.num_cells).any(|cid| {
-            PdkVariant::classify(netlistdb.celltypes[cid].as_str())
-                == Some(PdkVariant::Sky130)
+            PdkVariant::classify(netlistdb.celltypes[cid].as_str()) == Some(PdkVariant::Sky130)
         });
         let has_gf180mcu = (1..netlistdb.num_cells).any(|cid| {
-            PdkVariant::classify(netlistdb.celltypes[cid].as_str())
-                == Some(PdkVariant::Gf180Mcu)
+            PdkVariant::classify(netlistdb.celltypes[cid].as_str()) == Some(PdkVariant::Gf180Mcu)
         });
 
         if has_sky130 {
@@ -2521,8 +2515,7 @@ impl AIG {
                 dff.d_iv = d_in;
                 assert_ne!(dff.q, 0);
             } else if PdkVariant::classify(celltype) == Some(PdkVariant::Sky130)
-                && PdkVariant::Sky130
-                    .is_sequential(PdkVariant::Sky130.extract_cell_type(celltype))
+                && PdkVariant::Sky130.is_sequential(PdkVariant::Sky130.extract_cell_type(celltype))
             {
                 // Handle SKY130 DFFs (dfxtp, edfxtp, dfrtp, etc.)
                 let cell_type = PdkVariant::Sky130.extract_cell_type(celltype);
@@ -2823,13 +2816,13 @@ impl AIG {
                 let mut ce_active_iv: usize = 1; // tied-high (active)
                 let mut we_global_active_iv: usize = 1; // tied-high (active)
                 let mut we_mask_active_iv: [usize; 32] = [1; 32]; // tied-high per bit
-                // Diagnostic counters: how many pin IDs did netlistdb
-                // produce for each control bus? Used to surface the
-                // OCD-style "WEN was supposed to be 8 distinct nets
-                // but came through as 1 (or 0)" case at construction
-                // time — that's the netlist-shape signature behind
-                // mask-collapsed write composition. See PR #82's
-                // wafer.space diagnosis.
+                                                                  // Diagnostic counters: how many pin IDs did netlistdb
+                                                                  // produce for each control bus? Used to surface the
+                                                                  // OCD-style "WEN was supposed to be 8 distinct nets
+                                                                  // but came through as 1 (or 0)" case at construction
+                                                                  // time — that's the netlist-shape signature behind
+                                                                  // mask-collapsed write composition. See PR #82's
+                                                                  // wafer.space diagnosis.
                 let mut wm_pins_matched: usize = 0;
                 let mut ce_pins_matched: usize = 0;
                 let mut we_pins_matched: usize = 0;
@@ -2957,8 +2950,7 @@ impl AIG {
                     }
                 }
                 for i in 0..data_width.min(sram.port_w_wr_en_iv.len()) {
-                    sram.port_w_wr_en_iv[i] =
-                        aig.add_and_gate(clken_ce_we, we_mask_active_iv[i]);
+                    sram.port_w_wr_en_iv[i] = aig.add_and_gate(clken_ce_we, we_mask_active_iv[i]);
                 }
                 // Read enable: clken & ce_active & NOT we_global. For
                 // the OCD SRAM that's `clken & !CEN & GWEN`. For SRAMs
@@ -4235,11 +4227,7 @@ endmodule
             ) -> netlistdb::Direction {
                 netlistdb::Direction::Unknown
             }
-            fn width_of(
-                &self,
-                _: &CompactString,
-                _: &CompactString,
-            ) -> Option<SVerilogRange> {
+            fn width_of(&self, _: &CompactString, _: &CompactString) -> Option<SVerilogRange> {
                 None
             }
         }
@@ -4249,12 +4237,8 @@ endmodule
             fallback: &fallback,
         };
 
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            TOP_VERILOG,
-            Some("top"),
-            &provider,
-        )
-        .expect("netlist parse");
+        let nl = netlistdb::NetlistDB::from_sverilog_source(TOP_VERILOG, Some("top"), &provider)
+            .expect("netlist parse");
 
         let aig = AIG::from_netlistdb_with_cells(&nl, Some(&runtime_lib));
 
@@ -4387,12 +4371,8 @@ data_out     = \"Q\"
             fallback: &fallback,
         };
 
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            TOP_VERILOG,
-            Some("top"),
-            &provider,
-        )
-        .expect("netlist parse");
+        let nl = netlistdb::NetlistDB::from_sverilog_source(TOP_VERILOG, Some("top"), &provider)
+            .expect("netlist parse");
         let aig = AIG::from_netlistdb_with_cells(&nl, Some(&runtime_lib));
 
         // Find the SRAM's RAMBlock entry.
@@ -4404,7 +4384,10 @@ data_out     = \"Q\"
 
         // Q[7:0] → port_r_rd_data[0..8] populated by Visit phase.
         let populated_q = ram.port_r_rd_data.iter().filter(|&&p| p != 0).count();
-        assert_eq!(populated_q, 8, "expected 8 populated Q slots, got {populated_q}");
+        assert_eq!(
+            populated_q, 8,
+            "expected 8 populated Q slots, got {populated_q}"
+        );
 
         // A[9:0] → port_r_addr_iv[0..10] and port_w_addr_iv[0..10]
         // populated by the explicit-port second-pass.
@@ -4941,12 +4924,9 @@ module top(p, y);
   gf180mcu_fd_sc_mcu9t5v0__tiel u_tie_oe (.ZN(core_oe));
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("top"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("top"), &GF180MCULeafPins)
+                .expect("netlist parse");
         let aig = AIG::from_netlistdb(&nl);
         assert!(aig.num_aigpins > 0);
 
@@ -5001,12 +4981,9 @@ module top(a, oe, p, y);
   );
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("top"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("top"), &GF180MCULeafPins)
+                .expect("netlist parse");
         let aig = AIG::from_netlistdb(&nl);
 
         // Find the bi_24t's A / OE / PAD inputs and Y output by pin name.
@@ -5104,12 +5081,9 @@ module top(bidir_PAD);
   gf180mcu_fd_sc_mcu9t5v0__tiel u_oe1 (.ZN(core_oe_1));
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("top"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("top"), &GF180MCULeafPins)
+                .expect("netlist parse");
         let aig = AIG::from_netlistdb(&nl);
         let names: std::collections::HashSet<String> = aig
             .extra_observable_names
@@ -5145,12 +5119,9 @@ module top(clk_PAD, in_PAD, y0, y1);
   gf180mcu_fd_io__in_c in_pad  (.PAD(in_PAD),  .PU(1'b0), .PD(1'b0), .Y(y1));
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("top"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("top"), &GF180MCULeafPins)
+                .expect("netlist parse");
         let aig = AIG::from_netlistdb(&nl);
         assert!(
             aig.extra_observable_names.is_empty(),
@@ -5175,12 +5146,9 @@ module top(a, b, sel, y);
   gf180mcu_fd_sc_mcu9t5v0__mux2_1 u1 (.I0(a), .I1(b), .S(sel), .Z(y));
 endmodule
 "#;
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            VERILOG,
-            Some("top"),
-            &GF180MCULeafPins,
-        )
-        .expect("netlist parse");
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(VERILOG, Some("top"), &GF180MCULeafPins)
+                .expect("netlist parse");
         let aig = AIG::from_netlistdb(&nl);
         assert!(aig.num_aigpins > 0, "AIG should have at least one pin");
     }
@@ -5225,9 +5193,7 @@ mod splice_comb_logic_tests {
             DriverType::InputPort(_) => *inputs
                 .get(&aigpin)
                 .unwrap_or_else(|| panic!("no input value for aigpin {aigpin}")),
-            DriverType::AndGate(a, b) => {
-                eval_iv(aig, a, inputs) && eval_iv(aig, b, inputs)
-            }
+            DriverType::AndGate(a, b) => eval_iv(aig, a, inputs) && eval_iv(aig, b, inputs),
             ref other => panic!("eval_iv: unexpected driver {other:?}"),
         };
         base ^ invert
@@ -5244,11 +5210,16 @@ mod splice_comb_logic_tests {
 
         let comb = CombLogic {
             inputs: vec!["A".into(), "B".into()],
-            and_nodes: vec![AndNode { a: Ref::node(1), b: Ref::node(2) }],
-            outputs: vec![OutputPin { pin: "ZN".into(), r: Ref::inv(3) }],
+            and_nodes: vec![AndNode {
+                a: Ref::node(1),
+                b: Ref::node(2),
+            }],
+            outputs: vec![OutputPin {
+                pin: "ZN".into(),
+                r: Ref::inv(3),
+            }],
         };
-        let input_ivs =
-            HashMap::from([("A".to_string(), a_iv), ("B".to_string(), b_iv)]);
+        let input_ivs = HashMap::from([("A".to_string(), a_iv), ("B".to_string(), b_iv)]);
         let out_iv = aig.splice_comb_logic(&comb, &input_ivs, "ZN");
 
         for (a, b) in [(false, false), (false, true), (true, false), (true, true)] {
@@ -5272,14 +5243,22 @@ mod splice_comb_logic_tests {
 
         let comb = CombLogic {
             inputs: vec!["A".into(), "B".into()],
-            and_nodes: vec![AndNode { a: Ref::node(1), b: Ref::node(2) }],
+            and_nodes: vec![AndNode {
+                a: Ref::node(1),
+                b: Ref::node(2),
+            }],
             outputs: vec![
-                OutputPin { pin: "AND".into(), r: Ref::node(3) },
-                OutputPin { pin: "NAND".into(), r: Ref::inv(3) },
+                OutputPin {
+                    pin: "AND".into(),
+                    r: Ref::node(3),
+                },
+                OutputPin {
+                    pin: "NAND".into(),
+                    r: Ref::inv(3),
+                },
             ],
         };
-        let input_ivs =
-            HashMap::from([("A".to_string(), a_iv), ("B".to_string(), b_iv)]);
+        let input_ivs = HashMap::from([("A".to_string(), a_iv), ("B".to_string(), b_iv)]);
         let and_iv = aig.splice_comb_logic(&comb, &input_ivs, "AND");
         let nand_iv = aig.splice_comb_logic(&comb, &input_ivs, "NAND");
 
@@ -5308,7 +5287,10 @@ mod splice_comb_logic_tests {
         let comb = CombLogic {
             inputs: vec!["A".into()],
             and_nodes: vec![],
-            outputs: vec![OutputPin { pin: "ZN".into(), r: Ref::inv(1) }],
+            outputs: vec![OutputPin {
+                pin: "ZN".into(),
+                r: Ref::inv(1),
+            }],
         };
         let input_ivs = HashMap::from([("A".to_string(), a_iv)]);
         let out_iv = aig.splice_comb_logic(&comb, &input_ivs, "ZN");

@@ -1262,13 +1262,12 @@ fn build_flattened_script_v1(
                     let part_sram_start = flattening_parts[part_id].sram_start;
                     let mut cur_sram_id: u32 = 0;
                     for &endpt_i in &init_parts[part_id].endpoints {
-                        if let EndpointGroup::RAMBlock(_) =
-                            staged.get_endpoint_group(aig, endpt_i)
+                        if let EndpointGroup::RAMBlock(_) = staged.get_endpoint_group(aig, endpt_i)
                         {
                             let sram_pos = endpt_i - aig_po_len - aig_dff_len;
                             let cellid = *aig.srams.get_index(sram_pos).unwrap().0;
-                            let offset = part_sram_start
-                                + cur_sram_id * (1 << AIGPDK_SRAM_ADDR_WIDTH);
+                            let offset =
+                                part_sram_start + cur_sram_id * (1 << AIGPDK_SRAM_ADDR_WIDTH);
                             sram_cell_storage_offsets.insert(cellid, offset);
                             cur_sram_id += 1;
                         }
@@ -2266,7 +2265,11 @@ fn ir_corner_max(
             let entry = v.get(i);
             if entry.corner_index() == idx {
                 let m = entry.max();
-                return if m > 0.0 { Some(m.round() as u64) } else { Some(0) };
+                return if m > 0.0 {
+                    Some(m.round() as u64)
+                } else {
+                    Some(0)
+                };
             }
         }
         None
@@ -3536,10 +3539,7 @@ mod word_symbol_map_tests {
     #[test]
     fn describe_word_with_single_dff() {
         let m = map_with(vec![(3, vec![site("top/cpu/state", 0)])]);
-        assert_eq!(
-            m.describe_word(3, 4),
-            "top/cpu/state[bit 0] [word=3]"
-        );
+        assert_eq!(m.describe_word(3, 4), "top/cpu/state[bit 0] [word=3]");
     }
 
     #[test]
@@ -3568,10 +3568,7 @@ mod word_symbol_map_tests {
                 .collect(),
         )]);
         let out = m.describe_word(1, 2);
-        assert_eq!(
-            out,
-            "top/r0[bit 0], top/r1[bit 1], +4 more [word=1]"
-        );
+        assert_eq!(out, "top/r0[bit 0], top/r1[bit 1], +4 more [word=1]");
     }
 
     #[test]
@@ -3592,7 +3589,6 @@ mod word_symbol_map_tests {
         assert_eq!(m.num_words(), 2);
         assert_eq!(m.num_sites(), 3);
     }
-
 }
 
 #[cfg(test)]

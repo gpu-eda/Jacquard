@@ -420,7 +420,11 @@ struct CosimArgs {
     /// `--jtag-replay` (mutually exclusive with it). Attach a debugger
     /// to inspect the design's RISC-V Debug Module exactly as on
     /// silicon — see `docs/jtag-debug.md`. Issue #124.
-    #[clap(long = "jtag-server", value_name = "PORT", conflicts_with = "jtag_replay")]
+    #[clap(
+        long = "jtag-server",
+        value_name = "PORT",
+        conflicts_with = "jtag_replay"
+    )]
     jtag_server: Option<u16>,
 
     /// Keep the `--jtag-server` alive across client disconnects: when the
@@ -646,11 +650,13 @@ fn cmd_sim(args: SimArgs) {
     // path under a scratch dir like `target/test-out/` doesn't fail.
     let output_vcd_path = std::path::Path::new(&args.output_vcd);
     vcd_io::ensure_parent_dir(output_vcd_path).unwrap_or_else(|e| {
-        panic!("Failed to create output VCD dir for {}: {}", args.output_vcd, e)
+        panic!(
+            "Failed to create output VCD dir for {}: {}",
+            args.output_vcd, e
+        )
     });
-    let write_buf = std::fs::File::create(&args.output_vcd).unwrap_or_else(|e| {
-        panic!("Failed to create output VCD {}: {}", args.output_vcd, e)
-    });
+    let write_buf = std::fs::File::create(&args.output_vcd)
+        .unwrap_or_else(|e| panic!("Failed to create output VCD {}: {}", args.output_vcd, e));
     let write_buf = std::io::BufWriter::new(write_buf);
     let mut writer = vcd_ng::Writer::new(write_buf);
     let output_mapping = vcd_io::setup_output_vcd(
@@ -1654,7 +1660,11 @@ fn sim_hip(
                 ev_size,
             );
         }
-        if event_box.overflow.load(std::sync::atomic::Ordering::Acquire) != 0 {
+        if event_box
+            .overflow
+            .load(std::sync::atomic::Ordering::Acquire)
+            != 0
+        {
             clilog::warn!(
                 "Timing event buffer overflowed (>{} events); some violations dropped",
                 MAX_EVENTS
@@ -2048,7 +2058,11 @@ fn cmd_xsources(args: XsourcesArgs) {
         Some(path) => {
             std::fs::write(path, format!("{json}\n"))
                 .unwrap_or_else(|e| panic!("writing {}: {e}", path.display()));
-            clilog::info!("Wrote {} X-source(s) to {}", manifest.x_sources.len(), path.display());
+            clilog::info!(
+                "Wrote {} X-source(s) to {}",
+                manifest.x_sources.len(),
+                path.display()
+            );
         }
         None => println!("{json}"),
     }
@@ -2117,9 +2131,8 @@ fn cmd_jtag_openocd_config(args: JtagOpenocdConfigArgs) {
     );
     match args.output.as_ref() {
         Some(path) => {
-            std::fs::write(path, &cfg).unwrap_or_else(|e| {
-                panic!("failed to write {}: {e}", path.display())
-            });
+            std::fs::write(path, &cfg)
+                .unwrap_or_else(|e| panic!("failed to write {}: {e}", path.display()));
             clilog::info!("Wrote OpenOCD config → {}", path.display());
         }
         None => print!("{cfg}"),

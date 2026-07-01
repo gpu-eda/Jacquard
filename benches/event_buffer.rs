@@ -64,7 +64,13 @@ fn bench_process_events(c: &mut Criterion) {
 
                 b.iter(|| {
                     let mut stats = SimStats::default();
-                    let result = process_events(black_box(&buf), &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+                    let result = process_events(
+                        black_box(&buf),
+                        &config,
+                        &mut stats,
+                        ReportingCtx::default(),
+                        |_, _, _| {},
+                    );
                     black_box((result, stats.assertion_failures))
                 });
             },

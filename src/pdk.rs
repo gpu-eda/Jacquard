@@ -287,10 +287,7 @@ mod tests {
         // Mixed — any two libraries together is an error.
         let mixed_sky_aig = ["sky130_fd_sc_hd__inv_2", "AND2_00_0"];
         assert_eq!(detect_library(mixed_sky_aig.iter()), CellLibrary::Mixed);
-        let mixed_gf_sky = [
-            "gf180mcu_fd_sc_mcu7t5v0__inv_2",
-            "sky130_fd_sc_hd__nand2_1",
-        ];
+        let mixed_gf_sky = ["gf180mcu_fd_sc_mcu7t5v0__inv_2", "sky130_fd_sc_hd__nand2_1"];
         assert_eq!(detect_library(mixed_gf_sky.iter()), CellLibrary::Mixed);
         let mixed_gf_aig = ["gf180mcu_fd_sc_mcu7t5v0__inv_2", "AND2_00_0"];
         assert_eq!(detect_library(mixed_gf_aig.iter()), CellLibrary::Mixed);

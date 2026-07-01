@@ -97,9 +97,8 @@ pub fn load_pdk_models(cells_root: &Path, cell_types: &[String]) -> Gf180PdkMode
         let src = std::fs::read_to_string(&entry).unwrap_or_else(|e| {
             panic!("read {}: {e}", entry.display());
         });
-        let model = cell_decomp::parse_functional_model(&src).unwrap_or_else(|| {
-            panic!("parse {}: returned None", entry.display())
-        });
+        let model = cell_decomp::parse_functional_model(&src)
+            .unwrap_or_else(|| panic!("parse {}: returned None", entry.display()));
 
         // Load any UDPs this model references, by functional.v
         // gate-type name. Currently no combinational cells reference
@@ -143,10 +142,7 @@ fn load_udp_by_functional_name(models_root: &Path, gate_name: &str) -> Option<Ud
 
     // Two candidate directory names: the canonical `udp_<kind_lc>` and
     // the upstream typo `upd_<kind_lc>` (latch with both R and S).
-    let candidate_dirs = [
-        format!("udp_{kind_lc}"),
-        format!("upd_{kind_lc}"),
-    ];
+    let candidate_dirs = [format!("udp_{kind_lc}"), format!("upd_{kind_lc}")];
     let candidate_files = [
         format!("gf180mcu_mcu7t5v0__udp_{kind_lc}.v"),
         format!("gf180mcu_fd_sc_mcu7t5v0__udp_{kind_lc}.v"),
@@ -299,9 +295,7 @@ fn apply_gate(
         "nor" => build_chain_gate(&inputs, true, false, and_gates),
         "xor" => build_xor_chain(&inputs, false, and_gates),
         "xnor" => build_xor_chain(&inputs, true, and_gates),
-        other if other.starts_with("UDP_GF018") => {
-            build_udp_aig(gate, wires, udps, and_gates)
-        }
+        other if other.starts_with("UDP_GF018") => build_udp_aig(gate, wires, udps, and_gates),
         other => panic!(
             "Unhandled GF180MCU primitive '{other}' in gate with output '{}'. \
              If this is a new Verilog primitive, extend apply_gate().",
@@ -430,14 +424,14 @@ mod tests {
     /// 9t5v0 standard cell libraries ship these 69 cells; the lists
     /// are identical (verified in build.rs's dedup pass).
     const ALL_CELL_TYPES: &[&str] = &[
-        "addf", "addh", "and2", "and3", "and4", "antenna", "aoi21", "aoi211", "aoi22",
-        "aoi221", "aoi222", "buf", "bufz", "clkbuf", "clkinv", "dffnq", "dffnrnq",
-        "dffnrsnq", "dffnsnq", "dffq", "dffrnq", "dffrsnq", "dffsnq", "dlya", "dlyb",
-        "dlyc", "dlyd", "endcap", "fill", "fillcap", "filltie", "hold", "icgtn", "icgtp",
-        "inv", "invz", "latq", "latrnq", "latrsnq", "latsnq", "mux2", "mux4", "nand2",
-        "nand3", "nand4", "nor2", "nor3", "nor4", "oai21", "oai211", "oai22", "oai221",
-        "oai222", "oai31", "oai32", "oai33", "or2", "or3", "or4", "sdffq", "sdffrnq",
-        "sdffrsnq", "sdffsnq", "tieh", "tiel", "xnor2", "xnor3", "xor2", "xor3",
+        "addf", "addh", "and2", "and3", "and4", "antenna", "aoi21", "aoi211", "aoi22", "aoi221",
+        "aoi222", "buf", "bufz", "clkbuf", "clkinv", "dffnq", "dffnrnq", "dffnrsnq", "dffnsnq",
+        "dffq", "dffrnq", "dffrsnq", "dffsnq", "dlya", "dlyb", "dlyc", "dlyd", "endcap", "fill",
+        "fillcap", "filltie", "hold", "icgtn", "icgtp", "inv", "invz", "latq", "latrnq", "latrsnq",
+        "latsnq", "mux2", "mux4", "nand2", "nand3", "nand4", "nor2", "nor3", "nor4", "oai21",
+        "oai211", "oai22", "oai221", "oai222", "oai31", "oai32", "oai33", "or2", "or3", "or4",
+        "sdffq", "sdffrnq", "sdffrsnq", "sdffsnq", "tieh", "tiel", "xnor2", "xnor3", "xor2",
+        "xor3",
     ];
 
     #[test]
@@ -452,12 +446,7 @@ mod tests {
             .iter()
             .filter(|c| is_sequential_cell(c))
             .collect();
-        assert_eq!(
-            seq.len(),
-            18,
-            "expected 18 sequential cells, got {:?}",
-            seq
-        );
+        assert_eq!(seq.len(), 18, "expected 18 sequential cells, got {:?}", seq);
     }
 
     #[test]
@@ -577,8 +566,7 @@ mod tests {
         use cell_decomp::parse_functional_model;
         let path = "vendor/gf180mcu_fd_sc_mcu7t5v0/cells/dffq/\
                     gf180mcu_fd_sc_mcu7t5v0__dffq_1.functional.v";
-        let src = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("read {path}: {e}"));
+        let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read {path}: {e}"));
         let model = parse_functional_model(&src).expect("parse should succeed");
         assert_eq!(model.module_name, "gf180mcu_fd_sc_mcu7t5v0__dffq_1");
         // dffq_1 wraps a UDP_GF018... FF UDP between two `not` gates;
@@ -624,8 +612,7 @@ mod tests {
 
     #[test]
     fn load_udp_by_functional_name_resolves_all_four_primitives() {
-        let models_root =
-            Path::new("vendor/gf180mcu_fd_sc_mcu7t5v0/models");
+        let models_root = Path::new("vendor/gf180mcu_fd_sc_mcu7t5v0/models");
         // The four UDP gate-type names referenced by GF180MCU
         // functional.v files (corner+pg fields stripped down to a
         // representative one). The loader must resolve all four —
@@ -655,9 +642,12 @@ mod tests {
         use cell_decomp::parse_functional_model;
         let path = "vendor/gf180mcu_fd_sc_mcu7t5v0/cells/nand2/\
                     gf180mcu_fd_sc_mcu7t5v0__nand2_1.functional.v";
-        let src = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("read {path}: {e} \
-                — submodule may need `git submodule update --init`"));
+        let src = std::fs::read_to_string(path).unwrap_or_else(|e| {
+            panic!(
+                "read {path}: {e} \
+                — submodule may need `git submodule update --init`"
+            )
+        });
         let model = parse_functional_model(&src).expect("parse should succeed");
         assert_eq!(model.module_name, "gf180mcu_fd_sc_mcu7t5v0__nand2_1");
         assert_eq!(model.inputs, vec!["A1".to_string(), "A2".to_string()]);
@@ -672,8 +662,8 @@ mod tests {
         // Pure combinational gates (inv, nand2, oai21, etc.) should NOT
         // match any specialised classifier.
         for c in [
-            "inv", "buf", "nand2", "nor3", "and4", "or2", "xor2", "xnor3", "aoi22",
-            "oai222", "mux2", "mux4",
+            "inv", "buf", "nand2", "nor3", "and4", "or2", "xor2", "xnor3", "aoi22", "oai222",
+            "mux2", "mux4",
         ] {
             assert!(!is_sequential_cell(c), "{c} should not be sequential");
             assert!(!is_tie_cell(c), "{c} should not be a tie cell");
@@ -771,15 +761,12 @@ mod tests {
                 bool_inputs.insert(name.clone(), bit);
                 pin_values.insert(pin_index_for[name], bit);
             }
-            let expected = cell_decomp::eval_behavioral_model(
-                &model,
-                &bool_inputs,
-                output_pin,
-                &empty_udps,
-            );
+            let expected =
+                cell_decomp::eval_behavioral_model(&model, &bool_inputs, output_pin, &empty_udps);
             let got = eval_decomp(&decomp, &pin_values);
             assert_eq!(
-                got, expected,
+                got,
+                expected,
                 "cell={cell_type} pin={output_pin} mask=0b{mask:0width$b} \
                  inputs={bool_inputs:?}: expected {expected}, got {got}",
                 width = n.max(1)
@@ -926,9 +913,7 @@ mod tests {
             let dir = if *pin_name == "Q" { "output" } else { "input" };
             verilog.push_str(&format!("  {dir} {port};\n"));
         }
-        verilog.push_str(&format!(
-            "  gf180mcu_fd_sc_mcu7t5v0__{cell_type}_1 u (\n"
-        ));
+        verilog.push_str(&format!("  gf180mcu_fd_sc_mcu7t5v0__{cell_type}_1 u (\n"));
         let conn_list: Vec<String> = cell_pins
             .iter()
             .map(|(pin_name, port)| format!("    .{pin_name}({port})"))
@@ -939,12 +924,9 @@ mod tests {
         // to 0 explicitly if not already connected.
         verilog.push_str("endmodule\n");
 
-        let nl = netlistdb::NetlistDB::from_sverilog_source(
-            &verilog,
-            Some("tiny"),
-            &GF180MCULeafPins,
-        )
-        .unwrap_or_else(|| panic!("netlist parse failed for cell '{cell_type}'"));
+        let nl =
+            netlistdb::NetlistDB::from_sverilog_source(&verilog, Some("tiny"), &GF180MCULeafPins)
+                .unwrap_or_else(|| panic!("netlist parse failed for cell '{cell_type}'"));
 
         // Map each module port name → netlistdb pin id (top-level cell 0).
         let mut port_to_pin: HashMap<String, usize> = HashMap::new();
@@ -1063,7 +1045,10 @@ mod tests {
                 &inputs,
                 &HashMap::from([(dff_cellid, state)]),
             );
-            assert_eq!(q_observed, d_val, "dffq Q mismatch after latching d={d_val}");
+            assert_eq!(
+                q_observed, d_val,
+                "dffq Q mismatch after latching d={d_val}"
+            );
         }
     }
 
@@ -1087,11 +1072,7 @@ mod tests {
             .expect("dffrnq cell Q pin");
 
         // Step 1: RN=1 (inactive), d=1, latch → Q=1.
-        let inputs1 = HashMap::from([
-            (port["d"], true),
-            (port["clk"], true),
-            (port["rn"], true),
-        ]);
+        let inputs1 = HashMap::from([(port["d"], true), (port["clk"], true), (port["rn"], true)]);
         let state1 = step_dff(&aig, dff_cellid, &inputs1, false);
         assert!(state1, "dffrnq should latch d=1 with RN inactive");
         let q1 = read_q_output(
@@ -1105,11 +1086,7 @@ mod tests {
 
         // Step 2: RN=0 (asserted) should drag Q to 0 *combinationally*
         // even if the stored state is 1.
-        let inputs2 = HashMap::from([
-            (port["d"], true),
-            (port["clk"], false),
-            (port["rn"], false),
-        ]);
+        let inputs2 = HashMap::from([(port["d"], true), (port["clk"], false), (port["rn"], false)]);
         let q2 = read_q_output(
             &aig,
             &nl,
@@ -1120,11 +1097,7 @@ mod tests {
         assert!(!q2, "dffrnq Q must be 0 when RN=0 (active-low reset)");
 
         // Step 3: RN=1, d=0, clock → Q=0 (normal clocking after reset).
-        let inputs3 = HashMap::from([
-            (port["d"], false),
-            (port["clk"], true),
-            (port["rn"], true),
-        ]);
+        let inputs3 = HashMap::from([(port["d"], false), (port["clk"], true), (port["rn"], true)]);
         let state3 = step_dff(&aig, dff_cellid, &inputs3, false);
         assert!(!state3, "dffrnq normal clocking after reset");
     }
@@ -1312,12 +1285,7 @@ mod tests {
     /// Q holds its previous value.
     #[test]
     fn latq_is_transparent_when_e_high() {
-        let pins = &[
-            ("E", "e"),
-            ("D", "d"),
-            ("Q", "q"),
-            ("notifier", "notif"),
-        ];
+        let pins = &[("E", "e"), ("D", "d"), ("Q", "q"), ("notifier", "notif")];
         let (aig, nl, port) = build_one_cell_aig("latq", pins);
         let dff_cellid = find_cell_id(&nl, "latq");
 
@@ -1327,8 +1295,7 @@ mod tests {
         assert!(next, "latq E=1 must pass D=1 through");
 
         // E=0 → holds previous state regardless of D.
-        let inputs_hold =
-            HashMap::from([(port["d"], false), (port["e"], false)]);
+        let inputs_hold = HashMap::from([(port["d"], false), (port["e"], false)]);
         let held = step_dff(&aig, dff_cellid, &inputs_hold, true);
         assert!(held, "latq E=0 must hold previous state");
         let _ = nl;
@@ -1351,7 +1318,10 @@ mod tests {
             ("dffnrsnq", &["CLKN", "D", "RN", "SETN", "notifier", "Q"]),
             ("sdffq", &["CLK", "D", "SE", "SI", "notifier", "Q"]),
             ("sdffrnq", &["CLK", "D", "RN", "SE", "SI", "notifier", "Q"]),
-            ("sdffsnq", &["CLK", "D", "SE", "SETN", "SI", "notifier", "Q"]),
+            (
+                "sdffsnq",
+                &["CLK", "D", "SE", "SETN", "SI", "notifier", "Q"],
+            ),
             (
                 "sdffrsnq",
                 &["CLK", "D", "RN", "SE", "SETN", "SI", "notifier", "Q"],
@@ -1365,8 +1335,7 @@ mod tests {
         ];
 
         for (cell, port_order) in cell_pin_specs {
-            let pins: Vec<(&str, &str)> =
-                port_order.iter().map(|p| (*p, *p)).collect();
+            let pins: Vec<(&str, &str)> = port_order.iter().map(|p| (*p, *p)).collect();
             // build_one_cell_aig panics on parse / AIG construction
             // failure; reaching the end is the assertion.
             let (aig, _nl, _port) = build_one_cell_aig(cell, &pins);

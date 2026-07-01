@@ -211,8 +211,14 @@ impl CosimBackend for CudaBackend {
         } else {
             1
         };
-        let mut sram_xmask =
-            vec![if script.xprop_enabled { 0xFFFF_FFFFu32 } else { 0u32 }; sram_xmask_len];
+        let mut sram_xmask = vec![
+            if script.xprop_enabled {
+                0xFFFF_FFFFu32
+            } else {
+                0u32
+            };
+            sram_xmask_len
+        ];
 
         // SRAM preload (issue #80) — same path as CpuBackend::new. Logic
         // fixtures declare no `sram_init`, so this is untaken; wired for
@@ -253,11 +259,19 @@ impl CosimBackend for CudaBackend {
 
         // Device-resident block program (copied from `script` so the backend
         // owns its storage). Materialise the device copies up front.
-        let mut blocks_start: UVec<usize> =
-            script.blocks_start.iter().copied().collect::<Vec<_>>().into();
+        let mut blocks_start: UVec<usize> = script
+            .blocks_start
+            .iter()
+            .copied()
+            .collect::<Vec<_>>()
+            .into();
         blocks_start.as_mut_uptr(DEVICE);
-        let mut blocks_data: UVec<u32> =
-            script.blocks_data.iter().copied().collect::<Vec<_>>().into();
+        let mut blocks_data: UVec<u32> = script
+            .blocks_data
+            .iter()
+            .copied()
+            .collect::<Vec<_>>()
+            .into();
         blocks_data.as_mut_uptr(DEVICE);
 
         // ── GPU peripheral IO buffers (mirror MetalBackend::build_io_buffers) ──
@@ -292,7 +306,11 @@ impl CosimBackend for CudaBackend {
 
         // UartChannel[MAX_UARTS] — zeroed header with capacity set per channel.
         let uart_channel = host_bytes_to_dev(
-            channel_buf(std::mem::size_of::<UartChannel>(), MAX_UARTS, UART_CHANNEL_CAP as u32),
+            channel_buf(
+                std::mem::size_of::<UartChannel>(),
+                MAX_UARTS,
+                UART_CHANNEL_CAP as u32,
+            ),
             DEVICE,
         );
 
@@ -566,12 +584,7 @@ impl CosimBackend for CudaBackend {
 
             // ── Inject flash MISO (FlashState.d_i → input state) before sim ──
             // Mirrors the Metal order: state_prep → apply_flash_din → simulate.
-            ucci::gpu_apply_flash_din(
-                &mut *state,
-                &*flash_state,
-                &self.flash_din_params,
-                DEVICE,
-            );
+            ucci::gpu_apply_flash_din(&mut *state, &*flash_state, &self.flash_din_params, DEVICE);
 
             // ── Simulate every major stage (timing OFF in cosim) ────────────
             for stage in 0..self.num_major_stages {

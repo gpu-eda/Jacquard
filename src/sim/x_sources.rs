@@ -75,8 +75,8 @@ pub struct XSourceManifest {
 /// insensitively against the cell's pin port names across sky130 / gf180mcu /
 /// generic libraries.
 const RESET_SET_PIN_LEAVES: &[&str] = &[
-    "reset_b", "set_b", "resetn", "setn", "reset", "set", "clrz", "clr", "clrn",
-    "pre", "pren", "rn", "sn", "rb", "sb", "r", "s",
+    "reset_b", "set_b", "resetn", "setn", "reset", "set", "clrz", "clr", "clrn", "pre", "pren",
+    "rn", "sn", "rb", "sb", "r", "s",
 ];
 
 /// Parse a GPIO index from a port name like `gpio_in[5]` or `gpio_in:5`.
@@ -293,13 +293,18 @@ mod tests {
     use super::*;
     use crate::sim::setup::build_netlist_and_aig;
 
-    const DEMO_NETLIST: &str =
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/xprop_cosim/xprop_demo_synth.gv");
-    const DEMO_CONFIG: &str =
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/xprop_cosim/sim_config.json");
+    const DEMO_NETLIST: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/xprop_cosim/xprop_demo_synth.gv"
+    );
+    const DEMO_CONFIG: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/xprop_cosim/sim_config.json"
+    );
 
     fn demo_manifest(with_config: bool) -> XSourceManifest {
-        let (netlistdb, aig) = build_netlist_and_aig(Path::new(DEMO_NETLIST), None, &[], None, None);
+        let (netlistdb, aig) =
+            build_netlist_and_aig(Path::new(DEMO_NETLIST), None, &[], None, None);
         let config: Option<TestbenchConfig> = if with_config {
             let f = std::fs::File::open(DEMO_CONFIG).unwrap();
             Some(serde_json::from_reader(std::io::BufReader::new(f)).unwrap())
@@ -354,7 +359,9 @@ mod tests {
         let m = demo_manifest(false);
         assert!(!m.undriven_inputs_classified);
         assert!(
-            !m.x_sources.iter().any(|s| s.kind == XSourceKind::UndrivenInput),
+            !m.x_sources
+                .iter()
+                .any(|s| s.kind == XSourceKind::UndrivenInput),
             "undriven inputs must not be classified without a config"
         );
     }
@@ -364,7 +371,10 @@ mod tests {
         let m = demo_manifest(true);
         assert!(m.undriven_inputs_classified);
         // The genuinely-unconnected input reads X.
-        assert_eq!(kind_of(&m, "unconnected"), Some(&XSourceKind::UndrivenInput));
+        assert_eq!(
+            kind_of(&m, "unconnected"),
+            Some(&XSourceKind::UndrivenInput)
+        );
         // clk / rst_n are driven (clock / reset gpio via port_mapping), so
         // they must NOT be reported as undriven X-sources.
         assert!(kind_of(&m, "clk").is_none());

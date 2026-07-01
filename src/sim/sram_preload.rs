@@ -27,8 +27,8 @@
 
 use std::path::Path;
 
-use elf::ElfBytes;
 use elf::endian::AnyEndian;
+use elf::ElfBytes;
 use indexmap::IndexMap;
 
 use crate::aigpdk::AIGPDK_SRAM_SIZE;
@@ -115,11 +115,9 @@ pub fn parse_elf_chunks(elf_path: &Path) -> Result<Vec<PreloadChunk>, PreloadErr
         path: elf_path.to_path_buf(),
         err,
     })?;
-    let elf = ElfBytes::<AnyEndian>::minimal_parse(&bytes).map_err(|e| {
-        PreloadError::ElfParse {
-            path: elf_path.to_path_buf(),
-            message: format!("{e}"),
-        }
+    let elf = ElfBytes::<AnyEndian>::minimal_parse(&bytes).map_err(|e| PreloadError::ElfParse {
+        path: elf_path.to_path_buf(),
+        message: format!("{e}"),
     })?;
     let segments = elf
         .segments()

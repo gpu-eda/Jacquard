@@ -525,8 +525,7 @@ endmodule
         let mut lib = RuntimeCellLibrary::default();
         lib.load_verilog(&path).unwrap();
 
-        let macro_name =
-            CompactString::new("gf180mcu_ocd_ip_sram__sram1024x8m8wm1");
+        let macro_name = CompactString::new("gf180mcu_ocd_ip_sram__sram1024x8m8wm1");
         assert_eq!(
             lib.lookup_pin(&macro_name, &CompactString::new("CLK")),
             Some(Direction::I)
@@ -542,7 +541,10 @@ endmodule
         );
         // Unknown macro
         assert_eq!(
-            lib.lookup_pin(&CompactString::new("other_cell"), &CompactString::new("CLK")),
+            lib.lookup_pin(
+                &CompactString::new("other_cell"),
+                &CompactString::new("CLK")
+            ),
             None
         );
     }
@@ -581,8 +583,7 @@ endmodule
              [cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]\n\
              kind = \"ram\"\n",
         );
-        let lib =
-            RuntimeCellLibrary::from_files(&[dir.path().join("ocd_sram.v")]).unwrap();
+        let lib = RuntimeCellLibrary::from_files(&[dir.path().join("ocd_sram.v")]).unwrap();
         assert_eq!(
             lib.lookup_kind("gf180mcu_ocd_ip_sram__sram1024x8m8wm1"),
             Some(CellKind::Ram)
@@ -593,11 +594,7 @@ endmodule
     #[test]
     fn rejects_unsupported_schema_version() {
         let dir = TempDir::new().unwrap();
-        let manifest = write_file(
-            &dir,
-            "x.cells.toml",
-            "schema_version = \"2.0\"\n",
-        );
+        let manifest = write_file(&dir, "x.cells.toml", "schema_version = \"2.0\"\n");
         let mut lib = RuntimeCellLibrary::default();
         let err = lib.load_manifest(&manifest).unwrap_err();
         assert!(matches!(err, LoadError::UnsupportedSchemaVersion { .. }));
@@ -749,15 +746,13 @@ kind = \"ram\"
              [cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]\n\
              kind = \"ram\"\n",
         );
-        let lib =
-            RuntimeCellLibrary::from_files(&[dir.path().join("ocd_sram.v")]).unwrap();
+        let lib = RuntimeCellLibrary::from_files(&[dir.path().join("ocd_sram.v")]).unwrap();
         assert_eq!(
             lib.lookup_kind("gf180mcu_ocd_ip_sram__sram1024x8m8wm1"),
             Some(CellKind::Ram)
         );
         // Pins also populated.
-        let macro_name =
-            CompactString::new("gf180mcu_ocd_ip_sram__sram1024x8m8wm1");
+        let macro_name = CompactString::new("gf180mcu_ocd_ip_sram__sram1024x8m8wm1");
         assert_eq!(
             lib.lookup_pin(&macro_name, &CompactString::new("Q")),
             Some(Direction::O)
@@ -769,8 +764,7 @@ kind = \"ram\"
         let dir = TempDir::new().unwrap();
         write_file(&dir, "ocd_sram.v", OCD_SRAM_VERILOG);
         // No .cells.toml — pins-only load should still succeed.
-        let lib =
-            RuntimeCellLibrary::from_files(&[dir.path().join("ocd_sram.v")]).unwrap();
+        let lib = RuntimeCellLibrary::from_files(&[dir.path().join("ocd_sram.v")]).unwrap();
         assert!(lib.kind_entry_count() == 0);
         assert!(lib.pin_entry_count() > 0);
     }

@@ -437,7 +437,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         assert_eq!(control, SimControl::Continue);
         assert_eq!(stats.stop_count, 0);
@@ -452,7 +458,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         assert_eq!(control, SimControl::Pause);
         assert_eq!(stats.stop_count, 1);
@@ -466,7 +478,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         assert_eq!(control, SimControl::Terminate);
     }
@@ -483,7 +501,13 @@ mod tests {
         };
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         assert_eq!(control, SimControl::Continue);
         assert_eq!(stats.assertion_failures, 2);
@@ -500,7 +524,13 @@ mod tests {
         };
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         assert_eq!(control, SimControl::Terminate);
         assert_eq!(stats.assertion_failures, 1);
@@ -519,7 +549,13 @@ mod tests {
         };
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         // Should terminate after 2 failures
         assert_eq!(control, SimControl::Terminate);
@@ -541,10 +577,16 @@ mod tests {
         let mut captured_msg_id = 0u32;
         let mut captured_cycle = 0u32;
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |msg_id, cycle, _data| {
-            captured_msg_id = msg_id;
-            captured_cycle = cycle;
-        });
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |msg_id, cycle, _data| {
+                captured_msg_id = msg_id;
+                captured_cycle = cycle;
+            },
+        );
 
         assert_eq!(control, SimControl::Continue);
         assert_eq!(captured_msg_id, 42);
@@ -562,7 +604,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         // Finish should cause immediate termination
         assert_eq!(control, SimControl::Terminate);
@@ -598,7 +646,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         // Timing violations don't stop simulation by default
         assert_eq!(control, SimControl::Continue);
@@ -645,7 +699,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         assert_eq!(control, SimControl::Continue);
         assert_eq!(stats.setup_violations, 1);
@@ -661,7 +721,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         assert_eq!(control, SimControl::Continue);
         assert_eq!(stats.setup_violations, 0);
@@ -679,7 +745,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         assert_eq!(control, SimControl::Continue);
         assert_eq!(
@@ -700,7 +772,13 @@ mod tests {
         let config = AssertConfig::default();
         let mut stats = SimStats::default();
 
-        let control = process_events(&buf, &config, &mut stats, ReportingCtx::default(), |_, _, _| {});
+        let control = process_events(
+            &buf,
+            &config,
+            &mut stats,
+            ReportingCtx::default(),
+            |_, _, _| {},
+        );
 
         // $stop causes Pause, violations are counted
         assert_eq!(control, SimControl::Pause);

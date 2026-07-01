@@ -299,11 +299,7 @@ impl ReportBuilder {
     /// per-cycle cap (use with caution on violation-storm runs);
     /// `Some(n)` retains the first `n` records and counts the rest in
     /// `stats.violations_truncated`.
-    pub fn new(
-        metadata: RunMetadata,
-        worst_slack_n: usize,
-        max_violations: Option<usize>,
-    ) -> Self {
+    pub fn new(metadata: RunMetadata, worst_slack_n: usize, max_violations: Option<usize>) -> Self {
         Self {
             metadata,
             violations: Vec::new(),
@@ -403,10 +399,11 @@ impl WorstSlackTracker {
     }
 
     fn into_sorted_vec(mut self) -> Vec<ViolationRecord> {
-        self.items.sort_by(|a, b| match a.slack_ps.cmp(&b.slack_ps) {
-            Ordering::Equal => a.cycle.cmp(&b.cycle),
-            other => other,
-        });
+        self.items
+            .sort_by(|a, b| match a.slack_ps.cmp(&b.slack_ps) {
+                Ordering::Equal => a.cycle.cmp(&b.cycle),
+                other => other,
+            });
         self.items
     }
 }
@@ -514,7 +511,14 @@ mod tests {
         );
         b.observe(make_violation(10, ViolationKind::Setup, 5, -100, 1100));
         b.observe(make_violation(11, ViolationKind::Hold, 7, -20, 30));
-        let report = b.finalize(50, ReportStats { setup_violations: 1, hold_violations: 1, ..Default::default() });
+        let report = b.finalize(
+            50,
+            ReportStats {
+                setup_violations: 1,
+                hold_violations: 1,
+                ..Default::default()
+            },
+        );
         let json = serde_json::to_string(&report).unwrap();
         let parsed: TimingReport = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.violations.len(), 2);
@@ -715,10 +719,20 @@ mod tests {
         );
         b.observe(make_violation(10, ViolationKind::Setup, 5, -100, 1100));
         b.observe(make_violation(11, ViolationKind::Hold, 7, -20, 30));
-        let report = b.finalize(50, ReportStats { setup_violations: 1, hold_violations: 1, ..Default::default() });
+        let report = b.finalize(
+            50,
+            ReportStats {
+                setup_violations: 1,
+                hold_violations: 1,
+                ..Default::default()
+            },
+        );
         let text = report.format_summary();
         assert!(text.contains("Design:        tiny.gv"), "got:\n{text}");
-        assert!(text.contains("Vectors:       boot.vcd (50 cycles)"), "got:\n{text}");
+        assert!(
+            text.contains("Vectors:       boot.vcd (50 cycles)"),
+            "got:\n{text}"
+        );
         assert!(text.contains("Clock period:  1000 ps"), "got:\n{text}");
         assert!(text.contains("Setup: 1"), "got:\n{text}");
         assert!(text.contains("Hold:  1"), "got:\n{text}");
@@ -741,14 +755,24 @@ mod tests {
         assert!(text.contains("Hold:  0"));
         assert!(text.contains("Setup: (none)"));
         assert!(text.contains("Hold: (none)"));
-        assert!(!text.contains("Top 0"), "should not print empty top-N section");
+        assert!(
+            !text.contains("Top 0"),
+            "should not print empty top-N section"
+        );
     }
 
     #[test]
     fn format_summary_warns_on_dropped_events() {
         let mut b = ReportBuilder::new(RunMetadata::default(), 5, None);
         b.observe(make_violation(1, ViolationKind::Setup, 0, -10, 0));
-        let report = b.finalize(10, ReportStats { setup_violations: 1, events_dropped: 42, ..Default::default() });
+        let report = b.finalize(
+            10,
+            ReportStats {
+                setup_violations: 1,
+                events_dropped: 42,
+                ..Default::default()
+            },
+        );
         let text = report.format_summary();
         assert!(text.contains("42 events dropped"), "got:\n{text}");
     }
