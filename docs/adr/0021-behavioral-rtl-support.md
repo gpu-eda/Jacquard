@@ -52,10 +52,21 @@ input, while keeping the emulator's synthesized-netlist core unchanged:
    `aigpdk.lib` logic synthesis) to produce `gatelevel.gv`, which then feeds
    `sim` / `cosim` unchanged. RTL in, netlist out, one command.
 
-2. **Yosys via YoWASP**, not a vendored native build — WASM wheels the workspace
-   already resolves. The front-end **lives in the Python engine** (ADR 0020 P0 /
-   #161), because YoWASP is Python-distributed: `pip install jacquard` then
-   `jacquard build design.v && jacquard sim …` is RTL-to-waves from one install.
+2. **Yosys as WebAssembly, executed in-process from Rust** — not a vendored
+   native build, and *not* via the Python `yowasp-yosys` wrapper. YoWASP ships
+   Yosys as a single self-contained `yosys.wasm` (abc is compiled **in-tree**
+   into that module and called **in-process** — WASI has no `exec`), and the
+   `yowasp-runtime` that runs it is a thin harness over
+   [`wasmtime`](https://wasmtime.dev), which has a first-class Rust crate. So
+   `jacquard build` is a **Rust subcommand of the `jacquard` CLI** that embeds
+   `wasmtime`, loads the (bundled or fetch-on-first-use) `yosys.wasm`, preopens
+   the design + `aigpdk` library files + a temp dir under WASI, and runs the
+   existing synthesis script — caching the compiled module to disk exactly as
+   `yowasp-runtime` does. **No Python interpreter and no external toolchain:**
+   `jacquard build design.v && jacquard sim …` is RTL-to-waves from the single
+   `jacquard` binary. This **decouples the on-ramp from the Python-engine
+   packaging decision** (ADR 0020 / #161) — `build` needs neither PyO3 nor a
+   subprocess-bundled wheel.
 
 3. **Two synthesis tracks, kept explicit** (honouring force #1):
    - **On-ramp:** YoWASP Yosys — easy, functional, the default `jacquard build`.
@@ -79,13 +90,26 @@ std-cell mapping. Jacquard could then thread `\src` through `netlistdb`/AIG so
 GPU-sim results **speak RTL** — `--trace-signals`, timing violations, and
 X-debugging reporting source lines instead of flattened gate names.
 
-The tractable route is **building our own YoWASP from source** rather than
-depending on the upstream `yowasp-yosys` wheels: the same custom WASM build that
-carries the patched yosys can compile the patched abc (#487) alongside it, so
-provenance ships **self-contained in one wheel** — we are not blocked on upstream
-YoWASP adopting the patches, only on the patches themselves (abc#487 is in
-review). Differentiator, but a large build effort; tracked as Phase 2 in #162,
-out of scope for ratifying the on-ramp.
+The tractable route is **building our own `yosys.wasm` from source** rather than
+depending on the stock upstream wheel. YoWASP's build (`build.sh`: wasi-sdk 27 →
+flex → yosys `CONFIG=wasi` + LTO) compiles abc **in-tree from yosys's own bundled
+`abc/` submodule** — verified against the shipped `yosys.wasm`, which embeds the
+abc engine (the build path `…/yosys-src/abc/src/base/abci/…` and the full set of
+`&`-prefixed GIA commands are present in the module). So a provenance build is
+mechanical: **fork [YoWASP/yosys](https://codeberg.org/YoWASP/yosys)** (now on
+Codeberg; the old GitHub repo was archived read-only 2026-03-11), repoint
+`yosys-src` → `robtaylor/yosys@src-retention-y-ext` and yosys's bundled `abc`
+submodule → `robtaylor/abc@origin-tracking-clean` (#487), and rerun `build.sh`.
+Provenance then ships **self-contained in one `.wasm`** — not blocked on upstream
+YoWASP adopting the patches, only on the patches themselves (abc#487 in review).
+
+**Key open risk to spike before committing to WASM provenance:** origin-shell
+validated `\src` retention through **external** abc (`ABCEXTERNAL`, temp `.aig`
+round-trips). The WASM build calls abc **in-process**, a different integration
+surface — the `&origins` data must survive the in-process call path, not a
+temp-file hand-off. This is unproven and is the first Phase-2 task. A large build
+effort overall; tracked as Phase 2 in #162, out of scope for ratifying the
+on-ramp.
 
 ## Consequences
 
@@ -95,12 +119,15 @@ out of scope for ratifying the on-ramp.
 - **A QoR ceiling on the easy path.** YoWASP Yosys is functional-grade; peak GPU
   performance still wants DC. The docs must state this so `jacquard build` isn't
   mistaken for the performance path.
-- **A Python-layer dependency** (`yowasp-yosys`) — but one already in the
-  workspace, and optional (the native `sim`/`cosim`/`map` binary keeps working on
-  a pre-synthesized netlist with no Python).
-- **Reinforces ADR 0020 / #161:** the Python package is now more than a thin
-  binding — it hosts the synthesis front-end. A point in favour of a rich Python
-  layer regardless of the subprocess-vs-PyO3 call.
+- **A Rust `wasmtime` dependency + a `yosys.wasm` asset** — no new Python
+  dependency, and the on-ramp is optional (the `sim`/`cosim`/`map` binary keeps
+  working on a pre-synthesized netlist with `build` unused). The ~39 MB wasm is
+  either bundled into the binary or fetched to a cache on first `build` (open
+  sub-decision, #162).
+- **Decouples the on-ramp from ADR 0020 / #161:** because `build` runs Yosys from
+  Rust via `wasmtime`, it needs neither the PyO3 binding nor a subprocess-bundled
+  Python wheel. The Python-engine packaging call can be made independently; the
+  RTL on-ramp no longer waits on it.
 - **Provenance (Phase 2)** is a large, dependency-gated follow-on, not promised
   by this ADR.
 
@@ -112,6 +139,15 @@ out of scope for ratifying the on-ramp.
 - **Vendor/embed native Yosys (C++).** Heavy build + distribution burden across
   macOS/Linux/arch. YoWASP's WASM wheels are the lightweight embed that makes
   this decision cheap.
+- **Python-hosted front-end via the `yowasp-yosys` wrapper** (the original shape
+  of this ADR). Rejected once inspection showed the wrapper is a ~1 KB shim and
+  `yowasp-runtime` a ~100-line harness over `wasmtime`: hosting `build` in Python
+  would force the user to have Python + pip + the wheel present (reintroducing an
+  install dependency) and couple the on-ramp to the unresolved #161 packaging
+  decision — all to avoid porting a small WASI harness the Rust `wasmtime` crate
+  supports directly. `scripts/local_synth.py` (which drives
+  `yowasp_yosys.run_yosys` for the sky130 flow) remains a useful reference for the
+  synthesis-script *content*, even though the runtime is now Rust.
 - **A Nix environment instead of (or alongside) YoWASP.** origin-shell is itself
   a Nix flake pinning patched yosys + abc + librelane. A Nix devshell is a viable
   alternative back-end for `jacquard build`: **native** binaries (better QoR and
