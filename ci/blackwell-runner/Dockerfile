@@ -14,9 +14,10 @@ ARG RUNNER_VERSION=2.335.1
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Build + runner runtime deps. clang/llvm cover the cc-rs C++ paths
-# (spiflash_model); jq parses the registration-token API response.
+# (spiflash_model); jq parses the registration-token API response; python3
+# runs the CI test-suite validators (stdlib only, no pip).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl git jq sudo \
+        ca-certificates curl git jq sudo python3 \
         build-essential pkg-config libssl-dev clang llvm \
     && rm -rf /var/lib/apt/lists/*
 
