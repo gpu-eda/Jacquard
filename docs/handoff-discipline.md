@@ -29,7 +29,20 @@ A handoff *lives* in its own dedicated directory, separate from the persistent p
 - **Critical context** — gotchas, surprising findings, environment specifics that aren't obvious from the code or docs *yet*.
 - **Verification** — the command(s) the next session runs to confirm the work is in the state you say it is.
 
-Exactly one handoff exists at a time. There's no chain of resolved predecessors to wade through.
+**One handoff per active thread of work** — not one globally. A *thread* is a
+distinct arc someone could pick up cold (the RTL on-ramp, the cell-model-IR
+migration, a triage sweep). Concurrent threads get concurrent handoffs, each
+named by topic (`<topic>-handoff.md`). There's still no *chain*: a thread holds
+at most one live handoff, and a resolved one is folded-and-deleted (see below),
+not archived behind its successor.
+
+**Treat the handoff count as a WIP signal.** If the number of live handoffs
+climbs past roughly **2× the number of people actively working**, that's a smell,
+not a badge — more parallel threads than the team can hold context on. Read it as
+a prompt to *resolve, consolidate, or drop* threads, not to open more. (Earlier
+revisions of this doc mandated "exactly one handoff at a time"; that didn't match
+engineering reality, where several independent arcs are legitimately in flight at
+once. The per-thread rule plus the WIP heuristic replaces it.)
 
 ## What a handoff IS NOT
 
