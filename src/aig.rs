@@ -673,6 +673,29 @@ impl AIG {
         self.pin2aigpin_iv[pinid] = if inverted { q_read ^ 1 } else { q_read };
     }
 
+    /// Collect the netlist pin-ids of a descriptor-seq cell's async set/reset
+    /// control pins (ADR 0019 C3.3d) — the only inputs a flop's Q output cone
+    /// may depend on (the D / clock / enable inputs are wired in the post-DFS
+    /// loop and must NOT be output dependencies, else the topo walk cycles
+    /// through registered state). PDK-neutral replacement for the hardcoded
+    /// `RN`/`SETN` (GF180) and `SET_B`/`RESET_B` (SKY130) name matches.
+    fn ir_async_dep_pins(
+        netlistdb: &NetlistDB,
+        cellid: usize,
+        seq: &cell_model_ir::Sequential,
+    ) -> SmallVec<[usize; 6]> {
+        let mut deps = SmallVec::new();
+        for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
+            let pin_name = netlistdb.pinnames[dep_pinid].1.as_str();
+            let is_async = seq.async_set.as_ref().is_some_and(|c| c.pin == pin_name)
+                || seq.async_reset.as_ref().is_some_and(|c| c.pin == pin_name);
+            if is_async {
+                deps.push(dep_pinid);
+            }
+        }
+        deps
+    }
+
     /// given a clock pin, trace back to clock root and return its
     /// enable signal (with invert bit).
     ///
@@ -1171,8 +1194,13 @@ impl AIG {
                     // Handle standard-cell PDK cells (combinational + sequential).
                     match PdkVariant::classify(celltype) {
                         Some(PdkVariant::Sky130) => {
-                            let deps =
-                                self.get_sky130_dependencies(netlistdb, pinid, cellid, celltype);
+                            let deps = self.get_sky130_dependencies(
+                                netlistdb,
+                                pinid,
+                                cellid,
+                                celltype,
+                                cell_descriptor,
+                            );
                             self.sky130_preprocess(netlistdb, pinid, cellid, celltype);
                             work_stack.push(WorkItem::Process(pinid));
                             for dep in deps {
@@ -1181,8 +1209,13 @@ impl AIG {
                             continue;
                         }
                         Some(PdkVariant::Gf180Mcu) => {
-                            let deps =
-                                self.get_gf180mcu_dependencies(netlistdb, pinid, cellid, celltype);
+                            let deps = self.get_gf180mcu_dependencies(
+                                netlistdb,
+                                pinid,
+                                cellid,
+                                celltype,
+                                cell_descriptor,
+                            );
                             self.gf180mcu_preprocess(netlistdb, pinid, cellid, celltype);
                             work_stack.push(WorkItem::Process(pinid));
                             for dep in deps {
@@ -1461,6 +1494,7 @@ impl AIG {
         pinid: usize,
         cellid: usize,
         celltype: &str,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) -> SmallVec<[usize; 6]> {
         let cell_type = extract_cell_type(celltype);
         let output_pin_name = netlistdb.pinnames[pinid].1.as_str();
@@ -1475,8 +1509,17 @@ impl AIG {
             return SmallVec::new();
         }
 
-        // Sequential cells: depend on SET_B/RESET_B pins
+        // Sequential cells: depend on the async set/reset pins. ADR 0019 C3.3d:
+        // descriptor-driven (the L3 async pin names) when the descriptor models
+        // the cell, retiring the hardcoded `SET_B`/`RESET_B` match; legacy match
+        // is the fallback for a `None`-descriptor run.
         if is_sequential_cell(cell_type) {
+            if let Some(seq) = cell_descriptor
+                .and_then(|d| d.cell(celltype))
+                .and_then(|c| c.sequential.as_ref())
+            {
+                return Self::ir_async_dep_pins(netlistdb, cellid, seq);
+            }
             let mut deps = SmallVec::new();
             for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
                 let pin_name = netlistdb.pinnames[dep_pinid].1.as_str();
@@ -1890,6 +1933,7 @@ impl AIG {
         _pinid: usize,
         cellid: usize,
         celltype: &str,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) -> SmallVec<[usize; 6]> {
         let cell_type = crate::gf180mcu::extract_cell_type(celltype);
         if crate::gf180mcu_pdk::is_tie_cell(cell_type)
@@ -1897,12 +1941,22 @@ impl AIG {
         {
             return SmallVec::new();
         }
-        // Sequential cells: depend on RN / SETN (active-low reset / set).
-        // Other input pins (D, CLK, CLKN, SE, SI, TE, E) are wired up in
-        // the post-DFS DFF setup loop and must NOT be dependencies of
-        // the Q output's AIG pin, otherwise we'd build a topological
-        // cycle through registered state.
+        // Sequential cells: depend only on the async reset/set pins. The
+        // data/clock pins (D, CLK, CLKN, SE, SI, TE, E) are wired up in the
+        // post-DFS DFF setup loop and must NOT be dependencies of the Q output's
+        // AIG pin, otherwise we'd build a topological cycle through registered
+        // state. ADR 0019 C3.3d: descriptor-driven (the L3 async pin names)
+        // when the descriptor models the cell — retiring the hardcoded
+        // `RN`/`SETN` match; the name match is the `None`-descriptor fallback.
+        // Clock-gating cells (`icgtp`/`icgtn`) carry no L3, take the fallback,
+        // and have no `RN`/`SETN`, so their dep set is empty either way.
         if crate::gf180mcu_pdk::is_sequential_cell(cell_type) {
+            if let Some(seq) = cell_descriptor
+                .and_then(|d| d.cell(celltype))
+                .and_then(|c| c.sequential.as_ref())
+            {
+                return Self::ir_async_dep_pins(netlistdb, cellid, seq);
+            }
             let mut deps = SmallVec::new();
             for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
                 let pin_name = netlistdb.pinnames[dep_pinid].1.as_str();
@@ -2548,15 +2602,44 @@ impl AIG {
                     clock_start.elapsed()
                 );
             }
+            // ADR 0019 C3.3d: the descriptor's L3 clock pin (name + edge) for a
+            // descriptor-modelled flop. `None` for AIGPDK DFF/DFFSR, SRAMs,
+            // clock-gating cells (no L3), and latches (L3 but no edge clock) —
+            // those keep the pin-name match below. This retires the `"CLK"`/
+            // `"CLKN"` stdcell name-match for the vendored + IHP flops.
+            let ir_clock: Option<(&str, bool)> = cell_descriptor
+                .and_then(|d| d.cell(celltype))
+                .and_then(|c| c.sequential.as_ref())
+                .and_then(|s| s.clock.as_ref())
+                .map(|clk| {
+                    (
+                        clk.pin.as_str(),
+                        clk.edge == cell_model_ir::ClockEdge::Falling,
+                    )
+                });
             for pinid in netlistdb.cell2pin.iter_set(cellid) {
                 let pin_name = netlistdb.pinnames[pinid].1.as_str();
-                // AIGPDK/SKY130 sequentials use "CLK"; GF180MCU adds "CLKN"
-                // for negative-edge cells (`dffnq`, `dffnrnq`, `icgtn`, …);
-                // SRAMs use the PORT_*_CLK pair.
-                let is_clkn = pin_name == "CLKN";
-                if !matches!(pin_name, "CLK" | "CLKN" | "PORT_R_CLK" | "PORT_W_CLK") {
-                    continue;
-                }
+                // Negative-edge flops trigger on the falling edge: start the
+                // trace with is_negedge=true so trace_clock_pin records the
+                // inverted clock signal.
+                let is_clkn = match ir_clock {
+                    // Descriptor-driven flop: trace exactly its L3 clock pin at
+                    // the declared edge.
+                    Some((clk_pin, negedge)) => {
+                        if pin_name != clk_pin {
+                            continue;
+                        }
+                        negedge
+                    }
+                    // AIGPDK DFF/DFFSR use "CLK"; SRAMs use the preserved
+                    // PORT_*_CLK pair (ADR 0011); "CLKN" a negedge clock buffer.
+                    None => {
+                        if !matches!(pin_name, "CLK" | "CLKN" | "PORT_R_CLK" | "PORT_W_CLK") {
+                            continue;
+                        }
+                        pin_name == "CLKN"
+                    }
+                };
                 trace_count += 1;
                 if seq_count <= 5 {
                     clilog::info!("    Tracing clock pin {} for cell {}...", pinid, cellid);
