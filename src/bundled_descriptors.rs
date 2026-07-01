@@ -149,8 +149,8 @@ pub fn resolve(explicit: Option<&Path>, bundled: Option<&str>) -> Option<CellMod
 /// This is the automatic tier of the C3.2 precedence chain, sitting *below*
 /// the explicit `--cell-descriptor <file>` and `--bundled-descriptor <name>`
 /// selectors handled by [`resolve`] and *above* the legacy per-PDK Rust path.
-/// It replaces `pdk::PdkVariant`'s hardcoded prefix detection for the descriptor
-/// choice: instead of collapsing every GF180 cell to one variant (the #130 bug,
+/// It replaces the former per-PDK enum's hardcoded prefix detection for the
+/// descriptor choice: instead of collapsing every GF180 cell to one variant (the #130 bug,
 /// where a 9t netlist was served by 7t models), it keys on the full vendor
 /// prefix — which carries the track designation (`…mcu7t5v0__` vs `…mcu9t5v0__`)
 /// — so a 9t netlist auto-selects the 9t descriptor.
