@@ -16,21 +16,21 @@
 //! genuinely-special roles (clock edge, level enable, async set/reset
 //! polarity, state outputs) get named fields.
 //!
-//! ## The `clear_preset_var` precedence check (C2.1 flagged risk)
+//! ## The `clear_preset_var` tie-break (C4)
 //!
-//! Jacquard's `wire_dff_reset_set_overlay` bakes a FIXED reset-dominant
-//! tie-break: `d_in = AND(OR(D, !SETN), RN)` — when both async controls are
-//! asserted the state goes to 0 (clear wins). The schema cannot express a
-//! per-cell override. So for every cell with BOTH `clear` and `preset` this
-//! module reads Liberty's `clear_preset_var1` / `clear_preset_var2` and
-//! verifies it matches reset-dominant (`var1 = L`, the Q state var goes low
-//! when both are asserted). Any divergence is surfaced as a
-//! [`SeqNote::ClearPresetNotResetDominant`] generation-time diagnostic rather
-//! than silently emitted — that is the signal the schema needs a per-cell
-//! `clear_preset` field.
+//! When both `clear` and `preset` are asserted at once, Liberty's
+//! `clear_preset_var1` / `clear_preset_var2` state what the two state
+//! variables (`Q`, `QN`) take. This module reads them into the schema's
+//! [`cell_model_ir::ClearPreset`] ([`Sequential::clear_preset`]) so the
+//! consumer overlay can honour set-dominant cells rather than assuming
+//! reset-dominant. It ALSO keeps emitting the
+//! [`SeqNote::ClearPresetNotResetDominant`] generation diagnostic for any cell
+//! that is not reset-dominant (`var1 = L`, `var2 = H`) — a useful signal for
+//! spotting cells whose behaviour differs from Jacquard's historical default.
 
 use cell_model_ir::{
-    ActiveLevel, CellKind, ClockEdge, ClockPin, CombLogic, EnablePin, SeqOutput, Sequential,
+    ActiveLevel, CellKind, ClearPreset, ClearPresetVal, ClockEdge, ClockPin, CombLogic, EnablePin,
+    SeqOutput, Sequential,
 };
 use liberty_parse::LibertyGroup;
 
@@ -198,10 +198,12 @@ fn build_ff(
     let async_reset = build_async(ff.attr("clear"), "clear", cell_type, notes);
     let async_set = build_async(ff.attr("preset"), "preset", cell_type, notes);
 
-    // clear_preset_var precedence check when BOTH controls exist.
-    if async_reset.is_some() && async_set.is_some() {
-        check_clear_preset(ff, cell_type, notes);
-    }
+    // clear_preset tie-break, only meaningful when BOTH controls exist.
+    let clear_preset = if async_reset.is_some() && async_set.is_some() {
+        extract_clear_preset(ff, cell_type, notes)
+    } else {
+        None
+    };
 
     let outputs = state_outputs(cell, &q_var, &qn_var);
 
@@ -212,6 +214,7 @@ fn build_ff(
         outputs,
         async_set,
         async_reset,
+        clear_preset,
     };
     (CellKind::Dff, Some(seq))
 }
@@ -251,9 +254,11 @@ fn build_latch(
 
     let async_reset = build_async(latch.attr("clear"), "clear", cell_type, notes);
     let async_set = build_async(latch.attr("preset"), "preset", cell_type, notes);
-    if async_reset.is_some() && async_set.is_some() {
-        check_clear_preset(latch, cell_type, notes);
-    }
+    let clear_preset = if async_reset.is_some() && async_set.is_some() {
+        extract_clear_preset(latch, cell_type, notes)
+    } else {
+        None
+    };
 
     let outputs = state_outputs(cell, &q_var, &qn_var);
 
@@ -264,6 +269,7 @@ fn build_latch(
         outputs,
         async_set,
         async_reset,
+        clear_preset,
     };
     (CellKind::Latch, Some(seq))
 }
@@ -458,30 +464,62 @@ fn state_outputs(cell: &LibertyGroup, q_var: &str, qn_var: &str) -> Vec<SeqOutpu
     outputs
 }
 
-/// Verify `clear_preset_var1/var2` is reset-dominant; surface a diagnostic if
-/// not. Reset-dominant ⇒ when both clear and preset are asserted, the Q state
-/// var goes to `L` (and QN to `H`).
-fn check_clear_preset(group: &LibertyGroup, cell_type: &str, notes: &mut Vec<SeqNote>) {
-    let var1 = group
-        .attr("clear_preset_var1")
-        .and_then(|a| a.first_string())
-        .map(|s| s.trim_matches('"').to_uppercase())
-        .unwrap_or_default();
-    let var2 = group
-        .attr("clear_preset_var2")
-        .and_then(|a| a.first_string())
-        .map(|s| s.trim_matches('"').to_uppercase())
-        .unwrap_or_default();
-    // Reset-dominant: Q (var1) → L, QN (var2) → H. If var1 is absent Liberty
-    // leaves the tie-break unspecified, which is also not provably
-    // reset-dominant — surface it.
-    let reset_dominant = var1 == "L" && var2 == "H";
+/// Read `clear_preset_var1/var2` into a [`ClearPreset`] tie-break and, as a
+/// side effect, surface a [`SeqNote::ClearPresetNotResetDominant`] diagnostic
+/// when the pair is not reset-dominant (`var1 = L`, `var2 = H`). Called only
+/// when the cell has BOTH `clear` and `preset`.
+///
+/// Returns `None` (and no note) when neither attribute is present — Liberty
+/// omits the pair for cells where the tie-break is degenerate/unspecified, and
+/// an absent field means "reset-dominant default" to the consumer, exactly
+/// matching the historical hardcoded behaviour.
+fn extract_clear_preset(
+    group: &LibertyGroup,
+    cell_type: &str,
+    notes: &mut Vec<SeqNote>,
+) -> Option<ClearPreset> {
+    let raw = |attr: &str| -> Option<String> {
+        group
+            .attr(attr)
+            .and_then(|a| a.first_string())
+            .map(|s| s.trim_matches('"').to_uppercase())
+    };
+    let var1_s = raw("clear_preset_var1");
+    let var2_s = raw("clear_preset_var2");
+    if var1_s.is_none() && var2_s.is_none() {
+        // Liberty specifies no tie-break at all — reset-dominant default.
+        return None;
+    }
+    let var1_s = var1_s.unwrap_or_default();
+    let var2_s = var2_s.unwrap_or_default();
+
+    // Reset-dominant: Q (var1) → L, QN (var2) → H. Anything else — including an
+    // absent var1/var2, `H` (set-dominant), or `N`/`X`/`T` — is not provably
+    // reset-dominant, so surface the diagnostic (kept from C2).
+    let reset_dominant = var1_s == "L" && var2_s == "H";
     if !reset_dominant {
         notes.push(SeqNote::ClearPresetNotResetDominant {
             cell: cell_type.to_string(),
-            var1,
-            var2,
+            var1: var1_s.clone(),
+            var2: var2_s.clone(),
         });
+    }
+
+    Some(ClearPreset {
+        var1: parse_clear_preset_val(&var1_s),
+        var2: parse_clear_preset_val(&var2_s),
+    })
+}
+
+/// Map a Liberty `clear_preset_var*` token to a [`ClearPresetVal`]. An
+/// unrecognized/absent token defaults to [`ClearPresetVal::Unknown`] (`X`).
+fn parse_clear_preset_val(s: &str) -> ClearPresetVal {
+    match s {
+        "L" => ClearPresetVal::Low,
+        "H" => ClearPresetVal::High,
+        "N" => ClearPresetVal::NoChange,
+        "T" => ClearPresetVal::Toggle,
+        _ => ClearPresetVal::Unknown,
     }
 }
 
@@ -857,11 +895,21 @@ mod tests {
             "reset-dominant var1=L must not flag: {:?}",
             r.notes
         );
+        // The tie-break is emitted faithfully (L, H) and reduces to reset-dominant.
+        let cp = r
+            .sequential
+            .unwrap()
+            .clear_preset
+            .expect("clear_preset emitted");
+        assert_eq!(cp.var1, ClearPresetVal::Low);
+        assert_eq!(cp.var2, ClearPresetVal::High);
+        assert_eq!(cp.dominance(), cell_model_ir::Dominance::ResetDominant);
     }
 
     #[test]
-    fn clear_preset_set_dominant_is_flagged() {
-        // Same as DFFRSNQ but var1=H (set wins) — must surface a diagnostic.
+    fn clear_preset_set_dominant_is_emitted_and_flagged() {
+        // Same as DFFRSNQ but var1=H (set wins) — must emit var1=H and also
+        // surface the diagnostic (both remain useful).
         let src = DFFRSNQ.replace("clear_preset_var1 : L", "clear_preset_var1 : H");
         let src = src.replace("clear_preset_var2 : H", "clear_preset_var2 : L");
         let cell = parse_cell(&src);
@@ -875,6 +923,73 @@ mod tests {
             "set-dominant must flag, got: {:?}",
             r.notes
         );
+        let cp = r
+            .sequential
+            .unwrap()
+            .clear_preset
+            .expect("set-dominant clear_preset emitted");
+        assert_eq!(cp.var1, ClearPresetVal::High);
+        assert_eq!(cp.var2, ClearPresetVal::Low);
+        assert_eq!(cp.dominance(), cell_model_ir::Dominance::SetDominant);
+    }
+
+    #[test]
+    fn clear_preset_absent_when_no_set_preset_pair() {
+        // A plain reset-only DFF (no preset) must not carry a clear_preset.
+        let src = r#"
+        library(demo) {
+          cell(demo__dffrnq) {
+            ff(IQ1, IQN1) {
+              clocked_on : "CLK" ;
+              next_state : "D" ;
+              clear : "(!RN)" ;
+            }
+            pin(CLK) { direction : input ; clock : true ; }
+            pin(D)   { direction : input ; }
+            pin(RN)  { direction : input ; }
+            pin(Q)   { direction : output ; function : "IQ1" ; }
+          }
+        }
+        "#;
+        let cell = parse_cell(src);
+        let ins = input_pins(&cell);
+        let r = build(&cell, "demo__dffrnq", &ins, false);
+        assert!(r.sequential.unwrap().clear_preset.is_none());
+    }
+
+    #[test]
+    fn clear_preset_set_dominant_latch_is_emitted() {
+        // A GF180 `latrsnq`-shaped set-dominant latch (var1=H).
+        let src = r#"
+        library(demo) {
+          cell(demo__latrsnq) {
+            latch(IQ1, IQN1) {
+              enable : "E" ;
+              data_in : "D" ;
+              clear : "(!RN)" ;
+              preset : "(!SETN)" ;
+              clear_preset_var1 : H ;
+              clear_preset_var2 : L ;
+            }
+            pin(E)   { direction : input ; }
+            pin(D)   { direction : input ; }
+            pin(RN)  { direction : input ; }
+            pin(SETN){ direction : input ; }
+            pin(Q)   { direction : output ; function : "IQ1" ; }
+          }
+        }
+        "#;
+        let cell = parse_cell(src);
+        let ins = input_pins(&cell);
+        let r = build(&cell, "demo__latrsnq", &ins, false);
+        assert_eq!(r.kind, CellKind::Latch);
+        let cp = r
+            .sequential
+            .unwrap()
+            .clear_preset
+            .expect("latch clear_preset");
+        assert_eq!(cp.var1, ClearPresetVal::High);
+        assert_eq!(cp.dominance(), cell_model_ir::Dominance::SetDominant);
     }
 
     #[test]

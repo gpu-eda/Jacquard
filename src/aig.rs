@@ -380,6 +380,39 @@ impl AIG {
         (d_in, clken)
     }
 
+    /// Set-dominant counterpart of [`Self::wire_dff_reset_set_overlay`]: when
+    /// both async controls are asserted simultaneously the state goes to **1**
+    /// (preset/set wins), matching a Liberty `clear_preset_var1 = H` cell.
+    ///
+    /// ```text
+    ///   reset_n active-low: reset_n=0 forces Q=0
+    ///   set_n   active-low: set_n=0   forces Q=1  (dominant)
+    ///
+    ///   d_in  = OR(AND(D, reset_n), NOT set_n)
+    ///   clken = OR(clken, NOT reset_n, NOT set_n)
+    /// ```
+    ///
+    /// The clock-enable is identical to the reset-dominant overlay (either async
+    /// control forces a capture); only the data value differs when both fire.
+    /// `1` for `set_n_iv` / `reset_n_iv` folds the corresponding branch away.
+    fn wire_dff_set_dominant_overlay(
+        &mut self,
+        d_in: usize,
+        clken: usize,
+        reset_n_iv: usize,
+        set_n_iv: usize,
+    ) -> (usize, usize) {
+        // d_in  = AND(d_in, reset_n)          (reset clears first)
+        // clken = OR(clken, NOT reset_n)      = NOT(AND(NOT clken, reset_n))
+        let d_in = self.add_and_gate(d_in, reset_n_iv);
+        let clken = self.add_and_gate(clken ^ 1, reset_n_iv) ^ 1;
+        // d_in  = OR(d_in, NOT set_n)         = NOT(AND(NOT d_in, set_n))  (set wins)
+        // clken = OR(clken, NOT set_n)        = NOT(AND(NOT clken, set_n))
+        let d_in = self.add_and_gate(d_in ^ 1, set_n_iv) ^ 1;
+        let clken = self.add_and_gate(clken ^ 1, set_n_iv) ^ 1;
+        (d_in, clken)
+    }
+
     /// Resolve a cell-model-IR async set/reset control to the *active-low*
     /// `*_n` aigpin_iv that [`Self::wire_dff_reset_set_overlay`] expects
     /// (ADR 0019 D4).
@@ -434,11 +467,16 @@ impl AIG {
     ///   latch (no edge clock) — the same "treat a latch as a level-enabled
     ///   DFF" approximation the legacy GF180 path applies (GEM simulates no
     ///   true latches).
-    /// * **async set/reset** are layered with the shared reset-dominant
-    ///   [`Self::wire_dff_reset_set_overlay`]. NB this is *reset-dominant* for
-    ///   both DFFs and latches; GF180 set-dominant latches (`latrsnq`) are
-    ///   therefore approximated reset-dominant — exactly as the legacy overlay
-    ///   does, so the two paths agree (see the C2.3 report / ADR 0019 D4).
+    /// * **async set/reset** are layered with the shared async overlay. The
+    ///   simultaneous-assertion tie-break is honoured from the descriptor's
+    ///   [`Sequential::clear_preset`](cell_model_ir::Sequential::clear_preset)
+    ///   (ADR 0019 C4): a [`Dominance::SetDominant`](cell_model_ir::Dominance)
+    ///   cell (Liberty `clear_preset_var1 = H`, e.g. GF180 `latrsnq`) uses
+    ///   [`Self::wire_dff_set_dominant_overlay`]; every other cell — reset-
+    ///   dominant, exotic (`N`/`X`/`T`), or an absent field — uses the
+    ///   reset-dominant [`Self::wire_dff_reset_set_overlay`], which is exactly
+    ///   the historical hardcoded default (so cells without a set-dominant
+    ///   tie-break are byte-identical to the legacy path).
     fn wire_sequential_from_ir(
         &mut self,
         netlistdb: &NetlistDB,
@@ -497,12 +535,22 @@ impl AIG {
             };
         }
 
-        // Async set/reset overlay (input side), reset-dominant — shared with
-        // the legacy path, so the formulas are byte-identical for active-low
-        // GF180 controls.
+        // Async set/reset overlay (input side). The simultaneous-assertion
+        // tie-break comes from the descriptor's `clear_preset`; absent / reset-
+        // dominant / exotic all use the reset-dominant overlay (byte-identical
+        // to the legacy path), only a set-dominant cell (`var1 = H`, e.g. GF180
+        // `latrsnq`) uses the set-dominant overlay.
         let reset_n = self.resolve_async_n(&inputs, seq.async_reset.as_ref());
         let set_n = self.resolve_async_n(&inputs, seq.async_set.as_ref());
-        let (d_in, clken_iv) = self.wire_dff_reset_set_overlay(d_iv, clken_iv, reset_n, set_n);
+        let set_dominant = matches!(
+            seq.clear_preset.map(|cp| cp.dominance()),
+            Some(cell_model_ir::Dominance::SetDominant)
+        );
+        let (d_in, clken_iv) = if set_dominant {
+            self.wire_dff_set_dominant_overlay(d_iv, clken_iv, reset_n, set_n)
+        } else {
+            self.wire_dff_reset_set_overlay(d_iv, clken_iv, reset_n, set_n)
+        };
 
         let dff = self.dffs.entry(cellid).or_default();
         dff.en_iv = clken_iv;
@@ -3840,6 +3888,48 @@ mod xprop_tests {
         for v in &x_capable {
             assert!(!v);
         }
+    }
+
+    #[test]
+    fn reset_vs_set_dominant_overlay_tie_break() {
+        // The two async overlays must agree except when BOTH controls are
+        // asserted simultaneously (active-low ⇒ reset_n=0, set_n=0), where the
+        // reset-dominant overlay forces the captured D to const-0 (Q←0) and the
+        // set-dominant overlay forces it to const-1 (Q←1). iv 0 = const-false,
+        // iv 1 = const-true (see `add_and_gate`).
+        let d_pin = |aig: &mut AIG| -> usize { aig.add_aigpin(DriverType::InputPort(0)) << 1 };
+
+        // Both asserted: the tie-break case — the two overlays diverge.
+        let mut aig = new_test_aig();
+        let d = d_pin(&mut aig);
+        let (rd_d, _) = aig.wire_dff_reset_set_overlay(d, 0, 0, 0);
+        let (sd_d, _) = aig.wire_dff_set_dominant_overlay(d, 0, 0, 0);
+        assert_eq!(rd_d, 0, "reset-dominant: both asserted ⇒ Q←0 (const-0)");
+        assert_eq!(sd_d, 1, "set-dominant: both asserted ⇒ Q←1 (const-1)");
+
+        // Only reset asserted (reset_n=0, set_n=1): both overlays give Q←0.
+        let mut aig = new_test_aig();
+        let d = d_pin(&mut aig);
+        let (rd_d, _) = aig.wire_dff_reset_set_overlay(d, 0, 0, 1);
+        let (sd_d, _) = aig.wire_dff_set_dominant_overlay(d, 0, 0, 1);
+        assert_eq!(rd_d, 0);
+        assert_eq!(sd_d, 0);
+
+        // Only set asserted (reset_n=1, set_n=0): both overlays give Q←1.
+        let mut aig = new_test_aig();
+        let d = d_pin(&mut aig);
+        let (rd_d, _) = aig.wire_dff_reset_set_overlay(d, 0, 1, 0);
+        let (sd_d, _) = aig.wire_dff_set_dominant_overlay(d, 0, 1, 0);
+        assert_eq!(rd_d, 1);
+        assert_eq!(sd_d, 1);
+
+        // Neither asserted (reset_n=1, set_n=1): both pass D through unchanged.
+        let mut aig = new_test_aig();
+        let d = d_pin(&mut aig);
+        let (rd_d, _) = aig.wire_dff_reset_set_overlay(d, 0, 1, 1);
+        let (sd_d, _) = aig.wire_dff_set_dominant_overlay(d, 0, 1, 1);
+        assert_eq!(rd_d, d);
+        assert_eq!(sd_d, d);
     }
 
     #[test]
