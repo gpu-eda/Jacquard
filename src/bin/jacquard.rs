@@ -132,6 +132,43 @@ enum Commands {
     /// Point it at the port the server logs, then `openocd -f openocd.cfg`.
     /// See `docs/jtag-debug.md`. No GPU required.
     JtagOpenocdConfig(JtagOpenocdConfigArgs),
+
+    /// Synthesize behavioral RTL to a gate-level aigpdk netlist (ADR 0021).
+    ///
+    /// The RTL on-ramp: runs YoWASP Yosys (WebAssembly, in-process via
+    /// wasmtime — no Python, no external toolchain) through the aigpdk
+    /// memory + logic synthesis flow (`docs/synthesis-flow.md`), producing a
+    /// `gatelevel.gv` that feeds `sim`/`cosim` unchanged. YoWASP Yosys is the
+    /// functional on-ramp; bring-your-own DC remains the performance path.
+    /// Requires building with `--features synth`. No GPU required.
+    #[cfg(feature = "synth")]
+    Build(BuildArgs),
+}
+
+/// Arguments for `jacquard build` (ADR 0021).
+#[cfg(feature = "synth")]
+#[derive(Parser)]
+struct BuildArgs {
+    /// Behavioral / RTL Verilog source file(s).
+    #[clap(required = true)]
+    inputs: Vec<PathBuf>,
+
+    /// Output gate-level netlist path.
+    #[clap(short = 'o', long = "output", default_value = "gatelevel.gv")]
+    output: PathBuf,
+
+    /// Top module name (else auto-detected by Yosys `hierarchy`).
+    #[clap(long)]
+    top_module: Option<String>,
+
+    /// Explicit path to `yosys.wasm`. Overrides `JACQUARD_YOSYS_WASM` and
+    /// installed-`yowasp-yosys` discovery.
+    #[clap(long, value_name = "PATH")]
+    yosys_wasm: Option<PathBuf>,
+
+    /// Strip assertions instead of lowering them to `GEM_ASSERT` cells.
+    #[clap(long)]
+    strip_assertions: bool,
 }
 
 #[derive(Parser)]
@@ -2086,6 +2123,33 @@ fn main() {
         Commands::DumpPaths(args) => cmd_dump_paths(args),
         Commands::Xsources(args) => cmd_xsources(args),
         Commands::JtagOpenocdConfig(args) => cmd_jtag_openocd_config(args),
+        #[cfg(feature = "synth")]
+        Commands::Build(args) => cmd_build(args),
+    }
+}
+
+/// `jacquard build` — synthesize behavioral RTL to a gate-level aigpdk netlist.
+#[cfg(feature = "synth")]
+fn cmd_build(args: BuildArgs) {
+    let opts = jacquard::synth::BuildOptions {
+        inputs: args.inputs,
+        output: args.output,
+        top_module: args.top_module,
+        yosys_wasm: args.yosys_wasm,
+        keep_assertions: !args.strip_assertions,
+    };
+    match jacquard::synth::run_build(&opts) {
+        Ok(path) => {
+            println!("gate-level netlist written to {}", path.display());
+            println!(
+                "next: jacquard sim {} <input.vcd> <output.vcd> 1",
+                path.display()
+            );
+        }
+        Err(e) => {
+            clilog::error!("jacquard build failed: {e:#}");
+            std::process::exit(1);
+        }
     }
 }
 

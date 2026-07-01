@@ -78,3 +78,7 @@ pub mod display;
 pub mod testbench;
 
 pub mod sim;
+
+// ADR 0021: behavioral-RTL on-ramp (`jacquard build`) via embedded YoWASP Yosys.
+#[cfg(feature = "synth")]
+pub mod synth;
