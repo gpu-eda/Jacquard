@@ -6,7 +6,7 @@ binary wheel built with cibuildwheel.
 
 > **Deferred (2026-07-01).** ADR 0020 is a **draft** — a native PyO3 binding is
 > the preferred long-term direction, and whether we build this subprocess-wheel
-> path at all is deferred (tracking issue linked from PR #158). **P0** (adopt
+> path at all is deferred ([#161](https://github.com/gpu-eda/Jacquard/issues/161)). **P0** (adopt
 > PR #53's API into the uv workspace) is worth doing regardless — it's the
 > Python surface either approach exposes. **P1–P3** (embed-and-delocate the
 > subprocess binary) are on hold pending the subprocess-vs-PyO3 decision; note

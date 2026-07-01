@@ -10,7 +10,7 @@
 > (cibuildwheel + dylib repair) either way, doing it once for a PyO3 extension
 > avoids building the subprocess-wheel machinery only to replace it. We are
 > **not doing this now**; the decision (subprocess-wheel-first vs. straight to
-> PyO3) is deferred and tracked in the issue linked from PR #158. The
+> PyO3) is deferred and tracked in [#161](https://github.com/gpu-eda/Jacquard/issues/161). The
 > subprocess-wheel design below is preserved as the worked alternative and as
 > the analysis of the shared hard part (per-platform wheels + vendoring the
 > `libc++`/`libomp` runtime tail), which a PyO3 binding faces too.
