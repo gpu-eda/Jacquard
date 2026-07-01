@@ -43,6 +43,15 @@ pub const SKY130_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/sky130.cel
 /// mirroring `pdk::resolve_library`, where AIGPDK is already the default.
 pub const AIGPDK_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/aigpdk.cellir.json"));
 
+/// IHP SG13G2 descriptor, generated from
+/// `vendor/IHP-Open-PDK/…/sg13g2_stdcell_typ_1p20V_25C.lib` at the
+/// `typ_1p20V_25C` corner (read from the Liberty PVT groups). Selected by the
+/// `sg13g2_` cell-name prefix. This is the ADR 0019 D7a proof: IHP is a **new**
+/// built-in PDK added with **zero per-PDK Rust** — vendoring the submodule and
+/// embedding this descriptor is the whole change; the combinational splice picks
+/// it up through the same PDK-neutral auto-select path as every other PDK.
+pub const SG13G2_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/sg13g2.cellir.json"));
+
 /// A bundled descriptor's stable selector name and embedded JSON, paired so
 /// callers can list, match, or load them uniformly.
 pub struct BundledDescriptor {
@@ -74,6 +83,11 @@ pub const ALL: &[BundledDescriptor] = &[
     BundledDescriptor {
         name: "sky130",
         json: SKY130_JSON,
+        is_default_fallback: false,
+    },
+    BundledDescriptor {
+        name: "sg13g2",
+        json: SG13G2_JSON,
         is_default_fallback: false,
     },
     BundledDescriptor {
@@ -270,10 +284,13 @@ mod tests {
                     d.name
                 );
             } else {
-                // Prefix-keyed descriptors (GF180 7t/9t, SKY130) are full
-                // standard-cell libraries selected by their declared prefix.
+                // Prefix-keyed descriptors (GF180 7t/9t, SKY130, IHP SG13G2)
+                // are full standard-cell libraries selected by their declared
+                // prefix. Cell counts vary by library size (IHP SG13G2 is a
+                // compact 84-cell library; GF180/SKY130 are 200–430), so the
+                // floor is a modest sanity bound, not a per-library exact count.
                 assert!(
-                    ir.cells.len() > 100,
+                    ir.cells.len() > 50,
                     "{} embedded descriptor has only {} cells",
                     d.name,
                     ir.cells.len()
@@ -326,6 +343,24 @@ mod tests {
             .expect("sky130 netlist must auto-match without ambiguity")
             .expect("sky130 netlist must match a bundled descriptor");
         assert!(ir.library.name.starts_with("sky130_fd_sc_hd__"));
+    }
+
+    #[test]
+    fn sg13g2_auto_selects_by_prefix() {
+        // IHP SG13G2 (ADR 0019 D7a, C3a): a NEW built-in PDK added with zero
+        // per-PDK Rust — it must auto-select through the same prefix path as
+        // every other PDK. May be empty in a submodule-absent build; only assert
+        // when its declared prefix is present.
+        let ihp = load("sg13g2").expect("sg13g2 descriptor must load");
+        if ihp.library.prefixes.is_empty() {
+            eprintln!("skipping: IHP-Open-PDK submodule absent at build time");
+            return;
+        }
+        let cells = ["sg13g2_nand2_1", "sg13g2_inv_1", "sg13g2_mux2_1"];
+        let ir = auto_select(cells.iter().copied())
+            .expect("sg13g2 netlist must auto-match without ambiguity")
+            .expect("sg13g2 netlist must match a bundled descriptor");
+        assert!(ir.library.prefixes.iter().any(|p| p == "sg13g2_"));
     }
 
     #[test]
