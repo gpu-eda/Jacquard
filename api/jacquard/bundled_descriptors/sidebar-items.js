@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ALL","GF180MCU_7T_JSON","GF180MCU_9T_JSON"],"fn":["auto_select","json_by_name","load","names","resolve"],"struct":["BundledDescriptor"]};
+window.SIDEBAR_ITEMS = {"constant":["AIGPDK_JSON","ALL","GF180MCU_7T_JSON","GF180MCU_9T_JSON","SG13G2_JSON","SKY130_JSON"],"fn":["auto_select","default_fallback","json_by_name","load","names","resolve"],"struct":["BundledDescriptor"]};
