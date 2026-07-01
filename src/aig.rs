@@ -502,6 +502,7 @@ impl AIG {
         netlistdb: &NetlistDB,
         cellid: usize,
         seq: &cell_model_ir::Sequential,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) {
         // Resolve all input pins of the cell to (name -> iv) and (name -> pinid).
         let mut inputs: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -529,7 +530,7 @@ impl AIG {
                     )
                 });
                 let is_negedge = clk.edge == cell_model_ir::ClockEdge::Falling;
-                self.trace_clock_pin(netlistdb, pinid, is_negedge, false)
+                self.trace_clock_pin(netlistdb, pinid, is_negedge, false, cell_descriptor)
                     .unwrap()
             }
             None => 0,
@@ -696,6 +697,40 @@ impl AIG {
         deps
     }
 
+    /// Classify a clock-path cell as an identity buffer or inverter from the
+    /// cell-model-IR descriptor's L2 combinational logic (ADR 0019 C3.3d).
+    ///
+    /// A clock buffer / inverter is exactly a single-input combinational cell
+    /// with a single output driven directly by that input (no AND gates):
+    /// `Some(false)` for an identity buffer (output = input), `Some(true)` for
+    /// an inverter (output = ¬input). Any cell the descriptor doesn't model as
+    /// such (multi-input, gated, sequential, tie, or absent) returns `None` —
+    /// the caller then falls back to the preserved IO-pad / CKLNQD paths or
+    /// rejects the cell as unsupported on the clock path.
+    ///
+    /// This replaces the per-PDK `PdkVariant` name matches (`inv`/`clkinv` →
+    /// inverter, `buf`/`clkbuf`/`dly*` → buffer): the descriptor's decomposed
+    /// AIG is the source of truth for each cell's identity, so GF180/SKY130/
+    /// AIGPDK clock cells all classify uniformly with no PDK dispatch.
+    fn descriptor_clock_buf(
+        celltype: &str,
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
+    ) -> Option<bool> {
+        let logic = cell_descriptor?.cell(celltype)?.logic.as_ref()?;
+        // Single input, single output, no AND gates: a pure buffer / inverter.
+        if logic.inputs.len() != 1 || logic.outputs.len() != 1 || !logic.and_nodes.is_empty() {
+            return None;
+        }
+        let out = &logic.outputs[0].r;
+        // Node 0 is the const-0 node; node 1 is the sole input. A buffer /
+        // inverter drives its output straight off node 1.
+        if out.node == 1 {
+            Some(out.inverted)
+        } else {
+            None
+        }
+    }
+
     /// given a clock pin, trace back to clock root and return its
     /// enable signal (with invert bit).
     ///
@@ -712,6 +747,12 @@ impl AIG {
         // otherwise, we assert that cklnqd/en is already built in
         // our aig mapping (pin2aigpin_iv).
         ignore_cklnqd: bool,
+        // The auto-selected cell-model-IR descriptor (ADR 0019 C3.3d). Used to
+        // recognise clock-path buffers/inverters from their L2 combinational
+        // logic (single input, output = input or ¬input) instead of per-PDK
+        // `PdkVariant` name predicates. `None` = no descriptor (never happens
+        // for a built-in PDK, which always resolves one).
+        cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) -> Result<usize, usize> {
         // Iterative implementation using explicit stack
         // Each entry: (pinid, is_negedge, is_processing_cklnqd, cklnqd_cp_result)
@@ -877,64 +918,43 @@ impl AIG {
             let mut pin_en = usize::MAX;
             let celltype = netlistdb.celltypes[cellid].as_str();
 
-            // Determine if this is a clock buffer/inverter (AIGPDK / SKY130 / GF180MCU).
-            // GF180MCU `inv` / `clkinv` are negative-polarity; `buf` / `clkbuf` are
-            // identity. GF180MCU clock-path cells use input pin name `I` rather
-            // than `A`; we accept both below.
-            let variant = PdkVariant::classify(celltype);
-            // (is_inv, is_buf, is_io_pad_buf, is_delay).
+            // Determine if this is a clock buffer/inverter. ADR 0019 C3.3d:
+            // recognise identity buffers / inverters from the cell-model-IR
+            // descriptor's L2 logic (single input, output = input or ¬input)
+            // instead of per-PDK `PdkVariant` name predicates. This covers
+            // AIGPDK `INV`/`BUF`, SKY130 `inv`/`clkinv`/`buf`/`clkbuf`/
+            // `clkdlybuf` and the delay cells (`dlygate*`/`dlymetal*`), and
+            // GF180MCU `inv`/`clkinv`/`buf`/`clkbuf`/`dlya..d` uniformly —
+            // each of those is a single-input identity/inverter in its
+            // descriptor. GF180MCU clock-path cells use input pin name `I`
+            // rather than `A`; we accept both below.
             //
-            // Delay cells (`dlya`/`dlyb`/`dlyc`/`dlyd` for GF180MCU;
-            // `dlygate*`/`dlymetal*` for SKY130) are functional identity
-            // buffers — single input, single output, no gating, no
-            // negation. The post-P&R OpenROAD hold-fixing pass routinely
-            // inserts them on clock fanout to repair tight hold paths.
-            // Treated like `is_buf` in the downstream propagation
-            // (current_pinid = pin_a, is_negedge unchanged). Kept
-            // separate from `is_buf` so timing-analysis paths can
-            // distinguish "identity buffer" from "identity buffer with
-            // a delay constant" if they need to. See #73.
+            // Delay cells are functional identity buffers (single input, no
+            // gating, no negation); the post-P&R OpenROAD hold-fixing pass
+            // routinely inserts them on clock fanout. They fold into `is_buf`
+            // here — the downstream propagation is identical (current_pinid =
+            // pin_a, is_negedge unchanged). See #73.
             //
-            // GF180MCU `hold` is **not** included — it's OpenROAD's
-            // data-path hold-fix cell, not expected on a clock fanout.
-            // If one does appear, that's likely a netlist bug worth
-            // surfacing rather than silently traversing.
-            let (is_inv, is_buf, is_io_pad_buf, is_delay) = match variant {
-                Some(PdkVariant::Sky130) => {
-                    let ct = PdkVariant::Sky130.extract_cell_type(celltype);
-                    let is_inv = ct.starts_with("inv") || ct.starts_with("clkinv");
-                    let is_buf = ct.starts_with("buf")
-                        || ct.starts_with("clkbuf")
-                        || ct.starts_with("clkdlybuf")
-                        || ct.starts_with("lpflow_isobufsrc")
-                        || ct.starts_with("lpflow_inputiso");
-                    let is_delay = ct.starts_with("dlygate") || ct.starts_with("dlymetal");
-                    (is_inv, is_buf, false, is_delay)
-                }
-                Some(PdkVariant::Gf180Mcu) => {
-                    let ct = PdkVariant::Gf180Mcu.extract_cell_type(celltype);
-                    let is_inv = matches!(ct, "inv" | "clkinv");
-                    let is_buf = matches!(ct, "buf" | "clkbuf");
-                    // GF180MCU input + bidir pads on the clock path buffer
-                    // PAD → Y, so they're traceable just like a clkbuf.
-                    // `bi_24t` is included because the digital-sim
-                    // simplification (`Y = PAD`, see is_io_pad_cell in
-                    // gf180mcu_pdk.rs) makes its AIG shape identical to
-                    // in_c / in_s. Common case: JTAG TCK routed through a
-                    // bidirectional signal pad in templates that don't
-                    // dedicate input-only pads to the clock (e.g. the
-                    // wafer.space gf180mcu-project-template default). See
-                    // #75.
-                    let is_io_pad_buf = matches!(ct, "in_c" | "in_s" | "bi_24t");
-                    let is_delay = matches!(ct, "dlya" | "dlyb" | "dlyc" | "dlyd");
-                    (is_inv, is_buf, is_io_pad_buf, is_delay)
-                }
-                None => (celltype == "INV", celltype == "BUF", false, false),
+            // GF180MCU IO pads (`in_c`/`in_s`/`bi_24t`) are compiled IP macros
+            // *not* in the stdcell descriptor; they buffer PAD → Y, so they're
+            // traceable just like a clkbuf. `bi_24t` is included because the
+            // digital-sim simplification (`Y = PAD`) makes its AIG shape
+            // identical to in_c / in_s (common case: JTAG TCK routed through a
+            // bidirectional signal pad). This preserved pad path stays name-
+            // based via the gf180mcu module helpers (not `PdkVariant`). See #75.
+            let is_io_pad_buf = crate::gf180mcu::is_gf180mcu_cell(celltype)
+                && crate::gf180mcu_pdk::is_io_pad_cell(crate::gf180mcu::extract_cell_type(celltype));
+            let (is_inv, is_buf) = match Self::descriptor_clock_buf(celltype, cell_descriptor) {
+                Some(true) => (true, false),
+                Some(false) => (false, true),
+                None => (false, false),
             };
 
-            if !is_inv && !is_buf && !is_io_pad_buf && !is_delay && celltype != "CKLNQD" {
+            if !is_inv && !is_buf && !is_io_pad_buf && celltype != "CKLNQD" {
                 clilog::error!(
-                    "cell type {} not supported on clock path. expecting only INV, BUF, CKLNQD, or a delay cell (or SKY130 / GF180MCU equivalents)",
+                    "cell type {} not supported on clock path. expecting only an \
+                     identity buffer / inverter (from the cell descriptor), a \
+                     GF180MCU IO pad, or CKLNQD",
                     celltype
                 );
                 return Err(pinid);
@@ -948,8 +968,8 @@ impl AIG {
             // cone. Without this guard, both PAD and A match the
             // "A | I | PAD" arm below and whichever is enumerated
             // last wins — wrong if A wins. See #75.
-            let is_gf180mcu_bi_24t = matches!(variant, Some(PdkVariant::Gf180Mcu))
-                && PdkVariant::Gf180Mcu.extract_cell_type(celltype) == "bi_24t";
+            let is_gf180mcu_bi_24t = crate::gf180mcu::is_gf180mcu_cell(celltype)
+                && crate::gf180mcu::extract_cell_type(celltype) == "bi_24t";
 
             for ipin in netlistdb.cell2pin.iter_set(cellid) {
                 if netlistdb.pindirect[ipin] == Direction::I {
@@ -961,7 +981,7 @@ impl AIG {
                     // source. Skipping here keeps the "multi-input ⇒ clock
                     // gating" rule honest by ignoring them, the same way
                     // the IO-pad control pins below are ignored. See #70.
-                    if matches!(variant, Some(PdkVariant::Gf180Mcu))
+                    if crate::gf180mcu::is_gf180mcu_cell(celltype)
                         && crate::gf180mcu_pdk::is_power_pin(ipin_name)
                     {
                         continue;
@@ -996,12 +1016,14 @@ impl AIG {
                 assert_ne!(pin_a, usize::MAX);
                 current_pinid = pin_a;
                 current_is_negedge = !is_negedge;
-            } else if is_buf || is_io_pad_buf || is_delay {
+            } else if is_buf || is_io_pad_buf {
                 assert_ne!(pin_a, usize::MAX);
                 current_pinid = pin_a;
                 // is_negedge stays the same. Delay cells (`dlya/b/c/d`,
-                // `dlygate*`, `dlymetal*`) propagate the clock through
-                // their delay constant just like a plain buffer — see #73.
+                // `dlygate*`, `dlymetal*`) are single-input identity buffers
+                // in the descriptor, so they fold into `is_buf` and propagate
+                // the clock through their delay constant just like a plain
+                // buffer — see #73.
             } else if celltype == "CKLNQD" {
                 assert_ne!(pin_cp, usize::MAX);
                 assert_ne!(pin_en, usize::MAX);
@@ -2623,7 +2645,7 @@ impl AIG {
                 // Negative-edge cells (CLKN) trigger on the falling edge:
                 // start the trace with is_negedge=true so trace_clock_pin
                 // records the inverted clock signal.
-                if let Err(pinid) = aig.trace_clock_pin(netlistdb, pinid, is_clkn, true) {
+                if let Err(pinid) = aig.trace_clock_pin(netlistdb, pinid, is_clkn, true, cell_descriptor) {
                     use netlistdb::GeneralHierName;
                     panic!(
                         "Tracing clock pin of cell {} error: \
@@ -2695,7 +2717,7 @@ impl AIG {
                         "R" => ap_r_iv = pin_iv,
                         "CLK" => {
                             ap_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false).unwrap()
+                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap()
                         }
                         _ => {}
                     }
@@ -2724,7 +2746,7 @@ impl AIG {
                     .and_then(|c| c.sequential.as_ref())
                     .filter(|seq| Self::ir_seq_input_wireable(netlistdb, cellid, seq))
                 {
-                    aig.wire_sequential_from_ir(netlistdb, cellid, seq);
+                    aig.wire_sequential_from_ir(netlistdb, cellid, seq, cell_descriptor);
                     let dff = aig.dffs.entry(cellid).or_default();
                     assert_ne!(dff.q, 0, "SKY130 DFF {cellid} (IR-driven) has no Q output");
                     continue;
@@ -2747,7 +2769,7 @@ impl AIG {
                         "RESET_B" => ap_r_iv = pin_iv, // Active-low: AND(d, RESET_B) → RESET_B=0 forces d=0
                         "CLK" => {
                             ap_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false).unwrap()
+                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap()
                         }
                         _ => {}
                     }
@@ -2809,7 +2831,7 @@ impl AIG {
                     .and_then(|d| d.cell(celltype))
                     .and_then(|c| c.sequential.as_ref())
                 {
-                    aig.wire_sequential_from_ir(netlistdb, cellid, seq);
+                    aig.wire_sequential_from_ir(netlistdb, cellid, seq, cell_descriptor);
                     let dff = aig.dffs.entry(cellid).or_default();
                     assert_ne!(
                         dff.q, 0,
@@ -2846,12 +2868,12 @@ impl AIG {
                         // signal is the falling-edge tracker.
                         "CLK" => {
                             ap_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false).unwrap();
+                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap();
                             have_clk = true;
                         }
                         "CLKN" => {
                             ap_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, true, false).unwrap();
+                                aig.trace_clock_pin(netlistdb, pinid, true, false, cell_descriptor).unwrap();
                             have_clk = true;
                         }
                         _ => {}
@@ -2922,7 +2944,7 @@ impl AIG {
                 // their dedicated branches above; only non-vendored descriptor
                 // flops reach here. AIGPDK `DFF`/`DFFSR` are handled by the
                 // literal-match branch at the top of this loop, not here.
-                aig.wire_sequential_from_ir(netlistdb, cellid, seq);
+                aig.wire_sequential_from_ir(netlistdb, cellid, seq, cell_descriptor);
                 let dff = aig.dffs.entry(cellid).or_default();
                 assert_ne!(dff.q, 0, "IR-driven DFF {cellid} has no Q output built");
             } else if celltype == "$__RAMGEM_SYNC_" {
@@ -2937,14 +2959,14 @@ impl AIG {
                         }
                         "PORT_R_CLK" => {
                             sram.port_r_en_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false).unwrap();
+                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap();
                         }
                         "PORT_W_ADDR" => {
                             sram.port_w_addr_iv[bit.unwrap()] = pin_iv;
                         }
                         "PORT_W_CLK" => {
                             write_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false).unwrap();
+                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap();
                         }
                         "PORT_W_WR_DATA" => {
                             sram.port_w_wr_data_iv[bit.unwrap()] = pin_iv;
@@ -2973,7 +2995,7 @@ impl AIG {
                     let pin_iv = aig.pin2aigpin_iv[pinid];
                     match netlistdb.pinnames[pinid].1.as_str() {
                         "CLKin" => {
-                            clken_iv = aig.trace_clock_pin(netlistdb, pinid, false, false).unwrap();
+                            clken_iv = aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap();
                         }
                         "EN" => {
                             // EN combined with clock for read enable
@@ -3064,7 +3086,7 @@ impl AIG {
                         let is_negedge =
                             ram_ports.clock.edge == crate::cell_library::ClockEdge::Neg;
                         clken_iv = aig
-                            .trace_clock_pin(netlistdb, pinid, is_negedge, false)
+                            .trace_clock_pin(netlistdb, pinid, is_negedge, false, cell_descriptor)
                             .unwrap();
                     } else if let Some(ce) = &ram_ports.chip_enable {
                         if pin_name == ce.pin {
@@ -3210,7 +3232,7 @@ impl AIG {
                         "A" => ap_a_iv = pin_iv,
                         "CLK" => {
                             // Try to trace clock, but if it's tied to 1, use constant
-                            if let Ok(clken) = aig.trace_clock_pin(netlistdb, pinid, false, false) {
+                            if let Ok(clken) = aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor) {
                                 ap_clken_iv = clken;
                             }
                         }
@@ -3251,7 +3273,7 @@ impl AIG {
                         "EN" => dp_en_iv = pin_iv,
                         "CLK" => {
                             // Try to trace clock for edge detection
-                            if let Ok(clken) = aig.trace_clock_pin(netlistdb, pinid, false, false) {
+                            if let Ok(clken) = aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor) {
                                 dp_clken_iv = clken;
                             }
                         }
