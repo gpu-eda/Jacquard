@@ -11,14 +11,16 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ### Added
 
-- **`JACQUARD_VENDOR_DIR`** env var to override the vendored-PDK root used
-  for cell-library decomposition (`gf180mcu_fd_sc_mcu7t5v0` /
-  `sky130_fd_sc_hd` functional models). Previously the path was hardcoded
-  to `vendor/` relative to the process CWD, so a consumer running
-  `jacquard` from another working directory had to symlink `vendor/` into
-  place. Now it defaults to `vendor/` (unchanged behaviour) and honours
-  `JACQUARD_VENDOR_DIR` when set. Follows the existing `JACQUARD_*`
-  runtime-knob convention.
+- **Cell-model IR descriptors (ADR 0019).** Standard-cell libraries are now
+  consumed as generated JSON descriptors — pin directions, combinational AIG,
+  sequential roles, and timing — produced from Liberty by the
+  `liberty-to-cellir` converter and embedded at build time. Adds **SKY130**
+  (via a `.lib.json` reader) and **IHP SG13G2 as a new built-in PDK with zero
+  per-PDK Rust**; proprietary libraries simulate via `--cell-descriptor`
+  (no Jacquard build). The runtime binary is now **self-contained for standard
+  cells** — no vendored-PDK read at simulation time — and the `PdkVariant`
+  enum, per-PDK stdcell classifiers, and `build.rs` pin-table generation are
+  retired. See `docs/adding-a-pdk.md`.
 - **TNS / THS timing metrics** in `--timing-summary` and `--timing-report`.
   Alongside the existing worst-single-slack WNS/WHS, the report now carries
   Total Negative Slack and Total Hold Slack — the sum of every negative
