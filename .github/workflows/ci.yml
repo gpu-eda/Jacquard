@@ -1148,45 +1148,37 @@ jobs:
     # (mcu-soc-cvc, mcu-soc-comparison) gate on this via `needs:`.
     runs-on: macos-runner-1
     timeout-minutes: 30
-    needs: [changes, prepare-mcu-soc-jtir]
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, prepare-mcu-soc-jtir, metal-build]
+    if: always() && needs.changes.outputs.code == 'true'
     steps:
+      - name: Gate on the build
+        if: needs.metal-build.result != 'success'
+        run: |
+          echo "metal-build did not succeed (result: ${{ needs.metal-build.result }})" >&2
+          exit 1
       - uses: actions/checkout@v6
         with:
           submodules: recursive
           persist-credentials: true
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install LLVM (for OpenMP support)
+      - name: Install runtime libs (libomp/libc++ for the prebuilt Metal binary)
         run: |
-          # Self-hosted runner's non-interactive shell doesn't inherit
+          # The prebuilt binary links Homebrew LLVM's libc++/libomp at runtime.
+          # The self-hosted runner's non-interactive shell doesn't inherit
           # Homebrew on PATH; source shellenv before invoking brew.
           eval "$(/opt/homebrew/bin/brew shellenv)"
           brew install llvm
-          LLVM_PREFIX=$(brew --prefix llvm)
-          echo "CC=${LLVM_PREFIX}/bin/clang" >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
-          LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
-          echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Cache cargo
-        uses: actions/cache@v5
+      - name: Download jacquard (Metal)
+        uses: actions/download-artifact@v8
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-mcu-soc-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-mcu-soc-llvm${{ env.LLVM_VERSION }}-
+          name: jacquard-metal
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/jacquard
 
       - name: Build firmware
         run: |
@@ -1211,7 +1203,7 @@ jobs:
         timeout-minutes: 30
         run: |
           set -o pipefail
-          cargo run --release --features metal --bin jacquard -- cosim \
+          target/release/jacquard cosim \
             tests/mcu_soc/data/6_final.v \
             --config tests/mcu_soc/sim_config.json --top-module top \
             --max-clock-edges 500000 \
@@ -1238,7 +1230,7 @@ jobs:
         timeout-minutes: 15
         run: |
           set -o pipefail
-          cargo run --release --features metal --bin jacquard -- cosim \
+          target/release/jacquard cosim \
             tests/mcu_soc/data/6_final.v \
             --config tests/mcu_soc/sim_config.json --top-module top \
             --max-clock-edges 10000 \
@@ -1251,7 +1243,7 @@ jobs:
         timeout-minutes: 15
         run: |
           set -o pipefail
-          cargo run --release --features metal --bin jacquard -- sim \
+          target/release/jacquard sim \
             tests/mcu_soc/data/6_final.v \
             tests/mcu_soc/stimulus.vcd \
             tests/mcu_soc/jacquard_replay_mcu.vcd \
@@ -1306,8 +1298,8 @@ jobs:
   #   - Reset / TRST sequencing
   # See tests/jtag_minimal/README.md for full design + regen flow.
   jtag-minimal-cosim:
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, metal-build]
+    if: always() && needs.changes.outputs.code == 'true'
     name: JTAG Minimal Cosim (Hazard3 DTM+DM)
     # HEAVY Metal cosim (4M edges, ~10min self-hosted). On `main` / `ci:metal-xl`
     # it offloads to the GitHub-hosted macos-latest-xlarge so it runs in
@@ -1324,37 +1316,28 @@ jobs:
     # Regression gate for #84 (model-driven clock edge flags).
     continue-on-error: false
     steps:
+      - name: Gate on the build
+        if: needs.metal-build.result != 'success'
+        run: |
+          echo "metal-build did not succeed (result: ${{ needs.metal-build.result }})" >&2
+          exit 1
       - uses: actions/checkout@v6
         with:
           submodules: recursive
           persist-credentials: true
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install LLVM (for OpenMP)
+      - name: Install runtime libs (libomp/libc++ for the prebuilt Metal binary)
         run: |
           eval "$(/opt/homebrew/bin/brew shellenv)"
           brew install llvm
-          LLVM_PREFIX=$(brew --prefix llvm)
-          echo "CC=${LLVM_PREFIX}/bin/clang" >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
-          LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
-          echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
 
-      - name: Cache cargo
-        uses: actions/cache@v5
+      - name: Download jacquard (Metal)
+        uses: actions/download-artifact@v8
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-
+          name: jacquard-metal
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/jacquard
 
       - name: Run JTAG-replay cosim against post-PnR netlist
         # 40min: xlarge runs this ~3x slower than self-hosted (~32min for 4M
@@ -1362,7 +1345,7 @@ jobs:
         timeout-minutes: 40
         run: |
           set -o pipefail
-          cargo run --release --features metal --bin jacquard -- cosim \
+          target/release/jacquard cosim \
             tests/jtag_minimal/data/top.pnl.v \
             --config tests/jtag_minimal/sim_config.json \
             --top-module top \
@@ -1396,49 +1379,35 @@ jobs:
   # tooling. Mirrors jtag-minimal-cosim's cost (per-edge dispatch while
   # the session is live); runs in parallel as an independent signal.
   jtag-minimal-cosim-server:
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, metal-build]
+    if: always() && needs.changes.outputs.code == 'true'
     name: JTAG Minimal Cosim Server (live remote_bitbang)
     runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
     timeout-minutes: 45
     continue-on-error: false
     steps:
+      - name: Gate on the build
+        if: needs.metal-build.result != 'success'
+        run: |
+          echo "metal-build did not succeed (result: ${{ needs.metal-build.result }})" >&2
+          exit 1
       - uses: actions/checkout@v6
         with:
           submodules: recursive
           persist-credentials: true
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install LLVM (for OpenMP)
+      - name: Install runtime libs (libomp/libc++ for the prebuilt Metal binary)
         run: |
           eval "$(/opt/homebrew/bin/brew shellenv)"
           brew install llvm
-          LLVM_PREFIX=$(brew --prefix llvm)
-          echo "CC=${LLVM_PREFIX}/bin/clang" >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
-          LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
-          echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
 
-      - name: Cache cargo
-        uses: actions/cache@v5
+      - name: Download jacquard (Metal)
+        uses: actions/download-artifact@v8
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          # Share the replay job's cache key so both Metal jtag jobs reuse the
-          # same warm `target/` instead of each paying for a cold build.
-          key: ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-
-
-      - name: Build jacquard (metal)
-        run: cargo build --release --features metal --bin jacquard
+          name: jacquard-metal
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/jacquard
 
       - name: Run live --jtag-server cosim + bitbang client
         # The server binds the port and blocks on accept() during setup;
@@ -1487,53 +1456,42 @@ jobs:
   # examination stops at MISA; the script asserts IDCODE=0xdeadbeef and
   # DMI read-back=0xcafebabe instead.
   jtag-minimal-openocd:
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, metal-build]
+    if: always() && needs.changes.outputs.code == 'true'
     name: JTAG Minimal OpenOCD (real remote_bitbang attach)
     runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
     timeout-minutes: 45
     continue-on-error: false
     steps:
+      - name: Gate on the build
+        if: needs.metal-build.result != 'success'
+        run: |
+          echo "metal-build did not succeed (result: ${{ needs.metal-build.result }})" >&2
+          exit 1
       - uses: actions/checkout@v6
         with:
           submodules: recursive
           persist-credentials: true
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install LLVM (for OpenMP) and OpenOCD
+      - name: Install runtime libs (libomp/libc++) and OpenOCD
         run: |
+          # The prebuilt binary links Homebrew LLVM's libc++/libomp at runtime;
+          # OpenOCD is the real debugger this gate attaches with.
           eval "$(/opt/homebrew/bin/brew shellenv)"
           brew install llvm open-ocd
-          LLVM_PREFIX=$(brew --prefix llvm)
-          echo "CC=${LLVM_PREFIX}/bin/clang" >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-          echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> $GITHUB_ENV
-          LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
-          echo "LLVM_VERSION=$LLVM_VER" >> $GITHUB_ENV
           # Put the Homebrew bin (openocd, etc.) on PATH for later steps —
           # `brew shellenv` only affects this step's shell. The self-hosted
           # runner doesn't have /opt/homebrew/bin on PATH by default.
           echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
           "$(brew --prefix)/bin/openocd" --version
 
-      - name: Cache cargo
-        uses: actions/cache@v5
+      - name: Download jacquard (Metal)
+        uses: actions/download-artifact@v8
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          # Share the replay job's warm target cache.
-          key: ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-jtag-minimal-llvm${{ env.LLVM_VERSION }}-
-
-      - name: Build jacquard (metal)
-        run: cargo build --release --features metal --bin jacquard
+          name: jacquard-metal
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/jacquard
 
       - name: Attach with real OpenOCD and assert IDCODE + DMI read-back
         # Bind an OS-assigned port (`--jtag-server 0`) so concurrent jobs /
