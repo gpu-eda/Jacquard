@@ -629,84 +629,11 @@ jobs:
       - name: Make binary executable
         run: chmod +x target/release/jacquard
 
-      - name: Run CUDA simulation (timing test)
-        run: |
-          time (target/release/jacquard sim \
-            tests/timing_test/dff_test_synth.gv \
-            tests/timing_test/dff_test.vcd \
-            tests/timing_test/ci_cuda_output.vcd \
-            1) 2>&1 | tee cuda_timing.txt
-
-      - name: Report CUDA performance
-        run: |
-          {
-            echo "## CUDA Simulation Performance"
-            echo "\`\`\`"
-            cat cuda_timing.txt
-            echo "\`\`\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Run CUDA simulation with X-propagation
-        run: |
-          target/release/jacquard sim \
-            tests/timing_test/dff_test_synth.gv \
-            tests/timing_test/dff_test.vcd \
-            tests/timing_test/ci_cuda_xprop_output.vcd \
-            1 --xprop 2>&1 | tee cuda_xprop.txt
-
-      - name: Verify CUDA X-propagation output
-        run: |
-          # FATAL: a missing X means the seed/X-aware path silently regressed.
-          if grep -q 'x' tests/timing_test/ci_cuda_xprop_output.vcd; then
-            echo "X-propagation VCD contains X values as expected"
-          else
-            echo "ERROR: No X values in CUDA xprop output VCD (X-propagation broken)"
-            exit 1
-          fi
-
-      # #104: exercise the CUDA timed path (timed launcher + EventBuffer drain +
-      # report finalize). The timing/arrival logic itself is shared kernel code
-      # (kernel_v1_impl.cuh); this asserts the CUDA-specific Rust wiring runs and
-      # emits a structurally valid report. (inv_chain_pnr has 0 violations, so
-      # the violation-observe path is not yet exercised — see follow-up.)
-      - name: Run CUDA simulation with timing (inv_chain_pnr, #104)
-        run: |
-          set -o pipefail
-          target/release/jacquard sim \
-            tests/timing_test/inv_chain_pnr/inv_chain.v \
-            tests/timing_test/inv_chain_pnr/inv_chain_stimulus.vcd \
-            tests/timing_test/inv_chain_pnr/jacquard_timed_output_cuda.vcd \
-            1 \
-            --timing-ir tests/timing_test/inv_chain_pnr/inv_chain.jtir \
-            --timed \
-            --timing-report tests/timing_test/inv_chain_pnr/timing_report_cuda.json \
-            --timing-summary \
-            2>&1 | tee cuda_timed.txt
-
-      - name: Validate CUDA timing report JSON shape (#104)
-        run: |
-          python3 scripts/ci/validate_timing_report.py \
-            tests/timing_test/inv_chain_pnr/timing_report_cuda.json
-
-      # Phase 2 Stage B (#105): run the logic + GPU-peripheral cosim fixtures on
-      # the CUDA backend and diff against the committed CPU/Metal goldens. Stage A
-      # validated the design step (xprop_cosim); Stage B adds the GPU UART/bus
-      # peripherals (dual_uart + apb_trace) via gpu_io_step. COSIM_SCOPE=all runs
-      # every UART/bus fixture (no flash/JTAG fixture exists yet — that is Stage C).
-      - name: Run CUDA cosim — logic + UART/bus (Stage B, #105)
-        run: |
-          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=all \
-            bash scripts/ci/cosim_cpu_check.sh
-
-      # Phase 2 Stage C (#105): the mcu_soc flash cosim on the CUDA backend vs
-      # the committed CpuBackend golden (== Metal flash kernel, C2). Separate
-      # scope because the 19.6 MB netlist costs ~40s of partitioning per run —
-      # kept out of `all`; 10k edges is the minimal run that still reaches a real
-      # flash read (cmd 0x03 @ 0x100000). Gates the CUDA flash kernels (C3).
-      - name: Run CUDA cosim — flash (Stage C, #105)
-        run: |
-          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=flash \
-            bash scripts/ci/cosim_cpu_check.sh
+      # Full functional suite (sim / X-prop / timed + report / cosim Stage B+C),
+      # shared with cuda-blackwell via scripts/ci/gpu_test_suite.sh so the two
+      # GPU runners stay in lockstep.
+      - name: Run GPU test suite
+        run: JACQUARD_BIN=target/release/jacquard bash scripts/ci/gpu_test_suite.sh cuda
 
       - name: Upload CUDA artifacts
         uses: actions/upload-artifact@v7
@@ -724,20 +651,18 @@ jobs:
             perf_metrics/
 
   # Real NVIDIA Blackwell (sm_120) coverage on the self-hosted nvidia1.local
-  # runner — reuses cuda-build's all-major artifact (already has sm_120 SASS),
-  # so no extra compile and no GitHub GPU-minute cost. The ephemeral runner
-  # container ships the CUDA runtime, so the job just runs the binary.
+  # runner. Runs the *same* GPU test suite as the `cuda` job (via
+  # scripts/ci/gpu_test_suite.sh) against the same all-major artifact — so
+  # Blackwell gets full functional coverage, not just a smoke test, for no extra
+  # compile and no GitHub GPU-minute cost.
   #
-  # NOT a required check. Fork-PR gated: untrusted fork code never auto-runs on
-  # the self-hosted box — only pushes, same-repo PRs, or a maintainer-applied
-  # `ci:blackwell` label trigger it.
+  # Deliberately NOT a required check: this is a self-hosted box that can go
+  # offline, and an offline box must not block merges. Host isolation is the
+  # ephemeral runner container (fork-PR gating intentionally omitted — the box
+  # is dedicated to open-source gpu-eda work; tighten later if needed).
   cuda-blackwell:
     needs: [changes, cuda-build]
-    if: >-
-      needs.changes.outputs.code == 'true' &&
-      (github.event_name == 'push' ||
-       github.event.pull_request.head.repo.full_name == github.repository ||
-       contains(github.event.pull_request.labels.*.name, 'ci:blackwell'))
+    if: needs.changes.outputs.code == 'true'
     name: CUDA Blackwell Tests
     runs-on: [self-hosted, cuda, blackwell]
     steps:
@@ -753,14 +678,10 @@ jobs:
           path: target/release
       - name: Make binary executable
         run: chmod +x target/release/jacquard
-      - name: CUDA sim on Blackwell (sm_120) with CPU cross-check
-        run: |
-          nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader
-          target/release/jacquard sim \
-            tests/timing_test/dff_test_synth.gv \
-            tests/timing_test/dff_test.vcd \
-            /tmp/blackwell_cuda_out.vcd \
-            1 --check-with-cpu
+      - name: Show GPU
+        run: nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader
+      - name: Run GPU test suite
+        run: JACQUARD_BIN=target/release/jacquard bash scripts/ci/gpu_test_suite.sh blackwell
 
   # Build and run HIP simulation on NVIDIA GPU (HIP's NVIDIA backend)
   # This validates the HIP code path using hipcc targeting NVIDIA via HIP_PLATFORM=nvidia.
