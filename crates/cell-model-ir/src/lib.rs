@@ -76,8 +76,11 @@ pub const SCHEMA_MAJOR: u16 = 0;
 /// the C2 L3 sequential/classification block ([`Sequential`], the extended
 /// [`CellKind`]) and the L4 corner-keyed timing block ([`CellTiming`],
 /// [`Corner`], [`CellModelIr::corners`] / [`CellModelIr::default_corner`])
-/// alongside the C1 L1+L2 fields, which are unchanged.
-pub const SCHEMA_MINOR: u16 = 2;
+/// alongside the C1 L1+L2 fields, which are unchanged. `3` adds the C4
+/// [`Sequential::clear_preset`] tie-break ([`ClearPreset`]) capturing the
+/// state when async clear and preset are asserted simultaneously — additive,
+/// `skip_serializing_if` absent, so `2`-era documents still read back.
+pub const SCHEMA_MINOR: u16 = 3;
 
 /// A whole library's worth of per-cell-type facts: one descriptor per library.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -421,6 +424,82 @@ pub struct Sequential {
     /// `None` if the cell has no async reset. (Liberty `ff` `clear`.)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub async_reset: Option<AsyncControl>,
+    /// The simultaneous-assertion tie-break for a cell with BOTH async set
+    /// (`preset`) and reset (`clear`): what the state variables take when both
+    /// are asserted at once (Liberty `clear_preset_var1` / `clear_preset_var2`).
+    /// `None` when the cell lacks a clear+preset pair, or when the Liberty group
+    /// omits the attributes. See [`ClearPreset`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clear_preset: Option<ClearPreset>,
+}
+
+/// The simultaneous-assertion tie-break for a flop/latch that has BOTH an
+/// async clear (reset) and an async preset (set): the value each of the two
+/// state variables (`Q` = `var1`, `QN` = `var2`) takes when clear AND preset
+/// are asserted at the same time. This is Liberty's `clear_preset_var1` /
+/// `clear_preset_var2`.
+///
+/// Jacquard's consumer overlay (`wire_dff_reset_set_overlay` in `src/aig.rs`)
+/// historically hardcoded reset-dominant (`var1 = L`). Most cells match, but
+/// set-dominant cells (`var1 = H`) exist across every foundry library tested
+/// (GF180 `latrsnq`, SKY130, GF130 `TLATSR`/`TLATNSR`, IHP `sg13g2_sdfbbp_1`);
+/// carrying the true tie-break here lets the consumer honour it rather than
+/// silently mis-simulating. Use [`ClearPreset::dominance`] to reduce the pair
+/// to the tie-break the overlay needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClearPreset {
+    /// `clear_preset_var1` — the value the first state variable (`Q`) takes
+    /// when clear and preset are asserted simultaneously.
+    pub var1: ClearPresetVal,
+    /// `clear_preset_var2` — the value the second state variable (`QN`) takes
+    /// when clear and preset are asserted simultaneously. Usually the
+    /// complement of [`Self::var1`], but Liberty permits any combination.
+    pub var2: ClearPresetVal,
+}
+
+/// Which async control wins when clear and preset are asserted together, as
+/// derived from a [`ClearPreset`]'s `var1` (the `Q` state variable).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dominance {
+    /// `var1 = L` — the state goes to 0; clear (reset) wins. This is Jacquard's
+    /// legacy hardcoded behaviour and the default when `clear_preset` is absent.
+    ResetDominant,
+    /// `var1 = H` — the state goes to 1; preset (set) wins.
+    SetDominant,
+    /// `var1` is `N` / `X` / `T` (hold / unknown / toggle): not a simple
+    /// dominance. The consumer falls back to reset-dominant (the safe default).
+    Other,
+}
+
+impl ClearPreset {
+    /// Reduce the `var1`/`var2` pair to the simultaneous-assertion dominance
+    /// the consumer overlay needs, keyed on `var1` (the `Q` state variable).
+    pub fn dominance(&self) -> Dominance {
+        match self.var1 {
+            ClearPresetVal::Low => Dominance::ResetDominant,
+            ClearPresetVal::High => Dominance::SetDominant,
+            ClearPresetVal::NoChange | ClearPresetVal::Unknown | ClearPresetVal::Toggle => {
+                Dominance::Other
+            }
+        }
+    }
+}
+
+/// A Liberty `clear_preset_var*` value: the state a variable takes when clear
+/// and preset are asserted simultaneously. Liberty's five permitted values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClearPresetVal {
+    /// `L` — the state variable goes low.
+    Low,
+    /// `H` — the state variable goes high.
+    High,
+    /// `N` — no change (holds its previous value).
+    NoChange,
+    /// `X` — unknown.
+    Unknown,
+    /// `T` — toggles (inverts its previous value).
+    Toggle,
 }
 
 /// Clock pin + the edge it triggers on.
@@ -847,6 +926,7 @@ mod tests {
                     pin: "RN".into(),
                     active: ActiveLevel::Low,
                 }),
+                clear_preset: None,
             }),
             timing: Some(timing),
         });
@@ -860,8 +940,11 @@ mod tests {
         let back = CellModelIr::from_json(&json).unwrap();
         assert_eq!(ir, back);
 
-        // Schema version stamped at the C2 minor.
-        assert_eq!((back.schema_major, back.schema_minor), (SCHEMA_MAJOR, 2));
+        // Schema version stamped at the current minor.
+        assert_eq!(
+            (back.schema_major, back.schema_minor),
+            (SCHEMA_MAJOR, SCHEMA_MINOR)
+        );
 
         // L3 roles survived the round-trip.
         let seq = back
@@ -874,6 +957,114 @@ mod tests {
         assert_eq!(seq.async_reset.as_ref().unwrap().pin, "RN");
         assert_eq!(seq.async_reset.as_ref().unwrap().active, ActiveLevel::Low);
         assert_eq!(seq.async_set.as_ref().unwrap().active, ActiveLevel::Low);
+    }
+
+    #[test]
+    fn set_dominant_clear_preset_round_trips() {
+        // Take the reset+set flop and stamp it set-dominant (var1=H): the field
+        // must survive a JSON round-trip and reduce to SetDominant, while an
+        // absent field defaults to ResetDominant.
+        let mut ir = dff_with_async_reset();
+        {
+            let seq = ir.cells[0].sequential.as_mut().unwrap();
+            assert!(seq.clear_preset.is_none(), "baseline has no clear_preset");
+            seq.clear_preset = Some(ClearPreset {
+                var1: ClearPresetVal::High,
+                var2: ClearPresetVal::Low,
+            });
+        }
+        let json = ir.to_json().unwrap();
+        assert!(
+            json.contains("clear_preset"),
+            "set-dominant field must serialize:\n{json}"
+        );
+        let back = CellModelIr::from_json(&json).unwrap();
+        assert_eq!(ir, back);
+
+        let cp = back.cells[0]
+            .sequential
+            .as_ref()
+            .unwrap()
+            .clear_preset
+            .unwrap();
+        assert_eq!(cp.var1, ClearPresetVal::High);
+        assert_eq!(cp.var2, ClearPresetVal::Low);
+        assert_eq!(cp.dominance(), Dominance::SetDominant);
+
+        // Absent field is reset-dominant by omission (default = today's behavior).
+        assert!(dff_with_async_reset().cells[0]
+            .sequential
+            .as_ref()
+            .unwrap()
+            .clear_preset
+            .is_none());
+
+        // The other var1 values map to Other (consumer → reset-dominant fallback).
+        assert_eq!(
+            ClearPreset {
+                var1: ClearPresetVal::Low,
+                var2: ClearPresetVal::High
+            }
+            .dominance(),
+            Dominance::ResetDominant
+        );
+        for v in [
+            ClearPresetVal::NoChange,
+            ClearPresetVal::Unknown,
+            ClearPresetVal::Toggle,
+        ] {
+            assert_eq!(
+                ClearPreset {
+                    var1: v,
+                    var2: ClearPresetVal::Unknown
+                }
+                .dominance(),
+                Dominance::Other
+            );
+        }
+    }
+
+    #[test]
+    fn c2_sequential_without_clear_preset_is_backward_readable() {
+        // A schema-2 document (async_set + async_reset but no clear_preset key)
+        // must still deserialize under schema 3 with clear_preset == None.
+        let c2_json = r#"{
+            "schema_major": 0,
+            "schema_minor": 2,
+            "library": { "name": "demo_lib", "prefixes": ["demo_"] },
+            "cells": [
+                {
+                    "cell_type": "demo_dffsrnq",
+                    "kind": "dff",
+                    "pins": [
+                        { "name": "D",   "direction": "input"  },
+                        { "name": "CLK", "direction": "input"  },
+                        { "name": "RN",  "direction": "input"  },
+                        { "name": "SETN","direction": "input"  },
+                        { "name": "Q",   "direction": "output" }
+                    ],
+                    "sequential": {
+                        "clock": { "pin": "CLK", "edge": "rising" },
+                        "next_state": {
+                            "inputs": ["D"], "and_nodes": [],
+                            "outputs": [{ "pin": "D", "r": { "node": 1, "inverted": false } }]
+                        },
+                        "outputs": [{ "pin": "Q" }],
+                        "async_set":   { "pin": "SETN", "active": "low" },
+                        "async_reset": { "pin": "RN",   "active": "low" }
+                    }
+                }
+            ]
+        }"#;
+        let ir = CellModelIr::from_json(c2_json).unwrap();
+        let seq = ir
+            .cell("demo_dffsrnq")
+            .unwrap()
+            .sequential
+            .as_ref()
+            .unwrap();
+        assert!(seq.clear_preset.is_none());
+        assert!(seq.async_set.is_some() && seq.async_reset.is_some());
     }
 
     #[test]

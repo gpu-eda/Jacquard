@@ -194,6 +194,7 @@ mod tests {
                     pin: "RN".into(),
                     active: ActiveLevel::Low,
                 }),
+                clear_preset: None,
             }),
             timing: Some(CellTiming {
                 delays: vec![],
@@ -269,6 +270,23 @@ mod tests {
             .as_mut()
             .unwrap()
             .active = ActiveLevel::High;
+        let d = diff_irs(&a, &b);
+        assert!(d
+            .mismatches
+            .iter()
+            .any(|m| m.contains("sequential (L3) block differs")));
+    }
+
+    #[test]
+    fn changed_clear_preset_tie_break_is_reported() {
+        // Adding a set-dominant clear_preset where there was none is an L3
+        // change the diff must surface (the field lives inside the seq block).
+        let a = seq_lib();
+        let mut b = seq_lib();
+        b.cells[0].sequential.as_mut().unwrap().clear_preset = Some(crate::ClearPreset {
+            var1: crate::ClearPresetVal::High,
+            var2: crate::ClearPresetVal::Low,
+        });
         let d = diff_irs(&a, &b);
         assert!(d
             .mismatches
