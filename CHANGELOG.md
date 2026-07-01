@@ -19,6 +19,13 @@ the public contracts in `docs/release-process.md` follow stricter rules).
   place. Now it defaults to `vendor/` (unchanged behaviour) and honours
   `JACQUARD_VENDOR_DIR` when set. Follows the existing `JACQUARD_*`
   runtime-knob convention.
+- **TNS / THS timing metrics** in `--timing-summary` and `--timing-report`.
+  Alongside the existing worst-single-slack WNS/WHS, the report now carries
+  Total Negative Slack and Total Hold Slack — the sum of every negative
+  setup / hold slack across the run (`stats.total_setup_slack_ps` /
+  `stats.total_hold_slack_ps`). Additive JSON-schema change, bumped to
+  `1.2.0` (older reports still parse via `#[serde(default)]`). Salvaged from
+  the timing logic in #17. (#9)
 
 ## [0.2.4] - 2026-06-26
 
