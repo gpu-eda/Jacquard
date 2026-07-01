@@ -220,6 +220,19 @@ fn generate_cell_descriptors() {
             top_lib: "aigpdk/aigpdk.lib",
             watch_dirs: &["aigpdk"],
         },
+        // IHP SG13G2 (open-source, added as a NEW built-in PDK with ZERO
+        // per-PDK Rust — ADR 0019 D7a, C3a). A monolithic single-`.lib`-per-corner
+        // commercial-style library (Liberate); the converter reads its `cell`
+        // groups directly (no split-lib merge) and derives the `sg13g2_` D8
+        // prefix from the cell names. Only the vendored stdcell Liberty is needed;
+        // the submodule is sparse/shallow (stdcell `lib/` + `verilog/` only). When
+        // absent on a partial checkout, an empty descriptor is embedded (as GF180).
+        DescriptorSpec {
+            out_filename: "sg13g2.cellir.json",
+            top_lib: "vendor/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/\
+                      sg13g2_stdcell_typ_1p20V_25C.lib",
+            watch_dirs: &["vendor/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib"],
+        },
     ];
 
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");

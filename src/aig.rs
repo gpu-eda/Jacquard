@@ -1060,23 +1060,23 @@ impl AIG {
                         }
                     }
 
-                    // Handle AIGPDK combinational cells (AND2, INV, BUF)
-                    let mut prev_a = usize::MAX;
-                    let mut prev_b = usize::MAX;
-                    for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
-                        match netlistdb.pinnames[dep_pinid].1.as_str() {
-                            "A" => prev_a = dep_pinid,
-                            "B" => prev_b = dep_pinid,
-                            _ => {}
-                        }
-                    }
-                    // Push process then dependencies
+                    // Combinational cell outside the vendored PDKs: the internal
+                    // AIGPDK cells (AND2 / INV / BUF) *and* any stdcell an
+                    // auto-selected cell-model-IR descriptor models — e.g. IHP
+                    // SG13G2 `sg13g2_*`, added as a new built-in PDK with ZERO
+                    // per-PDK Rust (ADR 0019 D7a, C3a). Visit *every* input pin so
+                    // each driver is built before this output is spliced by
+                    // `try_descriptor_comb`. Gathering all `Direction::I` pins
+                    // (rather than the hardcoded "A"/"B") makes the dependency walk
+                    // PDK-neutral: it covers arbitrary multi-input descriptor cells
+                    // (mux2's A0/A1/S, a22oi's A1/A2/B1/B2, …) whose pin names
+                    // Jacquard never enumerates. For AIGPDK the input set is exactly
+                    // {A[,B]}, so this stays behaviour-identical.
                     work_stack.push(WorkItem::Process(pinid));
-                    if prev_b != usize::MAX {
-                        work_stack.push(WorkItem::Visit(prev_b));
-                    }
-                    if prev_a != usize::MAX {
-                        work_stack.push(WorkItem::Visit(prev_a));
+                    for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
+                        if netlistdb.pindirect[dep_pinid] == Direction::I {
+                            work_stack.push(WorkItem::Visit(dep_pinid));
+                        }
                     }
                 }
 
