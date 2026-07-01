@@ -117,6 +117,28 @@ Browse the full documentation [online](https://gpu-eda.github.io/Jacquard/) or b
 mdbook serve   # opens at http://localhost:3000
 ```
 
+## Input
+
+Jacquard is a gate-level **emulator**: the input to `sim` / `cosim` / `map` is a
+**synthesized gate-level Verilog netlist** (structural Verilog mapped to
+`aigpdk` / SKY130 / GF180MCU cells).
+
+**Behavioral RTL is the intended design input — through a synthesis step.** Bring
+your RTL, synthesize it to a gate-level netlist (Yosys or a commercial tool;
+synthesis *quality* sets Jacquard's speed, so it's a deliberate step), then
+simulate. The full flow — memory mapping + logic synthesis to `aigpdk.lib` — is
+in the [Synthesis Flow](https://gpu-eda.github.io/Jacquard/synthesis-flow.html)
+guide.
+
+- **Feed it:** a synthesized netlist (`design.gv`), or your RTL after synthesis.
+- **Don't feed it raw behavioral RTL** (`always`/`if`/`case`/`reg`/params) — the
+  synthesizer elaborates those away first.
+- Full supported netlist syntax + SystemVerilog/SVA status:
+  [Input netlist language](https://gpu-eda.github.io/Jacquard/input-netlist.html).
+
+> An integrated `jacquard build design.v` on-ramp (Yosys embedded via YoWASP, no
+> manual synthesis) is planned — [ADR 0021](https://gpu-eda.github.io/Jacquard/adr/0021-behavioral-rtl-support.html) / [#162](https://github.com/gpu-eda/Jacquard/issues/162).
+
 ## Limitations
 
 - `jacquard sim` takes a static VCD input waveform. For reactive testbenches,
