@@ -273,7 +273,19 @@ jobs:
         with:
           submodules: false
       - name: Init required submodules
-        run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+        # build.rs generates the GF180MCU/SKY130 pin tables + cell-model-IR
+        # from the vendored PDK cell/liberty trees at *build* time. Since this
+        # one artifact is THE jacquard binary for every Metal test job, all PDKs
+        # a Metal design might use must be present here or the generated tables
+        # are incomplete and the binary panics at runtime (e.g. the jtag_minimal
+        # cosim jobs run a gf180mcu_mcu9t5v0 design → "no pin-table entry for
+        # type 'clkinv'"). The self-built jobs got these via submodules:recursive.
+        run: |
+          git submodule update --init \
+            vendor/eda-infra-rs \
+            vendor/sky130_fd_sc_hd \
+            vendor/gf180mcu_fd_sc_mcu7t5v0 \
+            vendor/gf180mcu_fd_sc_mcu9t5v0
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Install LLVM (clang + OpenMP for the Metal build)
