@@ -7,8 +7,8 @@ and the port-mapping schema have all landed.
   (Tier 1 + minimal Tier 2)
 - [0011 — RAM port-mapping schema](../adr/0011-ram-port-mapping-schema.md)
   (the port-mapping extension originally deferred by ADR 0010)
-**Issues:** [#67](https://github.com/ChipFlow/Jacquard/issues/67),
-[#80](https://github.com/ChipFlow/Jacquard/issues/80).
+**Issues:** [#67](https://github.com/gpu-eda/Jacquard/issues/67),
+[#80](https://github.com/gpu-eda/Jacquard/issues/80).
 **Driving designs:** the wafer.space `chip_top.pnl.v` blocked on
 `gf180mcu_ocd_ip_sram__sram1024x8m8wm1`, then the JTAG-DM workflow
 in PR #78 surfacing the need for real RAM backing storage.

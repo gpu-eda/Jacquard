@@ -20,12 +20,12 @@ boots from ROM, never reads SRAM contents" cases but **fails the
 moment a real CPU writes to SRAM and expects to read its data back**.
 
 The acute trigger is the JTAG-DM firmware-load path enabled by
-[PR #78](https://github.com/ChipFlow/Jacquard/pull/78): OpenOCD
+[PR #78](https://github.com/gpu-eda/Jacquard/pull/78): OpenOCD
 walks a debug-module sequence that culminates in abstract-memory
 writes into the design's SRAM, then jumps the CPU to that memory.
 Because the SRAM is opaque (no backing storage, writes go nowhere),
 the CPU boots to garbage. Issue
-[#80](https://github.com/ChipFlow/Jacquard/issues/80) captures the
+[#80](https://github.com/gpu-eda/Jacquard/issues/80) captures the
 symptom and notes that wiring `SramInitConfig` is the smaller sibling
 problem — pre-loading SRAM contents at tick 0 — but the bigger gap
 is that `kind = "ram"` doesn't model writes at all.
@@ -157,7 +157,7 @@ flagged cells as opaque RAMs, which is a graceful degradation.
 
 `TestbenchConfig::sram_init` (an existing schema field declared in
 `src/testbench.rs` but unwired today — issue
-[#80](https://github.com/ChipFlow/Jacquard/issues/80)) becomes
+[#80](https://github.com/gpu-eda/Jacquard/issues/80)) becomes
 load-bearing once explicit-port RAMs have backing storage. The
 preload path:
 
@@ -205,9 +205,9 @@ require an ADR — purely additive JSON schema work.
 
 - ADR 0010 — Declarative cell metadata (the parent decision deferring
   this schema).
-- Issue [#80](https://github.com/ChipFlow/Jacquard/issues/80) —
+- Issue [#80](https://github.com/gpu-eda/Jacquard/issues/80) —
   driving consumer.
-- PR [#78](https://github.com/ChipFlow/Jacquard/pull/78) — the
+- PR [#78](https://github.com/gpu-eda/Jacquard/pull/78) — the
   JTAG-DM workflow that surfaced the schema need.
 - Upstream OCD SRAM behavioural model:
   [RTimothyEdwards/gf180mcu_ocd_ip_sram](https://github.com/RTimothyEdwards/gf180mcu_ocd_ip_sram).

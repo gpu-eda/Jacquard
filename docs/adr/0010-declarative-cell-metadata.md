@@ -26,7 +26,7 @@ Edwards' OCD 3.3V port of the GF180MCU SRAM IP, used in a downstream
 wafer.space tapeout. The cell is third-party IP (not in Jacquard's
 `vendor/`), doesn't match `is_gf180mcu_cell`'s prefix walk
 (`fd_*` / `ws_*` only), has no pin table, and isn't filler-stubbable.
-Issue [#67](https://github.com/ChipFlow/Jacquard/issues/67) captures
+Issue [#67](https://github.com/gpu-eda/Jacquard/issues/67) captures
 the discussion.
 
 The same pattern will repeat for every wafer.space tapeout that
@@ -156,7 +156,7 @@ tests stay green without churn.
 
 ## Links
 
-- Issue [#67](https://github.com/ChipFlow/Jacquard/issues/67) —
+- Issue [#67](https://github.com/gpu-eda/Jacquard/issues/67) —
   design discussion.
 - PR #64 (`9281e57`) — most recent per-PDK-code-as-data workaround
   this ADR resolves.

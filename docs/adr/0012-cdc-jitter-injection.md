@@ -29,7 +29,7 @@ handshake protocol violations) only surface when edge alignment varies
 from the ideal.
 
 The motivating incident was
-[PR #89 / run 26413667030](https://github.com/ChipFlow/Jacquard/actions/runs/26413667030):
+[PR #89 / run 26413667030](https://github.com/gpu-eda/Jacquard/actions/runs/26413667030):
 a scheduler index bug caused sys_clk to fire at TCK's period, making
 CDC synchronizers between the JTAG and system clock domains marginal.
 The test passed intermittently because Metal GPU scheduling jitter
