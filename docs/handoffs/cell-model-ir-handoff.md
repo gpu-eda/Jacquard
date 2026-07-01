@@ -103,6 +103,60 @@ dual_uart + apb_trace(±xprop) == goldens; GF180 jtag_minimal 9t MD5
 `d87c9f75b4f6af415a9df2d3c728e906` (`--features metal`, 300k edges), GF180
 untouched; `cargo test --lib` 316; four pipeline crates green; 7 crates @ 0.2.4.
 
+## C3a — COMPLETE (IHP SG13G2, new built-in PDK, ZERO per-PDK Rust)
+
+IHP's open **SG13G2** PDK is now a built-in, added purely by **vendoring its
+submodule + embedding a generated descriptor** — the ADR 0019 D7a proof that
+adding a PDK is no longer a Jacquard code change. Three commits on
+`feat/cell-model-ir-c3`.
+
+**Vendored submodule (commit `a2b57d9f`).** `vendor/IHP-Open-PDK` pinned at
+`22f2a25f`, a partial (`blob:none`) + shallow (`depth 1`) clone with a **cone
+sparse-checkout** limited to `ihp-sg13g2/libs.ref/sg13g2_stdcell/{lib,verilog}`
+→ **~10 MB on disk** instead of the multi-GB full PDK. `.gitmodules` carries
+`shallow = true`; the sparse config is local to the working clone (build.rs
+tolerates an absent submodule → empty descriptor, as GF180/SKY130). Registered
+as a mode-160000 gitlink.
+
+**Embed + PDK-neutral dispatch (commit `86f43c92`).** `build.rs` generates
+`sg13g2.cellir.json` from `sg13g2_stdcell_typ_1p20V_25C.lib` (**84 cells, 60
+comb, 14 L3, corner `typ_1p20V_25C`** from the Liberty PVT, 257 KB, det.);
+`bundled_descriptors::ALL` gains the prefix-keyed `sg13g2` entry, auto-selected
+by the derived `sg13g2_` D8 prefix. **No IHP name-match, no `ihp_*.rs`.** The
+combinational **Process**-side splice (`try_descriptor_comb`) was already
+auto-select-keyed; the one generalization needed was the **Visit-side
+dependency walk** in `from_netlistdb_impl` (the `None`-classify arm): it
+gathered only the hardcoded `"A"`/`"B"` input pins (fine for AIGPDK AND2/INV/BUF)
+and dropped the extra inputs of arbitrary descriptor cells. It now visits every
+`Direction::I` pin — PDK-neutral, behaviour-identical for AIGPDK, and also
+serves C3.3d. `cargo test --lib` 317 (+1); embedded-descriptor cell-count floor
+relaxed 100→50 (IHP is a compact 84-cell lib).
+
+**End-to-end proof (commit `b79cb1c2`, `tests/ihp_comb/`).** A cone of 12
+distinct combinational `sg13g2_*` cell types (incl. multi-input mux2/a21oi/
+a22oi/o21ai — what the dependency generalization exists for); primary inputs
+clocked through **AIGPDK DFFs** (a pure timing harness — GEM samples on clock
+edges; **no IHP flops**, sequential is deferred C3.3d). Leaf pin directions from
+a port-only `sg13g2_pins.v` via `--cell-library` (ADR 0010 data layer, not
+Rust). `jacquard sim --check-with-cpu` auto-selects `sg13g2` and passes **17
+cycles** GPU==CPU; an independent truth-table check (`check.py`, 176 signal
+checks, **0 mismatches**) proves the descriptor's comb logic is *correct*, not
+merely self-consistent (the logic oracle, since IHP's flat-`.v` cross-check is a
+C4 deferral).
+
+**Gate (all green).** GF180 jtag_minimal 9t MD5 `d87c9f75b4f6af415a9df2d3c728e906`
+(`--features metal`, 300k edges — GF180 untouched); SKY130 `mcu_soc` flash cosim
+== golden; AIGPDK all-7 cosim == goldens; `cargo test --lib` 317; 7 crates @
+0.2.4.
+
+**What remains for full IHP support.** *Sequential* IHP (14 `ff` cells) awaits
+**C3.3d** (sequential descriptor-driven for non-GF180 PDKs); the descriptor
+already carries their L3, so full support then needs **zero additional IHP
+Rust**. **C4:** the flat-`.v` cross-check indexer (IHP's `.v` is one flat-module
+file → 0 models indexed, comb logic unverified *at generation*, same as SKY130),
+and the one set-dominant flop `sg13g2_sdfbbp_1` (`clear_preset_var1=H`,
+`clear_preset_divergent=1`) needing the schema `clear_preset` tie-break field.
+
 ### What C3.3d (DESTRUCTIVE — not started) still needs
 
 The additive landing means the legacy is all still present and load-bearing:
