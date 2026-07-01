@@ -287,54 +287,51 @@
 <a href=#287 id=287 data-nosnippet>287</a>        <span class="comment">// Mixed — any two libraries together is an error.
 <a href=#288 id=288 data-nosnippet>288</a>        </span><span class="kw">let </span>mixed_sky_aig = [<span class="string">"sky130_fd_sc_hd__inv_2"</span>, <span class="string">"AND2_00_0"</span>];
 <a href=#289 id=289 data-nosnippet>289</a>        <span class="macro">assert_eq!</span>(detect_library(mixed_sky_aig.iter()), CellLibrary::Mixed);
-<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">let </span>mixed_gf_sky = [
-<a href=#291 id=291 data-nosnippet>291</a>            <span class="string">"gf180mcu_fd_sc_mcu7t5v0__inv_2"</span>,
-<a href=#292 id=292 data-nosnippet>292</a>            <span class="string">"sky130_fd_sc_hd__nand2_1"</span>,
-<a href=#293 id=293 data-nosnippet>293</a>        ];
-<a href=#294 id=294 data-nosnippet>294</a>        <span class="macro">assert_eq!</span>(detect_library(mixed_gf_sky.iter()), CellLibrary::Mixed);
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span>mixed_gf_aig = [<span class="string">"gf180mcu_fd_sc_mcu7t5v0__inv_2"</span>, <span class="string">"AND2_00_0"</span>];
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="macro">assert_eq!</span>(detect_library(mixed_gf_aig.iter()), CellLibrary::Mixed);
-<a href=#297 id=297 data-nosnippet>297</a>
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="comment">// Empty defaults to AIGPDK
-<a href=#299 id=299 data-nosnippet>299</a>        </span><span class="kw">let </span>empty: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = <span class="macro">vec!</span>[];
-<a href=#300 id=300 data-nosnippet>300</a>        <span class="macro">assert_eq!</span>(detect_library(empty.iter()), CellLibrary::AIGPDK);
-<a href=#301 id=301 data-nosnippet>301</a>    }
-<a href=#302 id=302 data-nosnippet>302</a>
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="attr">#[test]
-<a href=#304 id=304 data-nosnippet>304</a>    </span><span class="kw">fn </span>pdk_variant_classify() {
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="macro">assert_eq!</span>(
-<a href=#306 id=306 data-nosnippet>306</a>            PdkVariant::classify(<span class="string">"sky130_fd_sc_hd__inv_2"</span>),
-<a href=#307 id=307 data-nosnippet>307</a>            <span class="prelude-val">Some</span>(PdkVariant::Sky130)
-<a href=#308 id=308 data-nosnippet>308</a>        );
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="macro">assert_eq!</span>(
-<a href=#310 id=310 data-nosnippet>310</a>            PdkVariant::classify(<span class="string">"gf180mcu_fd_sc_mcu7t5v0__nand2_4"</span>),
-<a href=#311 id=311 data-nosnippet>311</a>            <span class="prelude-val">Some</span>(PdkVariant::Gf180Mcu)
-<a href=#312 id=312 data-nosnippet>312</a>        );
-<a href=#313 id=313 data-nosnippet>313</a>        <span class="macro">assert_eq!</span>(PdkVariant::classify(<span class="string">"AND2_00_0"</span>), <span class="prelude-val">None</span>);
-<a href=#314 id=314 data-nosnippet>314</a>        <span class="macro">assert_eq!</span>(PdkVariant::classify(<span class="string">"DFF"</span>), <span class="prelude-val">None</span>);
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="comment">// SRAM IP macros are GF180MCU cells (parser-accepted, GF180MCU-
-<a href=#316 id=316 data-nosnippet>316</a>        // detected) but classify as `None` so they route to the
-<a href=#317 id=317 data-nosnippet>317</a>        // cell-library RAM path rather than the std-cell functional.v
-<a href=#318 id=318 data-nosnippet>318</a>        // decompose (which has no model for them — would panic).
-<a href=#319 id=319 data-nosnippet>319</a>        </span><span class="macro">assert!</span>(<span class="kw">crate</span>::gf180mcu::is_gf180mcu_cell(
-<a href=#320 id=320 data-nosnippet>320</a>            <span class="string">"gf180mcu_fd_ip_sram__sram512x8m8wm1"
-<a href=#321 id=321 data-nosnippet>321</a>        </span>));
-<a href=#322 id=322 data-nosnippet>322</a>        <span class="macro">assert_eq!</span>(
-<a href=#323 id=323 data-nosnippet>323</a>            PdkVariant::classify(<span class="string">"gf180mcu_fd_ip_sram__sram512x8m8wm1"</span>),
-<a href=#324 id=324 data-nosnippet>324</a>            <span class="prelude-val">None
-<a href=#325 id=325 data-nosnippet>325</a>        </span>);
-<a href=#326 id=326 data-nosnippet>326</a>        <span class="macro">assert_eq!</span>(
-<a href=#327 id=327 data-nosnippet>327</a>            PdkVariant::classify(<span class="string">"gf180mcu_fd_ip_sram__sram256x8m8wm1"</span>),
-<a href=#328 id=328 data-nosnippet>328</a>            <span class="prelude-val">None
-<a href=#329 id=329 data-nosnippet>329</a>        </span>);
-<a href=#330 id=330 data-nosnippet>330</a>    }
-<a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="attr">#[test]
-<a href=#333 id=333 data-nosnippet>333</a>    </span><span class="kw">fn </span>pdk_variant_async_pin_names() {
-<a href=#334 id=334 data-nosnippet>334</a>        <span class="macro">assert_eq!</span>(PdkVariant::Sky130.reset_pin(), <span class="string">"RESET_B"</span>);
-<a href=#335 id=335 data-nosnippet>335</a>        <span class="macro">assert_eq!</span>(PdkVariant::Sky130.set_pin(), <span class="string">"SET_B"</span>);
-<a href=#336 id=336 data-nosnippet>336</a>        <span class="macro">assert_eq!</span>(PdkVariant::Gf180Mcu.reset_pin(), <span class="string">"RN"</span>);
-<a href=#337 id=337 data-nosnippet>337</a>        <span class="macro">assert_eq!</span>(PdkVariant::Gf180Mcu.set_pin(), <span class="string">"SETN"</span>);
-<a href=#338 id=338 data-nosnippet>338</a>    }
-<a href=#339 id=339 data-nosnippet>339</a>}
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">let </span>mixed_gf_sky = [<span class="string">"gf180mcu_fd_sc_mcu7t5v0__inv_2"</span>, <span class="string">"sky130_fd_sc_hd__nand2_1"</span>];
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="macro">assert_eq!</span>(detect_library(mixed_gf_sky.iter()), CellLibrary::Mixed);
+<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">let </span>mixed_gf_aig = [<span class="string">"gf180mcu_fd_sc_mcu7t5v0__inv_2"</span>, <span class="string">"AND2_00_0"</span>];
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="macro">assert_eq!</span>(detect_library(mixed_gf_aig.iter()), CellLibrary::Mixed);
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="comment">// Empty defaults to AIGPDK
+<a href=#296 id=296 data-nosnippet>296</a>        </span><span class="kw">let </span>empty: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = <span class="macro">vec!</span>[];
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="macro">assert_eq!</span>(detect_library(empty.iter()), CellLibrary::AIGPDK);
+<a href=#298 id=298 data-nosnippet>298</a>    }
+<a href=#299 id=299 data-nosnippet>299</a>
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="attr">#[test]
+<a href=#301 id=301 data-nosnippet>301</a>    </span><span class="kw">fn </span>pdk_variant_classify() {
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="macro">assert_eq!</span>(
+<a href=#303 id=303 data-nosnippet>303</a>            PdkVariant::classify(<span class="string">"sky130_fd_sc_hd__inv_2"</span>),
+<a href=#304 id=304 data-nosnippet>304</a>            <span class="prelude-val">Some</span>(PdkVariant::Sky130)
+<a href=#305 id=305 data-nosnippet>305</a>        );
+<a href=#306 id=306 data-nosnippet>306</a>        <span class="macro">assert_eq!</span>(
+<a href=#307 id=307 data-nosnippet>307</a>            PdkVariant::classify(<span class="string">"gf180mcu_fd_sc_mcu7t5v0__nand2_4"</span>),
+<a href=#308 id=308 data-nosnippet>308</a>            <span class="prelude-val">Some</span>(PdkVariant::Gf180Mcu)
+<a href=#309 id=309 data-nosnippet>309</a>        );
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="macro">assert_eq!</span>(PdkVariant::classify(<span class="string">"AND2_00_0"</span>), <span class="prelude-val">None</span>);
+<a href=#311 id=311 data-nosnippet>311</a>        <span class="macro">assert_eq!</span>(PdkVariant::classify(<span class="string">"DFF"</span>), <span class="prelude-val">None</span>);
+<a href=#312 id=312 data-nosnippet>312</a>        <span class="comment">// SRAM IP macros are GF180MCU cells (parser-accepted, GF180MCU-
+<a href=#313 id=313 data-nosnippet>313</a>        // detected) but classify as `None` so they route to the
+<a href=#314 id=314 data-nosnippet>314</a>        // cell-library RAM path rather than the std-cell functional.v
+<a href=#315 id=315 data-nosnippet>315</a>        // decompose (which has no model for them — would panic).
+<a href=#316 id=316 data-nosnippet>316</a>        </span><span class="macro">assert!</span>(<span class="kw">crate</span>::gf180mcu::is_gf180mcu_cell(
+<a href=#317 id=317 data-nosnippet>317</a>            <span class="string">"gf180mcu_fd_ip_sram__sram512x8m8wm1"
+<a href=#318 id=318 data-nosnippet>318</a>        </span>));
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="macro">assert_eq!</span>(
+<a href=#320 id=320 data-nosnippet>320</a>            PdkVariant::classify(<span class="string">"gf180mcu_fd_ip_sram__sram512x8m8wm1"</span>),
+<a href=#321 id=321 data-nosnippet>321</a>            <span class="prelude-val">None
+<a href=#322 id=322 data-nosnippet>322</a>        </span>);
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="macro">assert_eq!</span>(
+<a href=#324 id=324 data-nosnippet>324</a>            PdkVariant::classify(<span class="string">"gf180mcu_fd_ip_sram__sram256x8m8wm1"</span>),
+<a href=#325 id=325 data-nosnippet>325</a>            <span class="prelude-val">None
+<a href=#326 id=326 data-nosnippet>326</a>        </span>);
+<a href=#327 id=327 data-nosnippet>327</a>    }
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a>    <span class="attr">#[test]
+<a href=#330 id=330 data-nosnippet>330</a>    </span><span class="kw">fn </span>pdk_variant_async_pin_names() {
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="macro">assert_eq!</span>(PdkVariant::Sky130.reset_pin(), <span class="string">"RESET_B"</span>);
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="macro">assert_eq!</span>(PdkVariant::Sky130.set_pin(), <span class="string">"SET_B"</span>);
+<a href=#333 id=333 data-nosnippet>333</a>        <span class="macro">assert_eq!</span>(PdkVariant::Gf180Mcu.reset_pin(), <span class="string">"RN"</span>);
+<a href=#334 id=334 data-nosnippet>334</a>        <span class="macro">assert_eq!</span>(PdkVariant::Gf180Mcu.set_pin(), <span class="string">"SETN"</span>);
+<a href=#335 id=335 data-nosnippet>335</a>    }
+<a href=#336 id=336 data-nosnippet>336</a>}
 </code></pre></div></section></main></body></html>

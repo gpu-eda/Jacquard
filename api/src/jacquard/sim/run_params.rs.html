@@ -15,34 +15,35 @@
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a>    <span class="kw">pub fn </span>load(path: <span class="kw-2">&amp;</span>Path) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
 <a href=#17 id=17 data-nosnippet>17</a>        <span class="kw">let </span>contents = std::fs::read_to_string(path)<span class="question-mark">?</span>;
-<a href=#18 id=18 data-nosnippet>18</a>        serde_json::from_str(<span class="kw-2">&amp;</span>contents).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-<a href=#19 id=19 data-nosnippet>19</a>    }
-<a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub fn </span>write(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; std::io::Result&lt;()&gt; {
-<a href=#22 id=22 data-nosnippet>22</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = path.parent() {
-<a href=#23 id=23 data-nosnippet>23</a>            std::fs::create_dir_all(parent)<span class="question-mark">?</span>;
-<a href=#24 id=24 data-nosnippet>24</a>        }
-<a href=#25 id=25 data-nosnippet>25</a>        <span class="kw">let </span>json = serde_json::to_string_pretty(<span class="self">self</span>)
-<a href=#26 id=26 data-nosnippet>26</a>            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))<span class="question-mark">?</span>;
-<a href=#27 id=27 data-nosnippet>27</a>        std::fs::write(path, json)
-<a href=#28 id=28 data-nosnippet>28</a>    }
-<a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a>    <span class="kw">pub fn </span>load_or_generate(path: <span class="kw-2">&amp;</span>Path) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
-<a href=#31 id=31 data-nosnippet>31</a>        <span class="kw">if </span>path.exists() {
-<a href=#32 id=32 data-nosnippet>32</a>            <span class="self">Self</span>::load(path)
-<a href=#33 id=33 data-nosnippet>33</a>        } <span class="kw">else </span>{
-<a href=#34 id=34 data-nosnippet>34</a>            <span class="kw">let </span>params = <span class="self">Self</span>::generate();
-<a href=#35 id=35 data-nosnippet>35</a>            params.write(path)<span class="question-mark">?</span>;
-<a href=#36 id=36 data-nosnippet>36</a>            <span class="prelude-val">Ok</span>(params)
-<a href=#37 id=37 data-nosnippet>37</a>        }
-<a href=#38 id=38 data-nosnippet>38</a>    }
-<a href=#39 id=39 data-nosnippet>39</a>
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">pub fn </span>domain_seed(<span class="kw-2">&amp;</span><span class="self">self</span>, domain_name: <span class="kw-2">&amp;</span>str) -&gt; u64 {
-<a href=#41 id=41 data-nosnippet>41</a>        <span class="kw">use </span>std::hash::{Hash, Hasher};
-<a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">let </span><span class="kw-2">mut </span>hasher = std::collections::hash_map::DefaultHasher::new();
-<a href=#43 id=43 data-nosnippet>43</a>        <span class="self">self</span>.master_seed.hash(<span class="kw-2">&amp;mut </span>hasher);
-<a href=#44 id=44 data-nosnippet>44</a>        domain_name.hash(<span class="kw-2">&amp;mut </span>hasher);
-<a href=#45 id=45 data-nosnippet>45</a>        hasher.finish()
-<a href=#46 id=46 data-nosnippet>46</a>    }
-<a href=#47 id=47 data-nosnippet>47</a>}
+<a href=#18 id=18 data-nosnippet>18</a>        serde_json::from_str(<span class="kw-2">&amp;</span>contents)
+<a href=#19 id=19 data-nosnippet>19</a>            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+<a href=#20 id=20 data-nosnippet>20</a>    }
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">pub fn </span>write(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; std::io::Result&lt;()&gt; {
+<a href=#23 id=23 data-nosnippet>23</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = path.parent() {
+<a href=#24 id=24 data-nosnippet>24</a>            std::fs::create_dir_all(parent)<span class="question-mark">?</span>;
+<a href=#25 id=25 data-nosnippet>25</a>        }
+<a href=#26 id=26 data-nosnippet>26</a>        <span class="kw">let </span>json = serde_json::to_string_pretty(<span class="self">self</span>)
+<a href=#27 id=27 data-nosnippet>27</a>            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))<span class="question-mark">?</span>;
+<a href=#28 id=28 data-nosnippet>28</a>        std::fs::write(path, json)
+<a href=#29 id=29 data-nosnippet>29</a>    }
+<a href=#30 id=30 data-nosnippet>30</a>
+<a href=#31 id=31 data-nosnippet>31</a>    <span class="kw">pub fn </span>load_or_generate(path: <span class="kw-2">&amp;</span>Path) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
+<a href=#32 id=32 data-nosnippet>32</a>        <span class="kw">if </span>path.exists() {
+<a href=#33 id=33 data-nosnippet>33</a>            <span class="self">Self</span>::load(path)
+<a href=#34 id=34 data-nosnippet>34</a>        } <span class="kw">else </span>{
+<a href=#35 id=35 data-nosnippet>35</a>            <span class="kw">let </span>params = <span class="self">Self</span>::generate();
+<a href=#36 id=36 data-nosnippet>36</a>            params.write(path)<span class="question-mark">?</span>;
+<a href=#37 id=37 data-nosnippet>37</a>            <span class="prelude-val">Ok</span>(params)
+<a href=#38 id=38 data-nosnippet>38</a>        }
+<a href=#39 id=39 data-nosnippet>39</a>    }
+<a href=#40 id=40 data-nosnippet>40</a>
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">pub fn </span>domain_seed(<span class="kw-2">&amp;</span><span class="self">self</span>, domain_name: <span class="kw-2">&amp;</span>str) -&gt; u64 {
+<a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">use </span>std::hash::{Hash, Hasher};
+<a href=#43 id=43 data-nosnippet>43</a>        <span class="kw">let </span><span class="kw-2">mut </span>hasher = std::collections::hash_map::DefaultHasher::new();
+<a href=#44 id=44 data-nosnippet>44</a>        <span class="self">self</span>.master_seed.hash(<span class="kw-2">&amp;mut </span>hasher);
+<a href=#45 id=45 data-nosnippet>45</a>        domain_name.hash(<span class="kw-2">&amp;mut </span>hasher);
+<a href=#46 id=46 data-nosnippet>46</a>        hasher.finish()
+<a href=#47 id=47 data-nosnippet>47</a>    }
+<a href=#48 id=48 data-nosnippet>48</a>}
 </code></pre></div></section></main></body></html>

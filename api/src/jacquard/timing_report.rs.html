@@ -299,481 +299,505 @@
 <a href=#299 id=299 data-nosnippet>299</a>    /// per-cycle cap (use with caution on violation-storm runs);
 <a href=#300 id=300 data-nosnippet>300</a>    /// `Some(n)` retains the first `n` records and counts the rest in
 <a href=#301 id=301 data-nosnippet>301</a>    /// `stats.violations_truncated`.
-<a href=#302 id=302 data-nosnippet>302</a>    </span><span class="kw">pub fn </span>new(
-<a href=#303 id=303 data-nosnippet>303</a>        metadata: RunMetadata,
-<a href=#304 id=304 data-nosnippet>304</a>        worst_slack_n: usize,
-<a href=#305 id=305 data-nosnippet>305</a>        max_violations: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#306 id=306 data-nosnippet>306</a>    ) -&gt; <span class="self">Self </span>{
-<a href=#307 id=307 data-nosnippet>307</a>        <span class="self">Self </span>{
-<a href=#308 id=308 data-nosnippet>308</a>            metadata,
-<a href=#309 id=309 data-nosnippet>309</a>            violations: Vec::new(),
-<a href=#310 id=310 data-nosnippet>310</a>            per_word: std::collections::HashMap::new(),
-<a href=#311 id=311 data-nosnippet>311</a>            setup_worst: WorstSlackTracker::with_capacity(worst_slack_n),
-<a href=#312 id=312 data-nosnippet>312</a>            hold_worst: WorstSlackTracker::with_capacity(worst_slack_n),
-<a href=#313 id=313 data-nosnippet>313</a>            max_violations,
-<a href=#314 id=314 data-nosnippet>314</a>            truncated: <span class="number">0</span>,
-<a href=#315 id=315 data-nosnippet>315</a>            total_setup_slack_ps: <span class="number">0</span>,
-<a href=#316 id=316 data-nosnippet>316</a>            total_hold_slack_ps: <span class="number">0</span>,
-<a href=#317 id=317 data-nosnippet>317</a>        }
-<a href=#318 id=318 data-nosnippet>318</a>    }
-<a href=#319 id=319 data-nosnippet>319</a>
-<a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">pub fn </span>observe(<span class="kw-2">&amp;mut </span><span class="self">self</span>, v: ViolationRecord) {
-<a href=#321 id=321 data-nosnippet>321</a>        <span class="comment">// Worst-slack, per-word, and the TNS/THS sums always see every
-<a href=#322 id=322 data-nosnippet>322</a>        // violation; only the per-cycle list is bounded. Guard on
-<a href=#323 id=323 data-nosnippet>323</a>        // `slack_ps &lt; 0` so TNS/THS stay true "total *negative* slack"
-<a href=#324 id=324 data-nosnippet>324</a>        // even if a zero/positive-slack record is ever observed.
-<a href=#325 id=325 data-nosnippet>325</a>        </span><span class="kw">match </span>v.kind {
-<a href=#326 id=326 data-nosnippet>326</a>            ViolationKind::Setup =&gt; {
-<a href=#327 id=327 data-nosnippet>327</a>                <span class="kw">if </span>v.slack_ps &lt; <span class="number">0 </span>{
-<a href=#328 id=328 data-nosnippet>328</a>                    <span class="self">self</span>.total_setup_slack_ps += v.slack_ps <span class="kw">as </span>i64;
-<a href=#329 id=329 data-nosnippet>329</a>                }
-<a href=#330 id=330 data-nosnippet>330</a>                <span class="self">self</span>.setup_worst.push(v.clone())
-<a href=#331 id=331 data-nosnippet>331</a>            }
-<a href=#332 id=332 data-nosnippet>332</a>            ViolationKind::Hold =&gt; {
-<a href=#333 id=333 data-nosnippet>333</a>                <span class="kw">if </span>v.slack_ps &lt; <span class="number">0 </span>{
-<a href=#334 id=334 data-nosnippet>334</a>                    <span class="self">self</span>.total_hold_slack_ps += v.slack_ps <span class="kw">as </span>i64;
-<a href=#335 id=335 data-nosnippet>335</a>                }
-<a href=#336 id=336 data-nosnippet>336</a>                <span class="self">self</span>.hold_worst.push(v.clone())
-<a href=#337 id=337 data-nosnippet>337</a>            }
-<a href=#338 id=338 data-nosnippet>338</a>        }
-<a href=#339 id=339 data-nosnippet>339</a>        update_per_word(<span class="kw-2">&amp;mut </span><span class="self">self</span>.per_word, <span class="kw-2">&amp;</span>v);
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">match </span><span class="self">self</span>.max_violations {
-<a href=#341 id=341 data-nosnippet>341</a>            <span class="prelude-val">Some</span>(cap) <span class="kw">if </span><span class="self">self</span>.violations.len() &gt;= cap =&gt; {
-<a href=#342 id=342 data-nosnippet>342</a>                <span class="self">self</span>.truncated = <span class="self">self</span>.truncated.saturating_add(<span class="number">1</span>);
-<a href=#343 id=343 data-nosnippet>343</a>            }
-<a href=#344 id=344 data-nosnippet>344</a>            <span class="kw">_ </span>=&gt; <span class="self">self</span>.violations.push(v),
-<a href=#345 id=345 data-nosnippet>345</a>        }
-<a href=#346 id=346 data-nosnippet>346</a>    }
-<a href=#347 id=347 data-nosnippet>347</a>
-<a href=#348 id=348 data-nosnippet>348</a>    <span class="doccomment">/// Finalise into a `TimingReport`. The builder fills in
-<a href=#349 id=349 data-nosnippet>349</a>    /// `cycles_run` (from the argument) and `violations_truncated`
-<a href=#350 id=350 data-nosnippet>350</a>    /// (from its own counter). The caller-supplied
-<a href=#351 id=351 data-nosnippet>351</a>    /// `stats.violations_truncated` is overwritten.
-<a href=#352 id=352 data-nosnippet>352</a>    </span><span class="kw">pub fn </span>finalize(<span class="kw-2">mut </span><span class="self">self</span>, cycles_run: u32, <span class="kw-2">mut </span>stats: ReportStats) -&gt; TimingReport {
-<a href=#353 id=353 data-nosnippet>353</a>        <span class="self">self</span>.metadata.cycles_run = cycles_run;
-<a href=#354 id=354 data-nosnippet>354</a>        stats.violations_truncated = <span class="self">self</span>.truncated;
-<a href=#355 id=355 data-nosnippet>355</a>        stats.total_setup_slack_ps = <span class="self">self</span>.total_setup_slack_ps;
-<a href=#356 id=356 data-nosnippet>356</a>        stats.total_hold_slack_ps = <span class="self">self</span>.total_hold_slack_ps;
-<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">let </span>per_word = sort_per_word(<span class="self">self</span>.per_word.into_values().collect());
-<a href=#358 id=358 data-nosnippet>358</a>        TimingReport {
-<a href=#359 id=359 data-nosnippet>359</a>            schema_version: SCHEMA_VERSION.to_string(),
-<a href=#360 id=360 data-nosnippet>360</a>            metadata: <span class="self">self</span>.metadata,
-<a href=#361 id=361 data-nosnippet>361</a>            stats,
-<a href=#362 id=362 data-nosnippet>362</a>            violations: <span class="self">self</span>.violations,
-<a href=#363 id=363 data-nosnippet>363</a>            per_word,
-<a href=#364 id=364 data-nosnippet>364</a>            worst_slack: WorstSlack {
-<a href=#365 id=365 data-nosnippet>365</a>                setup: <span class="self">self</span>.setup_worst.into_sorted_vec(),
-<a href=#366 id=366 data-nosnippet>366</a>                hold: <span class="self">self</span>.hold_worst.into_sorted_vec(),
-<a href=#367 id=367 data-nosnippet>367</a>            },
-<a href=#368 id=368 data-nosnippet>368</a>        }
-<a href=#369 id=369 data-nosnippet>369</a>    }
-<a href=#370 id=370 data-nosnippet>370</a>}
-<a href=#371 id=371 data-nosnippet>371</a>
-<a href=#372 id=372 data-nosnippet>372</a><span class="doccomment">/// Bounded top-N tracker keeping the most-negative slacks (closest to
-<a href=#373 id=373 data-nosnippet>373</a>/// or beyond violation). Internally a `Vec` since N is small (default 10).
-<a href=#374 id=374 data-nosnippet>374</a></span><span class="kw">struct </span>WorstSlackTracker {
-<a href=#375 id=375 data-nosnippet>375</a>    capacity: usize,
-<a href=#376 id=376 data-nosnippet>376</a>    items: Vec&lt;ViolationRecord&gt;,
-<a href=#377 id=377 data-nosnippet>377</a>}
-<a href=#378 id=378 data-nosnippet>378</a>
-<a href=#379 id=379 data-nosnippet>379</a><span class="kw">impl </span>WorstSlackTracker {
-<a href=#380 id=380 data-nosnippet>380</a>    <span class="kw">fn </span>with_capacity(capacity: usize) -&gt; <span class="self">Self </span>{
-<a href=#381 id=381 data-nosnippet>381</a>        <span class="self">Self </span>{
-<a href=#382 id=382 data-nosnippet>382</a>            capacity: capacity.max(<span class="number">1</span>),
-<a href=#383 id=383 data-nosnippet>383</a>            items: Vec::with_capacity(capacity.max(<span class="number">1</span>)),
-<a href=#384 id=384 data-nosnippet>384</a>        }
-<a href=#385 id=385 data-nosnippet>385</a>    }
-<a href=#386 id=386 data-nosnippet>386</a>
-<a href=#387 id=387 data-nosnippet>387</a>    <span class="kw">fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, v: ViolationRecord) {
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="comment">// Worst = most negative slack; we keep the smallest N.
-<a href=#389 id=389 data-nosnippet>389</a>        </span><span class="kw">if </span><span class="self">self</span>.items.len() &lt; <span class="self">self</span>.capacity {
-<a href=#390 id=390 data-nosnippet>390</a>            <span class="self">self</span>.items.push(v);
-<a href=#391 id=391 data-nosnippet>391</a>            <span class="kw">return</span>;
-<a href=#392 id=392 data-nosnippet>392</a>        }
-<a href=#393 id=393 data-nosnippet>393</a>        <span class="comment">// Find the largest (least negative) currently in the set; replace if v is smaller.
-<a href=#394 id=394 data-nosnippet>394</a>        </span><span class="kw">let </span>(idx, max) = <span class="self">self
-<a href=#395 id=395 data-nosnippet>395</a>            </span>.items
-<a href=#396 id=396 data-nosnippet>396</a>            .iter()
-<a href=#397 id=397 data-nosnippet>397</a>            .enumerate()
-<a href=#398 id=398 data-nosnippet>398</a>            .max_by(|(<span class="kw">_</span>, a), (<span class="kw">_</span>, b)| a.slack_ps.cmp(<span class="kw-2">&amp;</span>b.slack_ps))
-<a href=#399 id=399 data-nosnippet>399</a>            .expect(<span class="string">"non-empty by construction"</span>);
-<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">if </span>v.slack_ps &lt; max.slack_ps {
-<a href=#401 id=401 data-nosnippet>401</a>            <span class="self">self</span>.items[idx] = v;
-<a href=#402 id=402 data-nosnippet>402</a>        }
-<a href=#403 id=403 data-nosnippet>403</a>    }
-<a href=#404 id=404 data-nosnippet>404</a>
-<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">fn </span>into_sorted_vec(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; Vec&lt;ViolationRecord&gt; {
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="self">self</span>.items.sort_by(|a, b| <span class="kw">match </span>a.slack_ps.cmp(<span class="kw-2">&amp;</span>b.slack_ps) {
-<a href=#407 id=407 data-nosnippet>407</a>            Ordering::Equal =&gt; a.cycle.cmp(<span class="kw-2">&amp;</span>b.cycle),
-<a href=#408 id=408 data-nosnippet>408</a>            other =&gt; other,
-<a href=#409 id=409 data-nosnippet>409</a>        });
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="self">self</span>.items
-<a href=#411 id=411 data-nosnippet>411</a>    }
-<a href=#412 id=412 data-nosnippet>412</a>}
-<a href=#413 id=413 data-nosnippet>413</a>
-<a href=#414 id=414 data-nosnippet>414</a><span class="doccomment">/// Fold one violation into the running per-word table. Used during
-<a href=#415 id=415 data-nosnippet>415</a>/// `ReportBuilder::observe` so the aggregate sees every event even
-<a href=#416 id=416 data-nosnippet>416</a>/// when the per-cycle list is capped.
-<a href=#417 id=417 data-nosnippet>417</a></span><span class="kw">fn </span>update_per_word(
-<a href=#418 id=418 data-nosnippet>418</a>    by_word: <span class="kw-2">&amp;mut </span>std::collections::HashMap&lt;u32, PerWordSummary&gt;,
-<a href=#419 id=419 data-nosnippet>419</a>    v: <span class="kw-2">&amp;</span>ViolationRecord,
-<a href=#420 id=420 data-nosnippet>420</a>) {
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">let </span>entry = by_word.entry(v.word_id).or_insert_with(|| PerWordSummary {
-<a href=#422 id=422 data-nosnippet>422</a>        word_id: v.word_id,
-<a href=#423 id=423 data-nosnippet>423</a>        site: v.site.clone(),
-<a href=#424 id=424 data-nosnippet>424</a>        setup_violations: <span class="number">0</span>,
-<a href=#425 id=425 data-nosnippet>425</a>        hold_violations: <span class="number">0</span>,
-<a href=#426 id=426 data-nosnippet>426</a>        worst_setup_slack_ps: <span class="prelude-val">None</span>,
-<a href=#427 id=427 data-nosnippet>427</a>        worst_hold_slack_ps: <span class="prelude-val">None</span>,
-<a href=#428 id=428 data-nosnippet>428</a>        worst_arrival_ps: <span class="prelude-val">None</span>,
-<a href=#429 id=429 data-nosnippet>429</a>    });
-<a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">match </span>v.kind {
-<a href=#431 id=431 data-nosnippet>431</a>        ViolationKind::Setup =&gt; {
-<a href=#432 id=432 data-nosnippet>432</a>            entry.setup_violations += <span class="number">1</span>;
-<a href=#433 id=433 data-nosnippet>433</a>            entry.worst_setup_slack_ps = <span class="prelude-val">Some</span>(<span class="kw">match </span>entry.worst_setup_slack_ps {
-<a href=#434 id=434 data-nosnippet>434</a>                <span class="prelude-val">Some</span>(s) =&gt; s.min(v.slack_ps),
-<a href=#435 id=435 data-nosnippet>435</a>                <span class="prelude-val">None </span>=&gt; v.slack_ps,
-<a href=#436 id=436 data-nosnippet>436</a>            });
-<a href=#437 id=437 data-nosnippet>437</a>        }
-<a href=#438 id=438 data-nosnippet>438</a>        ViolationKind::Hold =&gt; {
-<a href=#439 id=439 data-nosnippet>439</a>            entry.hold_violations += <span class="number">1</span>;
-<a href=#440 id=440 data-nosnippet>440</a>            entry.worst_hold_slack_ps = <span class="prelude-val">Some</span>(<span class="kw">match </span>entry.worst_hold_slack_ps {
-<a href=#441 id=441 data-nosnippet>441</a>                <span class="prelude-val">Some</span>(s) =&gt; s.min(v.slack_ps),
-<a href=#442 id=442 data-nosnippet>442</a>                <span class="prelude-val">None </span>=&gt; v.slack_ps,
-<a href=#443 id=443 data-nosnippet>443</a>            });
-<a href=#444 id=444 data-nosnippet>444</a>        }
-<a href=#445 id=445 data-nosnippet>445</a>    }
-<a href=#446 id=446 data-nosnippet>446</a>    entry.worst_arrival_ps = <span class="prelude-val">Some</span>(<span class="kw">match </span>entry.worst_arrival_ps {
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="prelude-val">Some</span>(a) =&gt; a.max(v.arrival_ps),
-<a href=#448 id=448 data-nosnippet>448</a>        <span class="prelude-val">None </span>=&gt; v.arrival_ps,
-<a href=#449 id=449 data-nosnippet>449</a>    });
-<a href=#450 id=450 data-nosnippet>450</a>}
-<a href=#451 id=451 data-nosnippet>451</a>
-<a href=#452 id=452 data-nosnippet>452</a><span class="doccomment">/// Sort the per-word table for output: descending by total violation
-<a href=#453 id=453 data-nosnippet>453</a>/// count, then ascending by word_id for deterministic ties.
-<a href=#454 id=454 data-nosnippet>454</a></span><span class="kw">fn </span>sort_per_word(<span class="kw-2">mut </span>summaries: Vec&lt;PerWordSummary&gt;) -&gt; Vec&lt;PerWordSummary&gt; {
-<a href=#455 id=455 data-nosnippet>455</a>    summaries.sort_by(|a, b| {
-<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">let </span>total_a = a.setup_violations + a.hold_violations;
-<a href=#457 id=457 data-nosnippet>457</a>        <span class="kw">let </span>total_b = b.setup_violations + b.hold_violations;
-<a href=#458 id=458 data-nosnippet>458</a>        total_b.cmp(<span class="kw-2">&amp;</span>total_a).then(a.word_id.cmp(<span class="kw-2">&amp;</span>b.word_id))
-<a href=#459 id=459 data-nosnippet>459</a>    });
-<a href=#460 id=460 data-nosnippet>460</a>    summaries
-<a href=#461 id=461 data-nosnippet>461</a>}
-<a href=#462 id=462 data-nosnippet>462</a>
-<a href=#463 id=463 data-nosnippet>463</a><span class="attr">#[cfg(test)]
-<a href=#464 id=464 data-nosnippet>464</a></span><span class="kw">mod </span>tests {
-<a href=#465 id=465 data-nosnippet>465</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#466 id=466 data-nosnippet>466</a>
-<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">fn </span>make_violation(
-<a href=#468 id=468 data-nosnippet>468</a>        cycle: u32,
-<a href=#469 id=469 data-nosnippet>469</a>        kind: ViolationKind,
-<a href=#470 id=470 data-nosnippet>470</a>        word_id: u32,
-<a href=#471 id=471 data-nosnippet>471</a>        slack_ps: i32,
-<a href=#472 id=472 data-nosnippet>472</a>        arrival_ps: u32,
-<a href=#473 id=473 data-nosnippet>473</a>    ) -&gt; ViolationRecord {
-<a href=#474 id=474 data-nosnippet>474</a>        ViolationRecord {
-<a href=#475 id=475 data-nosnippet>475</a>            cycle,
-<a href=#476 id=476 data-nosnippet>476</a>            kind,
-<a href=#477 id=477 data-nosnippet>477</a>            word_id,
-<a href=#478 id=478 data-nosnippet>478</a>            site: <span class="macro">format!</span>(<span class="string">"dff_w{word_id}"</span>),
-<a href=#479 id=479 data-nosnippet>479</a>            arrival_ps,
-<a href=#480 id=480 data-nosnippet>480</a>            constraint_ps: <span class="number">1000</span>,
-<a href=#481 id=481 data-nosnippet>481</a>            slack_ps,
-<a href=#482 id=482 data-nosnippet>482</a>        }
-<a href=#483 id=483 data-nosnippet>483</a>    }
-<a href=#484 id=484 data-nosnippet>484</a>
-<a href=#485 id=485 data-nosnippet>485</a>    <span class="attr">#[test]
-<a href=#486 id=486 data-nosnippet>486</a>    </span><span class="kw">fn </span>schema_version_is_semver_like() {
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="macro">assert!</span>(SCHEMA_VERSION.split(<span class="string">'.'</span>).count() == <span class="number">3</span>);
-<a href=#488 id=488 data-nosnippet>488</a>    }
-<a href=#489 id=489 data-nosnippet>489</a>
-<a href=#490 id=490 data-nosnippet>490</a>    <span class="attr">#[test]
-<a href=#491 id=491 data-nosnippet>491</a>    </span><span class="kw">fn </span>empty_report_serializes_with_schema_version() {
-<a href=#492 id=492 data-nosnippet>492</a>        <span class="kw">let </span>r = TimingReport::new(RunMetadata {
-<a href=#493 id=493 data-nosnippet>493</a>            jacquard_version: <span class="string">"0.1.0"</span>.into(),
-<a href=#494 id=494 data-nosnippet>494</a>            clock_period_ps: <span class="number">1000</span>,
-<a href=#495 id=495 data-nosnippet>495</a>            ..Default::default()
-<a href=#496 id=496 data-nosnippet>496</a>        });
-<a href=#497 id=497 data-nosnippet>497</a>        <span class="kw">let </span>s = serde_json::to_string(<span class="kw-2">&amp;</span>r).unwrap();
-<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">let </span>expected = <span class="macro">format!</span>(<span class="string">r#""schema_version":"{SCHEMA_VERSION}""#</span>);
-<a href=#499 id=499 data-nosnippet>499</a>        <span class="macro">assert!</span>(s.contains(<span class="kw-2">&amp;</span>expected), <span class="string">"got: {s}"</span>);
-<a href=#500 id=500 data-nosnippet>500</a>        <span class="macro">assert!</span>(s.contains(<span class="string">r#""violations":[]"#</span>));
-<a href=#501 id=501 data-nosnippet>501</a>        <span class="macro">assert!</span>(s.contains(<span class="string">r#""per_word":[]"#</span>));
-<a href=#502 id=502 data-nosnippet>502</a>    }
-<a href=#503 id=503 data-nosnippet>503</a>
-<a href=#504 id=504 data-nosnippet>504</a>    <span class="attr">#[test]
-<a href=#505 id=505 data-nosnippet>505</a>    </span><span class="kw">fn </span>round_trip_preserves_data() {
-<a href=#506 id=506 data-nosnippet>506</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(
-<a href=#507 id=507 data-nosnippet>507</a>            RunMetadata {
-<a href=#508 id=508 data-nosnippet>508</a>                jacquard_version: <span class="string">"0.1.0"</span>.into(),
-<a href=#509 id=509 data-nosnippet>509</a>                clock_period_ps: <span class="number">1000</span>,
-<a href=#510 id=510 data-nosnippet>510</a>                ..Default::default()
-<a href=#511 id=511 data-nosnippet>511</a>            },
-<a href=#512 id=512 data-nosnippet>512</a>            <span class="number">5</span>,
-<a href=#513 id=513 data-nosnippet>513</a>            <span class="prelude-val">None</span>,
-<a href=#514 id=514 data-nosnippet>514</a>        );
-<a href=#515 id=515 data-nosnippet>515</a>        b.observe(make_violation(<span class="number">10</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">100</span>, <span class="number">1100</span>));
-<a href=#516 id=516 data-nosnippet>516</a>        b.observe(make_violation(<span class="number">11</span>, ViolationKind::Hold, <span class="number">7</span>, -<span class="number">20</span>, <span class="number">30</span>));
-<a href=#517 id=517 data-nosnippet>517</a>        <span class="kw">let </span>report = b.finalize(<span class="number">50</span>, ReportStats { setup_violations: <span class="number">1</span>, hold_violations: <span class="number">1</span>, ..Default::default() });
-<a href=#518 id=518 data-nosnippet>518</a>        <span class="kw">let </span>json = serde_json::to_string(<span class="kw-2">&amp;</span>report).unwrap();
-<a href=#519 id=519 data-nosnippet>519</a>        <span class="kw">let </span>parsed: TimingReport = serde_json::from_str(<span class="kw-2">&amp;</span>json).unwrap();
-<a href=#520 id=520 data-nosnippet>520</a>        <span class="macro">assert_eq!</span>(parsed.violations.len(), <span class="number">2</span>);
-<a href=#521 id=521 data-nosnippet>521</a>        <span class="macro">assert_eq!</span>(parsed.metadata.cycles_run, <span class="number">50</span>);
-<a href=#522 id=522 data-nosnippet>522</a>        <span class="macro">assert_eq!</span>(parsed.stats.setup_violations, <span class="number">1</span>);
-<a href=#523 id=523 data-nosnippet>523</a>    }
-<a href=#524 id=524 data-nosnippet>524</a>
-<a href=#525 id=525 data-nosnippet>525</a>    <span class="attr">#[test]
-<a href=#526 id=526 data-nosnippet>526</a>    </span><span class="kw">fn </span>tns_ths_accumulate_across_observations() {
-<a href=#527 id=527 data-nosnippet>527</a>        <span class="comment">// Ported from PR #17: WNS/WHS are the single worst; TNS/THS are
-<a href=#528 id=528 data-nosnippet>528</a>        // the sums. Setup: -100 + -450 + -200 = -750 (WNS = -450).
-<a href=#529 id=529 data-nosnippet>529</a>        // Hold: -120 + -280 = -400 (WHS = -280).
-<a href=#530 id=530 data-nosnippet>530</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(
-<a href=#531 id=531 data-nosnippet>531</a>            RunMetadata {
-<a href=#532 id=532 data-nosnippet>532</a>                jacquard_version: <span class="string">"0.1.0"</span>.into(),
-<a href=#533 id=533 data-nosnippet>533</a>                clock_period_ps: <span class="number">1000</span>,
-<a href=#534 id=534 data-nosnippet>534</a>                ..Default::default()
-<a href=#535 id=535 data-nosnippet>535</a>            },
-<a href=#536 id=536 data-nosnippet>536</a>            <span class="number">5</span>,
-<a href=#537 id=537 data-nosnippet>537</a>            <span class="prelude-val">None</span>,
-<a href=#538 id=538 data-nosnippet>538</a>        );
-<a href=#539 id=539 data-nosnippet>539</a>        <span class="kw">for </span>slack <span class="kw">in </span>[-<span class="number">100</span>, -<span class="number">450</span>, -<span class="number">200</span>] {
-<a href=#540 id=540 data-nosnippet>540</a>            b.observe(make_violation(<span class="number">0</span>, ViolationKind::Setup, <span class="number">1</span>, slack, <span class="number">0</span>));
-<a href=#541 id=541 data-nosnippet>541</a>        }
-<a href=#542 id=542 data-nosnippet>542</a>        <span class="kw">for </span>slack <span class="kw">in </span>[-<span class="number">120</span>, -<span class="number">280</span>] {
-<a href=#543 id=543 data-nosnippet>543</a>            b.observe(make_violation(<span class="number">0</span>, ViolationKind::Hold, <span class="number">2</span>, slack, <span class="number">0</span>));
-<a href=#544 id=544 data-nosnippet>544</a>        }
-<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw">let </span>report = b.finalize(<span class="number">10</span>, ReportStats::default());
-<a href=#546 id=546 data-nosnippet>546</a>        <span class="macro">assert_eq!</span>(report.stats.total_setup_slack_ps, -<span class="number">750</span>, <span class="string">"TNS"</span>);
-<a href=#547 id=547 data-nosnippet>547</a>        <span class="macro">assert_eq!</span>(report.stats.total_hold_slack_ps, -<span class="number">400</span>, <span class="string">"THS"</span>);
-<a href=#548 id=548 data-nosnippet>548</a>        <span class="comment">// WNS/WHS unaffected — still the single worst.
-<a href=#549 id=549 data-nosnippet>549</a>        </span><span class="macro">assert_eq!</span>(report.worst_slack.setup[<span class="number">0</span>].slack_ps, -<span class="number">450</span>, <span class="string">"WNS"</span>);
-<a href=#550 id=550 data-nosnippet>550</a>        <span class="macro">assert_eq!</span>(report.worst_slack.hold[<span class="number">0</span>].slack_ps, -<span class="number">280</span>, <span class="string">"WHS"</span>);
-<a href=#551 id=551 data-nosnippet>551</a>        <span class="comment">// Survives a JSON round-trip (serde default keeps back-compat).
-<a href=#552 id=552 data-nosnippet>552</a>        </span><span class="kw">let </span>parsed: TimingReport =
-<a href=#553 id=553 data-nosnippet>553</a>            serde_json::from_str(<span class="kw-2">&amp;</span>serde_json::to_string(<span class="kw-2">&amp;</span>report).unwrap()).unwrap();
-<a href=#554 id=554 data-nosnippet>554</a>        <span class="macro">assert_eq!</span>(parsed.stats.total_setup_slack_ps, -<span class="number">750</span>);
-<a href=#555 id=555 data-nosnippet>555</a>        <span class="macro">assert_eq!</span>(parsed.stats.total_hold_slack_ps, -<span class="number">400</span>);
-<a href=#556 id=556 data-nosnippet>556</a>    }
-<a href=#557 id=557 data-nosnippet>557</a>
-<a href=#558 id=558 data-nosnippet>558</a>    <span class="attr">#[test]
-<a href=#559 id=559 data-nosnippet>559</a>    </span><span class="kw">fn </span>worst_slack_tracker_keeps_n_most_negative() {
-<a href=#560 id=560 data-nosnippet>560</a>        <span class="kw">let </span><span class="kw-2">mut </span>t = WorstSlackTracker::with_capacity(<span class="number">2</span>);
-<a href=#561 id=561 data-nosnippet>561</a>        <span class="kw">for </span>slack <span class="kw">in </span>[-<span class="number">10</span>, -<span class="number">50</span>, -<span class="number">5</span>, -<span class="number">100</span>, -<span class="number">30</span>] {
-<a href=#562 id=562 data-nosnippet>562</a>            t.push(make_violation(<span class="number">0</span>, ViolationKind::Setup, <span class="number">0</span>, slack, <span class="number">0</span>));
-<a href=#563 id=563 data-nosnippet>563</a>        }
-<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw">let </span>kept: Vec&lt;i32&gt; = t.into_sorted_vec().iter().map(|v| v.slack_ps).collect();
-<a href=#565 id=565 data-nosnippet>565</a>        <span class="macro">assert_eq!</span>(kept, <span class="macro">vec!</span>[-<span class="number">100</span>, -<span class="number">50</span>]);
-<a href=#566 id=566 data-nosnippet>566</a>    }
-<a href=#567 id=567 data-nosnippet>567</a>
-<a href=#568 id=568 data-nosnippet>568</a>    <span class="attr">#[test]
-<a href=#569 id=569 data-nosnippet>569</a>    </span><span class="kw">fn </span>worst_slack_tracker_capacity_one() {
-<a href=#570 id=570 data-nosnippet>570</a>        <span class="comment">// `with_capacity(0)` floors to 1; the test name reflects the
-<a href=#571 id=571 data-nosnippet>571</a>        // resulting capacity, not the input.
-<a href=#572 id=572 data-nosnippet>572</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>t = WorstSlackTracker::with_capacity(<span class="number">0</span>);
-<a href=#573 id=573 data-nosnippet>573</a>        t.push(make_violation(<span class="number">0</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
-<a href=#574 id=574 data-nosnippet>574</a>        t.push(make_violation(<span class="number">1</span>, ViolationKind::Setup, <span class="number">1</span>, -<span class="number">5</span>, <span class="number">0</span>));
-<a href=#575 id=575 data-nosnippet>575</a>        <span class="kw">let </span>kept = t.into_sorted_vec();
-<a href=#576 id=576 data-nosnippet>576</a>        <span class="macro">assert_eq!</span>(kept.len(), <span class="number">1</span>);
-<a href=#577 id=577 data-nosnippet>577</a>        <span class="macro">assert_eq!</span>(kept[<span class="number">0</span>].slack_ps, -<span class="number">10</span>);
-<a href=#578 id=578 data-nosnippet>578</a>    }
-<a href=#579 id=579 data-nosnippet>579</a>
-<a href=#580 id=580 data-nosnippet>580</a>    <span class="attr">#[test]
-<a href=#581 id=581 data-nosnippet>581</a>    </span><span class="kw">fn </span>worst_slack_tracker_ties_break_by_cycle() {
-<a href=#582 id=582 data-nosnippet>582</a>        <span class="kw">let </span><span class="kw-2">mut </span>t = WorstSlackTracker::with_capacity(<span class="number">3</span>);
-<a href=#583 id=583 data-nosnippet>583</a>        t.push(make_violation(<span class="number">20</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">50</span>, <span class="number">0</span>));
-<a href=#584 id=584 data-nosnippet>584</a>        t.push(make_violation(<span class="number">10</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">50</span>, <span class="number">0</span>));
-<a href=#585 id=585 data-nosnippet>585</a>        t.push(make_violation(<span class="number">30</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">50</span>, <span class="number">0</span>));
-<a href=#586 id=586 data-nosnippet>586</a>        <span class="kw">let </span>kept: Vec&lt;u32&gt; = t.into_sorted_vec().iter().map(|v| v.cycle).collect();
-<a href=#587 id=587 data-nosnippet>587</a>        <span class="macro">assert_eq!</span>(kept, <span class="macro">vec!</span>[<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>]);
-<a href=#588 id=588 data-nosnippet>588</a>    }
-<a href=#589 id=589 data-nosnippet>589</a>
-<a href=#590 id=590 data-nosnippet>590</a>    <span class="kw">fn </span>aggregate_via_builder(violations: Vec&lt;ViolationRecord&gt;) -&gt; Vec&lt;PerWordSummary&gt; {
-<a href=#591 id=591 data-nosnippet>591</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">1</span>, <span class="prelude-val">None</span>);
-<a href=#592 id=592 data-nosnippet>592</a>        <span class="kw">for </span>v <span class="kw">in </span>violations {
-<a href=#593 id=593 data-nosnippet>593</a>            b.observe(v);
-<a href=#594 id=594 data-nosnippet>594</a>        }
-<a href=#595 id=595 data-nosnippet>595</a>        b.finalize(<span class="number">0</span>, ReportStats::default()).per_word
-<a href=#596 id=596 data-nosnippet>596</a>    }
-<a href=#597 id=597 data-nosnippet>597</a>
-<a href=#598 id=598 data-nosnippet>598</a>    <span class="attr">#[test]
-<a href=#599 id=599 data-nosnippet>599</a>    </span><span class="kw">fn </span>per_word_aggregates_setup_and_hold_separately() {
-<a href=#600 id=600 data-nosnippet>600</a>        <span class="kw">let </span>agg = aggregate_via_builder(<span class="macro">vec!</span>[
-<a href=#601 id=601 data-nosnippet>601</a>            make_violation(<span class="number">1</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">100</span>, <span class="number">1100</span>),
-<a href=#602 id=602 data-nosnippet>602</a>            make_violation(<span class="number">2</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">50</span>, <span class="number">1050</span>),
-<a href=#603 id=603 data-nosnippet>603</a>            make_violation(<span class="number">3</span>, ViolationKind::Hold, <span class="number">5</span>, -<span class="number">10</span>, <span class="number">5</span>),
-<a href=#604 id=604 data-nosnippet>604</a>            make_violation(<span class="number">4</span>, ViolationKind::Setup, <span class="number">7</span>, -<span class="number">200</span>, <span class="number">1200</span>),
-<a href=#605 id=605 data-nosnippet>605</a>        ]);
-<a href=#606 id=606 data-nosnippet>606</a>        <span class="macro">assert_eq!</span>(agg.len(), <span class="number">2</span>);
-<a href=#607 id=607 data-nosnippet>607</a>        <span class="comment">// sorted by total violations desc → word 5 (3) before word 7 (1)
-<a href=#608 id=608 data-nosnippet>608</a>        </span><span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].word_id, <span class="number">5</span>);
-<a href=#609 id=609 data-nosnippet>609</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].setup_violations, <span class="number">2</span>);
-<a href=#610 id=610 data-nosnippet>610</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].hold_violations, <span class="number">1</span>);
-<a href=#611 id=611 data-nosnippet>611</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].worst_setup_slack_ps, <span class="prelude-val">Some</span>(-<span class="number">100</span>));
-<a href=#612 id=612 data-nosnippet>612</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].worst_hold_slack_ps, <span class="prelude-val">Some</span>(-<span class="number">10</span>));
-<a href=#613 id=613 data-nosnippet>613</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].worst_arrival_ps, <span class="prelude-val">Some</span>(<span class="number">1100</span>));
-<a href=#614 id=614 data-nosnippet>614</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">1</span>].word_id, <span class="number">7</span>);
-<a href=#615 id=615 data-nosnippet>615</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">1</span>].worst_setup_slack_ps, <span class="prelude-val">Some</span>(-<span class="number">200</span>));
-<a href=#616 id=616 data-nosnippet>616</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">1</span>].worst_hold_slack_ps, <span class="prelude-val">None</span>);
-<a href=#617 id=617 data-nosnippet>617</a>    }
-<a href=#618 id=618 data-nosnippet>618</a>
-<a href=#619 id=619 data-nosnippet>619</a>    <span class="attr">#[test]
-<a href=#620 id=620 data-nosnippet>620</a>    </span><span class="kw">fn </span>write_to_path_creates_parent_dirs() {
-<a href=#621 id=621 data-nosnippet>621</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#622 id=622 data-nosnippet>622</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"nested/sub/report.json"</span>);
-<a href=#623 id=623 data-nosnippet>623</a>        <span class="kw">let </span>r = TimingReport::new(RunMetadata {
-<a href=#624 id=624 data-nosnippet>624</a>            jacquard_version: <span class="string">"0.1.0"</span>.into(),
-<a href=#625 id=625 data-nosnippet>625</a>            clock_period_ps: <span class="number">1000</span>,
-<a href=#626 id=626 data-nosnippet>626</a>            ..Default::default()
-<a href=#627 id=627 data-nosnippet>627</a>        });
-<a href=#628 id=628 data-nosnippet>628</a>        r.write_to_path(<span class="kw-2">&amp;</span>path).unwrap();
-<a href=#629 id=629 data-nosnippet>629</a>        <span class="kw">let </span>text = std::fs::read_to_string(<span class="kw-2">&amp;</span>path).unwrap();
-<a href=#630 id=630 data-nosnippet>630</a>        <span class="kw">let </span>parsed: TimingReport = serde_json::from_str(<span class="kw-2">&amp;</span>text).unwrap();
-<a href=#631 id=631 data-nosnippet>631</a>        <span class="macro">assert_eq!</span>(parsed.schema_version, SCHEMA_VERSION);
-<a href=#632 id=632 data-nosnippet>632</a>    }
-<a href=#633 id=633 data-nosnippet>633</a>
-<a href=#634 id=634 data-nosnippet>634</a>    <span class="attr">#[test]
-<a href=#635 id=635 data-nosnippet>635</a>    </span><span class="kw">fn </span>per_word_worst_arrival_tracks_max_across_kinds_and_order() {
-<a href=#636 id=636 data-nosnippet>636</a>        <span class="comment">// Hold violations report small arrivals; setup violations large.
-<a href=#637 id=637 data-nosnippet>637</a>        // worst_arrival_ps must reflect the maximum regardless of kind or
-<a href=#638 id=638 data-nosnippet>638</a>        // observation order. Order: hold(arrival=10), setup(900), hold(20).
-<a href=#639 id=639 data-nosnippet>639</a>        </span><span class="kw">let </span>agg = aggregate_via_builder(<span class="macro">vec!</span>[
-<a href=#640 id=640 data-nosnippet>640</a>            make_violation(<span class="number">1</span>, ViolationKind::Hold, <span class="number">5</span>, -<span class="number">40</span>, <span class="number">10</span>),
-<a href=#641 id=641 data-nosnippet>641</a>            make_violation(<span class="number">2</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">100</span>, <span class="number">900</span>),
-<a href=#642 id=642 data-nosnippet>642</a>            make_violation(<span class="number">3</span>, ViolationKind::Hold, <span class="number">5</span>, -<span class="number">20</span>, <span class="number">20</span>),
-<a href=#643 id=643 data-nosnippet>643</a>        ]);
-<a href=#644 id=644 data-nosnippet>644</a>        <span class="macro">assert_eq!</span>(agg.len(), <span class="number">1</span>);
-<a href=#645 id=645 data-nosnippet>645</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].worst_arrival_ps, <span class="prelude-val">Some</span>(<span class="number">900</span>));
-<a href=#646 id=646 data-nosnippet>646</a>    }
-<a href=#647 id=647 data-nosnippet>647</a>
-<a href=#648 id=648 data-nosnippet>648</a>    <span class="attr">#[test]
-<a href=#649 id=649 data-nosnippet>649</a>    </span><span class="kw">fn </span>violations_array_caps_at_default() {
-<a href=#650 id=650 data-nosnippet>650</a>        <span class="comment">// DEFAULT_MAX_VIOLATIONS is 100k; sanity-test with a smaller cap.
-<a href=#651 id=651 data-nosnippet>651</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">5</span>, <span class="prelude-val">Some</span>(<span class="number">3</span>));
-<a href=#652 id=652 data-nosnippet>652</a>        <span class="kw">for </span>cycle <span class="kw">in </span><span class="number">0</span>..<span class="number">10 </span>{
-<a href=#653 id=653 data-nosnippet>653</a>            b.observe(make_violation(cycle, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
-<a href=#654 id=654 data-nosnippet>654</a>        }
-<a href=#655 id=655 data-nosnippet>655</a>        <span class="kw">let </span>report = b.finalize(<span class="number">10</span>, ReportStats::default());
-<a href=#656 id=656 data-nosnippet>656</a>        <span class="macro">assert_eq!</span>(report.violations.len(), <span class="number">3</span>);
-<a href=#657 id=657 data-nosnippet>657</a>        <span class="macro">assert_eq!</span>(report.stats.violations_truncated, <span class="number">7</span>);
-<a href=#658 id=658 data-nosnippet>658</a>        <span class="comment">// Worst-slack tracker still saw all 10.
-<a href=#659 id=659 data-nosnippet>659</a>        </span><span class="macro">assert_eq!</span>(report.worst_slack.setup.len(), <span class="number">5</span>);
-<a href=#660 id=660 data-nosnippet>660</a>        <span class="comment">// Per-word now reflects every observed violation (incrementally
-<a href=#661 id=661 data-nosnippet>661</a>        // updated in observe(), not re-derived from the truncated list).
-<a href=#662 id=662 data-nosnippet>662</a>        </span><span class="macro">assert_eq!</span>(report.per_word[<span class="number">0</span>].setup_violations, <span class="number">10</span>);
-<a href=#663 id=663 data-nosnippet>663</a>    }
-<a href=#664 id=664 data-nosnippet>664</a>
-<a href=#665 id=665 data-nosnippet>665</a>    <span class="attr">#[test]
-<a href=#666 id=666 data-nosnippet>666</a>    </span><span class="kw">fn </span>violations_array_unbounded_when_cap_none() {
-<a href=#667 id=667 data-nosnippet>667</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">5</span>, <span class="prelude-val">None</span>);
-<a href=#668 id=668 data-nosnippet>668</a>        <span class="kw">for </span>cycle <span class="kw">in </span><span class="number">0</span>..<span class="number">50 </span>{
-<a href=#669 id=669 data-nosnippet>669</a>            b.observe(make_violation(cycle, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
-<a href=#670 id=670 data-nosnippet>670</a>        }
-<a href=#671 id=671 data-nosnippet>671</a>        <span class="kw">let </span>report = b.finalize(<span class="number">50</span>, ReportStats::default());
-<a href=#672 id=672 data-nosnippet>672</a>        <span class="macro">assert_eq!</span>(report.violations.len(), <span class="number">50</span>);
-<a href=#673 id=673 data-nosnippet>673</a>        <span class="macro">assert_eq!</span>(report.stats.violations_truncated, <span class="number">0</span>);
-<a href=#674 id=674 data-nosnippet>674</a>    }
-<a href=#675 id=675 data-nosnippet>675</a>
-<a href=#676 id=676 data-nosnippet>676</a>    <span class="attr">#[test]
-<a href=#677 id=677 data-nosnippet>677</a>    </span><span class="kw">fn </span>truncated_count_appears_in_summary() {
-<a href=#678 id=678 data-nosnippet>678</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">5</span>, <span class="prelude-val">Some</span>(<span class="number">2</span>));
-<a href=#679 id=679 data-nosnippet>679</a>        <span class="kw">for </span>cycle <span class="kw">in </span><span class="number">0</span>..<span class="number">5 </span>{
-<a href=#680 id=680 data-nosnippet>680</a>            b.observe(make_violation(cycle, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
-<a href=#681 id=681 data-nosnippet>681</a>        }
-<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">let </span>report = b.finalize(<span class="number">5</span>, ReportStats::default());
-<a href=#683 id=683 data-nosnippet>683</a>        <span class="kw">let </span>summary = report.format_summary();
-<a href=#684 id=684 data-nosnippet>684</a>        <span class="macro">assert!</span>(
-<a href=#685 id=685 data-nosnippet>685</a>            summary.contains(<span class="string">"3 violation records dropped"</span>),
-<a href=#686 id=686 data-nosnippet>686</a>            <span class="string">"got: {summary}"
-<a href=#687 id=687 data-nosnippet>687</a>        </span>);
-<a href=#688 id=688 data-nosnippet>688</a>    }
-<a href=#689 id=689 data-nosnippet>689</a>
-<a href=#690 id=690 data-nosnippet>690</a>    <span class="attr">#[test]
-<a href=#691 id=691 data-nosnippet>691</a>    </span><span class="kw">fn </span>report_builder_routes_setup_and_hold_to_separate_trackers() {
-<a href=#692 id=692 data-nosnippet>692</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">3</span>, <span class="prelude-val">None</span>);
-<a href=#693 id=693 data-nosnippet>693</a>        b.observe(make_violation(<span class="number">1</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">100</span>, <span class="number">0</span>));
-<a href=#694 id=694 data-nosnippet>694</a>        b.observe(make_violation(<span class="number">2</span>, ViolationKind::Hold, <span class="number">1</span>, -<span class="number">5</span>, <span class="number">0</span>));
-<a href=#695 id=695 data-nosnippet>695</a>        b.observe(make_violation(<span class="number">3</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">200</span>, <span class="number">0</span>));
-<a href=#696 id=696 data-nosnippet>696</a>        <span class="kw">let </span>report = b.finalize(<span class="number">10</span>, ReportStats::default());
-<a href=#697 id=697 data-nosnippet>697</a>        <span class="macro">assert_eq!</span>(report.worst_slack.setup.len(), <span class="number">2</span>);
-<a href=#698 id=698 data-nosnippet>698</a>        <span class="macro">assert_eq!</span>(report.worst_slack.hold.len(), <span class="number">1</span>);
-<a href=#699 id=699 data-nosnippet>699</a>        <span class="macro">assert_eq!</span>(report.worst_slack.setup[<span class="number">0</span>].slack_ps, -<span class="number">200</span>);
-<a href=#700 id=700 data-nosnippet>700</a>    }
-<a href=#701 id=701 data-nosnippet>701</a>
-<a href=#702 id=702 data-nosnippet>702</a>    <span class="attr">#[test]
-<a href=#703 id=703 data-nosnippet>703</a>    </span><span class="kw">fn </span>format_summary_includes_metadata_and_violation_totals() {
-<a href=#704 id=704 data-nosnippet>704</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(
-<a href=#705 id=705 data-nosnippet>705</a>            RunMetadata {
-<a href=#706 id=706 data-nosnippet>706</a>                design: <span class="prelude-val">Some</span>(<span class="string">"tiny.gv"</span>.into()),
-<a href=#707 id=707 data-nosnippet>707</a>                vector_source: <span class="prelude-val">Some</span>(<span class="string">"boot.vcd"</span>.into()),
-<a href=#708 id=708 data-nosnippet>708</a>                timing_source: <span class="prelude-val">Some</span>(<span class="string">"tiny.jtir"</span>.into()),
-<a href=#709 id=709 data-nosnippet>709</a>                clock_period_ps: <span class="number">1000</span>,
-<a href=#710 id=710 data-nosnippet>710</a>                cycles_run: <span class="number">0</span>,
-<a href=#711 id=711 data-nosnippet>711</a>                jacquard_version: <span class="string">"0.1.0"</span>.into(),
-<a href=#712 id=712 data-nosnippet>712</a>            },
-<a href=#713 id=713 data-nosnippet>713</a>            <span class="number">5</span>,
-<a href=#714 id=714 data-nosnippet>714</a>            <span class="prelude-val">None</span>,
-<a href=#715 id=715 data-nosnippet>715</a>        );
-<a href=#716 id=716 data-nosnippet>716</a>        b.observe(make_violation(<span class="number">10</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">100</span>, <span class="number">1100</span>));
-<a href=#717 id=717 data-nosnippet>717</a>        b.observe(make_violation(<span class="number">11</span>, ViolationKind::Hold, <span class="number">7</span>, -<span class="number">20</span>, <span class="number">30</span>));
-<a href=#718 id=718 data-nosnippet>718</a>        <span class="kw">let </span>report = b.finalize(<span class="number">50</span>, ReportStats { setup_violations: <span class="number">1</span>, hold_violations: <span class="number">1</span>, ..Default::default() });
-<a href=#719 id=719 data-nosnippet>719</a>        <span class="kw">let </span>text = report.format_summary();
-<a href=#720 id=720 data-nosnippet>720</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Design:        tiny.gv"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#721 id=721 data-nosnippet>721</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Vectors:       boot.vcd (50 cycles)"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#722 id=722 data-nosnippet>722</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Clock period:  1000 ps"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#723 id=723 data-nosnippet>723</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Setup: 1"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#724 id=724 data-nosnippet>724</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Hold:  1"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#725 id=725 data-nosnippet>725</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Total: 2"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#726 id=726 data-nosnippet>726</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Setup: -100ps"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#727 id=727 data-nosnippet>727</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Hold: -20ps"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#728 id=728 data-nosnippet>728</a>    }
-<a href=#729 id=729 data-nosnippet>729</a>
-<a href=#730 id=730 data-nosnippet>730</a>    <span class="attr">#[test]
-<a href=#731 id=731 data-nosnippet>731</a>    </span><span class="kw">fn </span>format_summary_handles_no_violations() {
-<a href=#732 id=732 data-nosnippet>732</a>        <span class="kw">let </span>report = TimingReport::new(RunMetadata {
-<a href=#733 id=733 data-nosnippet>733</a>            design: <span class="prelude-val">Some</span>(<span class="string">"clean.gv"</span>.into()),
-<a href=#734 id=734 data-nosnippet>734</a>            jacquard_version: <span class="string">"0.1.0"</span>.into(),
-<a href=#735 id=735 data-nosnippet>735</a>            clock_period_ps: <span class="number">1000</span>,
-<a href=#736 id=736 data-nosnippet>736</a>            cycles_run: <span class="number">100</span>,
-<a href=#737 id=737 data-nosnippet>737</a>            ..Default::default()
-<a href=#738 id=738 data-nosnippet>738</a>        });
-<a href=#739 id=739 data-nosnippet>739</a>        <span class="kw">let </span>text = report.format_summary();
-<a href=#740 id=740 data-nosnippet>740</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Setup: 0"</span>));
-<a href=#741 id=741 data-nosnippet>741</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Hold:  0"</span>));
-<a href=#742 id=742 data-nosnippet>742</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Setup: (none)"</span>));
-<a href=#743 id=743 data-nosnippet>743</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Hold: (none)"</span>));
-<a href=#744 id=744 data-nosnippet>744</a>        <span class="macro">assert!</span>(!text.contains(<span class="string">"Top 0"</span>), <span class="string">"should not print empty top-N section"</span>);
-<a href=#745 id=745 data-nosnippet>745</a>    }
-<a href=#746 id=746 data-nosnippet>746</a>
-<a href=#747 id=747 data-nosnippet>747</a>    <span class="attr">#[test]
-<a href=#748 id=748 data-nosnippet>748</a>    </span><span class="kw">fn </span>format_summary_warns_on_dropped_events() {
-<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">5</span>, <span class="prelude-val">None</span>);
-<a href=#750 id=750 data-nosnippet>750</a>        b.observe(make_violation(<span class="number">1</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
-<a href=#751 id=751 data-nosnippet>751</a>        <span class="kw">let </span>report = b.finalize(<span class="number">10</span>, ReportStats { setup_violations: <span class="number">1</span>, events_dropped: <span class="number">42</span>, ..Default::default() });
-<a href=#752 id=752 data-nosnippet>752</a>        <span class="kw">let </span>text = report.format_summary();
-<a href=#753 id=753 data-nosnippet>753</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"42 events dropped"</span>), <span class="string">"got:\n{text}"</span>);
-<a href=#754 id=754 data-nosnippet>754</a>    }
-<a href=#755 id=755 data-nosnippet>755</a>
-<a href=#756 id=756 data-nosnippet>756</a>    <span class="doccomment">/// The sample fixture is pinned at schema_version 1.0.0 so that
-<a href=#757 id=757 data-nosnippet>757</a>    /// fields added in later minor versions (e.g. `stats.violations_truncated`
-<a href=#758 id=758 data-nosnippet>758</a>    /// in 1.1.0) regression-test their `#[serde(default)]` attribute.
-<a href=#759 id=759 data-nosnippet>759</a>    /// If this ever fails to parse against the current types, the
-<a href=#760 id=760 data-nosnippet>760</a>    /// schema has drifted in a non-additive way and the stability
-<a href=#761 id=761 data-nosnippet>761</a>    /// contract has been broken.
-<a href=#762 id=762 data-nosnippet>762</a>    </span><span class="attr">#[test]
-<a href=#763 id=763 data-nosnippet>763</a>    </span><span class="kw">fn </span>sample_fixture_parses_with_serde_default_for_newer_fields() {
-<a href=#764 id=764 data-nosnippet>764</a>        <span class="kw">let </span>path = std::path::Path::new(<span class="macro">env!</span>(<span class="string">"CARGO_MANIFEST_DIR"</span>))
-<a href=#765 id=765 data-nosnippet>765</a>            .join(<span class="string">"tests/timing_ir/sample_reports/two_violations.json"</span>);
-<a href=#766 id=766 data-nosnippet>766</a>        <span class="kw">let </span>text = std::fs::read_to_string(<span class="kw-2">&amp;</span>path)
-<a href=#767 id=767 data-nosnippet>767</a>            .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"read {}: {e}"</span>, path.display()));
-<a href=#768 id=768 data-nosnippet>768</a>        <span class="kw">let </span>parsed: TimingReport =
-<a href=#769 id=769 data-nosnippet>769</a>            serde_json::from_str(<span class="kw-2">&amp;</span>text).expect(<span class="string">"sample fixture failed to parse"</span>);
-<a href=#770 id=770 data-nosnippet>770</a>        <span class="macro">assert_eq!</span>(parsed.schema_version, <span class="string">"1.0.0"</span>);
-<a href=#771 id=771 data-nosnippet>771</a>        <span class="macro">assert_eq!</span>(parsed.violations.len(), <span class="number">3</span>);
-<a href=#772 id=772 data-nosnippet>772</a>        <span class="macro">assert_eq!</span>(parsed.per_word.len(), <span class="number">2</span>);
-<a href=#773 id=773 data-nosnippet>773</a>        <span class="macro">assert_eq!</span>(parsed.worst_slack.setup.len(), <span class="number">2</span>);
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="macro">assert_eq!</span>(parsed.worst_slack.hold.len(), <span class="number">1</span>);
-<a href=#775 id=775 data-nosnippet>775</a>        <span class="comment">// 1.1.0 field absent in the fixture; serde default kicks in.
-<a href=#776 id=776 data-nosnippet>776</a>        </span><span class="macro">assert_eq!</span>(parsed.stats.violations_truncated, <span class="number">0</span>);
-<a href=#777 id=777 data-nosnippet>777</a>    }
-<a href=#778 id=778 data-nosnippet>778</a>}
+<a href=#302 id=302 data-nosnippet>302</a>    </span><span class="kw">pub fn </span>new(metadata: RunMetadata, worst_slack_n: usize, max_violations: <span class="prelude-ty">Option</span>&lt;usize&gt;) -&gt; <span class="self">Self </span>{
+<a href=#303 id=303 data-nosnippet>303</a>        <span class="self">Self </span>{
+<a href=#304 id=304 data-nosnippet>304</a>            metadata,
+<a href=#305 id=305 data-nosnippet>305</a>            violations: Vec::new(),
+<a href=#306 id=306 data-nosnippet>306</a>            per_word: std::collections::HashMap::new(),
+<a href=#307 id=307 data-nosnippet>307</a>            setup_worst: WorstSlackTracker::with_capacity(worst_slack_n),
+<a href=#308 id=308 data-nosnippet>308</a>            hold_worst: WorstSlackTracker::with_capacity(worst_slack_n),
+<a href=#309 id=309 data-nosnippet>309</a>            max_violations,
+<a href=#310 id=310 data-nosnippet>310</a>            truncated: <span class="number">0</span>,
+<a href=#311 id=311 data-nosnippet>311</a>            total_setup_slack_ps: <span class="number">0</span>,
+<a href=#312 id=312 data-nosnippet>312</a>            total_hold_slack_ps: <span class="number">0</span>,
+<a href=#313 id=313 data-nosnippet>313</a>        }
+<a href=#314 id=314 data-nosnippet>314</a>    }
+<a href=#315 id=315 data-nosnippet>315</a>
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">pub fn </span>observe(<span class="kw-2">&amp;mut </span><span class="self">self</span>, v: ViolationRecord) {
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="comment">// Worst-slack, per-word, and the TNS/THS sums always see every
+<a href=#318 id=318 data-nosnippet>318</a>        // violation; only the per-cycle list is bounded. Guard on
+<a href=#319 id=319 data-nosnippet>319</a>        // `slack_ps &lt; 0` so TNS/THS stay true "total *negative* slack"
+<a href=#320 id=320 data-nosnippet>320</a>        // even if a zero/positive-slack record is ever observed.
+<a href=#321 id=321 data-nosnippet>321</a>        </span><span class="kw">match </span>v.kind {
+<a href=#322 id=322 data-nosnippet>322</a>            ViolationKind::Setup =&gt; {
+<a href=#323 id=323 data-nosnippet>323</a>                <span class="kw">if </span>v.slack_ps &lt; <span class="number">0 </span>{
+<a href=#324 id=324 data-nosnippet>324</a>                    <span class="self">self</span>.total_setup_slack_ps += v.slack_ps <span class="kw">as </span>i64;
+<a href=#325 id=325 data-nosnippet>325</a>                }
+<a href=#326 id=326 data-nosnippet>326</a>                <span class="self">self</span>.setup_worst.push(v.clone())
+<a href=#327 id=327 data-nosnippet>327</a>            }
+<a href=#328 id=328 data-nosnippet>328</a>            ViolationKind::Hold =&gt; {
+<a href=#329 id=329 data-nosnippet>329</a>                <span class="kw">if </span>v.slack_ps &lt; <span class="number">0 </span>{
+<a href=#330 id=330 data-nosnippet>330</a>                    <span class="self">self</span>.total_hold_slack_ps += v.slack_ps <span class="kw">as </span>i64;
+<a href=#331 id=331 data-nosnippet>331</a>                }
+<a href=#332 id=332 data-nosnippet>332</a>                <span class="self">self</span>.hold_worst.push(v.clone())
+<a href=#333 id=333 data-nosnippet>333</a>            }
+<a href=#334 id=334 data-nosnippet>334</a>        }
+<a href=#335 id=335 data-nosnippet>335</a>        update_per_word(<span class="kw-2">&amp;mut </span><span class="self">self</span>.per_word, <span class="kw-2">&amp;</span>v);
+<a href=#336 id=336 data-nosnippet>336</a>        <span class="kw">match </span><span class="self">self</span>.max_violations {
+<a href=#337 id=337 data-nosnippet>337</a>            <span class="prelude-val">Some</span>(cap) <span class="kw">if </span><span class="self">self</span>.violations.len() &gt;= cap =&gt; {
+<a href=#338 id=338 data-nosnippet>338</a>                <span class="self">self</span>.truncated = <span class="self">self</span>.truncated.saturating_add(<span class="number">1</span>);
+<a href=#339 id=339 data-nosnippet>339</a>            }
+<a href=#340 id=340 data-nosnippet>340</a>            <span class="kw">_ </span>=&gt; <span class="self">self</span>.violations.push(v),
+<a href=#341 id=341 data-nosnippet>341</a>        }
+<a href=#342 id=342 data-nosnippet>342</a>    }
+<a href=#343 id=343 data-nosnippet>343</a>
+<a href=#344 id=344 data-nosnippet>344</a>    <span class="doccomment">/// Finalise into a `TimingReport`. The builder fills in
+<a href=#345 id=345 data-nosnippet>345</a>    /// `cycles_run` (from the argument) and `violations_truncated`
+<a href=#346 id=346 data-nosnippet>346</a>    /// (from its own counter). The caller-supplied
+<a href=#347 id=347 data-nosnippet>347</a>    /// `stats.violations_truncated` is overwritten.
+<a href=#348 id=348 data-nosnippet>348</a>    </span><span class="kw">pub fn </span>finalize(<span class="kw-2">mut </span><span class="self">self</span>, cycles_run: u32, <span class="kw-2">mut </span>stats: ReportStats) -&gt; TimingReport {
+<a href=#349 id=349 data-nosnippet>349</a>        <span class="self">self</span>.metadata.cycles_run = cycles_run;
+<a href=#350 id=350 data-nosnippet>350</a>        stats.violations_truncated = <span class="self">self</span>.truncated;
+<a href=#351 id=351 data-nosnippet>351</a>        stats.total_setup_slack_ps = <span class="self">self</span>.total_setup_slack_ps;
+<a href=#352 id=352 data-nosnippet>352</a>        stats.total_hold_slack_ps = <span class="self">self</span>.total_hold_slack_ps;
+<a href=#353 id=353 data-nosnippet>353</a>        <span class="kw">let </span>per_word = sort_per_word(<span class="self">self</span>.per_word.into_values().collect());
+<a href=#354 id=354 data-nosnippet>354</a>        TimingReport {
+<a href=#355 id=355 data-nosnippet>355</a>            schema_version: SCHEMA_VERSION.to_string(),
+<a href=#356 id=356 data-nosnippet>356</a>            metadata: <span class="self">self</span>.metadata,
+<a href=#357 id=357 data-nosnippet>357</a>            stats,
+<a href=#358 id=358 data-nosnippet>358</a>            violations: <span class="self">self</span>.violations,
+<a href=#359 id=359 data-nosnippet>359</a>            per_word,
+<a href=#360 id=360 data-nosnippet>360</a>            worst_slack: WorstSlack {
+<a href=#361 id=361 data-nosnippet>361</a>                setup: <span class="self">self</span>.setup_worst.into_sorted_vec(),
+<a href=#362 id=362 data-nosnippet>362</a>                hold: <span class="self">self</span>.hold_worst.into_sorted_vec(),
+<a href=#363 id=363 data-nosnippet>363</a>            },
+<a href=#364 id=364 data-nosnippet>364</a>        }
+<a href=#365 id=365 data-nosnippet>365</a>    }
+<a href=#366 id=366 data-nosnippet>366</a>}
+<a href=#367 id=367 data-nosnippet>367</a>
+<a href=#368 id=368 data-nosnippet>368</a><span class="doccomment">/// Bounded top-N tracker keeping the most-negative slacks (closest to
+<a href=#369 id=369 data-nosnippet>369</a>/// or beyond violation). Internally a `Vec` since N is small (default 10).
+<a href=#370 id=370 data-nosnippet>370</a></span><span class="kw">struct </span>WorstSlackTracker {
+<a href=#371 id=371 data-nosnippet>371</a>    capacity: usize,
+<a href=#372 id=372 data-nosnippet>372</a>    items: Vec&lt;ViolationRecord&gt;,
+<a href=#373 id=373 data-nosnippet>373</a>}
+<a href=#374 id=374 data-nosnippet>374</a>
+<a href=#375 id=375 data-nosnippet>375</a><span class="kw">impl </span>WorstSlackTracker {
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="kw">fn </span>with_capacity(capacity: usize) -&gt; <span class="self">Self </span>{
+<a href=#377 id=377 data-nosnippet>377</a>        <span class="self">Self </span>{
+<a href=#378 id=378 data-nosnippet>378</a>            capacity: capacity.max(<span class="number">1</span>),
+<a href=#379 id=379 data-nosnippet>379</a>            items: Vec::with_capacity(capacity.max(<span class="number">1</span>)),
+<a href=#380 id=380 data-nosnippet>380</a>        }
+<a href=#381 id=381 data-nosnippet>381</a>    }
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a>    <span class="kw">fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, v: ViolationRecord) {
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="comment">// Worst = most negative slack; we keep the smallest N.
+<a href=#385 id=385 data-nosnippet>385</a>        </span><span class="kw">if </span><span class="self">self</span>.items.len() &lt; <span class="self">self</span>.capacity {
+<a href=#386 id=386 data-nosnippet>386</a>            <span class="self">self</span>.items.push(v);
+<a href=#387 id=387 data-nosnippet>387</a>            <span class="kw">return</span>;
+<a href=#388 id=388 data-nosnippet>388</a>        }
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="comment">// Find the largest (least negative) currently in the set; replace if v is smaller.
+<a href=#390 id=390 data-nosnippet>390</a>        </span><span class="kw">let </span>(idx, max) = <span class="self">self
+<a href=#391 id=391 data-nosnippet>391</a>            </span>.items
+<a href=#392 id=392 data-nosnippet>392</a>            .iter()
+<a href=#393 id=393 data-nosnippet>393</a>            .enumerate()
+<a href=#394 id=394 data-nosnippet>394</a>            .max_by(|(<span class="kw">_</span>, a), (<span class="kw">_</span>, b)| a.slack_ps.cmp(<span class="kw-2">&amp;</span>b.slack_ps))
+<a href=#395 id=395 data-nosnippet>395</a>            .expect(<span class="string">"non-empty by construction"</span>);
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">if </span>v.slack_ps &lt; max.slack_ps {
+<a href=#397 id=397 data-nosnippet>397</a>            <span class="self">self</span>.items[idx] = v;
+<a href=#398 id=398 data-nosnippet>398</a>        }
+<a href=#399 id=399 data-nosnippet>399</a>    }
+<a href=#400 id=400 data-nosnippet>400</a>
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">fn </span>into_sorted_vec(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; Vec&lt;ViolationRecord&gt; {
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="self">self</span>.items
+<a href=#403 id=403 data-nosnippet>403</a>            .sort_by(|a, b| <span class="kw">match </span>a.slack_ps.cmp(<span class="kw-2">&amp;</span>b.slack_ps) {
+<a href=#404 id=404 data-nosnippet>404</a>                Ordering::Equal =&gt; a.cycle.cmp(<span class="kw-2">&amp;</span>b.cycle),
+<a href=#405 id=405 data-nosnippet>405</a>                other =&gt; other,
+<a href=#406 id=406 data-nosnippet>406</a>            });
+<a href=#407 id=407 data-nosnippet>407</a>        <span class="self">self</span>.items
+<a href=#408 id=408 data-nosnippet>408</a>    }
+<a href=#409 id=409 data-nosnippet>409</a>}
+<a href=#410 id=410 data-nosnippet>410</a>
+<a href=#411 id=411 data-nosnippet>411</a><span class="doccomment">/// Fold one violation into the running per-word table. Used during
+<a href=#412 id=412 data-nosnippet>412</a>/// `ReportBuilder::observe` so the aggregate sees every event even
+<a href=#413 id=413 data-nosnippet>413</a>/// when the per-cycle list is capped.
+<a href=#414 id=414 data-nosnippet>414</a></span><span class="kw">fn </span>update_per_word(
+<a href=#415 id=415 data-nosnippet>415</a>    by_word: <span class="kw-2">&amp;mut </span>std::collections::HashMap&lt;u32, PerWordSummary&gt;,
+<a href=#416 id=416 data-nosnippet>416</a>    v: <span class="kw-2">&amp;</span>ViolationRecord,
+<a href=#417 id=417 data-nosnippet>417</a>) {
+<a href=#418 id=418 data-nosnippet>418</a>    <span class="kw">let </span>entry = by_word.entry(v.word_id).or_insert_with(|| PerWordSummary {
+<a href=#419 id=419 data-nosnippet>419</a>        word_id: v.word_id,
+<a href=#420 id=420 data-nosnippet>420</a>        site: v.site.clone(),
+<a href=#421 id=421 data-nosnippet>421</a>        setup_violations: <span class="number">0</span>,
+<a href=#422 id=422 data-nosnippet>422</a>        hold_violations: <span class="number">0</span>,
+<a href=#423 id=423 data-nosnippet>423</a>        worst_setup_slack_ps: <span class="prelude-val">None</span>,
+<a href=#424 id=424 data-nosnippet>424</a>        worst_hold_slack_ps: <span class="prelude-val">None</span>,
+<a href=#425 id=425 data-nosnippet>425</a>        worst_arrival_ps: <span class="prelude-val">None</span>,
+<a href=#426 id=426 data-nosnippet>426</a>    });
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">match </span>v.kind {
+<a href=#428 id=428 data-nosnippet>428</a>        ViolationKind::Setup =&gt; {
+<a href=#429 id=429 data-nosnippet>429</a>            entry.setup_violations += <span class="number">1</span>;
+<a href=#430 id=430 data-nosnippet>430</a>            entry.worst_setup_slack_ps = <span class="prelude-val">Some</span>(<span class="kw">match </span>entry.worst_setup_slack_ps {
+<a href=#431 id=431 data-nosnippet>431</a>                <span class="prelude-val">Some</span>(s) =&gt; s.min(v.slack_ps),
+<a href=#432 id=432 data-nosnippet>432</a>                <span class="prelude-val">None </span>=&gt; v.slack_ps,
+<a href=#433 id=433 data-nosnippet>433</a>            });
+<a href=#434 id=434 data-nosnippet>434</a>        }
+<a href=#435 id=435 data-nosnippet>435</a>        ViolationKind::Hold =&gt; {
+<a href=#436 id=436 data-nosnippet>436</a>            entry.hold_violations += <span class="number">1</span>;
+<a href=#437 id=437 data-nosnippet>437</a>            entry.worst_hold_slack_ps = <span class="prelude-val">Some</span>(<span class="kw">match </span>entry.worst_hold_slack_ps {
+<a href=#438 id=438 data-nosnippet>438</a>                <span class="prelude-val">Some</span>(s) =&gt; s.min(v.slack_ps),
+<a href=#439 id=439 data-nosnippet>439</a>                <span class="prelude-val">None </span>=&gt; v.slack_ps,
+<a href=#440 id=440 data-nosnippet>440</a>            });
+<a href=#441 id=441 data-nosnippet>441</a>        }
+<a href=#442 id=442 data-nosnippet>442</a>    }
+<a href=#443 id=443 data-nosnippet>443</a>    entry.worst_arrival_ps = <span class="prelude-val">Some</span>(<span class="kw">match </span>entry.worst_arrival_ps {
+<a href=#444 id=444 data-nosnippet>444</a>        <span class="prelude-val">Some</span>(a) =&gt; a.max(v.arrival_ps),
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="prelude-val">None </span>=&gt; v.arrival_ps,
+<a href=#446 id=446 data-nosnippet>446</a>    });
+<a href=#447 id=447 data-nosnippet>447</a>}
+<a href=#448 id=448 data-nosnippet>448</a>
+<a href=#449 id=449 data-nosnippet>449</a><span class="doccomment">/// Sort the per-word table for output: descending by total violation
+<a href=#450 id=450 data-nosnippet>450</a>/// count, then ascending by word_id for deterministic ties.
+<a href=#451 id=451 data-nosnippet>451</a></span><span class="kw">fn </span>sort_per_word(<span class="kw-2">mut </span>summaries: Vec&lt;PerWordSummary&gt;) -&gt; Vec&lt;PerWordSummary&gt; {
+<a href=#452 id=452 data-nosnippet>452</a>    summaries.sort_by(|a, b| {
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="kw">let </span>total_a = a.setup_violations + a.hold_violations;
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="kw">let </span>total_b = b.setup_violations + b.hold_violations;
+<a href=#455 id=455 data-nosnippet>455</a>        total_b.cmp(<span class="kw-2">&amp;</span>total_a).then(a.word_id.cmp(<span class="kw-2">&amp;</span>b.word_id))
+<a href=#456 id=456 data-nosnippet>456</a>    });
+<a href=#457 id=457 data-nosnippet>457</a>    summaries
+<a href=#458 id=458 data-nosnippet>458</a>}
+<a href=#459 id=459 data-nosnippet>459</a>
+<a href=#460 id=460 data-nosnippet>460</a><span class="attr">#[cfg(test)]
+<a href=#461 id=461 data-nosnippet>461</a></span><span class="kw">mod </span>tests {
+<a href=#462 id=462 data-nosnippet>462</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#463 id=463 data-nosnippet>463</a>
+<a href=#464 id=464 data-nosnippet>464</a>    <span class="kw">fn </span>make_violation(
+<a href=#465 id=465 data-nosnippet>465</a>        cycle: u32,
+<a href=#466 id=466 data-nosnippet>466</a>        kind: ViolationKind,
+<a href=#467 id=467 data-nosnippet>467</a>        word_id: u32,
+<a href=#468 id=468 data-nosnippet>468</a>        slack_ps: i32,
+<a href=#469 id=469 data-nosnippet>469</a>        arrival_ps: u32,
+<a href=#470 id=470 data-nosnippet>470</a>    ) -&gt; ViolationRecord {
+<a href=#471 id=471 data-nosnippet>471</a>        ViolationRecord {
+<a href=#472 id=472 data-nosnippet>472</a>            cycle,
+<a href=#473 id=473 data-nosnippet>473</a>            kind,
+<a href=#474 id=474 data-nosnippet>474</a>            word_id,
+<a href=#475 id=475 data-nosnippet>475</a>            site: <span class="macro">format!</span>(<span class="string">"dff_w{word_id}"</span>),
+<a href=#476 id=476 data-nosnippet>476</a>            arrival_ps,
+<a href=#477 id=477 data-nosnippet>477</a>            constraint_ps: <span class="number">1000</span>,
+<a href=#478 id=478 data-nosnippet>478</a>            slack_ps,
+<a href=#479 id=479 data-nosnippet>479</a>        }
+<a href=#480 id=480 data-nosnippet>480</a>    }
+<a href=#481 id=481 data-nosnippet>481</a>
+<a href=#482 id=482 data-nosnippet>482</a>    <span class="attr">#[test]
+<a href=#483 id=483 data-nosnippet>483</a>    </span><span class="kw">fn </span>schema_version_is_semver_like() {
+<a href=#484 id=484 data-nosnippet>484</a>        <span class="macro">assert!</span>(SCHEMA_VERSION.split(<span class="string">'.'</span>).count() == <span class="number">3</span>);
+<a href=#485 id=485 data-nosnippet>485</a>    }
+<a href=#486 id=486 data-nosnippet>486</a>
+<a href=#487 id=487 data-nosnippet>487</a>    <span class="attr">#[test]
+<a href=#488 id=488 data-nosnippet>488</a>    </span><span class="kw">fn </span>empty_report_serializes_with_schema_version() {
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">let </span>r = TimingReport::new(RunMetadata {
+<a href=#490 id=490 data-nosnippet>490</a>            jacquard_version: <span class="string">"0.1.0"</span>.into(),
+<a href=#491 id=491 data-nosnippet>491</a>            clock_period_ps: <span class="number">1000</span>,
+<a href=#492 id=492 data-nosnippet>492</a>            ..Default::default()
+<a href=#493 id=493 data-nosnippet>493</a>        });
+<a href=#494 id=494 data-nosnippet>494</a>        <span class="kw">let </span>s = serde_json::to_string(<span class="kw-2">&amp;</span>r).unwrap();
+<a href=#495 id=495 data-nosnippet>495</a>        <span class="kw">let </span>expected = <span class="macro">format!</span>(<span class="string">r#""schema_version":"{SCHEMA_VERSION}""#</span>);
+<a href=#496 id=496 data-nosnippet>496</a>        <span class="macro">assert!</span>(s.contains(<span class="kw-2">&amp;</span>expected), <span class="string">"got: {s}"</span>);
+<a href=#497 id=497 data-nosnippet>497</a>        <span class="macro">assert!</span>(s.contains(<span class="string">r#""violations":[]"#</span>));
+<a href=#498 id=498 data-nosnippet>498</a>        <span class="macro">assert!</span>(s.contains(<span class="string">r#""per_word":[]"#</span>));
+<a href=#499 id=499 data-nosnippet>499</a>    }
+<a href=#500 id=500 data-nosnippet>500</a>
+<a href=#501 id=501 data-nosnippet>501</a>    <span class="attr">#[test]
+<a href=#502 id=502 data-nosnippet>502</a>    </span><span class="kw">fn </span>round_trip_preserves_data() {
+<a href=#503 id=503 data-nosnippet>503</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(
+<a href=#504 id=504 data-nosnippet>504</a>            RunMetadata {
+<a href=#505 id=505 data-nosnippet>505</a>                jacquard_version: <span class="string">"0.1.0"</span>.into(),
+<a href=#506 id=506 data-nosnippet>506</a>                clock_period_ps: <span class="number">1000</span>,
+<a href=#507 id=507 data-nosnippet>507</a>                ..Default::default()
+<a href=#508 id=508 data-nosnippet>508</a>            },
+<a href=#509 id=509 data-nosnippet>509</a>            <span class="number">5</span>,
+<a href=#510 id=510 data-nosnippet>510</a>            <span class="prelude-val">None</span>,
+<a href=#511 id=511 data-nosnippet>511</a>        );
+<a href=#512 id=512 data-nosnippet>512</a>        b.observe(make_violation(<span class="number">10</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">100</span>, <span class="number">1100</span>));
+<a href=#513 id=513 data-nosnippet>513</a>        b.observe(make_violation(<span class="number">11</span>, ViolationKind::Hold, <span class="number">7</span>, -<span class="number">20</span>, <span class="number">30</span>));
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">let </span>report = b.finalize(
+<a href=#515 id=515 data-nosnippet>515</a>            <span class="number">50</span>,
+<a href=#516 id=516 data-nosnippet>516</a>            ReportStats {
+<a href=#517 id=517 data-nosnippet>517</a>                setup_violations: <span class="number">1</span>,
+<a href=#518 id=518 data-nosnippet>518</a>                hold_violations: <span class="number">1</span>,
+<a href=#519 id=519 data-nosnippet>519</a>                ..Default::default()
+<a href=#520 id=520 data-nosnippet>520</a>            },
+<a href=#521 id=521 data-nosnippet>521</a>        );
+<a href=#522 id=522 data-nosnippet>522</a>        <span class="kw">let </span>json = serde_json::to_string(<span class="kw-2">&amp;</span>report).unwrap();
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="kw">let </span>parsed: TimingReport = serde_json::from_str(<span class="kw-2">&amp;</span>json).unwrap();
+<a href=#524 id=524 data-nosnippet>524</a>        <span class="macro">assert_eq!</span>(parsed.violations.len(), <span class="number">2</span>);
+<a href=#525 id=525 data-nosnippet>525</a>        <span class="macro">assert_eq!</span>(parsed.metadata.cycles_run, <span class="number">50</span>);
+<a href=#526 id=526 data-nosnippet>526</a>        <span class="macro">assert_eq!</span>(parsed.stats.setup_violations, <span class="number">1</span>);
+<a href=#527 id=527 data-nosnippet>527</a>    }
+<a href=#528 id=528 data-nosnippet>528</a>
+<a href=#529 id=529 data-nosnippet>529</a>    <span class="attr">#[test]
+<a href=#530 id=530 data-nosnippet>530</a>    </span><span class="kw">fn </span>tns_ths_accumulate_across_observations() {
+<a href=#531 id=531 data-nosnippet>531</a>        <span class="comment">// Ported from PR #17: WNS/WHS are the single worst; TNS/THS are
+<a href=#532 id=532 data-nosnippet>532</a>        // the sums. Setup: -100 + -450 + -200 = -750 (WNS = -450).
+<a href=#533 id=533 data-nosnippet>533</a>        // Hold: -120 + -280 = -400 (WHS = -280).
+<a href=#534 id=534 data-nosnippet>534</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(
+<a href=#535 id=535 data-nosnippet>535</a>            RunMetadata {
+<a href=#536 id=536 data-nosnippet>536</a>                jacquard_version: <span class="string">"0.1.0"</span>.into(),
+<a href=#537 id=537 data-nosnippet>537</a>                clock_period_ps: <span class="number">1000</span>,
+<a href=#538 id=538 data-nosnippet>538</a>                ..Default::default()
+<a href=#539 id=539 data-nosnippet>539</a>            },
+<a href=#540 id=540 data-nosnippet>540</a>            <span class="number">5</span>,
+<a href=#541 id=541 data-nosnippet>541</a>            <span class="prelude-val">None</span>,
+<a href=#542 id=542 data-nosnippet>542</a>        );
+<a href=#543 id=543 data-nosnippet>543</a>        <span class="kw">for </span>slack <span class="kw">in </span>[-<span class="number">100</span>, -<span class="number">450</span>, -<span class="number">200</span>] {
+<a href=#544 id=544 data-nosnippet>544</a>            b.observe(make_violation(<span class="number">0</span>, ViolationKind::Setup, <span class="number">1</span>, slack, <span class="number">0</span>));
+<a href=#545 id=545 data-nosnippet>545</a>        }
+<a href=#546 id=546 data-nosnippet>546</a>        <span class="kw">for </span>slack <span class="kw">in </span>[-<span class="number">120</span>, -<span class="number">280</span>] {
+<a href=#547 id=547 data-nosnippet>547</a>            b.observe(make_violation(<span class="number">0</span>, ViolationKind::Hold, <span class="number">2</span>, slack, <span class="number">0</span>));
+<a href=#548 id=548 data-nosnippet>548</a>        }
+<a href=#549 id=549 data-nosnippet>549</a>        <span class="kw">let </span>report = b.finalize(<span class="number">10</span>, ReportStats::default());
+<a href=#550 id=550 data-nosnippet>550</a>        <span class="macro">assert_eq!</span>(report.stats.total_setup_slack_ps, -<span class="number">750</span>, <span class="string">"TNS"</span>);
+<a href=#551 id=551 data-nosnippet>551</a>        <span class="macro">assert_eq!</span>(report.stats.total_hold_slack_ps, -<span class="number">400</span>, <span class="string">"THS"</span>);
+<a href=#552 id=552 data-nosnippet>552</a>        <span class="comment">// WNS/WHS unaffected — still the single worst.
+<a href=#553 id=553 data-nosnippet>553</a>        </span><span class="macro">assert_eq!</span>(report.worst_slack.setup[<span class="number">0</span>].slack_ps, -<span class="number">450</span>, <span class="string">"WNS"</span>);
+<a href=#554 id=554 data-nosnippet>554</a>        <span class="macro">assert_eq!</span>(report.worst_slack.hold[<span class="number">0</span>].slack_ps, -<span class="number">280</span>, <span class="string">"WHS"</span>);
+<a href=#555 id=555 data-nosnippet>555</a>        <span class="comment">// Survives a JSON round-trip (serde default keeps back-compat).
+<a href=#556 id=556 data-nosnippet>556</a>        </span><span class="kw">let </span>parsed: TimingReport =
+<a href=#557 id=557 data-nosnippet>557</a>            serde_json::from_str(<span class="kw-2">&amp;</span>serde_json::to_string(<span class="kw-2">&amp;</span>report).unwrap()).unwrap();
+<a href=#558 id=558 data-nosnippet>558</a>        <span class="macro">assert_eq!</span>(parsed.stats.total_setup_slack_ps, -<span class="number">750</span>);
+<a href=#559 id=559 data-nosnippet>559</a>        <span class="macro">assert_eq!</span>(parsed.stats.total_hold_slack_ps, -<span class="number">400</span>);
+<a href=#560 id=560 data-nosnippet>560</a>    }
+<a href=#561 id=561 data-nosnippet>561</a>
+<a href=#562 id=562 data-nosnippet>562</a>    <span class="attr">#[test]
+<a href=#563 id=563 data-nosnippet>563</a>    </span><span class="kw">fn </span>worst_slack_tracker_keeps_n_most_negative() {
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw">let </span><span class="kw-2">mut </span>t = WorstSlackTracker::with_capacity(<span class="number">2</span>);
+<a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">for </span>slack <span class="kw">in </span>[-<span class="number">10</span>, -<span class="number">50</span>, -<span class="number">5</span>, -<span class="number">100</span>, -<span class="number">30</span>] {
+<a href=#566 id=566 data-nosnippet>566</a>            t.push(make_violation(<span class="number">0</span>, ViolationKind::Setup, <span class="number">0</span>, slack, <span class="number">0</span>));
+<a href=#567 id=567 data-nosnippet>567</a>        }
+<a href=#568 id=568 data-nosnippet>568</a>        <span class="kw">let </span>kept: Vec&lt;i32&gt; = t.into_sorted_vec().iter().map(|v| v.slack_ps).collect();
+<a href=#569 id=569 data-nosnippet>569</a>        <span class="macro">assert_eq!</span>(kept, <span class="macro">vec!</span>[-<span class="number">100</span>, -<span class="number">50</span>]);
+<a href=#570 id=570 data-nosnippet>570</a>    }
+<a href=#571 id=571 data-nosnippet>571</a>
+<a href=#572 id=572 data-nosnippet>572</a>    <span class="attr">#[test]
+<a href=#573 id=573 data-nosnippet>573</a>    </span><span class="kw">fn </span>worst_slack_tracker_capacity_one() {
+<a href=#574 id=574 data-nosnippet>574</a>        <span class="comment">// `with_capacity(0)` floors to 1; the test name reflects the
+<a href=#575 id=575 data-nosnippet>575</a>        // resulting capacity, not the input.
+<a href=#576 id=576 data-nosnippet>576</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>t = WorstSlackTracker::with_capacity(<span class="number">0</span>);
+<a href=#577 id=577 data-nosnippet>577</a>        t.push(make_violation(<span class="number">0</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
+<a href=#578 id=578 data-nosnippet>578</a>        t.push(make_violation(<span class="number">1</span>, ViolationKind::Setup, <span class="number">1</span>, -<span class="number">5</span>, <span class="number">0</span>));
+<a href=#579 id=579 data-nosnippet>579</a>        <span class="kw">let </span>kept = t.into_sorted_vec();
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="macro">assert_eq!</span>(kept.len(), <span class="number">1</span>);
+<a href=#581 id=581 data-nosnippet>581</a>        <span class="macro">assert_eq!</span>(kept[<span class="number">0</span>].slack_ps, -<span class="number">10</span>);
+<a href=#582 id=582 data-nosnippet>582</a>    }
+<a href=#583 id=583 data-nosnippet>583</a>
+<a href=#584 id=584 data-nosnippet>584</a>    <span class="attr">#[test]
+<a href=#585 id=585 data-nosnippet>585</a>    </span><span class="kw">fn </span>worst_slack_tracker_ties_break_by_cycle() {
+<a href=#586 id=586 data-nosnippet>586</a>        <span class="kw">let </span><span class="kw-2">mut </span>t = WorstSlackTracker::with_capacity(<span class="number">3</span>);
+<a href=#587 id=587 data-nosnippet>587</a>        t.push(make_violation(<span class="number">20</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">50</span>, <span class="number">0</span>));
+<a href=#588 id=588 data-nosnippet>588</a>        t.push(make_violation(<span class="number">10</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">50</span>, <span class="number">0</span>));
+<a href=#589 id=589 data-nosnippet>589</a>        t.push(make_violation(<span class="number">30</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">50</span>, <span class="number">0</span>));
+<a href=#590 id=590 data-nosnippet>590</a>        <span class="kw">let </span>kept: Vec&lt;u32&gt; = t.into_sorted_vec().iter().map(|v| v.cycle).collect();
+<a href=#591 id=591 data-nosnippet>591</a>        <span class="macro">assert_eq!</span>(kept, <span class="macro">vec!</span>[<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>]);
+<a href=#592 id=592 data-nosnippet>592</a>    }
+<a href=#593 id=593 data-nosnippet>593</a>
+<a href=#594 id=594 data-nosnippet>594</a>    <span class="kw">fn </span>aggregate_via_builder(violations: Vec&lt;ViolationRecord&gt;) -&gt; Vec&lt;PerWordSummary&gt; {
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">1</span>, <span class="prelude-val">None</span>);
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="kw">for </span>v <span class="kw">in </span>violations {
+<a href=#597 id=597 data-nosnippet>597</a>            b.observe(v);
+<a href=#598 id=598 data-nosnippet>598</a>        }
+<a href=#599 id=599 data-nosnippet>599</a>        b.finalize(<span class="number">0</span>, ReportStats::default()).per_word
+<a href=#600 id=600 data-nosnippet>600</a>    }
+<a href=#601 id=601 data-nosnippet>601</a>
+<a href=#602 id=602 data-nosnippet>602</a>    <span class="attr">#[test]
+<a href=#603 id=603 data-nosnippet>603</a>    </span><span class="kw">fn </span>per_word_aggregates_setup_and_hold_separately() {
+<a href=#604 id=604 data-nosnippet>604</a>        <span class="kw">let </span>agg = aggregate_via_builder(<span class="macro">vec!</span>[
+<a href=#605 id=605 data-nosnippet>605</a>            make_violation(<span class="number">1</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">100</span>, <span class="number">1100</span>),
+<a href=#606 id=606 data-nosnippet>606</a>            make_violation(<span class="number">2</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">50</span>, <span class="number">1050</span>),
+<a href=#607 id=607 data-nosnippet>607</a>            make_violation(<span class="number">3</span>, ViolationKind::Hold, <span class="number">5</span>, -<span class="number">10</span>, <span class="number">5</span>),
+<a href=#608 id=608 data-nosnippet>608</a>            make_violation(<span class="number">4</span>, ViolationKind::Setup, <span class="number">7</span>, -<span class="number">200</span>, <span class="number">1200</span>),
+<a href=#609 id=609 data-nosnippet>609</a>        ]);
+<a href=#610 id=610 data-nosnippet>610</a>        <span class="macro">assert_eq!</span>(agg.len(), <span class="number">2</span>);
+<a href=#611 id=611 data-nosnippet>611</a>        <span class="comment">// sorted by total violations desc → word 5 (3) before word 7 (1)
+<a href=#612 id=612 data-nosnippet>612</a>        </span><span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].word_id, <span class="number">5</span>);
+<a href=#613 id=613 data-nosnippet>613</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].setup_violations, <span class="number">2</span>);
+<a href=#614 id=614 data-nosnippet>614</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].hold_violations, <span class="number">1</span>);
+<a href=#615 id=615 data-nosnippet>615</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].worst_setup_slack_ps, <span class="prelude-val">Some</span>(-<span class="number">100</span>));
+<a href=#616 id=616 data-nosnippet>616</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].worst_hold_slack_ps, <span class="prelude-val">Some</span>(-<span class="number">10</span>));
+<a href=#617 id=617 data-nosnippet>617</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].worst_arrival_ps, <span class="prelude-val">Some</span>(<span class="number">1100</span>));
+<a href=#618 id=618 data-nosnippet>618</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">1</span>].word_id, <span class="number">7</span>);
+<a href=#619 id=619 data-nosnippet>619</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">1</span>].worst_setup_slack_ps, <span class="prelude-val">Some</span>(-<span class="number">200</span>));
+<a href=#620 id=620 data-nosnippet>620</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">1</span>].worst_hold_slack_ps, <span class="prelude-val">None</span>);
+<a href=#621 id=621 data-nosnippet>621</a>    }
+<a href=#622 id=622 data-nosnippet>622</a>
+<a href=#623 id=623 data-nosnippet>623</a>    <span class="attr">#[test]
+<a href=#624 id=624 data-nosnippet>624</a>    </span><span class="kw">fn </span>write_to_path_creates_parent_dirs() {
+<a href=#625 id=625 data-nosnippet>625</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#626 id=626 data-nosnippet>626</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"nested/sub/report.json"</span>);
+<a href=#627 id=627 data-nosnippet>627</a>        <span class="kw">let </span>r = TimingReport::new(RunMetadata {
+<a href=#628 id=628 data-nosnippet>628</a>            jacquard_version: <span class="string">"0.1.0"</span>.into(),
+<a href=#629 id=629 data-nosnippet>629</a>            clock_period_ps: <span class="number">1000</span>,
+<a href=#630 id=630 data-nosnippet>630</a>            ..Default::default()
+<a href=#631 id=631 data-nosnippet>631</a>        });
+<a href=#632 id=632 data-nosnippet>632</a>        r.write_to_path(<span class="kw-2">&amp;</span>path).unwrap();
+<a href=#633 id=633 data-nosnippet>633</a>        <span class="kw">let </span>text = std::fs::read_to_string(<span class="kw-2">&amp;</span>path).unwrap();
+<a href=#634 id=634 data-nosnippet>634</a>        <span class="kw">let </span>parsed: TimingReport = serde_json::from_str(<span class="kw-2">&amp;</span>text).unwrap();
+<a href=#635 id=635 data-nosnippet>635</a>        <span class="macro">assert_eq!</span>(parsed.schema_version, SCHEMA_VERSION);
+<a href=#636 id=636 data-nosnippet>636</a>    }
+<a href=#637 id=637 data-nosnippet>637</a>
+<a href=#638 id=638 data-nosnippet>638</a>    <span class="attr">#[test]
+<a href=#639 id=639 data-nosnippet>639</a>    </span><span class="kw">fn </span>per_word_worst_arrival_tracks_max_across_kinds_and_order() {
+<a href=#640 id=640 data-nosnippet>640</a>        <span class="comment">// Hold violations report small arrivals; setup violations large.
+<a href=#641 id=641 data-nosnippet>641</a>        // worst_arrival_ps must reflect the maximum regardless of kind or
+<a href=#642 id=642 data-nosnippet>642</a>        // observation order. Order: hold(arrival=10), setup(900), hold(20).
+<a href=#643 id=643 data-nosnippet>643</a>        </span><span class="kw">let </span>agg = aggregate_via_builder(<span class="macro">vec!</span>[
+<a href=#644 id=644 data-nosnippet>644</a>            make_violation(<span class="number">1</span>, ViolationKind::Hold, <span class="number">5</span>, -<span class="number">40</span>, <span class="number">10</span>),
+<a href=#645 id=645 data-nosnippet>645</a>            make_violation(<span class="number">2</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">100</span>, <span class="number">900</span>),
+<a href=#646 id=646 data-nosnippet>646</a>            make_violation(<span class="number">3</span>, ViolationKind::Hold, <span class="number">5</span>, -<span class="number">20</span>, <span class="number">20</span>),
+<a href=#647 id=647 data-nosnippet>647</a>        ]);
+<a href=#648 id=648 data-nosnippet>648</a>        <span class="macro">assert_eq!</span>(agg.len(), <span class="number">1</span>);
+<a href=#649 id=649 data-nosnippet>649</a>        <span class="macro">assert_eq!</span>(agg[<span class="number">0</span>].worst_arrival_ps, <span class="prelude-val">Some</span>(<span class="number">900</span>));
+<a href=#650 id=650 data-nosnippet>650</a>    }
+<a href=#651 id=651 data-nosnippet>651</a>
+<a href=#652 id=652 data-nosnippet>652</a>    <span class="attr">#[test]
+<a href=#653 id=653 data-nosnippet>653</a>    </span><span class="kw">fn </span>violations_array_caps_at_default() {
+<a href=#654 id=654 data-nosnippet>654</a>        <span class="comment">// DEFAULT_MAX_VIOLATIONS is 100k; sanity-test with a smaller cap.
+<a href=#655 id=655 data-nosnippet>655</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">5</span>, <span class="prelude-val">Some</span>(<span class="number">3</span>));
+<a href=#656 id=656 data-nosnippet>656</a>        <span class="kw">for </span>cycle <span class="kw">in </span><span class="number">0</span>..<span class="number">10 </span>{
+<a href=#657 id=657 data-nosnippet>657</a>            b.observe(make_violation(cycle, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
+<a href=#658 id=658 data-nosnippet>658</a>        }
+<a href=#659 id=659 data-nosnippet>659</a>        <span class="kw">let </span>report = b.finalize(<span class="number">10</span>, ReportStats::default());
+<a href=#660 id=660 data-nosnippet>660</a>        <span class="macro">assert_eq!</span>(report.violations.len(), <span class="number">3</span>);
+<a href=#661 id=661 data-nosnippet>661</a>        <span class="macro">assert_eq!</span>(report.stats.violations_truncated, <span class="number">7</span>);
+<a href=#662 id=662 data-nosnippet>662</a>        <span class="comment">// Worst-slack tracker still saw all 10.
+<a href=#663 id=663 data-nosnippet>663</a>        </span><span class="macro">assert_eq!</span>(report.worst_slack.setup.len(), <span class="number">5</span>);
+<a href=#664 id=664 data-nosnippet>664</a>        <span class="comment">// Per-word now reflects every observed violation (incrementally
+<a href=#665 id=665 data-nosnippet>665</a>        // updated in observe(), not re-derived from the truncated list).
+<a href=#666 id=666 data-nosnippet>666</a>        </span><span class="macro">assert_eq!</span>(report.per_word[<span class="number">0</span>].setup_violations, <span class="number">10</span>);
+<a href=#667 id=667 data-nosnippet>667</a>    }
+<a href=#668 id=668 data-nosnippet>668</a>
+<a href=#669 id=669 data-nosnippet>669</a>    <span class="attr">#[test]
+<a href=#670 id=670 data-nosnippet>670</a>    </span><span class="kw">fn </span>violations_array_unbounded_when_cap_none() {
+<a href=#671 id=671 data-nosnippet>671</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">5</span>, <span class="prelude-val">None</span>);
+<a href=#672 id=672 data-nosnippet>672</a>        <span class="kw">for </span>cycle <span class="kw">in </span><span class="number">0</span>..<span class="number">50 </span>{
+<a href=#673 id=673 data-nosnippet>673</a>            b.observe(make_violation(cycle, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
+<a href=#674 id=674 data-nosnippet>674</a>        }
+<a href=#675 id=675 data-nosnippet>675</a>        <span class="kw">let </span>report = b.finalize(<span class="number">50</span>, ReportStats::default());
+<a href=#676 id=676 data-nosnippet>676</a>        <span class="macro">assert_eq!</span>(report.violations.len(), <span class="number">50</span>);
+<a href=#677 id=677 data-nosnippet>677</a>        <span class="macro">assert_eq!</span>(report.stats.violations_truncated, <span class="number">0</span>);
+<a href=#678 id=678 data-nosnippet>678</a>    }
+<a href=#679 id=679 data-nosnippet>679</a>
+<a href=#680 id=680 data-nosnippet>680</a>    <span class="attr">#[test]
+<a href=#681 id=681 data-nosnippet>681</a>    </span><span class="kw">fn </span>truncated_count_appears_in_summary() {
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">5</span>, <span class="prelude-val">Some</span>(<span class="number">2</span>));
+<a href=#683 id=683 data-nosnippet>683</a>        <span class="kw">for </span>cycle <span class="kw">in </span><span class="number">0</span>..<span class="number">5 </span>{
+<a href=#684 id=684 data-nosnippet>684</a>            b.observe(make_violation(cycle, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
+<a href=#685 id=685 data-nosnippet>685</a>        }
+<a href=#686 id=686 data-nosnippet>686</a>        <span class="kw">let </span>report = b.finalize(<span class="number">5</span>, ReportStats::default());
+<a href=#687 id=687 data-nosnippet>687</a>        <span class="kw">let </span>summary = report.format_summary();
+<a href=#688 id=688 data-nosnippet>688</a>        <span class="macro">assert!</span>(
+<a href=#689 id=689 data-nosnippet>689</a>            summary.contains(<span class="string">"3 violation records dropped"</span>),
+<a href=#690 id=690 data-nosnippet>690</a>            <span class="string">"got: {summary}"
+<a href=#691 id=691 data-nosnippet>691</a>        </span>);
+<a href=#692 id=692 data-nosnippet>692</a>    }
+<a href=#693 id=693 data-nosnippet>693</a>
+<a href=#694 id=694 data-nosnippet>694</a>    <span class="attr">#[test]
+<a href=#695 id=695 data-nosnippet>695</a>    </span><span class="kw">fn </span>report_builder_routes_setup_and_hold_to_separate_trackers() {
+<a href=#696 id=696 data-nosnippet>696</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">3</span>, <span class="prelude-val">None</span>);
+<a href=#697 id=697 data-nosnippet>697</a>        b.observe(make_violation(<span class="number">1</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">100</span>, <span class="number">0</span>));
+<a href=#698 id=698 data-nosnippet>698</a>        b.observe(make_violation(<span class="number">2</span>, ViolationKind::Hold, <span class="number">1</span>, -<span class="number">5</span>, <span class="number">0</span>));
+<a href=#699 id=699 data-nosnippet>699</a>        b.observe(make_violation(<span class="number">3</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">200</span>, <span class="number">0</span>));
+<a href=#700 id=700 data-nosnippet>700</a>        <span class="kw">let </span>report = b.finalize(<span class="number">10</span>, ReportStats::default());
+<a href=#701 id=701 data-nosnippet>701</a>        <span class="macro">assert_eq!</span>(report.worst_slack.setup.len(), <span class="number">2</span>);
+<a href=#702 id=702 data-nosnippet>702</a>        <span class="macro">assert_eq!</span>(report.worst_slack.hold.len(), <span class="number">1</span>);
+<a href=#703 id=703 data-nosnippet>703</a>        <span class="macro">assert_eq!</span>(report.worst_slack.setup[<span class="number">0</span>].slack_ps, -<span class="number">200</span>);
+<a href=#704 id=704 data-nosnippet>704</a>    }
+<a href=#705 id=705 data-nosnippet>705</a>
+<a href=#706 id=706 data-nosnippet>706</a>    <span class="attr">#[test]
+<a href=#707 id=707 data-nosnippet>707</a>    </span><span class="kw">fn </span>format_summary_includes_metadata_and_violation_totals() {
+<a href=#708 id=708 data-nosnippet>708</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(
+<a href=#709 id=709 data-nosnippet>709</a>            RunMetadata {
+<a href=#710 id=710 data-nosnippet>710</a>                design: <span class="prelude-val">Some</span>(<span class="string">"tiny.gv"</span>.into()),
+<a href=#711 id=711 data-nosnippet>711</a>                vector_source: <span class="prelude-val">Some</span>(<span class="string">"boot.vcd"</span>.into()),
+<a href=#712 id=712 data-nosnippet>712</a>                timing_source: <span class="prelude-val">Some</span>(<span class="string">"tiny.jtir"</span>.into()),
+<a href=#713 id=713 data-nosnippet>713</a>                clock_period_ps: <span class="number">1000</span>,
+<a href=#714 id=714 data-nosnippet>714</a>                cycles_run: <span class="number">0</span>,
+<a href=#715 id=715 data-nosnippet>715</a>                jacquard_version: <span class="string">"0.1.0"</span>.into(),
+<a href=#716 id=716 data-nosnippet>716</a>            },
+<a href=#717 id=717 data-nosnippet>717</a>            <span class="number">5</span>,
+<a href=#718 id=718 data-nosnippet>718</a>            <span class="prelude-val">None</span>,
+<a href=#719 id=719 data-nosnippet>719</a>        );
+<a href=#720 id=720 data-nosnippet>720</a>        b.observe(make_violation(<span class="number">10</span>, ViolationKind::Setup, <span class="number">5</span>, -<span class="number">100</span>, <span class="number">1100</span>));
+<a href=#721 id=721 data-nosnippet>721</a>        b.observe(make_violation(<span class="number">11</span>, ViolationKind::Hold, <span class="number">7</span>, -<span class="number">20</span>, <span class="number">30</span>));
+<a href=#722 id=722 data-nosnippet>722</a>        <span class="kw">let </span>report = b.finalize(
+<a href=#723 id=723 data-nosnippet>723</a>            <span class="number">50</span>,
+<a href=#724 id=724 data-nosnippet>724</a>            ReportStats {
+<a href=#725 id=725 data-nosnippet>725</a>                setup_violations: <span class="number">1</span>,
+<a href=#726 id=726 data-nosnippet>726</a>                hold_violations: <span class="number">1</span>,
+<a href=#727 id=727 data-nosnippet>727</a>                ..Default::default()
+<a href=#728 id=728 data-nosnippet>728</a>            },
+<a href=#729 id=729 data-nosnippet>729</a>        );
+<a href=#730 id=730 data-nosnippet>730</a>        <span class="kw">let </span>text = report.format_summary();
+<a href=#731 id=731 data-nosnippet>731</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Design:        tiny.gv"</span>), <span class="string">"got:\n{text}"</span>);
+<a href=#732 id=732 data-nosnippet>732</a>        <span class="macro">assert!</span>(
+<a href=#733 id=733 data-nosnippet>733</a>            text.contains(<span class="string">"Vectors:       boot.vcd (50 cycles)"</span>),
+<a href=#734 id=734 data-nosnippet>734</a>            <span class="string">"got:\n{text}"
+<a href=#735 id=735 data-nosnippet>735</a>        </span>);
+<a href=#736 id=736 data-nosnippet>736</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Clock period:  1000 ps"</span>), <span class="string">"got:\n{text}"</span>);
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Setup: 1"</span>), <span class="string">"got:\n{text}"</span>);
+<a href=#738 id=738 data-nosnippet>738</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Hold:  1"</span>), <span class="string">"got:\n{text}"</span>);
+<a href=#739 id=739 data-nosnippet>739</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Total: 2"</span>), <span class="string">"got:\n{text}"</span>);
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Setup: -100ps"</span>), <span class="string">"got:\n{text}"</span>);
+<a href=#741 id=741 data-nosnippet>741</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Hold: -20ps"</span>), <span class="string">"got:\n{text}"</span>);
+<a href=#742 id=742 data-nosnippet>742</a>    }
+<a href=#743 id=743 data-nosnippet>743</a>
+<a href=#744 id=744 data-nosnippet>744</a>    <span class="attr">#[test]
+<a href=#745 id=745 data-nosnippet>745</a>    </span><span class="kw">fn </span>format_summary_handles_no_violations() {
+<a href=#746 id=746 data-nosnippet>746</a>        <span class="kw">let </span>report = TimingReport::new(RunMetadata {
+<a href=#747 id=747 data-nosnippet>747</a>            design: <span class="prelude-val">Some</span>(<span class="string">"clean.gv"</span>.into()),
+<a href=#748 id=748 data-nosnippet>748</a>            jacquard_version: <span class="string">"0.1.0"</span>.into(),
+<a href=#749 id=749 data-nosnippet>749</a>            clock_period_ps: <span class="number">1000</span>,
+<a href=#750 id=750 data-nosnippet>750</a>            cycles_run: <span class="number">100</span>,
+<a href=#751 id=751 data-nosnippet>751</a>            ..Default::default()
+<a href=#752 id=752 data-nosnippet>752</a>        });
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="kw">let </span>text = report.format_summary();
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Setup: 0"</span>));
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Hold:  0"</span>));
+<a href=#756 id=756 data-nosnippet>756</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Setup: (none)"</span>));
+<a href=#757 id=757 data-nosnippet>757</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"Hold: (none)"</span>));
+<a href=#758 id=758 data-nosnippet>758</a>        <span class="macro">assert!</span>(
+<a href=#759 id=759 data-nosnippet>759</a>            !text.contains(<span class="string">"Top 0"</span>),
+<a href=#760 id=760 data-nosnippet>760</a>            <span class="string">"should not print empty top-N section"
+<a href=#761 id=761 data-nosnippet>761</a>        </span>);
+<a href=#762 id=762 data-nosnippet>762</a>    }
+<a href=#763 id=763 data-nosnippet>763</a>
+<a href=#764 id=764 data-nosnippet>764</a>    <span class="attr">#[test]
+<a href=#765 id=765 data-nosnippet>765</a>    </span><span class="kw">fn </span>format_summary_warns_on_dropped_events() {
+<a href=#766 id=766 data-nosnippet>766</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = ReportBuilder::new(RunMetadata::default(), <span class="number">5</span>, <span class="prelude-val">None</span>);
+<a href=#767 id=767 data-nosnippet>767</a>        b.observe(make_violation(<span class="number">1</span>, ViolationKind::Setup, <span class="number">0</span>, -<span class="number">10</span>, <span class="number">0</span>));
+<a href=#768 id=768 data-nosnippet>768</a>        <span class="kw">let </span>report = b.finalize(
+<a href=#769 id=769 data-nosnippet>769</a>            <span class="number">10</span>,
+<a href=#770 id=770 data-nosnippet>770</a>            ReportStats {
+<a href=#771 id=771 data-nosnippet>771</a>                setup_violations: <span class="number">1</span>,
+<a href=#772 id=772 data-nosnippet>772</a>                events_dropped: <span class="number">42</span>,
+<a href=#773 id=773 data-nosnippet>773</a>                ..Default::default()
+<a href=#774 id=774 data-nosnippet>774</a>            },
+<a href=#775 id=775 data-nosnippet>775</a>        );
+<a href=#776 id=776 data-nosnippet>776</a>        <span class="kw">let </span>text = report.format_summary();
+<a href=#777 id=777 data-nosnippet>777</a>        <span class="macro">assert!</span>(text.contains(<span class="string">"42 events dropped"</span>), <span class="string">"got:\n{text}"</span>);
+<a href=#778 id=778 data-nosnippet>778</a>    }
+<a href=#779 id=779 data-nosnippet>779</a>
+<a href=#780 id=780 data-nosnippet>780</a>    <span class="doccomment">/// The sample fixture is pinned at schema_version 1.0.0 so that
+<a href=#781 id=781 data-nosnippet>781</a>    /// fields added in later minor versions (e.g. `stats.violations_truncated`
+<a href=#782 id=782 data-nosnippet>782</a>    /// in 1.1.0) regression-test their `#[serde(default)]` attribute.
+<a href=#783 id=783 data-nosnippet>783</a>    /// If this ever fails to parse against the current types, the
+<a href=#784 id=784 data-nosnippet>784</a>    /// schema has drifted in a non-additive way and the stability
+<a href=#785 id=785 data-nosnippet>785</a>    /// contract has been broken.
+<a href=#786 id=786 data-nosnippet>786</a>    </span><span class="attr">#[test]
+<a href=#787 id=787 data-nosnippet>787</a>    </span><span class="kw">fn </span>sample_fixture_parses_with_serde_default_for_newer_fields() {
+<a href=#788 id=788 data-nosnippet>788</a>        <span class="kw">let </span>path = std::path::Path::new(<span class="macro">env!</span>(<span class="string">"CARGO_MANIFEST_DIR"</span>))
+<a href=#789 id=789 data-nosnippet>789</a>            .join(<span class="string">"tests/timing_ir/sample_reports/two_violations.json"</span>);
+<a href=#790 id=790 data-nosnippet>790</a>        <span class="kw">let </span>text = std::fs::read_to_string(<span class="kw-2">&amp;</span>path)
+<a href=#791 id=791 data-nosnippet>791</a>            .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"read {}: {e}"</span>, path.display()));
+<a href=#792 id=792 data-nosnippet>792</a>        <span class="kw">let </span>parsed: TimingReport =
+<a href=#793 id=793 data-nosnippet>793</a>            serde_json::from_str(<span class="kw-2">&amp;</span>text).expect(<span class="string">"sample fixture failed to parse"</span>);
+<a href=#794 id=794 data-nosnippet>794</a>        <span class="macro">assert_eq!</span>(parsed.schema_version, <span class="string">"1.0.0"</span>);
+<a href=#795 id=795 data-nosnippet>795</a>        <span class="macro">assert_eq!</span>(parsed.violations.len(), <span class="number">3</span>);
+<a href=#796 id=796 data-nosnippet>796</a>        <span class="macro">assert_eq!</span>(parsed.per_word.len(), <span class="number">2</span>);
+<a href=#797 id=797 data-nosnippet>797</a>        <span class="macro">assert_eq!</span>(parsed.worst_slack.setup.len(), <span class="number">2</span>);
+<a href=#798 id=798 data-nosnippet>798</a>        <span class="macro">assert_eq!</span>(parsed.worst_slack.hold.len(), <span class="number">1</span>);
+<a href=#799 id=799 data-nosnippet>799</a>        <span class="comment">// 1.1.0 field absent in the fixture; serde default kicks in.
+<a href=#800 id=800 data-nosnippet>800</a>        </span><span class="macro">assert_eq!</span>(parsed.stats.violations_truncated, <span class="number">0</span>);
+<a href=#801 id=801 data-nosnippet>801</a>    }
+<a href=#802 id=802 data-nosnippet>802</a>}
 </code></pre></div></section></main></body></html>
