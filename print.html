@@ -5005,7 +5005,19 @@ contract.</li>
 <li><strong>Critical context</strong> — gotchas, surprising findings, environment specifics that aren't obvious from the code or docs <em>yet</em>.</li>
 <li><strong>Verification</strong> — the command(s) the next session runs to confirm the work is in the state you say it is.</li>
 </ul>
-<p>Exactly one handoff exists at a time. There's no chain of resolved predecessors to wade through.</p>
+<p><strong>One handoff per active thread of work</strong> — not one globally. A <em>thread</em> is a
+distinct arc someone could pick up cold (the RTL on-ramp, the cell-model-IR
+migration, a triage sweep). Concurrent threads get concurrent handoffs, each
+named by topic (<code>&lt;topic&gt;-handoff.md</code>). There's still no <em>chain</em>: a thread holds
+at most one live handoff, and a resolved one is folded-and-deleted (see below),
+not archived behind its successor.</p>
+<p><strong>Treat the handoff count as a WIP signal.</strong> If the number of live handoffs
+climbs past roughly <strong>2× the number of people actively working</strong>, that's a smell,
+not a badge — more parallel threads than the team can hold context on. Read it as
+a prompt to <em>resolve, consolidate, or drop</em> threads, not to open more. (Earlier
+revisions of this doc mandated "exactly one handoff at a time"; that didn't match
+engineering reality, where several independent arcs are legitimately in flight at
+once. The per-thread rule plus the WIP heuristic replaces it.)</p>
 <h2 id="what-a-handoff-is-not"><a class="header" href="#what-a-handoff-is-not">What a handoff IS NOT</a></h2>
 <ul>
 <li><strong>Not a decision log.</strong> Decisions go in ADRs. If you find yourself writing "we chose X over Y because Z" in a handoff, that paragraph belongs in an ADR (or an existing ADR's "Consequences" / "Walk-back" section).</li>
