@@ -12,13 +12,13 @@
 
 use crate::aigpdk::AIGPDK_SRAM_ADDR_WIDTH;
 use crate::gf180mcu_pdk::Gf180PdkModels;
-use crate::pdk::PdkVariant;
 // SKY130-flavoured helpers used by the sky130-specific methods on AIG
 // (`get_sky130_dependencies`, `sky130_preprocess`, `sky130_postprocess`,
-// `build_sky130_multi_output_postprocess`). Top-level dispatch through
-// PdkVariant is preferred for new code, but within SKY130-only methods
-// the unqualified shorthand is fine — it can't accidentally classify a
-// GF180MCU cell because the caller has already routed on PdkVariant.
+// `build_sky130_multi_output_postprocess`). Top-level dispatch routes cells
+// to these methods via `AIG::is_sky130_stdcell` / `is_gf180mcu_stdcell`
+// (direct cell-name predicates, ADR 0019 C3.3d), so within a SKY130-only
+// method the unqualified `extract_cell_type` shorthand can't accidentally
+// classify a GF180MCU cell — the caller has already routed on the predicate.
 use crate::sky130::extract_cell_type;
 use crate::sky130_pdk::{
     decompose_with_pdk, is_multi_output_cell, is_sequential_cell, is_tie_cell, CellInputs,
@@ -697,6 +697,24 @@ impl AIG {
         deps
     }
 
+    /// True if `celltype` is a SKY130 standard cell that takes the
+    /// SKY130-specific AIG build path (`get_sky130_dependencies` /
+    /// `sky130_preprocess` / `sky130_postprocess`). Formerly the
+    /// former classify-Sky130 arm.
+    fn is_sky130_stdcell(celltype: &str) -> bool {
+        crate::sky130::is_sky130_cell(celltype)
+    }
+
+    /// True if `celltype` is a GF180MCU standard cell that takes the
+    /// GF180-specific AIG build path. Excludes the `gf180mcu_fd_ip_sram__*`
+    /// IP macros, which are compiled hard macros modelled as RAM blocks via
+    /// the runtime cell library (ADR 0010/0011), not standard cells — they
+    /// route to the RAM path like the former classify-None arm. Formerly the
+    /// classify-Gf180Mcu arm.
+    fn is_gf180mcu_stdcell(celltype: &str) -> bool {
+        crate::gf180mcu::is_gf180mcu_cell(celltype) && !crate::gf180mcu::is_sram_macro(celltype)
+    }
+
     /// Classify a clock-path cell as an identity buffer or inverter from the
     /// cell-model-IR descriptor's L2 combinational logic (ADR 0019 C3.3d).
     ///
@@ -708,7 +726,7 @@ impl AIG {
     /// the caller then falls back to the preserved IO-pad / CKLNQD paths or
     /// rejects the cell as unsupported on the clock path.
     ///
-    /// This replaces the per-PDK `PdkVariant` name matches (`inv`/`clkinv` →
+    /// This replaces the per-PDK name matches (`inv`/`clkinv` →
     /// inverter, `buf`/`clkbuf`/`dly*` → buffer): the descriptor's decomposed
     /// AIG is the source of truth for each cell's identity, so GF180/SKY130/
     /// AIGPDK clock cells all classify uniformly with no PDK dispatch.
@@ -750,7 +768,7 @@ impl AIG {
         // The auto-selected cell-model-IR descriptor (ADR 0019 C3.3d). Used to
         // recognise clock-path buffers/inverters from their L2 combinational
         // logic (single input, output = input or ¬input) instead of per-PDK
-        // `PdkVariant` name predicates. `None` = no descriptor (never happens
+        // per-PDK name predicates. `None` = no descriptor (never happens
         // for a built-in PDK, which always resolves one).
         cell_descriptor: Option<&cell_model_ir::CellModelIr>,
     ) -> Result<usize, usize> {
@@ -921,7 +939,7 @@ impl AIG {
             // Determine if this is a clock buffer/inverter. ADR 0019 C3.3d:
             // recognise identity buffers / inverters from the cell-model-IR
             // descriptor's L2 logic (single input, output = input or ¬input)
-            // instead of per-PDK `PdkVariant` name predicates. This covers
+            // instead of per-PDK name predicates. This covers
             // AIGPDK `INV`/`BUF`, SKY130 `inv`/`clkinv`/`buf`/`clkbuf`/
             // `clkdlybuf` and the delay cells (`dlygate*`/`dlymetal*`), and
             // GF180MCU `inv`/`clkinv`/`buf`/`clkbuf`/`dlya..d` uniformly —
@@ -941,7 +959,8 @@ impl AIG {
             // digital-sim simplification (`Y = PAD`) makes its AIG shape
             // identical to in_c / in_s (common case: JTAG TCK routed through a
             // bidirectional signal pad). This preserved pad path stays name-
-            // based via the gf180mcu module helpers (not `PdkVariant`). See #75.
+            // based via the gf180mcu module helpers (not a PDK dispatch enum).
+            // See #75.
             let is_io_pad_buf = crate::gf180mcu::is_gf180mcu_cell(celltype)
                 && crate::gf180mcu_pdk::is_io_pad_cell(crate::gf180mcu::extract_cell_type(celltype));
             let (is_inv, is_buf) = match Self::descriptor_clock_buf(celltype, cell_descriptor) {
@@ -1214,65 +1233,64 @@ impl AIG {
                     }
 
                     // Handle standard-cell PDK cells (combinational + sequential).
-                    match PdkVariant::classify(celltype) {
-                        Some(PdkVariant::Sky130) => {
-                            let deps = self.get_sky130_dependencies(
-                                netlistdb,
-                                pinid,
-                                cellid,
-                                celltype,
-                                cell_descriptor,
-                            );
-                            self.sky130_preprocess(netlistdb, pinid, cellid, celltype);
-                            work_stack.push(WorkItem::Process(pinid));
-                            for dep in deps {
-                                work_stack.push(WorkItem::Visit(dep));
-                            }
-                            continue;
+                    // ADR 0019 C3.3d: dispatch by direct cell-name predicate
+                    // (`is_sky130_stdcell` / `is_gf180mcu_stdcell`) rather than
+                    // the retired classify dispatch enum — behaviour-identical
+                    // (the enum was a thin wrapper over these predicates).
+                    if Self::is_sky130_stdcell(celltype) {
+                        let deps = self.get_sky130_dependencies(
+                            netlistdb,
+                            pinid,
+                            cellid,
+                            celltype,
+                            cell_descriptor,
+                        );
+                        self.sky130_preprocess(netlistdb, pinid, cellid, celltype);
+                        work_stack.push(WorkItem::Process(pinid));
+                        for dep in deps {
+                            work_stack.push(WorkItem::Visit(dep));
                         }
-                        Some(PdkVariant::Gf180Mcu) => {
-                            let deps = self.get_gf180mcu_dependencies(
-                                netlistdb,
-                                pinid,
-                                cellid,
-                                celltype,
-                                cell_descriptor,
-                            );
-                            self.gf180mcu_preprocess(netlistdb, pinid, cellid, celltype);
-                            work_stack.push(WorkItem::Process(pinid));
-                            for dep in deps {
-                                work_stack.push(WorkItem::Visit(dep));
-                            }
-                            continue;
+                        continue;
+                    } else if Self::is_gf180mcu_stdcell(celltype) {
+                        let deps = self.get_gf180mcu_dependencies(
+                            netlistdb,
+                            pinid,
+                            cellid,
+                            celltype,
+                            cell_descriptor,
+                        );
+                        self.gf180mcu_preprocess(netlistdb, pinid, cellid, celltype);
+                        work_stack.push(WorkItem::Process(pinid));
+                        for dep in deps {
+                            work_stack.push(WorkItem::Visit(dep));
                         }
-                        None => {
-                            // Cell isn't in a vendored PDK; consult
-                            // the runtime cell-library manifest
-                            // (ADR 0010). For `kind = "ram"`, treat
-                            // as opaque RAM: allocate a per-output
-                            // SRAM driver and route through `srams`
-                            // for X-source enumeration. No port
-                            // resolution; future schema versions
-                            // upgrade this with explicit port mapping.
-                            if let Some(lib) = cell_library {
-                                use crate::cell_library::CellKind;
-                                if lib.lookup_kind(celltype) == Some(CellKind::Ram) {
-                                    let o = self.add_aigpin(DriverType::SRAM(cellid));
-                                    self.pin2aigpin_iv[pinid] = o << 1;
-                                    let pin_name = netlistdb.pinnames[pinid].1.to_string();
-                                    self.aigpin_cell_origins[o].push((
-                                        cellid,
-                                        celltype.to_string(),
-                                        pin_name,
-                                    ));
-                                    let sram = self.srams.entry(cellid).or_default();
-                                    let bit_idx = netlistdb.pinnames[pinid].2.unwrap_or(0) as usize;
-                                    if bit_idx < sram.port_r_rd_data.len() {
-                                        sram.port_r_rd_data[bit_idx] = o;
-                                    }
-                                    topo_instack[pinid] = false;
-                                    continue;
+                        continue;
+                    } else {
+                        // Cell isn't in a vendored PDK (SRAM IP macro, AIGPDK,
+                        // IHP, or unknown); consult the runtime cell-library
+                        // manifest (ADR 0010). For `kind = "ram"`, treat as
+                        // opaque RAM: allocate a per-output SRAM driver and
+                        // route through `srams` for X-source enumeration. No
+                        // port resolution; future schema versions upgrade this
+                        // with explicit port mapping.
+                        if let Some(lib) = cell_library {
+                            use crate::cell_library::CellKind;
+                            if lib.lookup_kind(celltype) == Some(CellKind::Ram) {
+                                let o = self.add_aigpin(DriverType::SRAM(cellid));
+                                self.pin2aigpin_iv[pinid] = o << 1;
+                                let pin_name = netlistdb.pinnames[pinid].1.to_string();
+                                self.aigpin_cell_origins[o].push((
+                                    cellid,
+                                    celltype.to_string(),
+                                    pin_name,
+                                ));
+                                let sram = self.srams.entry(cellid).or_default();
+                                let bit_idx = netlistdb.pinnames[pinid].2.unwrap_or(0) as usize;
+                                if bit_idx < sram.port_r_rd_data.len() {
+                                    sram.port_r_rd_data[bit_idx] = o;
                                 }
+                                topo_instack[pinid] = false;
+                                continue;
                             }
                         }
                     }
@@ -1387,54 +1405,50 @@ impl AIG {
                         continue;
                     }
 
-                    // Process standard-cell PDK cells.
-                    match PdkVariant::classify(celltype) {
-                        Some(PdkVariant::Sky130) => {
-                            // ADR 0019 C3.3c: descriptor-driven combinational
-                            // splice first; legacy `sky130_postprocess` decompose
-                            // is the fallback for cells the descriptor doesn't
-                            // model with `logic` (sequential / tie / SRAM /
-                            // multi-output — handled by the postprocess).
-                            let base = extract_cell_type(celltype);
-                            if self.try_descriptor_comb(
-                                netlistdb,
-                                pinid,
-                                cellid,
-                                celltype,
-                                base,
-                                cell_descriptor,
-                            ) {
-                                // combinational splice done
-                            } else if let Some(seq) = cell_descriptor
-                                .and_then(|d| d.cell(celltype))
-                                .and_then(|c| c.sequential.as_ref())
-                            {
-                                // ADR 0019 C3.3d: descriptor-driven async *output*
-                                // overlay for SKY130 flops — byte-identical to the
-                                // legacy `SET_B`/`RESET_B` read below, now shared
-                                // with GF180 / IHP via `apply_ir_seq_output`.
-                                self.apply_ir_seq_output(netlistdb, pinid, cellid, seq);
-                            } else {
-                                self.sky130_postprocess(
-                                    netlistdb, pinid, cellid, celltype, pdk_models,
-                                );
-                            }
-                            topo_instack[pinid] = false;
-                            continue;
+                    // Process standard-cell PDK cells. ADR 0019 C3.3d: dispatch
+                    // by direct cell-name predicate rather than the retired
+                    // retired classify dispatch enum (behaviour-identical).
+                    if Self::is_sky130_stdcell(celltype) {
+                        // ADR 0019 C3.3c: descriptor-driven combinational
+                        // splice first; legacy `sky130_postprocess` decompose
+                        // is the fallback for cells the descriptor doesn't
+                        // model with `logic` (sequential / tie / SRAM /
+                        // multi-output — handled by the postprocess).
+                        let base = extract_cell_type(celltype);
+                        if self.try_descriptor_comb(
+                            netlistdb,
+                            pinid,
+                            cellid,
+                            celltype,
+                            base,
+                            cell_descriptor,
+                        ) {
+                            // combinational splice done
+                        } else if let Some(seq) = cell_descriptor
+                            .and_then(|d| d.cell(celltype))
+                            .and_then(|c| c.sequential.as_ref())
+                        {
+                            // ADR 0019 C3.3d: descriptor-driven async *output*
+                            // overlay for SKY130 flops — byte-identical to the
+                            // legacy `SET_B`/`RESET_B` read below, now shared
+                            // with GF180 / IHP via `apply_ir_seq_output`.
+                            self.apply_ir_seq_output(netlistdb, pinid, cellid, seq);
+                        } else {
+                            self.sky130_postprocess(netlistdb, pinid, cellid, celltype, pdk_models);
                         }
-                        Some(PdkVariant::Gf180Mcu) => {
-                            self.gf180mcu_postprocess(
-                                netlistdb,
-                                pinid,
-                                cellid,
-                                celltype,
-                                gf180_pdk,
-                                cell_descriptor,
-                            );
-                            topo_instack[pinid] = false;
-                            continue;
-                        }
-                        None => {}
+                        topo_instack[pinid] = false;
+                        continue;
+                    } else if Self::is_gf180mcu_stdcell(celltype) {
+                        self.gf180mcu_postprocess(
+                            netlistdb,
+                            pinid,
+                            cellid,
+                            celltype,
+                            gf180_pdk,
+                            cell_descriptor,
+                        );
+                        topo_instack[pinid] = false;
+                        continue;
                     }
 
                     // ADR 0019 C3.3d: descriptor-driven sequential *output* overlay
@@ -2566,10 +2580,12 @@ impl AIG {
 
             // Check if this is a sequential element (AIGPDK / SKY130 / GF180MCU)
             let is_aigpdk_seq = matches!(celltype, "DFF" | "DFFSR" | "$__RAMGEM_SYNC_");
-            let is_pdk_seq = match PdkVariant::classify(celltype) {
-                Some(variant) => variant.is_sequential(variant.extract_cell_type(celltype)),
-                None => false,
-            };
+            let is_pdk_seq = (Self::is_sky130_stdcell(celltype)
+                && crate::sky130_pdk::is_sequential_cell(extract_cell_type(celltype)))
+                || (Self::is_gf180mcu_stdcell(celltype)
+                    && crate::gf180mcu_pdk::is_sequential_cell(crate::gf180mcu::extract_cell_type(
+                        celltype,
+                    )));
             // ADR 0019 C3.3d: descriptor-driven sequential classification for
             // stdcells outside the vendored PDKs (e.g. IHP SG13G2 `ff` cells),
             // so their clock pins are traced here like any other flop. Additive:
@@ -2732,8 +2748,8 @@ impl AIG {
                 dff.en_iv = ap_clken_iv;
                 dff.d_iv = d_in;
                 assert_ne!(dff.q, 0);
-            } else if PdkVariant::classify(celltype) == Some(PdkVariant::Sky130)
-                && PdkVariant::Sky130.is_sequential(PdkVariant::Sky130.extract_cell_type(celltype))
+            } else if Self::is_sky130_stdcell(celltype)
+                && crate::sky130_pdk::is_sequential_cell(extract_cell_type(celltype))
             {
                 // ADR 0019 C3.3d: IR-driven sequential input wiring (D / clock-
                 // enable / async), the SKY130 twin of the GF180 branch below.
@@ -2753,7 +2769,7 @@ impl AIG {
                 }
 
                 // Handle SKY130 DFFs (dfxtp, edfxtp, dfrtp, etc.)
-                let cell_type = PdkVariant::Sky130.extract_cell_type(celltype);
+                let cell_type = extract_cell_type(celltype);
                 let mut ap_d_iv = 0;
                 let mut ap_clken_iv = 0;
                 let mut ap_enable_iv = 1; // For edfxtp (data enable)
@@ -2789,9 +2805,10 @@ impl AIG {
                 dff.en_iv = ap_clken_iv;
                 dff.d_iv = d_in;
                 assert_ne!(dff.q, 0, "SKY130 DFF {} has no Q output built", cellid);
-            } else if PdkVariant::classify(celltype) == Some(PdkVariant::Gf180Mcu)
-                && PdkVariant::Gf180Mcu
-                    .is_sequential(PdkVariant::Gf180Mcu.extract_cell_type(celltype))
+            } else if Self::is_gf180mcu_stdcell(celltype)
+                && crate::gf180mcu_pdk::is_sequential_cell(crate::gf180mcu::extract_cell_type(
+                    celltype,
+                ))
             {
                 // GF180MCU sequentials: DFFs / scan DFFs / latches /
                 // clock-gating cells. Same async-set/reset shape as
@@ -2816,7 +2833,7 @@ impl AIG {
                 // We treat them as state-holding DFFs to avoid a
                 // panic; clock-tree-aware simulation through them is
                 // a follow-on item (Phase 5+).
-                let cell_type = PdkVariant::Gf180Mcu.extract_cell_type(celltype);
+                let cell_type = crate::gf180mcu::extract_cell_type(celltype);
 
                 // ADR 0019 C2.3: IR-driven sequential wiring. When a
                 // cell-model-IR descriptor was supplied AND it carries an L3
@@ -2935,15 +2952,17 @@ impl AIG {
             } else if let Some(seq) = cell_descriptor
                 .and_then(|d| d.cell(celltype))
                 .and_then(|c| c.sequential.as_ref())
-                .filter(|_| PdkVariant::classify(celltype).is_none())
+                .filter(|_| {
+                    !Self::is_sky130_stdcell(celltype) && !Self::is_gf180mcu_stdcell(celltype)
+                })
                 .filter(|seq| Self::ir_seq_input_wireable(netlistdb, cellid, seq))
             {
                 // ADR 0019 C3.3d: IR-driven sequential input wiring for a stdcell
                 // outside the vendored PDKs (e.g. IHP SG13G2 `ff` cells). The
-                // `PdkVariant::classify().is_none()` filter keeps GF180/SKY130 on
-                // their dedicated branches above; only non-vendored descriptor
-                // flops reach here. AIGPDK `DFF`/`DFFSR` are handled by the
-                // literal-match branch at the top of this loop, not here.
+                // not-a-vendored-stdcell filter keeps GF180/SKY130 on their
+                // dedicated branches above; only non-vendored descriptor flops
+                // reach here. AIGPDK `DFF`/`DFFSR` are handled by the literal-
+                // match branch at the top of this loop, not here.
                 aig.wire_sequential_from_ir(netlistdb, cellid, seq, cell_descriptor);
                 let dff = aig.dffs.entry(cellid).or_default();
                 assert_ne!(dff.q, 0, "IR-driven DFF {cellid} has no Q output built");

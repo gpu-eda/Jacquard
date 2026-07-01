@@ -80,8 +80,8 @@ pub fn is_gf180mcu_cell(name: &str) -> bool {
 /// they are modelled as RAM blocks via the runtime `--cell-library`. They
 /// satisfy [`is_gf180mcu_cell`] (so the netlist parser accepts them and the
 /// library is detected as GF180MCU) but are excluded from the standard-cell
-/// decompose dispatch in [`crate::pdk::PdkVariant::classify`] so they reach
-/// the cell-library RAM path instead of the std-cell functional.v lookup.
+/// decompose dispatch (`AIG::is_gf180mcu_stdcell` returns `false` for them)
+/// so they reach the cell-library RAM path instead of the std-cell lookup.
 pub fn is_sram_macro(name: &str) -> bool {
     name.starts_with(IP_SRAM_PREFIX)
 }
