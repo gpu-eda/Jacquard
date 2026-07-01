@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 /// 1.1.0 — additive: `stats.violations_truncated`; per-cycle violations
 ///         array now bounded by default (worst-slack + per-word + totals
 ///         still reflect every event).
-pub const SCHEMA_VERSION: &str = "1.1.0";
+pub const SCHEMA_VERSION: &str = "1.2.0";
 
 /// One setup or hold violation record. Mirrors the `EventType::*Violation`
 /// payload, with `word_id` resolved to a human-readable `site` string via
@@ -72,6 +72,14 @@ pub struct ReportStats {
     /// per-cycle list is bounded.
     #[serde(default)]
     pub violations_truncated: u32,
+    /// Total negative slack (TNS / THS): the sum of every negative setup /
+    /// hold slack observed across the run, in picoseconds. Complements the
+    /// worst-single-slack (WNS / WHS) values carried in `worst_slack`. Always
+    /// ≤ 0; reflects every observed event regardless of the per-cycle cap.
+    #[serde(default)]
+    pub total_setup_slack_ps: i64,
+    #[serde(default)]
+    pub total_hold_slack_ps: i64,
 }
 
 /// Per-word aggregate: violation counts and worst slack across the run.
@@ -203,6 +211,12 @@ impl TimingReport {
         writeln!(out, "Worst slack:").unwrap();
         write_worst(&mut out, "Setup", self.worst_slack.setup.first());
         write_worst(&mut out, "Hold", self.worst_slack.hold.first());
+        writeln!(
+            out,
+            "  Total negative: setup (TNS)={}ps  hold (THS)={}ps",
+            self.stats.total_setup_slack_ps, self.stats.total_hold_slack_ps
+        )
+        .unwrap();
 
         if !self.per_word.is_empty() {
             writeln!(out).unwrap();
@@ -274,6 +288,10 @@ pub struct ReportBuilder {
     /// `None` = unbounded; `Some(n)` = keep the first `n` records.
     max_violations: Option<usize>,
     truncated: u32,
+    /// Running TNS / THS sums (negative slacks only), materialised into
+    /// `ReportStats` at `finalize`.
+    total_setup_slack_ps: i64,
+    total_hold_slack_ps: i64,
 }
 
 impl ReportBuilder {
@@ -294,15 +312,29 @@ impl ReportBuilder {
             hold_worst: WorstSlackTracker::with_capacity(worst_slack_n),
             max_violations,
             truncated: 0,
+            total_setup_slack_ps: 0,
+            total_hold_slack_ps: 0,
         }
     }
 
     pub fn observe(&mut self, v: ViolationRecord) {
-        // Worst-slack and per-word always see every violation; only the
-        // per-cycle list is bounded.
+        // Worst-slack, per-word, and the TNS/THS sums always see every
+        // violation; only the per-cycle list is bounded. Guard on
+        // `slack_ps < 0` so TNS/THS stay true "total *negative* slack"
+        // even if a zero/positive-slack record is ever observed.
         match v.kind {
-            ViolationKind::Setup => self.setup_worst.push(v.clone()),
-            ViolationKind::Hold => self.hold_worst.push(v.clone()),
+            ViolationKind::Setup => {
+                if v.slack_ps < 0 {
+                    self.total_setup_slack_ps += v.slack_ps as i64;
+                }
+                self.setup_worst.push(v.clone())
+            }
+            ViolationKind::Hold => {
+                if v.slack_ps < 0 {
+                    self.total_hold_slack_ps += v.slack_ps as i64;
+                }
+                self.hold_worst.push(v.clone())
+            }
         }
         update_per_word(&mut self.per_word, &v);
         match self.max_violations {
@@ -320,6 +352,8 @@ impl ReportBuilder {
     pub fn finalize(mut self, cycles_run: u32, mut stats: ReportStats) -> TimingReport {
         self.metadata.cycles_run = cycles_run;
         stats.violations_truncated = self.truncated;
+        stats.total_setup_slack_ps = self.total_setup_slack_ps;
+        stats.total_hold_slack_ps = self.total_hold_slack_ps;
         let per_word = sort_per_word(self.per_word.into_values().collect());
         TimingReport {
             schema_version: SCHEMA_VERSION.to_string(),
@@ -486,6 +520,39 @@ mod tests {
         assert_eq!(parsed.violations.len(), 2);
         assert_eq!(parsed.metadata.cycles_run, 50);
         assert_eq!(parsed.stats.setup_violations, 1);
+    }
+
+    #[test]
+    fn tns_ths_accumulate_across_observations() {
+        // Ported from PR #17: WNS/WHS are the single worst; TNS/THS are
+        // the sums. Setup: -100 + -450 + -200 = -750 (WNS = -450).
+        // Hold: -120 + -280 = -400 (WHS = -280).
+        let mut b = ReportBuilder::new(
+            RunMetadata {
+                jacquard_version: "0.1.0".into(),
+                clock_period_ps: 1000,
+                ..Default::default()
+            },
+            5,
+            None,
+        );
+        for slack in [-100, -450, -200] {
+            b.observe(make_violation(0, ViolationKind::Setup, 1, slack, 0));
+        }
+        for slack in [-120, -280] {
+            b.observe(make_violation(0, ViolationKind::Hold, 2, slack, 0));
+        }
+        let report = b.finalize(10, ReportStats::default());
+        assert_eq!(report.stats.total_setup_slack_ps, -750, "TNS");
+        assert_eq!(report.stats.total_hold_slack_ps, -400, "THS");
+        // WNS/WHS unaffected — still the single worst.
+        assert_eq!(report.worst_slack.setup[0].slack_ps, -450, "WNS");
+        assert_eq!(report.worst_slack.hold[0].slack_ps, -280, "WHS");
+        // Survives a JSON round-trip (serde default keeps back-compat).
+        let parsed: TimingReport =
+            serde_json::from_str(&serde_json::to_string(&report).unwrap()).unwrap();
+        assert_eq!(parsed.stats.total_setup_slack_ps, -750);
+        assert_eq!(parsed.stats.total_hold_slack_ps, -400);
     }
 
     #[test]

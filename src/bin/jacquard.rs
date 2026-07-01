@@ -51,8 +51,10 @@ impl TimingReportConfig<'_> {
             setup_violations: stats.setup_violations,
             hold_violations: stats.hold_violations,
             events_dropped: stats.events_dropped,
-            // `violations_truncated` is filled in by builder.finalize().
-            violations_truncated: 0,
+            // violations_truncated + the TNS/THS totals are filled in by
+            // builder.finalize(); default the rest so new report fields
+            // don't have to be threaded through here.
+            ..Default::default()
         };
         let report = builder.finalize(cycles_run, report_stats);
         if let Some(json_path) = self.json_path {
@@ -1685,7 +1687,9 @@ fn sim_hip(
                 setup_violations: sim_stats.setup_violations,
                 hold_violations: sim_stats.hold_violations,
                 events_dropped: sim_stats.events_dropped,
-                violations_truncated: 0,
+                // violations_truncated + TNS/THS totals are filled in by
+                // builder.finalize(); default the rest.
+                ..Default::default()
             };
             let report = builder.finalize(num_cycles as u32, stats);
             if let Some(json_path) = report_cfg.json_path {

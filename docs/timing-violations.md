@@ -146,11 +146,25 @@ Violations:
 Worst slack:
   Setup: -150ps  at top/cpu/regs[7][bit 22] [word=5]  (cycle 87)
   Hold:   -40ps  at top/cpu/state[bit 3] [word=12]  (cycle 91)
+  Total negative: setup (TNS)=-620ps  hold (THS)=-80ps
 
 Top 2 by violation count (of 2 total words with violations):
   top/cpu/regs[7][bit 22] [word=5] (5 violations): worst setup=-150ps hold=- arrival=950ps
   top/cpu/state[bit 3] [word=12] (2 violations): worst setup=- hold=-40ps arrival=10ps
 ```
+
+The **Worst slack** block reports the four standard signoff metrics:
+
+| Metric | Meaning |
+|--------|---------|
+| **WNS** (Worst Negative Slack) | The single most-negative setup slack across the whole run — the worst setup path. |
+| **WHS** (Worst Hold Slack) | The single most-negative hold slack. |
+| **TNS** (Total Negative Slack) | Sum of *all* negative setup slacks (`stats.total_setup_slack_ps` in the JSON). Captures the aggregate severity, not just the worst path. |
+| **THS** (Total Hold Slack) | Sum of all negative hold slacks (`stats.total_hold_slack_ps`). |
+
+TNS/THS reflect every observed violation regardless of the per-cycle
+list cap, and are never optimistic: if the GPU event buffer overflows,
+dropped events only make the true totals *more* negative.
 
 The format is for human inspection — explicitly **not** a stable
 parseable contract. Tools that need to script against the data should
