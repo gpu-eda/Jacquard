@@ -2,7 +2,16 @@
 
 Implementation plan for [ADR 0020](../adr/0020-python-engine-binary-wheel.md):
 turn PR #53's subprocess API into a `pip install jacquard` self-contained
-binary wheel built with cibuildwheel. Tracking issue: TBD (file when P0 starts).
+binary wheel built with cibuildwheel.
+
+> **Deferred (2026-07-01).** ADR 0020 is a **draft** — a native PyO3 binding is
+> the preferred long-term direction, and whether we build this subprocess-wheel
+> path at all is deferred (tracking issue linked from PR #158). **P0** (adopt
+> PR #53's API into the uv workspace) is worth doing regardless — it's the
+> Python surface either approach exposes. **P1–P3** (embed-and-delocate the
+> subprocess binary) are on hold pending the subprocess-vs-PyO3 decision; note
+> the shared hard part (per-platform wheels + `libc++`/`libomp` vendoring)
+> carries over to a PyO3 extension either way.
 
 ## Guiding constraints
 
