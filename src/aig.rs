@@ -629,8 +629,7 @@ impl AIG {
         seq: &cell_model_ir::Sequential,
     ) {
         let q = self.dffs.get(&cellid).unwrap().q;
-        let mut inputs: std::collections::HashMap<String, usize> =
-            std::collections::HashMap::new();
+        let mut inputs: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for ipin in netlistdb.cell2pin.iter_set(cellid) {
             if netlistdb.pindirect[ipin] == Direction::I {
                 inputs.insert(
@@ -942,7 +941,9 @@ impl AIG {
             // based via the gf180mcu module helpers (not a PDK dispatch enum).
             // See #75.
             let is_io_pad_buf = crate::gf180mcu::is_gf180mcu_cell(celltype)
-                && crate::gf180mcu_pdk::is_io_pad_cell(crate::gf180mcu::extract_cell_type(celltype));
+                && crate::gf180mcu_pdk::is_io_pad_cell(crate::gf180mcu::extract_cell_type(
+                    celltype,
+                ));
             let (is_inv, is_buf) = match Self::descriptor_clock_buf(celltype, cell_descriptor) {
                 Some(true) => (true, false),
                 Some(false) => (false, true),
@@ -1297,10 +1298,7 @@ impl AIG {
                         work_stack.push(WorkItem::Process(pinid));
                         for dep_pinid in netlistdb.cell2pin.iter_set(cellid) {
                             let pn = netlistdb.pinnames[dep_pinid].1.as_str();
-                            let is_async = seq
-                                .async_set
-                                .as_ref()
-                                .is_some_and(|c| c.pin == pn)
+                            let is_async = seq.async_set.as_ref().is_some_and(|c| c.pin == pn)
                                 || seq.async_reset.as_ref().is_some_and(|c| c.pin == pn);
                             if is_async {
                                 work_stack.push(WorkItem::Visit(dep_pinid));
@@ -2486,12 +2484,11 @@ impl AIG {
         // a descriptor explicitly (with `--cell-descriptor` / `--bundled-
         // descriptor` precedence); this covers the plain-API paths with the
         // same auto-select + default-fallback chain.
-        let auto = crate::bundled_descriptors::auto_select(
-            netlistdb.celltypes.iter().map(|s| s.as_str()),
-        )
-        .ok()
-        .flatten()
-        .or_else(crate::bundled_descriptors::default_fallback);
+        let auto =
+            crate::bundled_descriptors::auto_select(netlistdb.celltypes.iter().map(|s| s.as_str()))
+                .ok()
+                .flatten()
+                .or_else(crate::bundled_descriptors::default_fallback);
         Self::from_netlistdb_with_cells_and_descriptor(netlistdb, cell_library, auto.as_ref())
     }
 
@@ -2563,9 +2560,9 @@ impl AIG {
             let is_pdk_seq = (Self::is_sky130_stdcell(celltype)
                 && crate::sky130_pdk::is_sequential_cell(extract_cell_type(celltype)))
                 || (Self::is_gf180mcu_stdcell(celltype)
-                    && crate::gf180mcu_pdk::is_sequential_cell(crate::gf180mcu::extract_cell_type(
-                        celltype,
-                    )));
+                    && crate::gf180mcu_pdk::is_sequential_cell(
+                        crate::gf180mcu::extract_cell_type(celltype),
+                    ));
             // ADR 0019 C3.3d: descriptor-driven sequential classification for
             // stdcells outside the vendored PDKs (e.g. IHP SG13G2 `ff` cells),
             // so their clock pins are traced here like any other flop. Additive:
@@ -2641,7 +2638,9 @@ impl AIG {
                 // Negative-edge cells (CLKN) trigger on the falling edge:
                 // start the trace with is_negedge=true so trace_clock_pin
                 // records the inverted clock signal.
-                if let Err(pinid) = aig.trace_clock_pin(netlistdb, pinid, is_clkn, true, cell_descriptor) {
+                if let Err(pinid) =
+                    aig.trace_clock_pin(netlistdb, pinid, is_clkn, true, cell_descriptor)
+                {
                     use netlistdb::GeneralHierName;
                     panic!(
                         "Tracing clock pin of cell {} error: \
@@ -2712,8 +2711,9 @@ impl AIG {
                         "S" => ap_s_iv = pin_iv,
                         "R" => ap_r_iv = pin_iv,
                         "CLK" => {
-                            ap_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap()
+                            ap_clken_iv = aig
+                                .trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor)
+                                .unwrap()
                         }
                         _ => {}
                     }
@@ -2764,8 +2764,9 @@ impl AIG {
                         "SET_B" => ap_s_iv = pin_iv, // Active-low: AND/OR formulas handle it directly
                         "RESET_B" => ap_r_iv = pin_iv, // Active-low: AND(d, RESET_B) → RESET_B=0 forces d=0
                         "CLK" => {
-                            ap_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap()
+                            ap_clken_iv = aig
+                                .trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor)
+                                .unwrap()
                         }
                         _ => {}
                     }
@@ -2864,13 +2865,15 @@ impl AIG {
                         // CLKN flips the start polarity so the inferred
                         // signal is the falling-edge tracker.
                         "CLK" => {
-                            ap_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap();
+                            ap_clken_iv = aig
+                                .trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor)
+                                .unwrap();
                             have_clk = true;
                         }
                         "CLKN" => {
-                            ap_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, true, false, cell_descriptor).unwrap();
+                            ap_clken_iv = aig
+                                .trace_clock_pin(netlistdb, pinid, true, false, cell_descriptor)
+                                .unwrap();
                             have_clk = true;
                         }
                         _ => {}
@@ -2957,15 +2960,17 @@ impl AIG {
                             sram.port_r_addr_iv[bit.unwrap()] = pin_iv;
                         }
                         "PORT_R_CLK" => {
-                            sram.port_r_en_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap();
+                            sram.port_r_en_iv = aig
+                                .trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor)
+                                .unwrap();
                         }
                         "PORT_W_ADDR" => {
                             sram.port_w_addr_iv[bit.unwrap()] = pin_iv;
                         }
                         "PORT_W_CLK" => {
-                            write_clken_iv =
-                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap();
+                            write_clken_iv = aig
+                                .trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor)
+                                .unwrap();
                         }
                         "PORT_W_WR_DATA" => {
                             sram.port_w_wr_data_iv[bit.unwrap()] = pin_iv;
@@ -2994,7 +2999,9 @@ impl AIG {
                     let pin_iv = aig.pin2aigpin_iv[pinid];
                     match netlistdb.pinnames[pinid].1.as_str() {
                         "CLKin" => {
-                            clken_iv = aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor).unwrap();
+                            clken_iv = aig
+                                .trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor)
+                                .unwrap();
                         }
                         "EN" => {
                             // EN combined with clock for read enable
@@ -3231,7 +3238,9 @@ impl AIG {
                         "A" => ap_a_iv = pin_iv,
                         "CLK" => {
                             // Try to trace clock, but if it's tied to 1, use constant
-                            if let Ok(clken) = aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor) {
+                            if let Ok(clken) =
+                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor)
+                            {
                                 ap_clken_iv = clken;
                             }
                         }
@@ -3272,7 +3281,9 @@ impl AIG {
                         "EN" => dp_en_iv = pin_iv,
                         "CLK" => {
                             // Try to trace clock for edge detection
-                            if let Ok(clken) = aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor) {
+                            if let Ok(clken) =
+                                aig.trace_clock_pin(netlistdb, pinid, false, false, cell_descriptor)
+                            {
                                 dp_clken_iv = clken;
                             }
                         }
