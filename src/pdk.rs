@@ -165,5 +165,4 @@ mod tests {
         let empty: Vec<&str> = vec![];
         assert_eq!(detect_library(empty.iter()), CellLibrary::AIGPDK);
     }
-
 }
