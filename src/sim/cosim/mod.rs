@@ -345,9 +345,15 @@ struct FlashState {
     model_prev_csn: u32,
 }
 
-/// Parameters for the `gpu_apply_flash_din` kernel.
+/// Maximum number of QSPI memory instances a single GPU cosim can drive.
+/// Mirrors `MAX_BUS_TRACES`; the `*All` param blocks carry a fixed-size array.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+pub(crate) const MAX_QSPI_MEMS: usize = 4;
+
+/// Per-instance parameters for the `gpu_apply_flash_din` kernel.
 #[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
 #[repr(C)]
+#[derive(Clone, Copy, Default)]
 struct FlashDinParams {
     d_in_pos: [u32; 4],
     has_flash: u32,
@@ -358,15 +364,39 @@ struct FlashDinParams {
     xmask_state_offset: u32,
 }
 
-/// Parameters for the `gpu_flash_model_step` kernel.
+/// All-instance `gpu_apply_flash_din` params (plural; mirrors `BusTraceParamsAll`).
 #[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
 #[repr(C)]
+struct FlashDinParamsAll {
+    n_flashes: u32,
+    _pad: [u32; 3],
+    flashes: [FlashDinParams; MAX_QSPI_MEMS],
+}
+
+/// Per-instance parameters for the `gpu_flash_model_step` kernel.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
 struct FlashModelParams {
     state_size: u32,
     clk_out_pos: u32,
     csn_out_pos: u32,
     d_out_pos: [u32; 4],
     flash_data_size: u32,
+    /// Byte offset of this instance's backing store within the shared,
+    /// concatenated `flash_data` buffer. Instance i owns
+    /// `flash_data[data_offset .. data_offset + flash_data_size]`, so each
+    /// memory has an independent backing store. 0 for the single-instance case.
+    data_offset: u32,
+}
+
+/// All-instance `gpu_flash_model_step` params (plural; mirrors `BusTraceParamsAll`).
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[repr(C)]
+struct FlashModelParamsAll {
+    n_flashes: u32,
+    _pad: [u32; 3],
+    flashes: [FlashModelParams; MAX_QSPI_MEMS],
 }
 
 #[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
@@ -374,7 +404,10 @@ const _: () = {
     use std::mem::size_of;
     assert!(size_of::<FlashState>() == 48);
     assert!(size_of::<FlashDinParams>() == 24);
-    assert!(size_of::<FlashModelParams>() == 32);
+    assert!(size_of::<FlashModelParams>() == 36);
+    // n_flashes(4) + _pad(12) + N * per-instance.
+    assert!(size_of::<FlashDinParamsAll>() == 16 + MAX_QSPI_MEMS * 24);
+    assert!(size_of::<FlashModelParamsAll>() == 16 + MAX_QSPI_MEMS * 36);
 };
 
 /// Backend-agnostic per-bus pin positions resolved from the netlist. Plain

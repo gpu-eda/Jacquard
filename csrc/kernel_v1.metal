@@ -755,10 +755,20 @@ struct FlashState {
     uint model_prev_csn; // model internal: last csn seen by flash_eval_commit (for edge detection)
 };
 
+// Max QSPI memory instances (mirror MAX_QSPI_MEMS in src/sim/cosim/mod.rs).
+#define MAX_QSPI_MEMS 4
+
 struct FlashDinParams {
     u32 d_in_pos[4];     // input state bit positions for d0..d3
     u32 has_flash;       // 0 = skip
     u32 xmask_state_offset; // X-mask word offset (0 = xprop off)
+};
+
+// Plural block (mirror BusTraceParamsAll): n_flashes + per-instance params.
+struct FlashDinParamsAll {
+    u32 n_flashes;
+    u32 _pad[3];
+    FlashDinParams flashes[MAX_QSPI_MEMS];
 };
 
 struct FlashModelParams {
@@ -766,7 +776,14 @@ struct FlashModelParams {
     u32 clk_out_pos;      // output state bit position: flash_clk
     u32 csn_out_pos;      // output state bit position: flash_csn
     u32 d_out_pos[4];     // output state bit positions: d0..d3
-    u32 flash_data_size;  // firmware size in bytes
+    u32 flash_data_size;  // this instance's backing-store size in bytes
+    u32 data_offset;      // byte offset of this instance's store in flash_data
+};
+
+struct FlashModelParamsAll {
+    u32 n_flashes;
+    u32 _pad[3];
+    FlashModelParams flashes[MAX_QSPI_MEMS];
 };
 
 // ── Flash model inline helpers (ported from spiflash_model.cc) ───────────────
@@ -904,28 +921,31 @@ inline void flash_eval_commit_persistent(
 kernel void gpu_apply_flash_din(
     device u32* states [[buffer(0)]],
     device const FlashState* flash_state [[buffer(1)]],
-    constant FlashDinParams& params [[buffer(2)]],
+    constant FlashDinParamsAll& params [[buffer(2)]],
     uint tid [[thread_position_in_threadgroup]]
 ) {
-    if (tid != 0 || params.has_flash == 0) return;
+    if (tid != 0) return;
 
-    uchar d_i = flash_state->d_i;
-    u32 xmask_off = params.xmask_state_offset;
+    for (uint f = 0; f < params.n_flashes && f < MAX_QSPI_MEMS; f++) {
+        constant FlashDinParams& fp = params.flashes[f];
+        uchar d_i = flash_state[f].d_i;
+        u32 xmask_off = fp.xmask_state_offset;
 
-    for (uint i = 0; i < 4; i++) {
-        u32 pos = params.d_in_pos[i];
-        if (pos == 0xFFFFFFFFu) continue;
-        u32 word_idx = pos >> 5;
-        u32 bit_mask = 1u << (pos & 31u);
-        if ((d_i >> i) & 1) {
-            states[word_idx] |= bit_mask;
-        } else {
-            states[word_idx] &= ~bit_mask;
-        }
-        // These MISO bits are driven (known) here, bypassing state_prep's edge
-        // ops — clear their X-mask so they don't stay X-seeded (#95 phase 3).
-        if (xmask_off != 0u) {
-            states[xmask_off + word_idx] &= ~bit_mask;
+        for (uint i = 0; i < 4; i++) {
+            u32 pos = fp.d_in_pos[i];
+            if (pos == 0xFFFFFFFFu) continue;
+            u32 word_idx = pos >> 5;
+            u32 bit_mask = 1u << (pos & 31u);
+            if ((d_i >> i) & 1) {
+                states[word_idx] |= bit_mask;
+            } else {
+                states[word_idx] &= ~bit_mask;
+            }
+            // These MISO bits are driven (known) here, bypassing state_prep's
+            // edge ops — clear their X-mask so they don't stay X-seeded (#95).
+            if (xmask_off != 0u) {
+                states[xmask_off + word_idx] &= ~bit_mask;
+            }
         }
     }
 }
@@ -943,94 +963,100 @@ kernel void gpu_apply_flash_din(
 kernel void gpu_flash_model_step(
     device u32* states [[buffer(0)]],
     device FlashState* flash_state [[buffer(1)]],
-    constant FlashModelParams& params [[buffer(2)]],
+    constant FlashModelParamsAll& params [[buffer(2)]],
     device const uchar* flash_data [[buffer(3)]],
     uint tid [[thread_position_in_threadgroup]]
 ) {
     if (tid != 0) return;
 
-    u32 state_size = params.state_size;
+    for (uint f = 0; f < params.n_flashes && f < MAX_QSPI_MEMS; f++) {
+        device FlashState& fs = flash_state[f];
+        constant FlashModelParams& fm = params.flashes[f];
+        // Each instance owns its own slice of the concatenated backing store.
+        device const uchar* fd = flash_data + fm.data_offset;
 
-    // Read current output state signals
-    u32 clk_word = params.clk_out_pos >> 5;
-    u32 clk_bit = params.clk_out_pos & 31u;
-    uint clk = (states[state_size + clk_word] >> clk_bit) & 1u;
+        u32 state_size = fm.state_size;
 
-    u32 csn_word = params.csn_out_pos >> 5;
-    u32 csn_bit = params.csn_out_pos & 31u;
-    uint csn = (states[state_size + csn_word] >> csn_bit) & 1u;
+        // Read current output state signals
+        u32 clk_word = fm.clk_out_pos >> 5;
+        u32 clk_bit = fm.clk_out_pos & 31u;
+        uint clk = (states[state_size + clk_word] >> clk_bit) & 1u;
 
-    // Read d_out nibble from output state
-    uchar d_out = 0;
-    for (uint i = 0; i < 4; i++) {
-        u32 pos = params.d_out_pos[i];
-        if (pos == 0xFFFFFFFFu) continue;
-        u32 w = pos >> 5;
-        u32 b = pos & 31u;
-        d_out |= (uchar)(((states[state_size + w] >> b) & 1u) << i);
+        u32 csn_word = fm.csn_out_pos >> 5;
+        u32 csn_bit = fm.csn_out_pos & 31u;
+        uint csn = (states[state_size + csn_word] >> csn_bit) & 1u;
+
+        // Read d_out nibble from output state
+        uchar d_out = 0;
+        for (uint i = 0; i < 4; i++) {
+            u32 pos = fm.d_out_pos[i];
+            if (pos == 0xFFFFFFFFu) continue;
+            u32 w = pos >> 5;
+            u32 b = pos & 31u;
+            d_out |= (uchar)(((states[state_size + w] >> b) & 1u) << i);
+        }
+
+        // If in reset, force d_i high and update prev values
+        if (fs.in_reset) {
+            fs.d_i = 0x0F;
+            fs.prev_clk = clk;
+            fs.prev_csn = csn;
+            fs.model_prev_csn = csn;
+            fs.prev_d_out = d_out;
+            continue;
+        }
+
+        // Load state into locals for eval_commit
+        int bit_count = fs.bit_count;
+        int byte_count = fs.byte_count;
+        uint data_width = fs.data_width;
+        uint addr = fs.addr;
+        uchar curr_byte = fs.curr_byte;
+        uchar command = fs.command;
+        uchar out_buffer = fs.out_buffer;
+        uint prev_clk = fs.prev_clk;
+        uint prev_csn = fs.prev_csn;
+        uint last_error_cmd = fs.last_error_cmd;
+        uchar prev_d_out = fs.prev_d_out;
+
+        // Dual-step for setup delay (matches old GPU sim CPU callback behavior):
+        // The SPI clock, CSN, and data DFFs all advance simultaneously on the
+        // system clock edge. We feed delayed CSN/data with current clock to
+        // model setup timing. model_prev_csn tracks the model's internal edge
+        // detection state; prev_csn holds the delayed CSN (previous output).
+        uint model_prev_csn = fs.model_prev_csn;
+
+        // d_i persists across steps (matching C++ p_d_i member variable
+        // behavior). It's only updated on negedge_clk inside flash_eval_commit.
+        uchar d_i = fs.d_i;
+
+        // Step 1: eval with prev_csn + prev_d_out (posedge, samples old data)
+        flash_eval_commit_persistent(clk, prev_csn, prev_d_out,
+            bit_count, byte_count, data_width, addr,
+            curr_byte, command, out_buffer, prev_clk, model_prev_csn,
+            last_error_cmd, d_i, fd, fm.flash_data_size);
+
+        // Step 2: eval with prev_csn + current d_out
+        flash_eval_commit_persistent(clk, prev_csn, d_out,
+            bit_count, byte_count, data_width, addr,
+            curr_byte, command, out_buffer, prev_clk, model_prev_csn,
+            last_error_cmd, d_i, fd, fm.flash_data_size);
+
+        // Write state back
+        fs.bit_count = bit_count;
+        fs.byte_count = byte_count;
+        fs.data_width = data_width;
+        fs.addr = addr;
+        fs.curr_byte = curr_byte;
+        fs.command = command;
+        fs.out_buffer = out_buffer;
+        fs.prev_clk = clk;
+        fs.prev_csn = csn;  // current output csn → next tick's delayed csn
+        fs.model_prev_csn = model_prev_csn;  // model's edge detection state
+        fs.d_i = d_i;
+        fs.prev_d_out = d_out;
+        fs.last_error_cmd = last_error_cmd;
     }
-
-    // If in reset, force d_i high and update prev values
-    if (flash_state->in_reset) {
-        flash_state->d_i = 0x0F;
-        flash_state->prev_clk = clk;
-        flash_state->prev_csn = csn;
-        flash_state->model_prev_csn = csn;
-        flash_state->prev_d_out = d_out;
-        return;
-    }
-
-    // Load state into locals for eval_commit
-    int bit_count = flash_state->bit_count;
-    int byte_count = flash_state->byte_count;
-    uint data_width = flash_state->data_width;
-    uint addr = flash_state->addr;
-    uchar curr_byte = flash_state->curr_byte;
-    uchar command = flash_state->command;
-    uchar out_buffer = flash_state->out_buffer;
-    uint prev_clk = flash_state->prev_clk;
-    uint prev_csn = flash_state->prev_csn;
-    uint last_error_cmd = flash_state->last_error_cmd;
-    uchar prev_d_out = flash_state->prev_d_out;
-
-    // Dual-step for setup delay (matches old GPU sim CPU callback behavior):
-    // The SPI clock, CSN, and data DFFs all advance simultaneously on the system
-    // clock edge. We feed delayed CSN/data with current clock to model setup timing.
-    //
-    // model_prev_csn tracks the model's internal edge detection state (the CSN value
-    // the model last saw). prev_csn holds the delayed CSN (previous tick's output).
-    uint model_prev_csn = flash_state->model_prev_csn;
-
-    // d_i persists across steps (matching C++ p_d_i member variable behavior).
-    // It's only updated on negedge_clk inside flash_eval_commit.
-    uchar d_i = flash_state->d_i;
-
-    // Step 1: eval with prev_csn + prev_d_out (processes posedge, samples old data)
-    flash_eval_commit_persistent(clk, prev_csn, prev_d_out,
-        bit_count, byte_count, data_width, addr,
-        curr_byte, command, out_buffer, prev_clk, model_prev_csn,
-        last_error_cmd, d_i, flash_data, params.flash_data_size);
-
-    // Step 2: eval with prev_csn + current d_out
-    flash_eval_commit_persistent(clk, prev_csn, d_out,
-        bit_count, byte_count, data_width, addr,
-        curr_byte, command, out_buffer, prev_clk, model_prev_csn,
-        last_error_cmd, d_i, flash_data, params.flash_data_size);
-
-    // Write state back
-    flash_state->bit_count = bit_count;
-    flash_state->byte_count = byte_count;
-    flash_state->data_width = data_width;
-    flash_state->addr = addr;
-    flash_state->curr_byte = curr_byte;
-    flash_state->command = command;
-    flash_state->out_buffer = out_buffer;
-    flash_state->prev_clk = clk;
-    flash_state->prev_csn = csn;  // store current output csn → becomes next tick's delayed csn
-    flash_state->model_prev_csn = model_prev_csn;  // model's edge detection state
-    flash_state->d_i = d_i;
-    flash_state->prev_d_out = d_out;
-    flash_state->last_error_cmd = last_error_cmd;
 }
 
 // ── UART Decoder State + Channel (ADR 0013: multi-instance) ─────────────────
