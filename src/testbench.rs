@@ -816,4 +816,92 @@ mod tests {
         assert_eq!(uarts[0].name.as_deref(), Some("legacy"));
         assert_eq!(uarts[1].name.as_deref(), Some("new"));
     }
+
+    // ── QSPI memory plurality + legacy `flash` back-compat (ADR 0013) ─────────
+
+    fn qspi_mem(name: Option<&str>, csn_gpio: usize) -> QspiMemoryConfig {
+        let name_field = name
+            .map(|n| format!(r#""name": "{n}","#))
+            .unwrap_or_default();
+        serde_json::from_str(&format!(
+            r#"{{ {name_field} "clk_gpio": 0, "csn_gpio": {csn_gpio}, "d0_gpio": 2 }}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn effective_qspi_memory_empty_when_neither_set() {
+        let cfg = minimal_config();
+        assert!(cfg.effective_qspi_memory().is_empty());
+    }
+
+    #[test]
+    fn effective_qspi_memory_from_legacy_flash() {
+        let mut cfg = minimal_config();
+        cfg.flash = Some(qspi_mem(None, 7));
+        let mems = cfg.effective_qspi_memory();
+        assert_eq!(mems.len(), 1);
+        assert_eq!(mems[0].csn_gpio, 7);
+    }
+
+    #[test]
+    fn effective_qspi_memory_from_plural() {
+        let mut cfg = minimal_config();
+        cfg.qspi_memory = vec![qspi_mem(Some("rom"), 3), qspi_mem(Some("psram"), 6)];
+        let mems = cfg.effective_qspi_memory();
+        assert_eq!(mems.len(), 2);
+        assert_eq!(mems[0].name.as_deref(), Some("rom"));
+        assert_eq!(mems[1].name.as_deref(), Some("psram"));
+        // Independent pins → independent peripherals.
+        assert_ne!(mems[0].csn_gpio, mems[1].csn_gpio);
+    }
+
+    #[test]
+    fn effective_qspi_memory_merges_legacy_flash_prepended() {
+        let mut cfg = minimal_config();
+        cfg.flash = Some(qspi_mem(Some("legacy"), 3));
+        cfg.qspi_memory = vec![qspi_mem(Some("new"), 6)];
+        let mems = cfg.effective_qspi_memory();
+        assert_eq!(mems.len(), 2);
+        assert_eq!(mems[0].name.as_deref(), Some("legacy"));
+        assert_eq!(mems[1].name.as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn legacy_flash_key_deserializes_and_folds() {
+        // An existing sim_config.json using the singular `"flash"` key must
+        // still parse and behave as one QSPI memory (byte-compat).
+        let cfg: TestbenchConfig = serde_json::from_str(
+            r#"{
+                "clock_gpio": 0, "reset_gpio": 1, "reset_active_high": true,
+                "reset_cycles": 10, "num_cycles": 100,
+                "flash": { "clk_gpio": 2, "csn_gpio": 3, "d0_gpio": 4 }
+            }"#,
+        )
+        .unwrap();
+        let mems = cfg.effective_qspi_memory();
+        assert_eq!(mems.len(), 1);
+        assert_eq!(mems[0].clk_gpio, 2);
+        assert_eq!(mems[0].csn_gpio, 3);
+        assert_eq!(mems[0].d0_gpio, 4);
+    }
+
+    #[test]
+    fn plural_qspi_memory_key_parses_distinct_instances() {
+        let cfg: TestbenchConfig = serde_json::from_str(
+            r#"{
+                "clock_gpio": 0, "reset_gpio": 1, "reset_active_high": true,
+                "reset_cycles": 10, "num_cycles": 100,
+                "qspi_memory": [
+                    { "clk_gpio": 2, "csn_gpio": 3, "d0_gpio": 4 },
+                    { "clk_gpio": 5, "csn_gpio": 6, "d0_gpio": 7 }
+                ]
+            }"#,
+        )
+        .unwrap();
+        let mems = cfg.effective_qspi_memory();
+        assert_eq!(mems.len(), 2);
+        assert_ne!(mems[0].csn_gpio, mems[1].csn_gpio);
+        assert_ne!(mems[0].d0_gpio, mems[1].d0_gpio);
+    }
 }
