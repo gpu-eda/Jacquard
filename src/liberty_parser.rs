@@ -142,6 +142,59 @@ pub struct TimingLibrary {
     pub cells: IndexMap<String, CellTiming>,
 }
 
+/// Resolve the runtime [`TimingLibrary`] a run should consume, applying the
+/// ADR 0019 D5 precedence — the single implementation shared by the `sim
+/// --timed` static-timing path, the no-SDF pre-layout timing path
+/// (`src/sim/setup.rs`), the SDF / timing-IR `liberty_fallback`, and the
+/// `dump-paths` / standalone `timing_analysis` dev tools.
+///
+/// Precedence:
+/// 1. **descriptor L4** — cell-model-IR (ADR 0019): explicit
+///    `--cell-descriptor <path>` > `--bundled-descriptor <name>` >
+///    netlist-cell-prefix auto-select. Corner is `corner` (`--corner`) or the
+///    descriptor's `default_corner`.
+/// 2. **`--liberty <path>`** — an explicit runtime `.lib` parse, kept as an
+///    override for libraries without a bundled/auto-selectable descriptor.
+/// 3. **AIGPDK default** — `aigpdk/aigpdk.lib`, matching `pdk::resolve_library`.
+///
+/// `cell_types` is the netlist's cell-type set, used only for the auto-select
+/// tier. Panics with an actionable message on a bad `--corner`, a bad
+/// `--cell-descriptor` path/unknown bundled name (via
+/// [`crate::bundled_descriptors::resolve`]), or an ambiguous auto-select.
+pub fn resolve_timing_library<'a>(
+    cell_types: impl Iterator<Item = &'a str>,
+    cell_descriptor: Option<&Path>,
+    bundled_descriptor: Option<&str>,
+    corner: Option<&str>,
+    liberty: Option<&Path>,
+) -> TimingLibrary {
+    let descriptor = crate::bundled_descriptors::resolve(cell_descriptor, bundled_descriptor)
+        .or_else(|| {
+            crate::bundled_descriptors::auto_select(cell_types).unwrap_or_else(|e| panic!("{e}"))
+        });
+    if let Some(ir) = descriptor {
+        let corner_name = corner.unwrap_or(&ir.default_corner);
+        let corner_index = ir.corner_index(corner_name).unwrap_or_else(|| {
+            panic!(
+                "--corner '{}' not found in descriptor corner set {:?}",
+                corner_name,
+                ir.corners.iter().map(|c| &c.name).collect::<Vec<_>>()
+            )
+        });
+        clilog::info!(
+            "L4 timing from cell-model-IR descriptor '{}' at corner '{}' (index {})",
+            ir.library.name,
+            corner_name,
+            corner_index
+        );
+        TimingLibrary::from_cell_model_ir(&ir, corner_index)
+    } else if let Some(lib_path) = liberty {
+        TimingLibrary::from_file(lib_path).expect("Failed to load Liberty library")
+    } else {
+        TimingLibrary::load_aigpdk().expect("Failed to load default AIGPDK library")
+    }
+}
+
 impl TimingLibrary {
     /// Load a Liberty library from a file path.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, String> {
@@ -1008,5 +1061,51 @@ library ("sky130_fd_sc_hd__tt_025C_1v80") {
         let lib = TimingLibrary::parse_unchecked(no_cells)
             .expect("parse_unchecked should accept zero-cell Liberty");
         assert!(lib.cells.is_empty());
+    }
+
+    /// ADR 0019 D5: a built-in-PDK design with **no `--liberty`** must get its
+    /// L4 timing from the embedded cell-model-IR descriptor. A SKY130 cell-type
+    /// set auto-selects the SKY130 descriptor through `resolve_timing_library`
+    /// (no `cell_descriptor`/`bundled_descriptor`/`liberty` supplied), yielding a
+    /// non-empty timing library named after that descriptor — proving the no-
+    /// `--liberty` timed path is served entirely from the embedded descriptor.
+    #[test]
+    fn no_liberty_timed_run_gets_l4_from_embedded_descriptor() {
+        // SKY130 may be empty in a submodule-absent build; only assert when its
+        // declared prefix is present (mirrors the bundled_descriptors tests).
+        let sky = crate::bundled_descriptors::load("sky130").expect("sky130 descriptor must load");
+        if sky.library.prefixes.is_empty() {
+            eprintln!("skipping: sky130 submodule absent at build time");
+            return;
+        }
+
+        let cells = [
+            "sky130_fd_sc_hd__inv_2",
+            "sky130_fd_sc_hd__nand2_1",
+            "sky130_fd_sc_hd__dfxtp_1",
+        ];
+        // No cell_descriptor, no bundled_descriptor, no --corner, no --liberty:
+        // the netlist prefix alone selects the embedded SKY130 descriptor.
+        let lib = resolve_timing_library(cells.iter().copied(), None, None, None, None);
+
+        assert!(
+            lib.name.starts_with("sky130_fd_sc_hd__"),
+            "expected the SKY130 descriptor library, got '{}'",
+            lib.name
+        );
+        assert!(
+            !lib.cells.is_empty(),
+            "descriptor L4 must yield a non-empty timing library"
+        );
+        // The DFF cell must carry real timing arcs (setup/hold + clock→Q), i.e.
+        // the L4 projection is populated, not a hollow shell.
+        let dff = lib
+            .cells
+            .get("sky130_fd_sc_hd__dfxtp_1")
+            .expect("SKY130 D-flop must be present in the descriptor L4");
+        assert!(
+            !dff.pins.is_empty(),
+            "SKY130 D-flop must carry timing pins from descriptor L4"
+        );
     }
 }

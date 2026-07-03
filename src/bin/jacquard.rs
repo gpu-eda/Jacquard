@@ -498,6 +498,21 @@ struct DumpPathsArgs {
     #[clap(long)]
     timing_ir: Option<PathBuf>,
 
+    /// Generated cell-model-IR descriptor (ADR 0019), same as `sim`/`cosim`.
+    /// When set (or auto-selected from the netlist), supplies L4 timing.
+    #[clap(long = "cell-descriptor", value_name = "PATH")]
+    cell_descriptor: Option<PathBuf>,
+
+    /// Build-time-embedded cell-model-IR descriptor by name (ADR 0019 D7),
+    /// same as `sim`/`cosim`.
+    #[clap(long = "bundled-descriptor", value_name = "NAME")]
+    bundled_descriptor: Option<String>,
+
+    /// PVT corner to read L4 timing from in the descriptor (ADR 0019 D5).
+    /// Absent uses the descriptor's `default_corner`.
+    #[clap(long = "corner", value_name = "NAME")]
+    corner: Option<String>,
+
     /// Number of critical paths to dump (default: 5).
     #[clap(long, default_value = "5")]
     limit: usize,
@@ -597,15 +612,24 @@ fn cmd_sim(args: SimArgs) {
         bundled_descriptor: args.bundled_descriptor.clone(),
         trace_signals: args.trace_signals.clone(),
         extra_observable_signals: Vec::new(),
+        corner: args.corner.clone(),
+        timed: args.timed,
     };
 
     #[allow(unused_mut)]
     let mut design = setup::load_design(&design_args);
 
-    // Enable timing arrival readback if --timed is set
+    // Enable timing arrival readback if --timed is set. ADR 0019 D5: --timed no
+    // longer strictly requires --sdf/--liberty/--timing-ir — a matching cell-
+    // model-IR descriptor supplies L4, loaded into the script by load_design.
+    // Require that *some* timing source ended up loaded rather than a specific
+    // flag.
     if args.timed {
-        if args.sdf.is_none() && args.liberty.is_none() && args.timing_ir.is_none() {
-            eprintln!("Error: --timed requires --sdf, --liberty, or --timing-ir");
+        if !design.script.timing_enabled {
+            eprintln!(
+                "Error: --timed requires a timing source (--sdf, --liberty, \
+                 --timing-ir, or a cell-model-IR descriptor matching the netlist)"
+            );
             std::process::exit(1);
         }
         design.script.enable_timing_arrivals();
@@ -1851,8 +1875,6 @@ fn run_timing_analysis(
     netlistdb: &netlistdb::NetlistDB,
     args: &SimArgs,
 ) {
-    use jacquard::liberty_parser::TimingLibrary;
-
     clilog::info!("Running timing analysis on GPU simulation results...");
     let timer_timing = clilog::stimer!("timing_analysis");
 
@@ -1861,36 +1883,15 @@ fn run_timing_analysis(
     // parse. Descriptor selection mirrors the functional path's C3.2 precedence
     // (explicit file > bundled name > netlist-prefix auto-match); the same
     // descriptor that built the AIG also supplies its timing. Falls back to
-    // `--liberty` / the AIGPDK default when nothing matches.
-    let descriptor = jacquard::bundled_descriptors::resolve(
+    // `--liberty` / the AIGPDK default when nothing matches. Shared with the
+    // no-SDF pre-layout timing path via `resolve_timing_library`.
+    let lib = jacquard::liberty_parser::resolve_timing_library(
+        netlistdb.celltypes.iter().map(|s| s.as_str()),
         args.cell_descriptor.as_deref(),
         args.bundled_descriptor.as_deref(),
-    )
-    .or_else(|| {
-        jacquard::bundled_descriptors::auto_select(netlistdb.celltypes.iter().map(|s| s.as_str()))
-            .unwrap_or_else(|e| panic!("{e}"))
-    });
-    let lib = if let Some(ir) = descriptor {
-        let corner_name = args.corner.as_deref().unwrap_or(&ir.default_corner);
-        let corner_index = ir.corner_index(corner_name).unwrap_or_else(|| {
-            panic!(
-                "--corner '{}' not found in descriptor corner set {:?}",
-                corner_name,
-                ir.corners.iter().map(|c| &c.name).collect::<Vec<_>>()
-            )
-        });
-        clilog::info!(
-            "L4 timing from cell-model-IR descriptor '{}' at corner '{}' (index {})",
-            ir.library.name,
-            corner_name,
-            corner_index
-        );
-        TimingLibrary::from_cell_model_ir(&ir, corner_index)
-    } else if let Some(lib_path) = &args.liberty {
-        TimingLibrary::from_file(lib_path).expect("Failed to load Liberty library")
-    } else {
-        TimingLibrary::load_aigpdk().expect("Failed to load default AIGPDK library")
-    };
+        args.corner.as_deref(),
+        args.liberty.as_deref(),
+    );
     clilog::info!("Loaded Liberty library: {}", lib.name);
 
     aig.load_timing_library(&lib);
@@ -1955,7 +1956,6 @@ fn run_timing_analysis(
 }
 
 fn cmd_dump_paths(args: DumpPathsArgs) {
-    use jacquard::liberty_parser::TimingLibrary;
     use jacquard::sim::setup;
 
     clilog::info!("Loading design for critical path analysis...");
@@ -1977,21 +1977,28 @@ fn cmd_dump_paths(args: DumpPathsArgs) {
         timing_ir: args.timing_ir.clone(),
         timing_corner: None,
         cell_library: Vec::new(),
-        cell_descriptor: None,
-        bundled_descriptor: None,
+        cell_descriptor: args.cell_descriptor.clone(),
+        bundled_descriptor: args.bundled_descriptor.clone(),
         trace_signals: None,
         extra_observable_signals: Vec::new(),
+        corner: args.corner.clone(),
+        timed: false,
     };
 
     let mut design = setup::load_design(&design_args);
     clilog::finish!(timer);
 
     clilog::info!("Loading timing library...");
-    let lib = if let Some(lib_path) = &args.liberty {
-        TimingLibrary::from_file(lib_path).expect("Failed to load Liberty library")
-    } else {
-        TimingLibrary::load_aigpdk().expect("Failed to load default AIGPDK library")
-    };
+    // ADR 0019 D5: descriptor L4 (explicit > bundled > netlist-prefix
+    // auto-select) → `--liberty` override → AIGPDK default, via the shared
+    // `resolve_timing_library` — same precedence as `run_timing_analysis`.
+    let lib = jacquard::liberty_parser::resolve_timing_library(
+        design.netlistdb.celltypes.iter().map(|s| s.as_str()),
+        args.cell_descriptor.as_deref(),
+        args.bundled_descriptor.as_deref(),
+        args.corner.as_deref(),
+        args.liberty.as_deref(),
+    );
     clilog::info!("Loaded Liberty library: {}", lib.name);
 
     let aig = &mut design.aig;
@@ -2209,6 +2216,11 @@ fn cmd_cosim(args: CosimArgs) {
             bundled_descriptor: args.bundled_descriptor.clone(),
             trace_signals: args.trace_signals.clone(),
             extra_observable_signals: bus_trace_signals,
+            // cosim has no `--corner`/`--timed`; its no-SDF path stays off
+            // unless a timing IR is supplied (handled by load_timing_ir, whose
+            // descriptor fallback still uses `default_corner`).
+            corner: None,
+            timed: false,
         };
 
         let mut design = setup::load_design(&design_args);

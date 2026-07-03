@@ -10,7 +10,6 @@
 
 use jacquard::aig::AIG;
 use jacquard::aigpdk::AIGPDKLeafPins;
-use jacquard::liberty_parser::TimingLibrary;
 use netlistdb::NetlistDB;
 use std::path::PathBuf;
 
@@ -71,15 +70,7 @@ fn main() {
     let args = <Args as clap::Parser>::parse();
     clilog::info!("Timing analysis args:\n{:#?}", args);
 
-    // Load Liberty library
-    let lib = if let Some(lib_path) = &args.liberty {
-        TimingLibrary::from_file(lib_path).expect("Failed to load Liberty library")
-    } else {
-        TimingLibrary::load_aigpdk().expect("Failed to load default AIGPDK library")
-    };
-    clilog::info!("Loaded Liberty library: {}", lib.name);
-
-    // Load netlist
+    // Load netlist first so descriptor auto-selection can key on its cell types.
     clilog::info!("Loading netlist: {:?}", args.netlist_verilog);
     let netlistdb = NetlistDB::from_sverilog_file(
         &args.netlist_verilog,
@@ -87,6 +78,21 @@ fn main() {
         &AIGPDKLeafPins(),
     )
     .expect("Failed to build netlist");
+
+    // ADR 0019 D5: timing via the shared `resolve_timing_library` — descriptor
+    // L4 (netlist-prefix auto-select) → `--liberty` override → AIGPDK default.
+    // This dev tool parses AIGPDK netlists only (no `--cell-descriptor` flag),
+    // so auto-select finds no prefix match and it resolves to `--liberty` or the
+    // bundled AIGPDK default — its historical behaviour, with no raw runtime
+    // `.lib` parse of its own.
+    let lib = jacquard::liberty_parser::resolve_timing_library(
+        netlistdb.celltypes.iter().map(|s| s.as_str()),
+        None,
+        None,
+        None,
+        args.liberty.as_deref(),
+    );
+    clilog::info!("Loaded Liberty library: {}", lib.name);
 
     clilog::info!(
         "Netlist loaded: {} pins, {} cells",

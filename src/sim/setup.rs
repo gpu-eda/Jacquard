@@ -79,6 +79,17 @@ pub struct DesignArgs {
     /// to surface a configured bus's pins). Registered through the same
     /// path as `trace_signals`.
     pub extra_observable_signals: Vec<String>,
+    /// Optional `--corner <NAME>` — the ADR 0019 D5 PVT corner to read L4
+    /// timing from in the descriptor-driven no-SDF pre-layout timing path.
+    /// Names a corner in the resolved descriptor's corner set; absent uses the
+    /// descriptor's `default_corner`. Distinct from `timing_corner`, which
+    /// selects a corner in a per-design timing IR (ADR 0002).
+    pub corner: Option<String>,
+    /// `--timed` requested pre-layout timing without an SDF/IR. Triggers the
+    /// no-SDF timing path (ADR 0019 D5) to source L4 from the cell-model-IR
+    /// descriptor even when `--liberty` is absent. When false, that path fires
+    /// only if `--liberty` was passed (legacy opt-in).
+    pub timed: bool,
 }
 
 /// Result of loading a design: everything needed for simulation.
@@ -352,6 +363,9 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
             args.clock_period_ps,
             args.liberty.as_deref(),
             args.timing_corner.as_deref(),
+            args.cell_descriptor.as_deref(),
+            args.bundled_descriptor.as_deref(),
+            args.corner.as_deref(),
             args.sdf_debug,
         );
     } else if let Some(ref sdf_path) = args.sdf {
@@ -370,24 +384,36 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
             args.top_module.as_deref(),
             args.clock_period_ps,
             args.timing_corner.as_deref(),
+            args.cell_descriptor.as_deref(),
+            args.bundled_descriptor.as_deref(),
+            args.corner.as_deref(),
             args.sdf_debug,
         );
     }
 
-    // Load Liberty-only timing if provided and no SDF/IR
-    if args.sdf.is_none() && args.timing_ir.is_none() {
-        if let Some(ref lib_path) = args.liberty {
-            use crate::liberty_parser::TimingLibrary;
-            let lib = TimingLibrary::from_file(lib_path).expect("Failed to load Liberty library");
-            let clock_ps = args.clock_period_ps.unwrap_or(25000);
-            clilog::info!(
-                "Loading Liberty timing: {:?} (clock_period={}ps)",
-                lib_path,
-                clock_ps
-            );
-            script.load_timing(&aig, &netlistdb, &lib, clock_ps);
-            script.inject_timing_to_script();
-        }
+    // Pre-layout (no-SDF, no-IR) timing. ADR 0019 D5: source per-cell-type L4
+    // from the cell-model-IR descriptor (explicit > bundled > netlist-prefix
+    // auto-select), with `--liberty` as an explicit `.lib` override and AIGPDK
+    // as the default — one implementation via `resolve_timing_library`. The
+    // trigger stays opt-in so functional runs pay no timing cost: fire when
+    // `--liberty` was passed (legacy) or `--timed` requested it (the D5 case —
+    // timing from the embedded descriptor with no `--liberty`).
+    if args.sdf.is_none() && args.timing_ir.is_none() && (args.liberty.is_some() || args.timed) {
+        let lib = crate::liberty_parser::resolve_timing_library(
+            netlistdb.celltypes.iter().map(|s| s.as_str()),
+            args.cell_descriptor.as_deref(),
+            args.bundled_descriptor.as_deref(),
+            args.corner.as_deref(),
+            args.liberty.as_deref(),
+        );
+        let clock_ps = args.clock_period_ps.unwrap_or(25000);
+        clilog::info!(
+            "Loading pre-layout timing '{}' (clock_period={}ps)",
+            lib.name,
+            clock_ps
+        );
+        script.load_timing(&aig, &netlistdb, &lib, clock_ps);
+        script.inject_timing_to_script();
     }
 
     // Print script hash
@@ -423,6 +449,9 @@ pub fn load_sdf_via_opensta_to_ir(
     top_module: Option<&str>,
     clock_period_ps: Option<u64>,
     corner_name: Option<&str>,
+    cell_descriptor: Option<&Path>,
+    bundled_descriptor: Option<&str>,
+    l4_corner: Option<&str>,
     debug: bool,
 ) {
     let liberty_path = liberty_path.unwrap_or_else(|| {
@@ -482,7 +511,18 @@ pub fn load_sdf_via_opensta_to_ir(
     let ir_file = crate::sim::timing_ir_loader::TimingIrFile::from_bytes(ir_buf)
         .unwrap_or_else(|e| panic!("opensta-to-ir produced invalid IR: {e}"));
 
-    let liberty_fallback = crate::liberty_parser::TimingLibrary::from_file(liberty_path).ok();
+    // ADR 0019 D5: the per-cell-type fallback for instances the SDF/IR does not
+    // annotate comes from the cell-model-IR descriptor's L4 (explicit > bundled
+    // > netlist-prefix auto-select), with the (OpenSTA-required) `--liberty` as
+    // the override. The per-instance IR remains PRIMARY (ADR 0002); this only
+    // fills cells absent from it.
+    let liberty_fallback = Some(crate::liberty_parser::resolve_timing_library(
+        netlistdb.celltypes.iter().map(|s| s.as_str()),
+        cell_descriptor,
+        bundled_descriptor,
+        l4_corner,
+        Some(liberty_path),
+    ));
 
     let ir = ir_file.view();
     let corner_index = crate::flatten::resolve_corner_index(&ir, corner_name)
@@ -503,6 +543,7 @@ pub fn load_sdf_via_opensta_to_ir(
 ///
 /// Mirrors `load_sdf` but consumes the IR via `TimingIrFile`. Optionally
 /// uses a Liberty library as fallback for cells absent from the IR.
+#[allow(clippy::too_many_arguments)]
 pub fn load_timing_ir(
     script: &mut FlattenedScriptV1,
     aig: &AIG,
@@ -511,6 +552,9 @@ pub fn load_timing_ir(
     clock_period_ps: Option<u64>,
     liberty_fallback_path: Option<&Path>,
     corner_name: Option<&str>,
+    cell_descriptor: Option<&Path>,
+    bundled_descriptor: Option<&str>,
+    l4_corner: Option<&str>,
     debug: bool,
 ) {
     let clock_ps = clock_period_ps.unwrap_or(25000);
@@ -528,15 +572,16 @@ pub fn load_timing_ir(
         }
     };
 
-    let liberty_fallback = liberty_fallback_path.and_then(|p| {
-        match crate::liberty_parser::TimingLibrary::from_file(p) {
-            Ok(lib) => Some(lib),
-            Err(e) => {
-                clilog::warn!("Liberty fallback unavailable: {}", e);
-                None
-            }
-        }
-    });
+    // ADR 0019 D5: cells absent from the timing IR fall back to the cell-model-
+    // IR descriptor's L4 (explicit > bundled > netlist-prefix auto-select), with
+    // `--liberty` as the override. The per-instance IR stays PRIMARY (ADR 0002).
+    let liberty_fallback = Some(crate::liberty_parser::resolve_timing_library(
+        netlistdb.celltypes.iter().map(|s| s.as_str()),
+        cell_descriptor,
+        bundled_descriptor,
+        l4_corner,
+        liberty_fallback_path,
+    ));
 
     let ir = ir_file.view();
     let corner_index = crate::flatten::resolve_corner_index(&ir, corner_name)
