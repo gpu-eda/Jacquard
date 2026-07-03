@@ -216,6 +216,163 @@ pub fn build_netlist_and_aig(
     (netlistdb, aig)
 }
 
+// ============================================================================
+// Input dispatch (ADR 0021 §1): behavioral RTL vs gate-level netlist.
+// ============================================================================
+
+/// Overrides and options for the `sim`/`cosim` input classifier
+/// ([`resolve_netlist_input`]).
+pub struct InputDispatch {
+    /// `--rtl`: force the synthesis path regardless of detection.
+    pub force_rtl: bool,
+    /// `--netlist`: force direct-structural loading, skipping detection.
+    pub force_netlist: bool,
+    /// `--emit-synth <path>`: dump the intermediate gate-level netlist.
+    pub emit_synth: Option<PathBuf>,
+    /// Explicit `yosys.wasm` path for synthesis (else env / discovery).
+    pub yosys_wasm: Option<PathBuf>,
+    /// Top module passed to synthesis (from `--top-module`).
+    pub top_module: Option<String>,
+    /// True when the user supplied `--cell-descriptor`, `--cell-library`, or
+    /// `--bundled-descriptor` — i.e. they have already described a non-built-in
+    /// PDK, so unrecognized cells are expected input, not an error.
+    pub has_cell_hint: bool,
+}
+
+/// Classify a `sim`/`cosim` netlist input (ADR 0021 §1) and return the path to
+/// actually load: the original file for a gate-level netlist, or a freshly
+/// synthesized `.gv` for behavioral RTL.
+///
+/// Dispatch:
+/// - `--netlist` → load `design` directly (skip detection).
+/// - `--rtl` → synthesize `design`, load the result.
+/// - otherwise: attempt a structural parse (`sverilogparse`). If it parses,
+///   the input is gate-level — every instantiated leaf cell is tested against
+///   the built-in stdcell recognizers. All recognized (or the user supplied a
+///   cell hint) → load directly; any unrecognized → error toward
+///   `--cell-descriptor` (it is already a netlist, not synthesized). If the
+///   structural parse fails, the input is behavioral → synthesize; a synthesis
+///   failure surfaces *both* the structural and Yosys diagnostics.
+pub fn resolve_netlist_input(design: &Path, d: &InputDispatch) -> anyhow::Result<PathBuf> {
+    use anyhow::bail;
+
+    if d.force_netlist && d.force_rtl {
+        bail!("--rtl and --netlist are mutually exclusive");
+    }
+    if d.force_netlist {
+        clilog::info!(
+            "{}: --netlist → loading as gate-level directly",
+            design.display()
+        );
+        return Ok(design.to_path_buf());
+    }
+    if d.force_rtl {
+        clilog::info!("{}: --rtl → synthesizing", design.display());
+        return synth_input(design, d);
+    }
+
+    match sverilogparse::SVerilog::parse_file(design) {
+        Ok(sv) => {
+            let unrecognized = unrecognized_cells(&sv);
+            if unrecognized.is_empty() || d.has_cell_hint {
+                clilog::info!(
+                    "{}: gate-level netlist → simulating directly",
+                    design.display()
+                );
+                Ok(design.to_path_buf())
+            } else {
+                bail!(
+                    "{}: gate-level netlist with unrecognized cell type(s): {}. \
+                     This is already a netlist (not behavioral RTL), so it is not \
+                     synthesized. Pass `--cell-descriptor <path>` (ADR 0019) to \
+                     describe the cell library, or `--cell-library <file.v>` for \
+                     pin definitions. Use `--rtl` to force synthesis instead.",
+                    design.display(),
+                    unrecognized.join(", ")
+                );
+            }
+        }
+        Err(parse_err) => {
+            clilog::info!(
+                "{}: not structural Verilog → treating as behavioral RTL",
+                design.display()
+            );
+            synth_input(design, d).map_err(|synth_err| {
+                anyhow::anyhow!(
+                    "{design}: could not load as a gate-level netlist, and \
+                     synthesizing it as behavioral RTL also failed.\n  \
+                     - structural parse error: {parse_err}\n  \
+                     - synthesis error: {synth_err:#}",
+                    design = design.display()
+                )
+            })
+        }
+    }
+}
+
+/// Instantiated leaf-cell types not matched by any built-in stdcell recognizer.
+/// Submodule instantiations (types that are themselves defined modules in the
+/// same file) are excluded — only leaf cells are classified.
+fn unrecognized_cells(sv: &sverilogparse::SVerilog) -> Vec<String> {
+    use std::collections::BTreeSet;
+    let defined: BTreeSet<&str> = sv.modules.iter().map(|(name, _)| name.as_str()).collect();
+    let mut out: BTreeSet<String> = BTreeSet::new();
+    for (_, m) in &sv.modules {
+        for cell in &m.cells {
+            let ty = cell.macro_name.as_str();
+            if defined.contains(ty) {
+                continue; // hierarchical submodule, not a leaf cell
+            }
+            if !is_recognized_cell(ty) {
+                out.insert(ty.to_string());
+            }
+        }
+    }
+    out.into_iter().collect()
+}
+
+/// True if `celltype` belongs to a built-in stdcell library (SKY130, GF180MCU,
+/// or AIGPDK) — the families [`detect_library`] dispatches on.
+fn is_recognized_cell(celltype: &str) -> bool {
+    crate::sky130::is_sky130_cell(celltype)
+        || crate::gf180mcu::is_gf180mcu_cell(celltype)
+        || crate::sky130::is_aigpdk_cell(celltype)
+}
+
+/// Synthesize `design` via the embedded Yosys engine, or (without the `synth`
+/// feature) return an actionable message pointing at a synth-enabled build.
+#[allow(unused_variables)]
+fn synth_input(design: &Path, d: &InputDispatch) -> anyhow::Result<PathBuf> {
+    #[cfg(feature = "synth")]
+    {
+        let opts = crate::synth::SynthOptions {
+            top_module: d.top_module.clone(),
+            yosys_wasm: d.yosys_wasm.clone(),
+            keep_assertions: true,
+            emit_synth: d.emit_synth.clone(),
+        };
+        let out = crate::synth::synthesize(design, &opts)?;
+        clilog::info!(
+            "{}: behavioral RTL → synthesized [YoWASP Yosys, functional QoR] → {}",
+            design.display(),
+            out.display()
+        );
+        Ok(out)
+    }
+    #[cfg(not(feature = "synth"))]
+    {
+        anyhow::bail!(
+            "{}: input looks like behavioral RTL, but this jacquard binary was \
+             built without synthesis support. Rebuild with `--features synth` \
+             (or use a release binary, which bundles it) to synthesize RTL \
+             on-the-fly, or pass a pre-synthesized gate-level netlist. If this \
+             really is a gate-level netlist that failed to parse, fix the syntax \
+             or pass `--netlist` to force direct loading.",
+            design.display()
+        )
+    }
+}
+
 /// Load a design through the full pipeline: netlist → AIG → staged → script.
 ///
 /// Detects cell library (AIGPDK, SKY130, or GF180MCU), loads display info
@@ -733,4 +890,144 @@ fn generate_partitions(
             effective_parts
         })
         .collect::<Vec<_>>()
+}
+
+#[cfg(test)]
+mod input_dispatch_tests {
+    //! ADR 0021 §1 input classifier — the three dispatch branches.
+    use super::*;
+    use std::io::Write;
+
+    fn write_tmp(name: &str, body: &str) -> (tempdir::TempDir, PathBuf) {
+        let dir = tempdir::TempDir::new("jacquard-dispatch-test").unwrap();
+        let path = dir.path().join(name);
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(body.as_bytes()).unwrap();
+        (dir, path)
+    }
+
+    fn dispatch(has_cell_hint: bool) -> InputDispatch {
+        InputDispatch {
+            force_rtl: false,
+            force_netlist: false,
+            emit_synth: None,
+            yosys_wasm: None,
+            top_module: None,
+            has_cell_hint,
+        }
+    }
+
+    // A structural gate-level netlist of only recognized (AIGPDK) cells.
+    const GATELEVEL_AIGPDK: &str = "\
+module top(a, clk, y);
+  input a;
+  input clk;
+  output y;
+  wire w;
+  INV g0 (.A(a), .Y(w));
+  DFF g1 (.D(w), .CK(clk), .Q(y));
+endmodule
+";
+
+    // A structural netlist referencing an unknown (non-built-in) cell type.
+    const GATELEVEL_UNKNOWN: &str = "\
+module top(a, y);
+  input a;
+  output y;
+  FOO_UNKNOWN_CELL g0 (.A(a), .Y(y));
+endmodule
+";
+
+    // Behavioral RTL — `always` is not structural, so `sverilogparse` rejects it.
+    const BEHAVIORAL_RTL: &str = "\
+module counter(clk, q);
+  input clk;
+  output reg [3:0] q;
+  always @(posedge clk) q <= q + 1;
+endmodule
+";
+
+    #[test]
+    fn branch_gate_level_recognized_simulates_directly() {
+        let (_d, path) = write_tmp("gate.v", GATELEVEL_AIGPDK);
+        // Structural parse must succeed (precondition for this branch).
+        assert!(sverilogparse::SVerilog::parse_file(&path).is_ok());
+        let out = resolve_netlist_input(&path, &dispatch(false)).expect("recognized netlist loads");
+        assert_eq!(out, path, "recognized gate-level netlist loads as-is");
+    }
+
+    #[test]
+    fn branch_unknown_cells_errors_toward_cell_descriptor() {
+        let (_d, path) = write_tmp("unknown.v", GATELEVEL_UNKNOWN);
+        assert!(sverilogparse::SVerilog::parse_file(&path).is_ok());
+        let err = resolve_netlist_input(&path, &dispatch(false))
+            .expect_err("unknown-cell netlist must error");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("FOO_UNKNOWN_CELL"),
+            "lists the unknown cell: {msg}"
+        );
+        assert!(
+            msg.contains("--cell-descriptor"),
+            "points at --cell-descriptor: {msg}"
+        );
+    }
+
+    #[test]
+    fn unknown_cells_accepted_when_user_supplies_a_cell_hint() {
+        // A user PDK (e.g. IHP sg13g2) is passed via --cell-library/--cell-descriptor;
+        // its cells aren't built-in recognizers, so has_cell_hint suppresses the error.
+        let (_d, path) = write_tmp("unknown.v", GATELEVEL_UNKNOWN);
+        let out = resolve_netlist_input(&path, &dispatch(true))
+            .expect("cell-hint suppresses unknown-cell error");
+        assert_eq!(out, path);
+    }
+
+    #[test]
+    fn force_netlist_skips_detection() {
+        let (_d, path) = write_tmp("weird.v", GATELEVEL_UNKNOWN);
+        let mut d = dispatch(false);
+        d.force_netlist = true;
+        let out = resolve_netlist_input(&path, &d).expect("--netlist bypasses classification");
+        assert_eq!(out, path);
+    }
+
+    #[test]
+    fn behavioral_rtl_is_not_structural() {
+        // The routing precondition for the synth branch: behavioral constructs
+        // trip the structural parser (ADR 0021 §1).
+        let (_d, path) = write_tmp("counter.v", BEHAVIORAL_RTL);
+        assert!(
+            sverilogparse::SVerilog::parse_file(&path).is_err(),
+            "behavioral RTL must fail the structural parse"
+        );
+    }
+
+    #[cfg(not(feature = "synth"))]
+    #[test]
+    fn behavioral_rtl_without_synth_feature_gives_actionable_message() {
+        let (_d, path) = write_tmp("counter.v", BEHAVIORAL_RTL);
+        let err = resolve_netlist_input(&path, &dispatch(false))
+            .expect_err("RTL without synth support must error");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("--features synth"),
+            "points at synth build: {msg}"
+        );
+    }
+
+    #[test]
+    fn unrecognized_cells_excludes_hierarchical_submodules() {
+        // A submodule instantiation whose type is a defined module is not a leaf
+        // cell and must not be flagged as unrecognized.
+        let src = "\
+module leaf(a, y); input a; output y; INV g (.A(a), .Y(y)); endmodule
+module top(a, y); input a; output y; leaf u0 (.a(a), .y(y)); endmodule
+";
+        let sv = sverilogparse::SVerilog::parse_str(src).expect("structural parse");
+        assert!(
+            unrecognized_cells(&sv).is_empty(),
+            "submodule `leaf` and recognized `INV` yield no unrecognized cells"
+        );
+    }
 }
