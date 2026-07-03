@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CellTiming","DFFTiming","PinTiming","SRAMTiming","TimingArc","TimingLibrary"]};
+window.SIDEBAR_ITEMS = {"fn":["resolve_timing_library"],"struct":["CellTiming","DFFTiming","PinTiming","SRAMTiming","TimingArc","TimingLibrary"]};
