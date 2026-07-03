@@ -42,7 +42,9 @@ jobs:
 
       - name: Build jacquard (Metal) + opensta-to-ir
         run: |
-          cargo build --release --features metal --bin jacquard
+          # synth (ADR 0021): shipped binary accepts behavioral RTL (yosys.wasm
+          # auto-fetch is Phase 4; on-ramp needs --yosys-wasm until then).
+          cargo build --release --features metal,synth --bin jacquard
           cargo build --release --manifest-path crates/opensta-to-ir/Cargo.toml --bin opensta-to-ir
 
       - name: Install to a clean dir (relocated) + run user-acceptance smoke

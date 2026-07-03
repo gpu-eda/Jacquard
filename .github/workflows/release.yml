@@ -82,7 +82,12 @@ jobs:
           # binstall requires every non-optional package bin to be in the
           # archive, so it must ship alongside jacquard (it builds without the
           # metal feature, but one invocation keeps the build cache shared).
-          cargo build --release --features metal --bin jacquard --bin timing_analysis
+          # `synth` (ADR 0021): embeds YoWASP Yosys so the shipped binary accepts
+          # behavioral RTL directly (`jacquard sim design.v`). The ~39 MB yosys.wasm
+          # is not bundled yet — auto-fetch is Phase 4; until then the on-ramp needs
+          # `--yosys-wasm` / an installed `yowasp-yosys`. A pre-synthesized netlist
+          # works with no wasm.
+          cargo build --release --features metal,synth --bin jacquard --bin timing_analysis
           cargo build --release --manifest-path crates/opensta-to-ir/Cargo.toml --bin opensta-to-ir
 
       - name: Package
