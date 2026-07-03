@@ -1128,6 +1128,17 @@ pub(crate) fn build_flash_buffers_dev(
     ulib::UVec<u8>,
     ulib::UVec<u8>,
 ) {
+    // Stage A: GPU flash kernels are single-instance (Stage B is N-instance).
+    // Guard N>1 in the GPU build path; the plural CPU backend handles N>1.
+    let qspi = config.effective_qspi_memory();
+    assert!(
+        qspi.len() <= 1,
+        "multiple QSPI memories ({}) on the GPU backend requires stage B; \
+         use the CPU backend (build without a GPU feature / `--backend cpu`)",
+        qspi.len()
+    );
+    let primary = qspi.first();
+
     // FlashState (shared, persistent across edges) — mirror build_flash_buffers.
     let mut fs: FlashState = unsafe { std::mem::zeroed() };
     fs.data_width = 1; // SPI single-bit mode
@@ -1140,13 +1151,11 @@ pub(crate) fn build_flash_buffers_dev(
     // FlashDinParams (constant).
     let mut din = FlashDinParams {
         d_in_pos: [0xFFFFFFFF; 4],
-        has_flash: if config.flash.is_some() { 1 } else { 0 },
+        has_flash: if primary.is_some() { 1 } else { 0 },
         xmask_state_offset: script.xprop_state_offset,
     };
     for (i, slot) in din.d_in_pos.iter_mut().enumerate() {
-        *slot = config
-            .flash
-            .as_ref()
+        *slot = primary
             .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
             .unwrap_or(0xFFFFFFFF);
     }
@@ -1155,23 +1164,17 @@ pub(crate) fn build_flash_buffers_dev(
     // FlashModelParams (constant).
     let mut model = FlashModelParams {
         state_size: state_size as u32,
-        clk_out_pos: config
-            .flash
-            .as_ref()
+        clk_out_pos: primary
             .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
             .unwrap_or(0),
-        csn_out_pos: config
-            .flash
-            .as_ref()
+        csn_out_pos: primary
             .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
             .unwrap_or(0),
         d_out_pos: [0xFFFFFFFF; 4],
         flash_data_size: FLASH_DATA_SIZE as u32,
     };
     for (i, slot) in model.d_out_pos.iter_mut().enumerate() {
-        *slot = config
-            .flash
-            .as_ref()
+        *slot = primary
             .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
             .unwrap_or(0xFFFFFFFF);
     }
@@ -1179,9 +1182,10 @@ pub(crate) fn build_flash_buffers_dev(
 
     // Flash firmware buffer (16 MiB) — 0xFF (erased) then firmware overlaid.
     let mut firmware = vec![0xFFu8; FLASH_DATA_SIZE];
-    if let Some(ref flash_cfg) = config.flash {
+    if let Some(fw_path) = primary.and_then(|f| f.firmware.as_ref()) {
         use std::io::Read;
-        let firmware_path = std::path::Path::new(&flash_cfg.firmware);
+        let flash_cfg = primary.expect("primary present when firmware present");
+        let firmware_path = std::path::Path::new(fw_path);
         let mut file = std::fs::File::open(firmware_path).expect("Failed to open firmware file");
         let mut data = Vec::new();
         file.read_to_end(&mut data)
@@ -2040,29 +2044,30 @@ fn run_cosim_generic<B: CosimBackend>(
     // (FlashModelParams / FlashDinParams). Recompute them here as
     // backend-agnostic locals so the cosim loop's flash diagnostics don't
     // read the GPU param buffers. Bit-identical to the buffer init formulas.
-    let flash_clk_out_pos: u32 = config
-        .flash
+    // These backend-agnostic locals feed the cosim loop's flash *diagnostics*
+    // (verbose logging + the `--check-with-cpu` inline reference, both
+    // single-instance). They describe the primary (instance 0) QSPI memory; the
+    // plural per-instance stepping lives inside `CpuBackend::run_edges`.
+    let qspi_primary = config.effective_qspi_memory().into_iter().next();
+    let flash_clk_out_pos: u32 = qspi_primary
         .as_ref()
         .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
         .unwrap_or(0);
-    let flash_csn_out_pos: u32 = config
-        .flash
+    let flash_csn_out_pos: u32 = qspi_primary
         .as_ref()
         .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
         .unwrap_or(0);
-    let flash_has: bool = config.flash.is_some();
+    let flash_has: bool = qspi_primary.is_some();
     let mut flash_d_in_pos: [u32; 4] = [0xFFFFFFFF; 4];
     for (i, slot) in flash_d_in_pos.iter_mut().enumerate() {
-        *slot = config
-            .flash
+        *slot = qspi_primary
             .as_ref()
             .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
             .unwrap_or(0xFFFFFFFF);
     }
     let mut flash_d_out_pos: [u32; 4] = [0xFFFFFFFF; 4];
     for (i, slot) in flash_d_out_pos.iter_mut().enumerate() {
-        *slot = config
-            .flash
+        *slot = qspi_primary
             .as_ref()
             .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
             .unwrap_or(0xFFFFFFFF);
@@ -2084,7 +2089,7 @@ fn run_cosim_generic<B: CosimBackend>(
         gpio_map.input_bits.keys().collect::<Vec<_>>()
     );
 
-    if let Some(ref flash_cfg) = config.flash {
+    if let Some(ref flash_cfg) = qspi_primary {
         for i in 0..4 {
             let gpio = flash_cfg.d0_gpio + i;
             if gpio_map.input_bits.contains_key(&gpio) {
@@ -2128,22 +2133,22 @@ fn run_cosim_generic<B: CosimBackend>(
 
     // ── Initialize peripheral models (CPU-side, kept for --check-with-cpu) ──
 
-    let _flash: Option<CppSpiFlash> = if let Some(ref flash_cfg) = config.flash {
-        let mut fl = CppSpiFlash::new(16 * 1024 * 1024);
+    let _flash: Option<CppSpiFlash> = qspi_primary.as_ref().map(|flash_cfg| {
+        let mut fl = CppSpiFlash::new(flash_cfg.backing_size_bytes());
         fl.set_verbose(opts.flash_verbose);
-        let firmware_path = std::path::Path::new(&flash_cfg.firmware);
-        match fl.load_firmware(firmware_path, flash_cfg.firmware_offset) {
-            Ok(size) => clilog::info!(
-                "Loaded {} bytes firmware at offset 0x{:X}",
-                size,
-                flash_cfg.firmware_offset
-            ),
-            Err(e) => panic!("Failed to load firmware: {}", e),
+        if let Some(ref fw) = flash_cfg.firmware {
+            let firmware_path = std::path::Path::new(fw);
+            match fl.load_firmware(firmware_path, flash_cfg.firmware_offset) {
+                Ok(size) => clilog::info!(
+                    "Loaded {} bytes firmware at offset 0x{:X}",
+                    size,
+                    flash_cfg.firmware_offset
+                ),
+                Err(e) => panic!("Failed to load firmware: {}", e),
+            }
         }
-        Some(fl)
-    } else {
-        None
-    };
+        fl
+    });
 
     // CLI --clock-period overrides config file clock_period_ps; default 1000ps (1GHz) if neither set
     let clock_period_ps = opts.clock_period.or(config.clock_period_ps).unwrap_or(1000);
@@ -2735,9 +2740,10 @@ fn run_cosim_generic<B: CosimBackend>(
             }
         }
 
-        // Set flash D_IN defaults (high = no data) — initial state before GPU
-        // flash takes over.
-        if let Some(ref flash_cfg) = config.flash {
+        // Set flash D_IN defaults (high = no data) — initial state before the
+        // backend flash model takes over. Applied per QSPI instance so every
+        // memory's MISO lanes start idle-high (plural CPU backend).
+        for flash_cfg in config.effective_qspi_memory() {
             set_flash_din(
                 &mut states[..state_size],
                 &gpio_map,
@@ -4292,6 +4298,33 @@ impl CpuUartDecoderState {
     }
 }
 
+/// One CPU-side QSPI-memory oracle instance (Stage A plurality).
+///
+/// The single-flash path was a flat set of `flash_*` fields on `CpuBackend`;
+/// making QSPI memory plural (`Vec<QspiMemoryConfig>`) means each configured
+/// instance gets its own `CppSpiFlash` model (its own backing buffer), its own
+/// resolved pin positions, and its own per-edge decode state. `run_edges` steps
+/// every instance independently, routing each one's pins in isolation, so two
+/// memories with different firmware read back independent data.
+struct CpuFlashInstance {
+    /// `CppSpiFlash` model with this instance's own backing buffer. `UnsafeCell`
+    /// because `CppSpiFlash::step` is `&mut` but `run_edges` is `&self`
+    /// (dispatch is sequential).
+    model: UnsafeCell<CppSpiFlash>,
+    /// Pin positions resolved in `new` (mirror `build_flash_buffers`):
+    /// clk/csn/d_out are OUTPUT-slot bit positions, d_in are INPUT-slot (MISO).
+    clk_out_pos: u32,
+    csn_out_pos: u32,
+    d_out_pos: [u32; 4],
+    d_in_pos: [u32; 4],
+    /// Current MISO nibble injected by `apply_flash_din` (mirrors `FlashState.d_i`).
+    d_i: UnsafeCell<u8>,
+    /// Delayed (previous-edge) output csn / d_out for the setup-delay dual-step
+    /// (mirror `FlashState.prev_csn` / `prev_d_out`).
+    prev_csn: UnsafeCell<u32>,
+    prev_d_out: UnsafeCell<u8>,
+}
+
 struct CpuBackend {
     /// Full design state `[input_state | output_state]`, `2 × state_size` words.
     state: UnsafeCell<Vec<u32>>,
@@ -4350,24 +4383,13 @@ struct CpuBackend {
     /// Captured raw beats awaiting drain (mirrors the GPU `BusTraceEntry` ring;
     /// `drain_bus_beats` empties it). Interior-mutable for the per-edge FSM.
     bus_beats: UnsafeCell<Vec<crate::sim::models::bus_trace::RawBeat>>,
-    // ── SPI-flash CPU oracle (Stage C) ──────────────────────────────────────
-    /// `CppSpiFlash` model (`Some` when `config.flash` is set), stepped per edge
-    /// in `run_edges` with the GPU's dual-step + delayed-CSN convention so its
-    /// `d_i` matches `gpu_flash_model_step` byte-for-byte. `UnsafeCell` because
-    /// `CppSpiFlash::step` is `&mut` but `run_edges` is `&self` (sequential).
-    flash: Option<UnsafeCell<CppSpiFlash>>,
-    /// Flash GPIO positions resolved in `new` (mirror `build_flash_buffers`):
-    /// clk/csn/d_out are OUTPUT-slot bit positions, d_in are INPUT-slot (MISO).
-    flash_clk_out_pos: u32,
-    flash_csn_out_pos: u32,
-    flash_d_out_pos: [u32; 4],
-    flash_d_in_pos: [u32; 4],
-    /// Current MISO nibble injected by `apply_flash_din` (mirrors `FlashState.d_i`).
-    flash_d_i: UnsafeCell<u8>,
-    /// Delayed (previous-edge) output csn / d_out for the setup-delay dual-step
-    /// (mirror `FlashState.prev_csn` / `prev_d_out`).
-    flash_prev_csn: UnsafeCell<u32>,
-    flash_prev_d_out: UnsafeCell<u8>,
+    // ── QSPI-memory CPU oracle (Stage A: plural) ────────────────────────────
+    /// One `CppSpiFlash` oracle per configured QSPI memory
+    /// (`config.effective_qspi_memory()`), each stepped per edge in `run_edges`
+    /// with the GPU's dual-step + delayed-CSN convention so instance 0's `d_i`
+    /// matches `gpu_flash_model_step` byte-for-byte. Empty when no memory is
+    /// configured; length 1 preserves the single-flash behaviour byte-for-byte.
+    flashes: Vec<CpuFlashInstance>,
 }
 
 impl CpuBackend {
@@ -4506,48 +4528,72 @@ impl CosimBackend for CpuBackend {
         let (bus_positions, bus_lanes) =
             build_bus_trace(aig, netlistdb, script, config.effective_bus_traces());
 
-        // SPI-flash CPU oracle (Stage C): build CppSpiFlash + resolve GPIO
-        // positions exactly as MetalBackend::build_flash_buffers. The flash MISO
-        // (d_i) starts 0x0F (idle high) — matching the GPU FlashState init and
-        // the patched CppSpiFlash p_d_i default — so the oracle is byte-identical
-        // through reset and the command/address phases.
-        let flash = config.flash.as_ref().map(|flash_cfg| {
-            let mut fl = CppSpiFlash::new(16 * 1024 * 1024);
-            let firmware_path = std::path::Path::new(&flash_cfg.firmware);
-            match fl.load_firmware(firmware_path, flash_cfg.firmware_offset) {
-                Ok(size) => clilog::info!(
-                    "CpuBackend flash: loaded {} bytes firmware at offset 0x{:X}",
-                    size,
-                    flash_cfg.firmware_offset
-                ),
-                Err(e) => panic!("CpuBackend flash: failed to load firmware: {}", e),
-            }
-            UnsafeCell::new(fl)
-        });
-        let flash_clk_out_pos = config
-            .flash
-            .as_ref()
-            .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
-            .unwrap_or(0);
-        let flash_csn_out_pos = config
-            .flash
-            .as_ref()
-            .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
-            .unwrap_or(0);
-        let mut flash_d_out_pos = [0xFFFFFFFFu32; 4];
-        let mut flash_d_in_pos = [0xFFFFFFFFu32; 4];
-        for i in 0..4 {
-            flash_d_out_pos[i] = config
-                .flash
-                .as_ref()
-                .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
-                .unwrap_or(0xFFFFFFFF);
-            flash_d_in_pos[i] = config
-                .flash
-                .as_ref()
-                .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
-                .unwrap_or(0xFFFFFFFF);
-        }
+        // QSPI-memory CPU oracle (Stage A: plural). Build one CppSpiFlash per
+        // configured memory + resolve each one's GPIO positions exactly as
+        // MetalBackend::build_flash_buffers does for the single instance. Each
+        // instance's MISO (d_i) starts 0x0F (idle high) — matching the GPU
+        // FlashState init and the patched CppSpiFlash p_d_i default — so
+        // instance 0 stays byte-identical to the single-flash GPU path through
+        // reset and the command/address phases. Instances >0 are independent
+        // oracles with their own backing buffers and pins.
+        let flashes: Vec<CpuFlashInstance> = config
+            .effective_qspi_memory()
+            .iter()
+            .enumerate()
+            .map(|(idx, flash_cfg)| {
+                let mut fl = CppSpiFlash::new(flash_cfg.backing_size_bytes());
+                if let Some(ref fw) = flash_cfg.firmware {
+                    let firmware_path = std::path::Path::new(fw);
+                    match fl.load_firmware(firmware_path, flash_cfg.firmware_offset) {
+                        Ok(size) => clilog::info!(
+                            "CpuBackend qspi_memory[{}]: loaded {} bytes firmware at offset 0x{:X}",
+                            idx,
+                            size,
+                            flash_cfg.firmware_offset
+                        ),
+                        Err(e) => {
+                            panic!("CpuBackend qspi_memory[{idx}]: failed to load firmware: {e}")
+                        }
+                    }
+                }
+                let clk_out_pos = gpio_map
+                    .output_bits
+                    .get(&flash_cfg.clk_gpio)
+                    .copied()
+                    .unwrap_or(0);
+                let csn_out_pos = gpio_map
+                    .output_bits
+                    .get(&flash_cfg.csn_gpio)
+                    .copied()
+                    .unwrap_or(0);
+                let mut d_out_pos = [0xFFFFFFFFu32; 4];
+                let mut d_in_pos = [0xFFFFFFFFu32; 4];
+                for i in 0..4 {
+                    d_out_pos[i] = gpio_map
+                        .output_bits
+                        .get(&(flash_cfg.d0_gpio + i))
+                        .copied()
+                        .unwrap_or(0xFFFFFFFF);
+                    d_in_pos[i] = gpio_map
+                        .input_bits
+                        .get(&(flash_cfg.d0_gpio + i))
+                        .copied()
+                        .unwrap_or(0xFFFFFFFF);
+                }
+                CpuFlashInstance {
+                    model: UnsafeCell::new(fl),
+                    clk_out_pos,
+                    csn_out_pos,
+                    d_out_pos,
+                    d_in_pos,
+                    // Idle MISO high (mirror GPU FlashState.d_i / patched CppSpiFlash).
+                    d_i: UnsafeCell::new(0x0F),
+                    // CSN starts high (deselected); d_out starts low (mirror FlashState).
+                    prev_csn: UnsafeCell::new(1),
+                    prev_d_out: UnsafeCell::new(0),
+                }
+            })
+            .collect();
 
         let backend = CpuBackend {
             state: UnsafeCell::new(state),
@@ -4575,16 +4621,7 @@ impl CosimBackend for CpuBackend {
             bus_prev_gate: UnsafeCell::new(0),
             bus_current_tick: UnsafeCell::new(0),
             bus_beats: UnsafeCell::new(Vec::new()),
-            flash,
-            flash_clk_out_pos,
-            flash_csn_out_pos,
-            flash_d_out_pos,
-            flash_d_in_pos,
-            // Idle MISO high (mirror GPU FlashState.d_i / patched CppSpiFlash).
-            flash_d_i: UnsafeCell::new(0x0F),
-            // CSN starts high (deselected); d_out starts low (mirror FlashState).
-            flash_prev_csn: UnsafeCell::new(1),
-            flash_prev_d_out: UnsafeCell::new(0),
+            flashes,
         };
         (backend, bus_lanes)
     }
@@ -4650,17 +4687,26 @@ impl CosimBackend for CpuBackend {
     }
 
     fn flash_d_i(&self) -> u8 {
-        // Current MISO nibble from the CppSpiFlash oracle (Stage C); 0x0F idle
-        // when no flash is configured.
+        // Current MISO nibble from the primary (instance 0) CppSpiFlash oracle;
+        // 0x0F idle when no memory is configured. Single-instance diagnostic
+        // used by `--check-with-cpu` (which requires N<=1).
         // SAFETY: sequential dispatch — no concurrent borrow of the cell.
-        unsafe { *self.flash_d_i.get() }
+        self.flashes
+            .first()
+            .map(|f| unsafe { *f.d_i.get() })
+            .unwrap_or(0x0F)
     }
 
     fn flash_debug_snapshot(&self) -> FlashDebug {
-        // CPU flash oracle (Stage C): report the live MISO + reset flag; the
-        // remaining FSM internals live inside CppSpiFlash (not mirrored here).
+        // CPU flash oracle: report the primary instance's live MISO + reset
+        // flag; the remaining FSM internals live inside CppSpiFlash (not
+        // mirrored here).
         FlashDebug {
-            d_i: unsafe { *self.flash_d_i.get() },
+            d_i: self
+                .flashes
+                .first()
+                .map(|f| unsafe { *f.d_i.get() })
+                .unwrap_or(0x0F),
             data_width: 0,
             prev_csn: 0,
             in_reset: self.flash_in_reset as u32,
@@ -4739,13 +4785,14 @@ impl CosimBackend for CpuBackend {
                 }
             }
             // ── CPU apply_flash_din (mirror gpu_apply_flash_din, shader:904) ─
-            // Inject the current MISO nibble into the input-state d_in bits
-            // BEFORE simulate, clearing their X-mask (driven ⇒ known, #95 ph3).
-            if self.flash.is_some() {
+            // Inject each memory's current MISO nibble into ITS input-state
+            // d_in bits BEFORE simulate, clearing their X-mask (driven ⇒ known,
+            // #95 ph3). Every QSPI instance drives its own lanes independently.
+            for inst in &self.flashes {
                 // SAFETY: sequential dispatch — no concurrent borrow.
-                let d_i = unsafe { *self.flash_d_i.get() };
+                let d_i = unsafe { *inst.d_i.get() };
                 for i in 0..4usize {
-                    let pos = self.flash_d_in_pos[i];
+                    let pos = inst.d_in_pos[i];
                     if pos == 0xFFFFFFFF {
                         continue;
                     }
@@ -4802,11 +4849,13 @@ impl CosimBackend for CpuBackend {
             }
 
             // ── CPU flash_model_step (mirror gpu_flash_model_step, shader:943) ─
-            // Read clk/csn/d_out from the OUTPUT slot, then dual-step CppSpiFlash
-            // with delayed CSN (setup-delay model) to compute the next MISO d_i.
-            // Runs after simulate (output fresh) on every edge, mirroring the
-            // Metal `encode_flash_model_step` cadence (before io_step / UART).
-            if let Some(flash_cell) = self.flash.as_ref() {
+            // For EACH memory: read its clk/csn/d_out from the OUTPUT slot, then
+            // dual-step ITS CppSpiFlash with delayed CSN (setup-delay model) to
+            // compute the next MISO d_i. Runs after simulate (output fresh) on
+            // every edge, mirroring the Metal `encode_flash_model_step` cadence
+            // (before io_step / UART). Each instance keeps its own delayed
+            // csn/d_out so the memories advance fully independently.
+            for inst in &self.flashes {
                 let read_out = |pos: u32| -> u32 {
                     if pos == 0xFFFFFFFF {
                         0
@@ -4814,16 +4863,16 @@ impl CosimBackend for CpuBackend {
                         (state[state_size + (pos >> 5) as usize] >> (pos & 31)) & 1
                     }
                 };
-                let clk = read_out(self.flash_clk_out_pos);
-                let csn = read_out(self.flash_csn_out_pos);
+                let clk = read_out(inst.clk_out_pos);
+                let csn = read_out(inst.csn_out_pos);
                 let mut d_out = 0u8;
                 for i in 0..4usize {
-                    d_out |= (read_out(self.flash_d_out_pos[i]) as u8) << i;
+                    d_out |= (read_out(inst.d_out_pos[i]) as u8) << i;
                 }
                 // SAFETY: sequential dispatch — these cells are only touched here.
-                let d_i_cell = unsafe { &mut *self.flash_d_i.get() };
-                let prev_csn = unsafe { &mut *self.flash_prev_csn.get() };
-                let prev_d_out = unsafe { &mut *self.flash_prev_d_out.get() };
+                let d_i_cell = unsafe { &mut *inst.d_i.get() };
+                let prev_csn = unsafe { &mut *inst.prev_csn.get() };
+                let prev_d_out = unsafe { &mut *inst.prev_d_out.get() };
                 if self.flash_in_reset {
                     // Reset branch (shader:974): force MISO high, update the
                     // delayed values, do NOT step the model.
@@ -4831,7 +4880,7 @@ impl CosimBackend for CpuBackend {
                     *prev_csn = csn;
                     *prev_d_out = d_out;
                 } else {
-                    let fl = unsafe { &mut *flash_cell.get() };
+                    let fl = unsafe { &mut *inst.model.get() };
                     // Dual-step with delayed CSN (matches the GPU setup-delay
                     // model): step 1 = delayed csn + delayed d_out, step 2 =
                     // delayed csn + current d_out. CppSpiFlash::step does one

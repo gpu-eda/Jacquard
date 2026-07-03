@@ -199,7 +199,16 @@ pub struct TestbenchConfig {
     pub num_cycles: usize,
     /// Clock period in picoseconds (e.g. 40000 for 25MHz). Used for UART baud rate calculation.
     pub clock_period_ps: Option<u64>,
-    pub flash: Option<FlashConfig>,
+    /// Legacy singular QSPI flash peripheral. Superseded by [`Self::qspi_memory`]
+    /// (ADR 0013 plural-peripheral convention). Kept so existing
+    /// `sim_config.json` files with a single `"flash": { … }` object still parse;
+    /// folded into `effective_qspi_memory()` as a 1-element vec.
+    #[serde(default)]
+    pub flash: Option<QspiMemoryConfig>,
+    /// Plural QSPI memory peripherals (flash / PSRAM). Each entry owns its own
+    /// pins and backing store. See ADR 0013 and `effective_qspi_memory()`.
+    #[serde(default)]
+    pub qspi_memory: Vec<QspiMemoryConfig>,
     pub uart: Option<UartConfig>,
     #[serde(default)]
     pub uarts: Vec<UartConfig>,
@@ -284,6 +293,20 @@ impl TestbenchConfig {
         out
     }
 
+    /// Return the effective QSPI memory configurations (ADR 0013).
+    ///
+    /// Merges the legacy singular `flash` (prepended, so it is instance 0) with
+    /// the plural `qspi_memory` list, mirroring `effective_uarts()`. This is the
+    /// single surface every backend consumes: the CPU backend steps every entry
+    /// independently; the GPU backends (Stage A) require `len() <= 1`.
+    pub fn effective_qspi_memory(&self) -> Vec<QspiMemoryConfig> {
+        let mut out = self.qspi_memory.clone();
+        if let Some(ref f) = self.flash {
+            out.insert(0, f.clone());
+        }
+        out
+    }
+
     /// Return the configured bus traces (ADR 0013).
     ///
     /// There is no legacy singular form — `bus_traces` is new — so this
@@ -324,14 +347,75 @@ pub struct PortMapping {
     pub outputs: HashMap<String, String>,
 }
 
+/// Configuration for a single QSPI memory peripheral (flash or PSRAM).
+///
+/// Formerly `FlashConfig` / the singular `flash` key. Renamed to reflect that
+/// the peripheral is a QSPI *memory* (read-only flash today; writable PSRAM is
+/// PR #159) and made plural via [`TestbenchConfig::qspi_memory`] (ADR 0013's
+/// plural-peripheral convention). Each instance owns its own pins and backing
+/// store, so a design can wire two independent memories.
+///
+/// Back-compat: the legacy `"flash": { … }` object still deserialises into this
+/// struct (via [`TestbenchConfig::flash`]) and is folded into
+/// `effective_qspi_memory()` as a 1-element vec. All the RAM-mode fields default
+/// to the original read-only SPI-flash behaviour, so a legacy config behaves
+/// byte-identically.
 #[derive(Debug, Clone, Deserialize)]
-pub struct FlashConfig {
+pub struct QspiMemoryConfig {
+    /// Optional human-readable name for logs/diagnostics.
+    #[serde(default)]
+    pub name: Option<String>,
     pub clk_gpio: usize,
     pub csn_gpio: usize,
     pub d0_gpio: usize,
-    pub firmware: String,
+    /// Firmware/preload image. Optional: a writable PSRAM may start from a
+    /// zeroed store, so a config without firmware is valid.
+    #[serde(default)]
+    pub firmware: Option<String>,
+    /// Byte offset in the backing store at which `firmware` is loaded.
+    #[serde(default)]
     pub firmware_offset: usize,
+    /// Backing-store size in bytes. Defaults to the historical 16 MiB flash
+    /// buffer when unset (see [`QspiMemoryConfig::backing_size_bytes`]).
+    #[serde(default)]
+    pub size_bytes: Option<usize>,
+
+    // ── QSPI PSRAM (RAM-mode) extensions — inert in Stage A ──────────────────
+    // Carried here so PR #159 (writable QSPI PSRAM) can rebase onto this plural
+    // surface without re-touching the config schema. Stage A is flash/read-only,
+    // so these are parsed but not yet acted upon; all default to the read-only
+    // SPI-flash behaviour (`writable = false`).
+    /// Treat the peripheral as a writable APS6404L-class QSPI PSRAM.
+    #[serde(default)]
+    pub writable: bool,
+    /// Command byte that latches QPI mode (e.g. `0x35`). Only honoured when
+    /// `writable`.
+    #[serde(default)]
+    pub enter_qpi_cmd: Option<u8>,
+    /// Command byte that quad-writes the backing store (e.g. `0x38`). Only
+    /// honoured when `writable`.
+    #[serde(default)]
+    pub quad_write_cmd: Option<u8>,
+    /// Dummy SCK cycles after the address of a QPI read. Defaults to the flash
+    /// value when unset.
+    #[serde(default)]
+    pub read_dummy_cycles: Option<u32>,
 }
+
+/// Historical default backing-store size (16 MiB) for a QSPI memory whose
+/// `size_bytes` is unset. Matches the flash buffer the GPU kernels allocate.
+pub const DEFAULT_QSPI_SIZE_BYTES: usize = 16 * 1024 * 1024;
+
+impl QspiMemoryConfig {
+    /// Backing-store size in bytes: the configured `size_bytes` or the
+    /// historical 16 MiB flash default.
+    pub fn backing_size_bytes(&self) -> usize {
+        self.size_bytes.unwrap_or(DEFAULT_QSPI_SIZE_BYTES)
+    }
+}
+
+/// Backwards-compatible alias: the config type used to be `FlashConfig`.
+pub type FlashConfig = QspiMemoryConfig;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct UartConfig {

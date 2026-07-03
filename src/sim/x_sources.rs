@@ -174,7 +174,7 @@ fn driven_gpios_and_ports(config: &TestbenchConfig) -> (HashSet<usize>, HashSet<
     for name in config.constant_ports.keys() {
         ports.insert(name.clone());
     }
-    if let Some(flash) = &config.flash {
+    for flash in config.effective_qspi_memory() {
         gpios.extend([flash.clk_gpio, flash.csn_gpio]);
         // `set_flash_din` drives 4 data lanes (d0..d0+3) for dual/quad SPI.
         gpios.extend((0..4).map(|i| flash.d0_gpio + i));
