@@ -2,6 +2,13 @@
 
 **Status:** Proposed
 
+> **Revised 2026-07-03 (pre-ratification, still Proposed):** the entry point
+> moved from a standalone **`jacquard build`** command to **folding synthesis
+> into `sim`/`cosim`** — RTL is simulated with one command, no separate build
+> step. The embedded-Yosys/`wasmtime` engine (Decision §2) is unchanged; only
+> the *surface* changed. The original `build`-command shape is preserved in
+> "Alternatives considered" for the audit trail. Rationale below.
+
 **Relates to:** [ADR 0014](0014-aig-as-simulation-ir.md) (AIG / emulator model —
 why synthesis is a front-end at all), the Python-engine work
 ([#161](https://github.com/gpu-eda/Jacquard/issues/161), ADR 0020 pending) that
@@ -47,10 +54,25 @@ Two forces shape the fix:
 Add an **embedded synthesis front-end** so behavioral RTL is a first-class
 input, while keeping the emulator's synthesized-netlist core unchanged:
 
-1. **`jacquard build <design.v…>`** drives Yosys through the *existing*
-   `docs/synthesis-flow.md` scripts (`memlib_yosys.txt` memory synthesis →
-   `aigpdk.lib` logic synthesis) to produce `gatelevel.gv`, which then feeds
-   `sim` / `cosim` unchanged. RTL in, netlist out, one command.
+1. **`sim` / `cosim` accept behavioral RTL directly** — synthesis is a
+   *transparent, cached pre-processor* inside those commands, not a separate
+   user step. There is **no `jacquard build` command**. On the input path, the
+   command classifies what it was handed and dispatches three ways:
+
+   | Input | Structural parse (`sverilogparse`) | Cell family | Action |
+   |---|---|---|---|
+   | Gate-level, **built-in** PDK | parses | matches an `is_*_stdcell` family | **simulate directly** — the embedded descriptor supplies logic + timing (corner via `--corner`, ADR 0019) |
+   | Gate-level, **unknown** PDK | parses | matches nothing | **error, actionable**: "gate-level netlist with unrecognized cells — pass `--cell-descriptor <path>`" (ADR 0019 D8). *Not synthesized* — it is already a netlist. |
+   | **Behavioral** RTL | fails (`always`/`if`/`case`/operators are not structural) | n/a | **synthesize** → aigpdk → simulate, via the embedded Yosys (Decision §2), caching the result |
+
+   The command **prints what it decided** (e.g. `design.v: behavioral RTL →
+   synthesized [YoWASP Yosys, functional QoR] → <cache>`), so synthesis is
+   never silent (honouring force #1 below). `--rtl` / `--netlist` override the
+   auto-detection; a syntax error in a netlist that falls through to the synth
+   path surfaces **both** the structural and the Yosys diagnostics. The
+   gate-level artefact is dumpable for inspection/fixtures via `--emit-synth
+   <path>`. RTL in, waveform out, one command — driving the *existing*
+   `docs/synthesis-flow.md` scripts (`memlib_yosys.txt` → `aigpdk.lib`).
 
 2. **Yosys as WebAssembly, executed in-process from Rust** — not a vendored
    native build, and *not* via the Python `yowasp-yosys` wrapper. YoWASP ships
@@ -58,25 +80,32 @@ input, while keeping the emulator's synthesized-netlist core unchanged:
    into that module and called **in-process** — WASI has no `exec`), and the
    `yowasp-runtime` that runs it is a thin harness over
    [`wasmtime`](https://wasmtime.dev), which has a first-class Rust crate. So
-   `jacquard build` is a **Rust subcommand of the `jacquard` CLI** that embeds
-   `wasmtime`, loads the (bundled or fetch-on-first-use) `yosys.wasm`, preopens
-   the design + `aigpdk` library files + a temp dir under WASI, and runs the
-   existing synthesis script — caching the compiled module to disk exactly as
-   `yowasp-runtime` does. **No Python interpreter and no external toolchain:**
-   `jacquard build design.v && jacquard sim …` is RTL-to-waves from the single
-   `jacquard` binary. This **decouples the on-ramp from the Python-engine
-   packaging decision** (ADR 0020 / #161) — `build` needs neither PyO3 nor a
-   subprocess-bundled wheel.
+   the synthesis engine is a **Rust component (`src/synth.rs`) embedded in the
+   `jacquard` binary** that embeds `wasmtime`, loads the (bundled or
+   fetch-on-first-use) `yosys.wasm`, preopens the design + `aigpdk` library
+   files + a temp dir under WASI, and runs the existing synthesis script —
+   caching the compiled module *and* the synthesized netlist to disk (by
+   content hash) exactly as `yowasp-runtime` does. It is invoked *transparently*
+   by `sim`/`cosim` on the behavioral-input path (Decision §1), behind the
+   opt-in **`synth` feature** (`wasmtime`+cranelift are heavy to compile). **No
+   Python interpreter and no external toolchain:** `jacquard sim design.v …` is
+   RTL-to-waves from the single `jacquard` binary. This **decouples the on-ramp
+   from the Python-engine packaging decision** (ADR 0020 / #161) — it needs
+   neither PyO3 nor a subprocess-bundled wheel.
 
 3. **Two synthesis tracks, kept explicit** (honouring force #1):
-   - **On-ramp:** YoWASP Yosys — easy, functional, the default `jacquard build`.
+   - **On-ramp:** YoWASP Yosys — easy, functional; the default when `sim`/`cosim`
+     are handed behavioral RTL.
    - **Performance:** bring-your-own DC (or native Yosys) → `gatelevel.gv` →
-     `jacquard sim` directly. Documented as the path to peak GPU speed.
+     `jacquard sim` directly (the "gate-level, built-in PDK" row above).
+     Documented as the path to peak GPU speed.
 
-4. **The emulator core does not change.** `jacquard build` is a *pre-processor*
-   that produces the same structural netlist users synthesize by hand today; the
-   AIG/boomerang pipeline (ADR 0014/0015) and the structural `sverilogparse`
-   input are untouched. Behavioral elaboration stays Yosys's job — we do not
+4. **The emulator core does not change.** Synthesis is a transparent
+   *pre-processor* inside `sim`/`cosim` that produces the same structural
+   netlist users synthesize by hand today; the AIG/boomerang pipeline (ADR
+   0014/0015) and the structural `sverilogparse` input are untouched — the
+   behavioral path simply feeds them a just-synthesized netlist instead of a
+   hand-written one. Behavioral elaboration stays Yosys's job — we do not
    reimplement an RTL front-end.
 
 Implementation phasing lives in **[#162](https://github.com/gpu-eda/Jacquard/issues/162)**.
@@ -116,18 +145,35 @@ on-ramp.
 - **RTL becomes a first-class, single-command input** — the onboarding cliff is
   removed, and "what does it accept?" has a clean answer: *your RTL* (or a
   pre-synthesized netlist).
+- **The accepted-RTL surface is defined and documented, not implicit.** Because
+  synthesis is delegated to Yosys, the accepted behavioral subset *is* the
+  embedded YoWASP Yosys `read_verilog -sv` frontend (no Verific → limited
+  concurrent SVA), plus the project's techmaps (assertions → `GEM_ASSERT`,
+  `$display` → `GEM_DISPLAY`, memories → `RAMGEM`) and minus dropped
+  testbench-only constructs. This gets a dedicated `docs/accepted-rtl.md`, whose
+  authoritative form is an **empirical coverage table** driven through
+  [sv-tests](https://github.com/SymbiFlow/sv-tests) (follow-up) rather than a
+  hand-claimed feature list — hand-claims about a delegated frontend would
+  violate the "verify, don't assert" bar.
 - **A QoR ceiling on the easy path.** YoWASP Yosys is functional-grade; peak GPU
-  performance still wants DC. The docs must state this so `jacquard build` isn't
-  mistaken for the performance path.
+  performance still wants DC. The auto-synth path *prints its QoR tier* and the
+  docs must state this, so the on-ramp isn't mistaken for the performance path.
 - **A Rust `wasmtime` dependency + a `yosys.wasm` asset** — no new Python
-  dependency, and the on-ramp is optional (the `sim`/`cosim`/`map` binary keeps
-  working on a pre-synthesized netlist with `build` unused). The ~39 MB wasm is
-  either bundled into the binary or fetched to a cache on first `build` (open
-  sub-decision, #162).
-- **Decouples the on-ramp from ADR 0020 / #161:** because `build` runs Yosys from
-  Rust via `wasmtime`, it needs neither the PyO3 binding nor a subprocess-bundled
-  Python wheel. The Python-engine packaging call can be made independently; the
-  RTL on-ramp no longer waits on it.
+  dependency. The `synth` feature is opt-in *at compile time* (heavy cranelift
+  build), but because behavioral input is now a `sim`/`cosim` capability rather
+  than a separate command, **released binaries must be built `--features synth`**
+  — otherwise `sim design.v` on RTL fails with a build-without-synth message.
+  A pre-synthesized netlist still simulates with the feature off. The ~39 MB
+  wasm is either bundled into the binary or fetched to a cache on first use
+  (open sub-decision, #162).
+- **Decouples the on-ramp from ADR 0020 / #161:** because synthesis runs Yosys
+  from Rust via `wasmtime`, it needs neither the PyO3 binding nor a
+  subprocess-bundled Python wheel. The Python-engine packaging call can be made
+  independently; the RTL on-ramp no longer waits on it.
+- **Timing stays descriptor-aligned, not `.lib`-coupled.** The on-ramp does not
+  reintroduce a `--liberty` runtime path: for built-in PDKs, logic *and* timing
+  come from the embedded cell-model descriptor (ADR 0019 D5), corner-selected
+  via `--corner`. `--liberty` / `--cell-descriptor` remain for user/custom PDKs.
 - **Provenance (Phase 2)** is a large, dependency-gated follow-on, not promised
   by this ADR.
 
@@ -160,6 +206,16 @@ on-ramp.
   WASM build. `jacquard build` should abstract the synthesis back-end so it can
   dispatch to whichever (YoWASP wheel, Nix devshell, or a plain system Yosys/DC)
   is present.
+- **A standalone `jacquard build <design.v>` command** producing `gatelevel.gv`
+  as an explicit user step (the original shape of this ADR; implemented on the
+  first cut of PR #167). Revised away before ratification: it reinstated the very
+  multi-command ceremony ("build, then point `sim` at the output") the ADR set
+  out to remove, and the artefact boundary it justified turned out unneeded — the
+  committed `*_synth.gv` test fixtures are each written **once** by the test that
+  introduces them and never regenerated, so no standing "rebuild the fixtures"
+  workflow depends on a `build` command; `--emit-synth` covers one-off fixture
+  authoring. Folding synthesis into `sim`/`cosim` (Decision §1) keeps the
+  one-command promise while the same `src/synth.rs` engine still backs it.
 - **Elaborate behavioral RTL directly inside Jacquard** (no synthesis). Rejected:
   it contradicts the emulator model (ADR 0014) and would reimplement a Verilog
   front-end Yosys already provides — enormous scope for no architectural gain.
