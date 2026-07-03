@@ -1,96 +1,100 @@
-# Handoff — ADR 0021 behavioral-RTL on-ramp (`jacquard build` via YoWASP)
+# Handoff — ADR 0021 behavioral-RTL on-ramp (`jacquard build`)
 
-**Created:** 2026-07-01
-**Working tree:** clean
-**Branch:** main
+**Updated:** 2026-07-03
+**Branch:** `feat/rtl-onramp-build` (PR [#167](https://github.com/gpu-eda/Jacquard/pull/167), **draft**, CI green)
+**Working tree:** clean (only `.env` untracked)
 
 ## Goal & next-up
 
-**Goal of this session:** clarify Jacquard's input story (external feedback: "not
-clear what netlist language you accept") and record the decision to make
-behavioral RTL first-class. Shipped the docs + [ADR 0021](../adr/0021-behavioral-rtl-support.md)
-(Proposed) in PR #163; filed the implementation tracker
-[#162](https://github.com/gpu-eda/Jacquard/issues/162). **No implementation
-started** — the ADR is ratified as *Proposed*, the code is the next arc.
+**This session:** implemented **Phase 1** of ADR 0021 / [#162](https://github.com/gpu-eda/Jacquard/issues/162)
+— `jacquard build <design.v…>` synthesizes behavioral RTL → gate-level aigpdk
+netlist that feeds `sim`/`cosim`, with **no Python and no external toolchain**.
+Shipped on PR #167 (draft, CI green on the branch and on `main`). The ADR was
+amended to record the **Rust + `wasmtime`** shape (was "Python-hosted").
 
-**Next session should pick up:** **Phase 1** of #162 — implement
-**`jacquard build <design.v>`**: shell out to Yosys (via `yowasp-yosys`) running
-the *existing* synthesis scripts, producing `gatelevel.gv`, then hand off to
-`sim`. The scripts already exist — memory synthesis uses `aigpdk/memlib_yosys.txt`
-(`memory_libmap`), logic synthesis maps to `aigpdk/aigpdk.lib` cells; the full
-manual flow is [`docs/synthesis-flow.md`](../synthesis-flow.md). Start by wiring
-`yowasp-yosys` (already resolved — see below) to run those two steps.
+**Next session should pick up** (priority order):
+1. **Un-draft PR #167** and get it reviewed/merged (nothing blocking; CI green).
+2. **CI coverage for the `synth` feature** — it's opt-in (not default), so current
+   CI (`cargo test --lib`, `cargo build -r --bin jacquard`) never compiles it. Add
+   a `cargo build --features synth` job + a `jacquard build` smoke test, and add
+   `--features synth` to `release.yml` / `user-acceptance.yml` so shipped binaries
+   include the on-ramp. **Without this the feature ships in no binary.**
+3. **Fetch-from-GitHub-release** (increment 2): publish the pinned `yosys.wasm` as
+   a Jacquard release asset; `build` fetches to `$XDG_CACHE_HOME/jacquard` + sha256.
+   Same mechanism will later deliver the Phase-2 patched wasm. Aligns with ADR 0018.
 
-**Verification command:**
+**Verification:**
 ```sh
-# ADR + docs are on main:
-ls docs/adr/0021-behavioral-rtl-support.md docs/input-netlist.md
-grep -n "0021" docs/adr/README.md docs/SUMMARY.md
-uv run python scripts/check_doc_links.py     # Expect: "All rendered-page links resolve"
-# YoWASP Yosys is already a resolved dependency:
-grep -n "yowasp-yosys" uv.lock                # Expect: present (via amaranth[builtin-yosys])
+# feature builds + runs (needs a yosys.wasm; e.g. from an installed yowasp-yosys wheel):
+cargo build --release --features synth --bin jacquard
+JACQUARD_YOSYS_WASM=<path/to/yosys.wasm> \
+  ./target/release/jacquard build <design.v> -o /tmp/gl.gv     # → aigpdk netlist
+./target/release/jacquard dump-paths /tmp/gl.gv --liberty aigpdk/aigpdk.lib   # parses → AIG
+cargo build --bin jacquard        # default build: `build` cleanly absent (feature-gated)
+gh pr checks 167
 ```
 
 ## Done this session
 
-| PR / issue | What |
+| What | Where |
 |---|---|
-| **#163** (merged, `559f4766`) | README `## Input`; `docs/input-netlist.md` (full structural-Verilog subset + SVA status); ADR 0021 (Proposed) |
-| **#162** (open) | Implementation tracker — Phase 1 (`jacquard build`/YoWASP) + Phase 2 (`\src` provenance) |
+| ADR 0021 amended: Rust+wasmtime decision, abc-in-tree/in-process finding, Codeberg fork recipe, in-process-`\src` risk, Python-hosted alt rejected | `docs/adr/0021-behavioral-rtl-support.md` |
+| Spike preserved (reference) | `docs/spikes/rust-wasmtime-yosys/` |
+| `jacquard build` implementation | `src/synth.rs` (new), `src/bin/jacquard.rs` (`Build` subcmd, `cmd_build`), `src/lib.rs`, `Cargo.toml` (`synth` feature + wasmtime/anyhow/log deps) |
+| Repo-wide `cargo fmt` | separate commit on **`main`** (`49aa9cff`); branch rebased on it |
+| fmt-before-commit hook (needs `/hooks` reload to activate) | `.claude/settings.json` (gitignored) |
 
-## Open follow-ups (priority order)
+Validated: **counter** (logic+DFF), **assert_test** (→ `GEM_ASSERT`), **mem_test**
+(→ `RAMGEM`) all synthesize to aigpdk cells, zero leftover `$`-cells; outputs
+parse + build an AIG via `dump-paths`.
 
-### 1. Phase 1 — `jacquard build` via stock YoWASP (the on-ramp)
-Drive `yowasp-yosys` through `aigpdk/memlib_yosys.txt` + `aigpdk/aigpdk.lib`
-synthesis → `gatelevel.gv` → `sim`. Micro-decisions still open (see ADR 0021 /
-#162): command name (**`build`** chosen) vs `--rtl` flag; **Rust subcommand vs
-Python entry** (leaning Python, since YoWASP is a Python package and this homes in
-the Python engine — #161); how `--top-module` and clock-gating (`CKLNQD`) config
-surface. Back-end should be abstracted so it can dispatch to YoWASP wheel · Nix
-devshell · system Yosys/DC.
+## Critical context / decisions
 
-### 2. Phase 2 — `\src` provenance (the moat), gated on upstreaming
-Patched (self-built) YoWASP carrying origin-shell's source pass-through → thread
-`\src` through `netlistdb`/AIG so `--trace-signals` / timing / X-debug speak RTL.
-**Blocked on** berkeley-abc **#487** landing (in review) + a patched-YoWASP or Nix
-build. Not startable until #487 is in.
+- **Rust + wasmtime, not Python.** `yowasp_runtime` is a ~100-line `wasmtime`+WASI
+  harness; `src/synth.rs` ports it. `build` is a clap subcommand behind the opt-in
+  **`synth` feature** (wasmtime+cranelift are heavy to compile). Decoupled from the
+  #161 Python-engine decision.
+- **abc is compiled in-tree into `yosys.wasm`, called in-process** (WASI has no
+  `exec`) — verified from the shipped module. This de-risks Phase 2: the only
+  remaining `\src`-provenance unknown is whether `&origins` data survives the
+  *in-process* abc path (origin-shell only validated the **external**-abc path).
+- **Synthesis script** (`src/synth.rs::synth_script`): `read_verilog -sv` → flatten
+  → `memory_libmap` (memlib_yosys.txt) → `synth -run coarse:` → **`techmap -map
+  gem_formal.v`** (assertions → `GEM_ASSERT`; `--strip-assertions` uses `chformal
+  -remove`) → dfflibmap/abc to aigpdk. Support files embedded via `include_str!`.
+  Do **not** `read_verilog -lib aigpdk.v` — it fails to parse (`aigpdk.v:64`); cells
+  emit fine as blackboxes.
+- **wasm compile is cached** to `$XDG_CACHE_HOME/jacquard` by content hash
+  (`load_module`), so only the first run pays the (large, ~20 s) cranelift compile.
+  **Debug builds are ~50× slower to compile the wasm** — always test with
+  `--release`. cranelift's DEBUG log torrent is clipped to Info around the compile.
+- **wasm sourcing:** now via `--yosys-wasm` / `JACQUARD_YOSYS_WASM` / installed
+  `yowasp-yosys` discovery. Chosen fetch default = **GitHub release asset** (above).
+- **No `map` subcommand exists** (CLAUDE.md/docs references are stale) — use
+  `dump-paths` (no GPU) to validate a netlist parses.
+- **Non-synthesizable constructs:** testbench-only (`$display`, delays) dropped by
+  synth; immediate assertions → `GEM_ASSERT`; concurrent SVA limited by YoWASP
+  Yosys (no Verific) — broader SVA is the #106/#107 roadmap.
 
-## Critical context
+## Phase 2 (roadmap, unchanged, not started)
 
-- **YoWASP is already in `uv.lock`** (transitively via `amaranth[builtin-yosys]`
-  in `designs/mcu_soc_sky130/`), so Phase 1 adds *no new heavy dependency* — the
-  WASM Yosys wheel is already resolved for the workspace.
-- **QoR split is load-bearing:** YoWASP Yosys is functional-grade; **bring-your-own
-  DC stays the performance path** (synthesis quality sets Jacquard's GPU speed,
-  per `synthesis-flow.md`). Don't let `jacquard build` be mistaken for the fast
-  path — document both.
-- **origin-shell PoC** (for Phase 2) lives at `~/Code/ChipFlow/reference/origin-shell`
-  (GitHub `robtaylor/origin-shell`) — a Nix flake pinning patched abc (#487) +
-  yosys (`src-retention-y-ext`) + librelane (`SYNTH_ABC_BACKEND=origins`). It
-  keeps `\src` alive through std-cell mapping at ~100% coverage. Building *our
-  own* YoWASP lets us compile the patched abc to WASM alongside yosys, so
-  provenance can ship self-contained in one wheel.
-- **Emulator core untouched:** `jacquard build` is a *pre-processor* producing the
-  same structural netlist users synthesize by hand today. The AIG/boomerang
-  pipeline (ADR 0014/0015) and the structural `sverilogparse` input don't change.
-- **Home tie:** this lands in the Python engine, whose *packaging* decision
-  (subprocess wheel vs PyO3) is itself deferred — ADR 0020 is **Draft**, tracked
-  in [#161](https://github.com/gpu-eda/Jacquard/issues/161) (PyO3 leaning). Phase 1
-  doesn't need that resolved, but the two share the Python layer.
+`\src` provenance: fork [YoWASP/yosys](https://codeberg.org/YoWASP/yosys) (now on
+Codeberg; GitHub mirror archived 2026-03-11), repoint `yosys-src` →
+`robtaylor/yosys@src-retention-y-ext` and yosys's bundled `abc` submodule →
+`robtaylor/abc@origin-tracking-clean` (abc#487), rerun `build.sh` (wasi-sdk 27).
+**First task = spike whether `\src` survives in-process abc** before committing.
+
+## Follow-ups not yet filed
+- CI `--features synth` coverage (see next-up #2) — **most important**, feature
+  ships in no binary until done.
+- Stale `jacquard map` references in `CLAUDE.md` / `docs/`.
+- Activate the fmt hook (`.claude/settings.json`) via `/hooks` reload.
 
 ## References
-
-- [ADR 0021](../adr/0021-behavioral-rtl-support.md) — the decision (+ Nix
-  alternative, Phase-2 provenance).
-- [#162](https://github.com/gpu-eda/Jacquard/issues/162) — implementation tracker.
-- [`docs/synthesis-flow.md`](../synthesis-flow.md) — the manual flow `jacquard build` wraps.
-- [`docs/input-netlist.md`](../input-netlist.md) — what the netlist input accepts today.
-- [ADR 0014](../adr/0014-aig-as-simulation-ir.md) — why synthesis is a front-end.
-- #161 / ADR 0020 — the Python engine that hosts this. berkeley-abc #487 — the Phase-2 gate.
+- [ADR 0021](../adr/0021-behavioral-rtl-support.md) · [#162](https://github.com/gpu-eda/Jacquard/issues/162) · PR [#167](https://github.com/gpu-eda/Jacquard/pull/167)
+- [`docs/spikes/rust-wasmtime-yosys/`](../spikes/rust-wasmtime-yosys/) — the proving spike
+- [`docs/synthesis-flow.md`](../synthesis-flow.md) · [`docs/input-netlist.md`](../input-netlist.md)
+- Assertion techmap: `aigpdk/gem_formal.v`; GEM_ASSERT cell: `aigpdk/aigpdk.v:174`, `src/aigpdk.rs:52,91`
 
 ---
-
-**Resume in a new session with:**
-```
-/resume_handoff docs/handoffs/adr-0021-behavioral-rtl-handoff.md
-```
+**Resume with:** `/resume_handoff docs/handoffs/adr-0021-behavioral-rtl-handoff.md`
