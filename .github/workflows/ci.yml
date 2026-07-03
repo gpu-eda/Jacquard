@@ -105,6 +105,42 @@ jobs:
           cargo test --manifest-path crates/cell-model-ir/Cargo.toml
           cargo test --manifest-path crates/liberty-to-cellir/Cargo.toml
 
+  # ADR 0021: compile the RTL on-ramp (the `synth` feature pulls heavy
+  # wasmtime/cranelift deps) on Linux, and run the input-classifier unit tests
+  # (pure logic — no yosys.wasm needed; the feature-gated tests are skipped by the
+  # default `cargo test --lib`). The GPU on-ramp e2e lives in the Metal Tests job.
+  synth-onramp:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
+    name: Synth on-ramp (Linux compile + classifier tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init required submodules
+        run: git submodule update --init vendor/eda-infra-rs
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          # Separate key: the wasmtime/cranelift deps are large and would thrash
+          # the shared cargo cache used by the no-feature jobs.
+          key: ${{ runner.os }}-cargo-synth-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-synth-
+      - name: Build jacquard (synth on-ramp, no GPU)
+        run: cargo build --release --features synth --bin jacquard
+      - name: Input-classifier unit tests (synth feature)
+        run: cargo test --lib --features synth input_dispatch
+
   # Cosim CpuBackend regression on a free Linux runner (no GPU). Builds the
   # no-feature jacquard binary (CpuBackend) and runs the seven cosim fixtures,
   # diffing each output against the committed golden in tests/*/expected/.
@@ -310,8 +346,10 @@ jobs:
           key: ${{ runner.os }}-cargo-metal-build-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-metal-build-llvm${{ env.LLVM_VERSION }}-
-      - name: Build jacquard (Metal)
-        run: cargo build --release --features metal --bin jacquard
+      - name: Build jacquard (Metal + synth on-ramp)
+        # synth (ADR 0021) embeds YoWASP Yosys so the Metal Tests job can exercise
+        # the behavioral-RTL on-ramp on real GPU. Also gives synth compile coverage.
+        run: cargo build --release --features metal,synth --bin jacquard
       - name: Upload jacquard-metal binary
         uses: actions/upload-artifact@v7
         with:
@@ -398,6 +436,43 @@ jobs:
             grep '^[01]!' tests/timing_test/ci_output.vcd | head -20
             echo ""
             echo "Note: Minor differences may be acceptable depending on signal timing"
+          fi
+
+      # ADR 0021 on-ramp: the gate-level run above used the committed
+      # dff_test_synth.gv fixture. Here we feed the *behavioral* dff_test.v to the
+      # same `sim` — it must detect RTL, synthesize via embedded YoWASP Yosys
+      # (read_slang), and produce waves bit-identical to the fixture run. This is
+      # the only CI coverage of the synth feature on real GPU; the prebuilt binary
+      # was built --features metal,synth by the metal-build job.
+      - name: Set up uv (YoWASP Yosys on-ramp)
+        uses: astral-sh/setup-uv@v7
+
+      - name: Resolve pinned yosys.wasm
+        run: |
+          set -euo pipefail
+          WASM=$(uv run --with yowasp-yosys python3 -c \
+            "import yowasp_yosys, pathlib; print(next(pathlib.Path(yowasp_yosys.__file__).parent.rglob('*.wasm')))")
+          test -f "$WASM"
+          echo "JACQUARD_YOSYS_WASM=$WASM" >> "$GITHUB_ENV"
+          echo "resolved yosys.wasm: $WASM"
+
+      - name: Behavioral RTL on-ramp smoke (ADR 0021)
+        run: |
+          set -euo pipefail
+          target/release/jacquard sim \
+            tests/timing_test/dff_test.v \
+            tests/timing_test/dff_test.vcd \
+            tests/timing_test/onramp_output.vcd \
+            1 --emit-synth tests/timing_test/onramp_synth.gv
+          echo "=== on-ramp synthesized netlist (head) ==="
+          head -8 tests/timing_test/onramp_synth.gv
+          echo "=== compare on-ramp waves vs gate-level fixture run (ci_output.vcd) ==="
+          if diff <(grep '^[01]!' tests/timing_test/ci_output.vcd) \
+                  <(grep '^[01]!' tests/timing_test/onramp_output.vcd); then
+            echo "✓ behavioral on-ramp waves are bit-identical to the fixture run"
+          else
+            echo "✗ on-ramp output diverged from the gate-level fixture run"
+            exit 1
           fi
 
       - name: Run Metal simulation with X-propagation
