@@ -31,6 +31,7 @@ persistent plans here.
 | [Multi-clock and stimulus architecture](multi-clock-and-stimulus-architecture.md) | Exploratory — demand-driven |
 | [Cosim backend portability](cosim-backend-portability.md) | Active — design captured (#105); see ADR 0017 amendment |
 | [Cell-model IR](cell-model-ir.md) | Proposed — realises ADR 0019 (#130, #67) |
+| [RTL on-ramp folded into `sim`/`cosim`](rtl-onramp-sim-integration.md) | Active — reworks #167, realises ADR 0021 (#162) |
 
 ## Reading order for new contributors
 
