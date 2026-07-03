@@ -132,43 +132,6 @@ enum Commands {
     /// Point it at the port the server logs, then `openocd -f openocd.cfg`.
     /// See `docs/jtag-debug.md`. No GPU required.
     JtagOpenocdConfig(JtagOpenocdConfigArgs),
-
-    /// Synthesize behavioral RTL to a gate-level aigpdk netlist (ADR 0021).
-    ///
-    /// The RTL on-ramp: runs YoWASP Yosys (WebAssembly, in-process via
-    /// wasmtime — no Python, no external toolchain) through the aigpdk
-    /// memory + logic synthesis flow (`docs/synthesis-flow.md`), producing a
-    /// `gatelevel.gv` that feeds `sim`/`cosim` unchanged. YoWASP Yosys is the
-    /// functional on-ramp; bring-your-own DC remains the performance path.
-    /// Requires building with `--features synth`. No GPU required.
-    #[cfg(feature = "synth")]
-    Build(BuildArgs),
-}
-
-/// Arguments for `jacquard build` (ADR 0021).
-#[cfg(feature = "synth")]
-#[derive(Parser)]
-struct BuildArgs {
-    /// Behavioral / RTL Verilog source file(s).
-    #[clap(required = true)]
-    inputs: Vec<PathBuf>,
-
-    /// Output gate-level netlist path.
-    #[clap(short = 'o', long = "output", default_value = "gatelevel.gv")]
-    output: PathBuf,
-
-    /// Top module name (else auto-detected by Yosys `hierarchy`).
-    #[clap(long)]
-    top_module: Option<String>,
-
-    /// Explicit path to `yosys.wasm`. Overrides `JACQUARD_YOSYS_WASM` and
-    /// installed-`yowasp-yosys` discovery.
-    #[clap(long, value_name = "PATH")]
-    yosys_wasm: Option<PathBuf>,
-
-    /// Strip assertions instead of lowering them to `GEM_ASSERT` cells.
-    #[clap(long)]
-    strip_assertions: bool,
 }
 
 #[derive(Parser)]
@@ -331,6 +294,20 @@ struct SimArgs {
     /// intended one.
     #[clap(long)]
     timing_corner: Option<String>,
+
+    /// Force the behavioral-RTL synthesis path (ADR 0021), overriding
+    /// auto-detection. Requires a `--features synth` build.
+    #[clap(long, conflicts_with = "netlist")]
+    rtl: bool,
+
+    /// Force direct gate-level loading, skipping RTL auto-detection.
+    #[clap(long)]
+    netlist: bool,
+
+    /// When the input is (or is forced to be) behavioral RTL, also write the
+    /// intermediate synthesized gate-level netlist here for inspection.
+    #[clap(long = "emit-synth", value_name = "PATH")]
+    emit_synth: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -499,6 +476,20 @@ struct CosimArgs {
     /// `docs/plans/bus-transaction-tracing.md`.
     #[clap(long = "bus-trace-csv", value_name = "PATH")]
     bus_trace_csv: Option<PathBuf>,
+
+    /// Force the behavioral-RTL synthesis path (ADR 0021), overriding
+    /// auto-detection. Requires a `--features synth` build.
+    #[clap(long, conflicts_with = "netlist")]
+    rtl: bool,
+
+    /// Force direct gate-level loading, skipping RTL auto-detection.
+    #[clap(long)]
+    netlist: bool,
+
+    /// When the input is (or is forced to be) behavioral RTL, also write the
+    /// intermediate synthesized gate-level netlist here for inspection.
+    #[clap(long = "emit-synth", value_name = "PATH")]
+    emit_synth: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -629,8 +620,28 @@ fn cmd_sim(args: SimArgs) {
     use jacquard::sim::setup;
     use jacquard::sim::vcd_io;
 
+    // ADR 0021 §1: classify the input (gate-level netlist vs behavioral RTL)
+    // and, for RTL, synthesize transparently. Returns the path to load.
+    let dispatch = setup::InputDispatch {
+        force_rtl: args.rtl,
+        force_netlist: args.netlist,
+        emit_synth: args.emit_synth.clone(),
+        yosys_wasm: None,
+        top_module: args.top_module.clone(),
+        has_cell_hint: args.cell_descriptor.is_some()
+            || !args.cell_library.is_empty()
+            || args.bundled_descriptor.is_some(),
+    };
+    let netlist_path = match setup::resolve_netlist_input(&args.netlist_verilog, &dispatch) {
+        Ok(p) => p,
+        Err(e) => {
+            clilog::error!("{e:#}");
+            std::process::exit(1);
+        }
+    };
+
     let design_args = DesignArgs {
-        netlist_verilog: args.netlist_verilog.clone(),
+        netlist_verilog: netlist_path.clone(),
         top_module: args.top_module.clone(),
         level_split: args.level_split.clone(),
         num_blocks: args.num_blocks,
@@ -2123,33 +2134,6 @@ fn main() {
         Commands::DumpPaths(args) => cmd_dump_paths(args),
         Commands::Xsources(args) => cmd_xsources(args),
         Commands::JtagOpenocdConfig(args) => cmd_jtag_openocd_config(args),
-        #[cfg(feature = "synth")]
-        Commands::Build(args) => cmd_build(args),
-    }
-}
-
-/// `jacquard build` — synthesize behavioral RTL to a gate-level aigpdk netlist.
-#[cfg(feature = "synth")]
-fn cmd_build(args: BuildArgs) {
-    let opts = jacquard::synth::BuildOptions {
-        inputs: args.inputs,
-        output: args.output,
-        top_module: args.top_module,
-        yosys_wasm: args.yosys_wasm,
-        keep_assertions: !args.strip_assertions,
-    };
-    match jacquard::synth::run_build(&opts) {
-        Ok(path) => {
-            println!("gate-level netlist written to {}", path.display());
-            println!(
-                "next: jacquard sim {} <input.vcd> <output.vcd> 1",
-                path.display()
-            );
-        }
-        Err(e) => {
-            clilog::error!("jacquard build failed: {e:#}");
-            std::process::exit(1);
-        }
     }
 }
 
@@ -2260,8 +2244,28 @@ fn cmd_cosim(args: CosimArgs) {
             .flat_map(jacquard::sim::models::bus_trace::observed_net_names)
             .collect();
 
+        // ADR 0021 §1: classify the input (gate-level netlist vs behavioral
+        // RTL) and, for RTL, synthesize transparently. Returns the path to load.
+        let dispatch = setup::InputDispatch {
+            force_rtl: args.rtl,
+            force_netlist: args.netlist,
+            emit_synth: args.emit_synth.clone(),
+            yosys_wasm: None,
+            top_module: args.top_module.clone(),
+            has_cell_hint: args.cell_descriptor.is_some()
+                || !args.cell_library.is_empty()
+                || args.bundled_descriptor.is_some(),
+        };
+        let netlist_path = match setup::resolve_netlist_input(&args.netlist_verilog, &dispatch) {
+            Ok(p) => p,
+            Err(e) => {
+                clilog::error!("{e:#}");
+                std::process::exit(1);
+            }
+        };
+
         let design_args = DesignArgs {
-            netlist_verilog: args.netlist_verilog.clone(),
+            netlist_verilog: netlist_path.clone(),
             top_module: args.top_module.clone(),
             level_split: args.level_split.clone(),
             num_blocks: args.num_blocks,
