@@ -960,6 +960,19 @@ impl MetalBackend {
         state_size: usize,
         gpio_map: &GpioMapping,
     ) -> (metal::Buffer, metal::Buffer, metal::Buffer, metal::Buffer) {
+        // Stage A: the GPU flash kernels are single-instance. The plural CPU
+        // path steps every `qspi_memory` entry; the GPU N-instance kernels are
+        // Stage B. Guard N>1 here (the GPU build path) so N=1 stays byte-
+        // identical and N>1 fails clearly rather than silently dropping memories.
+        let qspi = config.effective_qspi_memory();
+        assert!(
+            qspi.len() <= 1,
+            "multiple QSPI memories ({}) on the GPU backend requires stage B; \
+             use the CPU backend (build without a GPU feature / `--backend cpu`)",
+            qspi.len()
+        );
+        let primary = qspi.first();
+
         // FlashState (shared, persistent across ticks)
         let flash_state_buffer = device.new_buffer(
             std::mem::size_of::<FlashState>() as u64,
@@ -996,12 +1009,10 @@ impl MetalBackend {
         );
         unsafe {
             let p = &mut *(flash_din_params_buffer.contents() as *mut FlashDinParams);
-            p.has_flash = if config.flash.is_some() { 1 } else { 0 };
+            p.has_flash = if primary.is_some() { 1 } else { 0 };
             p.xmask_state_offset = script.xprop_state_offset;
             for i in 0..4 {
-                p.d_in_pos[i] = config
-                    .flash
-                    .as_ref()
+                p.d_in_pos[i] = primary
                     .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
                     .unwrap_or(0xFFFFFFFF);
             }
@@ -1015,20 +1026,14 @@ impl MetalBackend {
         unsafe {
             let p = &mut *(flash_model_params_buffer.contents() as *mut FlashModelParams);
             p.state_size = state_size as u32;
-            p.clk_out_pos = config
-                .flash
-                .as_ref()
+            p.clk_out_pos = primary
                 .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
                 .unwrap_or(0);
-            p.csn_out_pos = config
-                .flash
-                .as_ref()
+            p.csn_out_pos = primary
                 .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
                 .unwrap_or(0);
             for i in 0..4 {
-                p.d_out_pos[i] = config
-                    .flash
-                    .as_ref()
+                p.d_out_pos[i] = primary
                     .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
                     .unwrap_or(0xFFFFFFFF);
             }
@@ -1059,9 +1064,10 @@ impl MetalBackend {
             );
         }
         // Load firmware into flash data buffer
-        if let Some(ref flash_cfg) = config.flash {
+        if let Some(fw_path) = primary.and_then(|f| f.firmware.as_ref()) {
             use std::io::Read;
-            let firmware_path = std::path::Path::new(&flash_cfg.firmware);
+            let flash_cfg = primary.expect("primary present when firmware present");
+            let firmware_path = std::path::Path::new(fw_path);
             let mut file =
                 std::fs::File::open(firmware_path).expect("Failed to open firmware file");
             let mut data = Vec::new();
