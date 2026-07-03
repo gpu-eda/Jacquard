@@ -1288,62 +1288,87 @@
 <a href=#1288 id=1288 data-nosnippet>1288</a>        <span class="kw">let </span>pins = <span class="kw-2">&amp;</span>[(<span class="string">"E"</span>, <span class="string">"e"</span>), (<span class="string">"D"</span>, <span class="string">"d"</span>), (<span class="string">"Q"</span>, <span class="string">"q"</span>), (<span class="string">"notifier"</span>, <span class="string">"notif"</span>)];
 <a href=#1289 id=1289 data-nosnippet>1289</a>        <span class="kw">let </span>(aig, nl, port) = build_one_cell_aig(<span class="string">"latq"</span>, pins);
 <a href=#1290 id=1290 data-nosnippet>1290</a>        <span class="kw">let </span>dff_cellid = find_cell_id(<span class="kw-2">&amp;</span>nl, <span class="string">"latq"</span>);
-<a href=#1291 id=1291 data-nosnippet>1291</a>
-<a href=#1292 id=1292 data-nosnippet>1292</a>        <span class="comment">// E=1, D=1 → next state = D = 1.
-<a href=#1293 id=1293 data-nosnippet>1293</a>        </span><span class="kw">let </span>inputs = HashMap::from([(port[<span class="string">"d"</span>], <span class="bool-val">true</span>), (port[<span class="string">"e"</span>], <span class="bool-val">true</span>)]);
-<a href=#1294 id=1294 data-nosnippet>1294</a>        <span class="kw">let </span>next = step_dff(<span class="kw-2">&amp;</span>aig, dff_cellid, <span class="kw-2">&amp;</span>inputs, <span class="bool-val">false</span>);
-<a href=#1295 id=1295 data-nosnippet>1295</a>        <span class="macro">assert!</span>(next, <span class="string">"latq E=1 must pass D=1 through"</span>);
-<a href=#1296 id=1296 data-nosnippet>1296</a>
-<a href=#1297 id=1297 data-nosnippet>1297</a>        <span class="comment">// E=0 → holds previous state regardless of D.
-<a href=#1298 id=1298 data-nosnippet>1298</a>        </span><span class="kw">let </span>inputs_hold = HashMap::from([(port[<span class="string">"d"</span>], <span class="bool-val">false</span>), (port[<span class="string">"e"</span>], <span class="bool-val">false</span>)]);
-<a href=#1299 id=1299 data-nosnippet>1299</a>        <span class="kw">let </span>held = step_dff(<span class="kw-2">&amp;</span>aig, dff_cellid, <span class="kw-2">&amp;</span>inputs_hold, <span class="bool-val">true</span>);
-<a href=#1300 id=1300 data-nosnippet>1300</a>        <span class="macro">assert!</span>(held, <span class="string">"latq E=0 must hold previous state"</span>);
-<a href=#1301 id=1301 data-nosnippet>1301</a>        <span class="kw">let _ </span>= nl;
-<a href=#1302 id=1302 data-nosnippet>1302</a>    }
-<a href=#1303 id=1303 data-nosnippet>1303</a>
-<a href=#1304 id=1304 data-nosnippet>1304</a>    <span class="doccomment">/// Every sequential cell type must build without panicking. This
-<a href=#1305 id=1305 data-nosnippet>1305</a>    /// is the "did Phase 4b actually delete the panic" check, and
-<a href=#1306 id=1306 data-nosnippet>1306</a>    /// also catches pin-name regressions.
-<a href=#1307 id=1307 data-nosnippet>1307</a>    </span><span class="attr">#[test]
-<a href=#1308 id=1308 data-nosnippet>1308</a>    </span><span class="kw">fn </span>all_sequential_cells_build_without_panic() {
-<a href=#1309 id=1309 data-nosnippet>1309</a>        <span class="comment">// Pin layouts cribbed from `OUT_DIR/gf180mcu_pins.rs`.
-<a href=#1310 id=1310 data-nosnippet>1310</a>        </span><span class="kw">let </span>cell_pin_specs: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str])] = <span class="kw-2">&amp;</span>[
-<a href=#1311 id=1311 data-nosnippet>1311</a>            (<span class="string">"dffq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1312 id=1312 data-nosnippet>1312</a>            (<span class="string">"dffnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"D"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1313 id=1313 data-nosnippet>1313</a>            (<span class="string">"dffrnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1314 id=1314 data-nosnippet>1314</a>            (<span class="string">"dffnrnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1315 id=1315 data-nosnippet>1315</a>            (<span class="string">"dffsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1316 id=1316 data-nosnippet>1316</a>            (<span class="string">"dffnsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"D"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1317 id=1317 data-nosnippet>1317</a>            (<span class="string">"dffrsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1318 id=1318 data-nosnippet>1318</a>            (<span class="string">"dffnrsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1319 id=1319 data-nosnippet>1319</a>            (<span class="string">"sdffq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"SE"</span>, <span class="string">"SI"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1320 id=1320 data-nosnippet>1320</a>            (<span class="string">"sdffrnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"SE"</span>, <span class="string">"SI"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1321 id=1321 data-nosnippet>1321</a>            (
-<a href=#1322 id=1322 data-nosnippet>1322</a>                <span class="string">"sdffsnq"</span>,
-<a href=#1323 id=1323 data-nosnippet>1323</a>                <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"SE"</span>, <span class="string">"SETN"</span>, <span class="string">"SI"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>],
-<a href=#1324 id=1324 data-nosnippet>1324</a>            ),
-<a href=#1325 id=1325 data-nosnippet>1325</a>            (
-<a href=#1326 id=1326 data-nosnippet>1326</a>                <span class="string">"sdffrsnq"</span>,
-<a href=#1327 id=1327 data-nosnippet>1327</a>                <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"SE"</span>, <span class="string">"SETN"</span>, <span class="string">"SI"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>],
-<a href=#1328 id=1328 data-nosnippet>1328</a>            ),
-<a href=#1329 id=1329 data-nosnippet>1329</a>            (<span class="string">"latq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"D"</span>, <span class="string">"E"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1330 id=1330 data-nosnippet>1330</a>            (<span class="string">"latrnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"D"</span>, <span class="string">"E"</span>, <span class="string">"RN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1331 id=1331 data-nosnippet>1331</a>            (<span class="string">"latsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"D"</span>, <span class="string">"E"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1332 id=1332 data-nosnippet>1332</a>            (<span class="string">"latrsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"D"</span>, <span class="string">"E"</span>, <span class="string">"RN"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1333 id=1333 data-nosnippet>1333</a>            (<span class="string">"icgtp"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"E"</span>, <span class="string">"TE"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1334 id=1334 data-nosnippet>1334</a>            (<span class="string">"icgtn"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"E"</span>, <span class="string">"TE"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
-<a href=#1335 id=1335 data-nosnippet>1335</a>        ];
-<a href=#1336 id=1336 data-nosnippet>1336</a>
-<a href=#1337 id=1337 data-nosnippet>1337</a>        <span class="kw">for </span>(cell, port_order) <span class="kw">in </span>cell_pin_specs {
-<a href=#1338 id=1338 data-nosnippet>1338</a>            <span class="kw">let </span>pins: Vec&lt;(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str)&gt; = port_order.iter().map(|p| (<span class="kw-2">*</span>p, <span class="kw-2">*</span>p)).collect();
-<a href=#1339 id=1339 data-nosnippet>1339</a>            <span class="comment">// build_one_cell_aig panics on parse / AIG construction
-<a href=#1340 id=1340 data-nosnippet>1340</a>            // failure; reaching the end is the assertion.
-<a href=#1341 id=1341 data-nosnippet>1341</a>            </span><span class="kw">let </span>(aig, _nl, _port) = build_one_cell_aig(cell, <span class="kw-2">&amp;</span>pins);
-<a href=#1342 id=1342 data-nosnippet>1342</a>            <span class="macro">assert!</span>(
-<a href=#1343 id=1343 data-nosnippet>1343</a>                aig.num_aigpins &gt; <span class="number">0</span>,
-<a href=#1344 id=1344 data-nosnippet>1344</a>                <span class="string">"{cell}: AIG construction produced 0 pins"
-<a href=#1345 id=1345 data-nosnippet>1345</a>            </span>);
-<a href=#1346 id=1346 data-nosnippet>1346</a>        }
-<a href=#1347 id=1347 data-nosnippet>1347</a>    }
-<a href=#1348 id=1348 data-nosnippet>1348</a>}
+<a href=#1291 id=1291 data-nosnippet>1291</a>        <span class="kw">let </span>q_pinid = port[<span class="string">"q"</span>];
+<a href=#1292 id=1292 data-nosnippet>1292</a>
+<a href=#1293 id=1293 data-nosnippet>1293</a>        <span class="comment">// ADR 0019 C3.3d: the cell-model-IR `latq` stores the *inverted* data
+<a href=#1294 id=1294 data-nosnippet>1294</a>        // internally (`next_state = !D`, `seq.outputs Q inverted = true`) and
+<a href=#1295 id=1295 data-nosnippet>1295</a>        // inverts it back at the Q output, so the observable Q is D — but the
+<a href=#1296 id=1296 data-nosnippet>1296</a>        // raw internal DFF state (`step_dff`) is `!D`. Assert on the observable
+<a href=#1297 id=1297 data-nosnippet>1297</a>        // Q output pin, not the internal state, so the check is
+<a href=#1298 id=1298 data-nosnippet>1298</a>        // representation-agnostic (this is the descriptor-driven path the
+<a href=#1299 id=1299 data-nosnippet>1299</a>        // production build has used since C2.3; only the plain-API unit path
+<a href=#1300 id=1300 data-nosnippet>1300</a>        // moved onto it in C3.3d step 3).
+<a href=#1301 id=1301 data-nosnippet>1301</a>        </span><span class="kw">let </span>observe_q = |inputs: <span class="kw-2">&amp;</span>HashMap&lt;usize, bool&gt;, prev: bool| -&gt; bool {
+<a href=#1302 id=1302 data-nosnippet>1302</a>            <span class="kw">let </span>new_state = step_dff(<span class="kw-2">&amp;</span>aig, dff_cellid, inputs, prev);
+<a href=#1303 id=1303 data-nosnippet>1303</a>            <span class="kw">let </span><span class="kw-2">mut </span>clock_flags = HashMap::new();
+<a href=#1304 id=1304 data-nosnippet>1304</a>            <span class="kw">for </span>(clk_pin, <span class="kw-2">&amp;</span>(pos_id, neg_id)) <span class="kw">in </span>aig.clock_pin2aigpins.iter() {
+<a href=#1305 id=1305 data-nosnippet>1305</a>                <span class="kw">if </span>pos_id != usize::MAX {
+<a href=#1306 id=1306 data-nosnippet>1306</a>                    clock_flags.insert((<span class="kw-2">*</span>clk_pin, <span class="number">0u8</span>), <span class="bool-val">true</span>);
+<a href=#1307 id=1307 data-nosnippet>1307</a>                }
+<a href=#1308 id=1308 data-nosnippet>1308</a>                <span class="kw">if </span>neg_id != usize::MAX {
+<a href=#1309 id=1309 data-nosnippet>1309</a>                    clock_flags.insert((<span class="kw-2">*</span>clk_pin, <span class="number">1u8</span>), <span class="bool-val">true</span>);
+<a href=#1310 id=1310 data-nosnippet>1310</a>                }
+<a href=#1311 id=1311 data-nosnippet>1311</a>            }
+<a href=#1312 id=1312 data-nosnippet>1312</a>            <span class="kw">let </span>dff_state = HashMap::from([(dff_cellid, new_state)]);
+<a href=#1313 id=1313 data-nosnippet>1313</a>            <span class="kw">let </span>vals = eval_aig_combinational(<span class="kw-2">&amp;</span>aig, inputs, <span class="kw-2">&amp;</span>clock_flags, <span class="kw-2">&amp;</span>dff_state);
+<a href=#1314 id=1314 data-nosnippet>1314</a>            read_iv(aig.pin2aigpin_iv[q_pinid], <span class="kw-2">&amp;</span>vals)
+<a href=#1315 id=1315 data-nosnippet>1315</a>        };
+<a href=#1316 id=1316 data-nosnippet>1316</a>
+<a href=#1317 id=1317 data-nosnippet>1317</a>        <span class="comment">// E=1 → transparent: observable Q follows D.
+<a href=#1318 id=1318 data-nosnippet>1318</a>        </span><span class="kw">let </span>d1 = HashMap::from([(port[<span class="string">"d"</span>], <span class="bool-val">true</span>), (port[<span class="string">"e"</span>], <span class="bool-val">true</span>)]);
+<a href=#1319 id=1319 data-nosnippet>1319</a>        <span class="macro">assert!</span>(observe_q(<span class="kw-2">&amp;</span>d1, <span class="bool-val">false</span>), <span class="string">"latq E=1 must pass D=1 through to Q"</span>);
+<a href=#1320 id=1320 data-nosnippet>1320</a>        <span class="kw">let </span>d0 = HashMap::from([(port[<span class="string">"d"</span>], <span class="bool-val">false</span>), (port[<span class="string">"e"</span>], <span class="bool-val">true</span>)]);
+<a href=#1321 id=1321 data-nosnippet>1321</a>        <span class="macro">assert!</span>(!observe_q(<span class="kw-2">&amp;</span>d0, <span class="bool-val">true</span>), <span class="string">"latq E=1 must pass D=0 through to Q"</span>);
+<a href=#1322 id=1322 data-nosnippet>1322</a>
+<a href=#1323 id=1323 data-nosnippet>1323</a>        <span class="comment">// E=0 → holds previous Q (prev internal state false ⇒ observable Q=1).
+<a href=#1324 id=1324 data-nosnippet>1324</a>        </span><span class="kw">let </span>hold = HashMap::from([(port[<span class="string">"d"</span>], <span class="bool-val">false</span>), (port[<span class="string">"e"</span>], <span class="bool-val">false</span>)]);
+<a href=#1325 id=1325 data-nosnippet>1325</a>        <span class="macro">assert!</span>(observe_q(<span class="kw-2">&amp;</span>hold, <span class="bool-val">false</span>), <span class="string">"latq E=0 must hold previous Q"</span>);
+<a href=#1326 id=1326 data-nosnippet>1326</a>        <span class="kw">let _ </span>= nl;
+<a href=#1327 id=1327 data-nosnippet>1327</a>    }
+<a href=#1328 id=1328 data-nosnippet>1328</a>
+<a href=#1329 id=1329 data-nosnippet>1329</a>    <span class="doccomment">/// Every sequential cell type must build without panicking. This
+<a href=#1330 id=1330 data-nosnippet>1330</a>    /// is the "did Phase 4b actually delete the panic" check, and
+<a href=#1331 id=1331 data-nosnippet>1331</a>    /// also catches pin-name regressions.
+<a href=#1332 id=1332 data-nosnippet>1332</a>    </span><span class="attr">#[test]
+<a href=#1333 id=1333 data-nosnippet>1333</a>    </span><span class="kw">fn </span>all_sequential_cells_build_without_panic() {
+<a href=#1334 id=1334 data-nosnippet>1334</a>        <span class="comment">// Pin layouts cribbed from `OUT_DIR/gf180mcu_pins.rs`.
+<a href=#1335 id=1335 data-nosnippet>1335</a>        </span><span class="kw">let </span>cell_pin_specs: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str])] = <span class="kw-2">&amp;</span>[
+<a href=#1336 id=1336 data-nosnippet>1336</a>            (<span class="string">"dffq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1337 id=1337 data-nosnippet>1337</a>            (<span class="string">"dffnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"D"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1338 id=1338 data-nosnippet>1338</a>            (<span class="string">"dffrnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1339 id=1339 data-nosnippet>1339</a>            (<span class="string">"dffnrnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1340 id=1340 data-nosnippet>1340</a>            (<span class="string">"dffsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1341 id=1341 data-nosnippet>1341</a>            (<span class="string">"dffnsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"D"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1342 id=1342 data-nosnippet>1342</a>            (<span class="string">"dffrsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1343 id=1343 data-nosnippet>1343</a>            (<span class="string">"dffnrsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1344 id=1344 data-nosnippet>1344</a>            (<span class="string">"sdffq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"SE"</span>, <span class="string">"SI"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1345 id=1345 data-nosnippet>1345</a>            (<span class="string">"sdffrnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"SE"</span>, <span class="string">"SI"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1346 id=1346 data-nosnippet>1346</a>            (
+<a href=#1347 id=1347 data-nosnippet>1347</a>                <span class="string">"sdffsnq"</span>,
+<a href=#1348 id=1348 data-nosnippet>1348</a>                <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"SE"</span>, <span class="string">"SETN"</span>, <span class="string">"SI"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>],
+<a href=#1349 id=1349 data-nosnippet>1349</a>            ),
+<a href=#1350 id=1350 data-nosnippet>1350</a>            (
+<a href=#1351 id=1351 data-nosnippet>1351</a>                <span class="string">"sdffrsnq"</span>,
+<a href=#1352 id=1352 data-nosnippet>1352</a>                <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"D"</span>, <span class="string">"RN"</span>, <span class="string">"SE"</span>, <span class="string">"SETN"</span>, <span class="string">"SI"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>],
+<a href=#1353 id=1353 data-nosnippet>1353</a>            ),
+<a href=#1354 id=1354 data-nosnippet>1354</a>            (<span class="string">"latq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"D"</span>, <span class="string">"E"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1355 id=1355 data-nosnippet>1355</a>            (<span class="string">"latrnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"D"</span>, <span class="string">"E"</span>, <span class="string">"RN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1356 id=1356 data-nosnippet>1356</a>            (<span class="string">"latsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"D"</span>, <span class="string">"E"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1357 id=1357 data-nosnippet>1357</a>            (<span class="string">"latrsnq"</span>, <span class="kw-2">&amp;</span>[<span class="string">"D"</span>, <span class="string">"E"</span>, <span class="string">"RN"</span>, <span class="string">"SETN"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1358 id=1358 data-nosnippet>1358</a>            (<span class="string">"icgtp"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLK"</span>, <span class="string">"E"</span>, <span class="string">"TE"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1359 id=1359 data-nosnippet>1359</a>            (<span class="string">"icgtn"</span>, <span class="kw-2">&amp;</span>[<span class="string">"CLKN"</span>, <span class="string">"E"</span>, <span class="string">"TE"</span>, <span class="string">"notifier"</span>, <span class="string">"Q"</span>]),
+<a href=#1360 id=1360 data-nosnippet>1360</a>        ];
+<a href=#1361 id=1361 data-nosnippet>1361</a>
+<a href=#1362 id=1362 data-nosnippet>1362</a>        <span class="kw">for </span>(cell, port_order) <span class="kw">in </span>cell_pin_specs {
+<a href=#1363 id=1363 data-nosnippet>1363</a>            <span class="kw">let </span>pins: Vec&lt;(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str)&gt; = port_order.iter().map(|p| (<span class="kw-2">*</span>p, <span class="kw-2">*</span>p)).collect();
+<a href=#1364 id=1364 data-nosnippet>1364</a>            <span class="comment">// build_one_cell_aig panics on parse / AIG construction
+<a href=#1365 id=1365 data-nosnippet>1365</a>            // failure; reaching the end is the assertion.
+<a href=#1366 id=1366 data-nosnippet>1366</a>            </span><span class="kw">let </span>(aig, _nl, _port) = build_one_cell_aig(cell, <span class="kw-2">&amp;</span>pins);
+<a href=#1367 id=1367 data-nosnippet>1367</a>            <span class="macro">assert!</span>(
+<a href=#1368 id=1368 data-nosnippet>1368</a>                aig.num_aigpins &gt; <span class="number">0</span>,
+<a href=#1369 id=1369 data-nosnippet>1369</a>                <span class="string">"{cell}: AIG construction produced 0 pins"
+<a href=#1370 id=1370 data-nosnippet>1370</a>            </span>);
+<a href=#1371 id=1371 data-nosnippet>1371</a>        }
+<a href=#1372 id=1372 data-nosnippet>1372</a>    }
+<a href=#1373 id=1373 data-nosnippet>1373</a>}
 </code></pre></div></section></main></body></html>

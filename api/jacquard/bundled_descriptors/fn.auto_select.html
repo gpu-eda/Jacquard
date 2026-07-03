@@ -5,8 +5,8 @@ against each descriptor’s declared D8 <code>library.prefixes</code> (ADR 0019 
 <p>This is the automatic tier of the C3.2 precedence chain, sitting <em>below</em>
 the explicit <code>--cell-descriptor &lt;file&gt;</code> and <code>--bundled-descriptor &lt;name&gt;</code>
 selectors handled by <a href="fn.resolve.html" title="fn jacquard::bundled_descriptors::resolve"><code>resolve</code></a> and <em>above</em> the legacy per-PDK Rust path.
-It replaces <code>pdk::PdkVariant</code>’s hardcoded prefix detection for the descriptor
-choice: instead of collapsing every GF180 cell to one variant (the #130 bug,
+It replaces the former per-PDK enum’s hardcoded prefix detection for the
+descriptor choice: instead of collapsing every GF180 cell to one variant (the #130 bug,
 where a 9t netlist was served by 7t models), it keys on the full vendor
 prefix — which carries the track designation (<code>…mcu7t5v0__</code> vs <code>…mcu9t5v0__</code>)
 — so a 9t netlist auto-selects the 9t descriptor.</p>

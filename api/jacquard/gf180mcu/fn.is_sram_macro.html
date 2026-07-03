@@ -3,6 +3,6 @@
 they are modelled as RAM blocks via the runtime <code>--cell-library</code>. They
 satisfy <a href="fn.is_gf180mcu_cell.html" title="fn jacquard::gf180mcu::is_gf180mcu_cell"><code>is_gf180mcu_cell</code></a> (so the netlist parser accepts them and the
 library is detected as GF180MCU) but are excluded from the standard-cell
-decompose dispatch in <a href="../pdk/enum.PdkVariant.html#method.classify" title="associated function jacquard::pdk::PdkVariant::classify"><code>crate::pdk::PdkVariant::classify</code></a> so they reach
-the cell-library RAM path instead of the std-cell functional.v lookup.</p>
+decompose dispatch (<code>AIG::is_gf180mcu_stdcell</code> returns <code>false</code> for them)
+so they reach the cell-library RAM path instead of the std-cell lookup.</p>
 </div></details></section></div></main></body></html>

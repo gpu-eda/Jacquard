@@ -11923,10 +11923,30 @@ debugging-tools section.</li>
 <li>Wire-bundle reconstruction of multi-bit X-source buses (tracked separately).</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="cell-model-ir--staged-delivery-plan"><a class="header" href="#cell-model-ir--staged-delivery-plan">Cell-model IR — staged delivery plan</a></h1>
-<p><strong>Status:</strong> Proposed — not started. Realises
+<p><strong>Status:</strong> Largely delivered. Realises
 <a href="plans/../adr/0019-cell-model-ir.html">ADR 0019</a>. Tracks
 <a href="https://github.com/gpu-eda/Jacquard/issues/130">#130</a> and
 <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a>.</p>
+<ul>
+<li><strong>C1 (foundation + #130)</strong> — ✅ landed (#132). #130 is fixed by default: a 9T
+netlist auto-selects its own 9T descriptor.</li>
+<li><strong>C1b (converter generalization)</strong> — ✅ landed (#155): corner from Liberty PVT,
+ff internal-state-var (<code>IQ</code>). Surfaced by running the converter against the
+proprietary GF130 (GF013BCD) library.</li>
+<li><strong>C2 (L3 sequential + L4 timing)</strong> — ✅ landed (#132).</li>
+<li><strong>C3.1/C3.2 (build-time generation + prefix selection)</strong> — ✅ landed (#132).</li>
+<li><strong>SKY130 <code>.lib.json</code> reader</strong> — ✅ landed (#155): SKY130 ships only
+<code>.lib.json</code>, so <code>liberty-parse</code> reads it.</li>
+<li><strong>C3a (IHP SG13G2, zero-Rust new PDK)</strong> — ✅ landed (#155): vendored as a
+sparse/shallow submodule + a generated descriptor, no <code>ihp_*.rs</code>.</li>
+<li><strong>C3.3 (cut over + drop runtime <code>vendor/</code> dep)</strong> — ✅ landed (#160): the
+runtime binary is self-contained for standard cells (<code>load_pdk_models</code> has no
+runtime callers), and <code>PdkVariant</code> is deleted (<code>grep -rn PdkVariant src/</code> = 0).</li>
+<li><strong>C4 (proprietary workflow + <code>clear_preset</code>)</strong> — 🟡 partial: <code>clear_preset</code>
+set-dominant field landed (#155); <code>docs/adding-a-pdk.md</code> reframed around the
+descriptor workflow (#155). The proprietary <em>sequential</em> end-to-end test and
+the round-trip honesty fix remain (see Remaining follow-ups).</li>
+</ul>
 <p><strong>Goal:</strong> make Jacquard core consume a single, generated, JSON cell-model
 IR carrying <em>all</em> per-cell-type facts of a library — L1 directions, L2
 combinational AIG, L3 sequential/classification, <strong>and L4 timing
@@ -11947,6 +11967,49 @@ cleanup that the first two earn.</p>
 <tr><td><strong>C4 (later)</strong></td><td>A documented proprietary-library workflow: user runs the generator on their own Liberty, gets a descriptor, simulates — no Jacquard build. Honesty fix: the round-trip logic check replaces <code>build.rs</code>'s port-only <code>assert_eq!</code>.</td><td><code>docs/adding-a-pdk.md</code> recipe; a synthetic "private" library exercised end-to-end in a test.</td></tr>
 </tbody></table>
 </div>
+<h2 id="remaining-follow-ups-post-cutover"><a class="header" href="#remaining-follow-ups-post-cutover">Remaining follow-ups (post-cutover)</a></h2>
+<p>Discovered during implementation; folded here from the working handoff so they
+survive its deletion. None reopen the runtime <code>vendor/</code> stdcell dependency or
+reintroduce <code>PdkVariant</code>.</p>
+<ol>
+<li><strong>Descriptor-drive AIGPDK <code>DFF</code>/<code>DFFSR</code>.</strong> AIGPDK's two internal flops are
+still on a literal-match path. Their descriptor L3 is well-formed
+(clock=CLK/rising, next_state=D, async S/R active-low, reset-dominant); the
+conversion is gate-covered (every AIGPDK/IHP fixture exercises them). Do this
+first — it is bounded and safe.</li>
+<li><strong>Descriptor-drive the preserved <code>edfxtp</code>/<code>icgtp</code>/<code>icgtn</code> seq branches.</strong> The
+legacy <code>SET_B</code>/<code>RESET_B</code>/<code>RN</code>/<code>SETN</code> sequential-wiring branches remain because
+they still serve <em>preserved</em> cells: SKY130 <code>edfxtp</code> (its data-enable folds
+into <code>next_state</code> via the <code>ff</code> state var <code>IQ</code>, so <code>ir_seq_input_wireable</code>
+returns false) and GF180 <code>icgtp</code>/<code>icgtn</code> clock gates (emit no L3). <strong>No gated
+design exercises these</strong>, so add a small <code>edfxtp</code>/<code>icgtp</code> fixture <em>first</em>, then
+descriptor-drive them and delete the residual literals + the per-PDK
+classifiers.</li>
+<li><strong>Gate IHP sequential.</strong> IHP <code>ff</code> cells are code-supported (previously
+panicked) but ungated — no flop-bearing SG13G2 fixture exists (needs synthesis
+infra to produce an IHP gate-level netlist). Add one to lock in IHP sequential.</li>
+<li><strong>Flat-module <code>.v</code> cross-check indexer.</strong> Commercial libraries (GF130, IHP)
+ship one flat-module <code>.v</code>, so the D6 logic cross-check reports 0 models indexed
+and does not run at generation (the descriptor is still emitted; correctness is
+validated via simulation, and the converter now <em>warns</em>). Teach the indexer
+flat-module <code>.v</code> so commercial descriptors are logic-cross-checked at
+generation.</li>
+<li><strong>Descriptor-backed <code>LeafPinProvider</code> + delete <code>build.rs</code> pin-table gen.</strong>
+Confirmed feasible (descriptor L1 covers every stdcell's scalar pins; chain:
+power-pin → filler → descriptor L1 → preserved pad/IP/SRAM tables). Not yet
+wired; the per-PDK <code>LeafPinProvider</code>s + <code>build.rs::generate_pin_table</code> +
+<code>generated</code> modules remain (inert for stdcell <em>logic</em>, but still the parse-time
+pin-direction source). This is the last mechanical cleanup.</li>
+<li><strong>C4 — proprietary sequential end-to-end test + round-trip honesty fix.</strong> GF130
+descriptor <em>generation</em> is proven (the C4 proof), but no proprietary
+<em>sequential</em> simulation test exists; add a synthetic "private" library
+exercised end-to-end. Separately, the round-trip logic check should replace
+<code>build.rs</code>'s port-only <code>assert_eq!</code> (the plan's C4 honesty fix).</li>
+<li><strong><code>clear_preset</code> for true set-dominant sequential sim.</strong> The field is emitted
+and the consumer honors it, but a proprietary user simulating set-dominant
+flops still needs the non-GF180 sequential path fully descriptor-driven
+(items 1–2) to observe the correct behaviour end-to-end.</li>
+</ol>
 <h2 id="risks--open-questions-2"><a class="header" href="#risks--open-questions-2">Risks / open questions</a></h2>
 <ul>
 <li><strong>Sequential fidelity (C2).</strong> Liberty <code>ff</code> <code>clear</code>/<code>preset</code>/

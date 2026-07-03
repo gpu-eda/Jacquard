@@ -149,8 +149,8 @@
 <a href=#149 id=149 data-nosnippet>149</a>/// This is the automatic tier of the C3.2 precedence chain, sitting *below*
 <a href=#150 id=150 data-nosnippet>150</a>/// the explicit `--cell-descriptor &lt;file&gt;` and `--bundled-descriptor &lt;name&gt;`
 <a href=#151 id=151 data-nosnippet>151</a>/// selectors handled by [`resolve`] and *above* the legacy per-PDK Rust path.
-<a href=#152 id=152 data-nosnippet>152</a>/// It replaces `pdk::PdkVariant`'s hardcoded prefix detection for the descriptor
-<a href=#153 id=153 data-nosnippet>153</a>/// choice: instead of collapsing every GF180 cell to one variant (the #130 bug,
+<a href=#152 id=152 data-nosnippet>152</a>/// It replaces the former per-PDK enum's hardcoded prefix detection for the
+<a href=#153 id=153 data-nosnippet>153</a>/// descriptor choice: instead of collapsing every GF180 cell to one variant (the #130 bug,
 <a href=#154 id=154 data-nosnippet>154</a>/// where a 9t netlist was served by 7t models), it keys on the full vendor
 <a href=#155 id=155 data-nosnippet>155</a>/// prefix — which carries the track designation (`…mcu7t5v0__` vs `…mcu9t5v0__`)
 <a href=#156 id=156 data-nosnippet>156</a>/// — so a 9t netlist auto-selects the 9t descriptor.
