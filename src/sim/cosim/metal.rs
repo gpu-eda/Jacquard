@@ -28,9 +28,10 @@ use super::{
 // GPU peripheral `#[repr(C)]` IO structs + constants, lifted to the parent
 // module (gated to GPU builds) so Metal/CUDA/HIP share one ABI (Stage B B0).
 use super::{
-    BusTraceChannel, BusTraceEntry, BusTraceParamsAll, FlashDinParams, FlashModelParams,
+    BusTraceChannel, BusTraceEntry, BusTraceParamsAll, FlashDinParamsAll, FlashModelParamsAll,
     FlashState, UartChannel, UartDecoderState, UartParams, UartPerChannelConfig, WbTraceChannel,
-    WbTraceEntry, WbTraceParams, BUS_TRACE_CHANNEL_CAP, UART_CHANNEL_CAP, WB_TRACE_CHANNEL_CAP,
+    WbTraceEntry, WbTraceParams, BUS_TRACE_CHANNEL_CAP, MAX_QSPI_MEMS, UART_CHANNEL_CAP,
+    WB_TRACE_CHANNEL_CAP,
 };
 
 // ── Simulation Parameters (must match Metal shader) ──────────────────────────
@@ -960,133 +961,139 @@ impl MetalBackend {
         state_size: usize,
         gpio_map: &GpioMapping,
     ) -> (metal::Buffer, metal::Buffer, metal::Buffer, metal::Buffer) {
-        // Stage A: the GPU flash kernels are single-instance. The plural CPU
-        // path steps every `qspi_memory` entry; the GPU N-instance kernels are
-        // Stage B. Guard N>1 here (the GPU build path) so N=1 stays byte-
-        // identical and N>1 fails clearly rather than silently dropping memories.
+        // ADR 0013 plural QSPI memory (Stage B). Each instance owns a
+        // FlashState slot + a slice of the concatenated `flash_data` backing
+        // store, so memories advance independently. N=1 stays byte-identical.
+        const FLASH_SIZE_DEFAULT: usize = 16 * 1024 * 1024;
         let qspi = config.effective_qspi_memory();
         assert!(
-            qspi.len() <= 1,
-            "multiple QSPI memories ({}) on the GPU backend requires stage B; \
-             use the CPU backend (build without a GPU feature / `--backend cpu`)",
-            qspi.len()
+            qspi.len() <= MAX_QSPI_MEMS,
+            "too many QSPI memories ({}); GPU backend supports at most {}",
+            qspi.len(),
+            MAX_QSPI_MEMS
         );
-        let primary = qspi.first();
+        let n = qspi.len();
 
-        // FlashState (shared, persistent across ticks)
+        // Per-instance backing-store sizes + byte offsets into the shared buffer.
+        let sizes: Vec<usize> = qspi
+            .iter()
+            .map(|m| m.size_bytes.unwrap_or(FLASH_SIZE_DEFAULT))
+            .collect();
+        let mut offsets = vec![0u32; n];
+        let mut total = 0usize;
+        for i in 0..n {
+            offsets[i] = total as u32;
+            total += sizes[i];
+        }
+        let total = total.max(1); // avoid a 0-byte buffer when n == 0
+
+        // FlashState: one slot per instance (>=1 to avoid a 0-byte buffer).
+        let n_slots = n.max(1);
         let flash_state_buffer = device.new_buffer(
-            std::mem::size_of::<FlashState>() as u64,
+            (n_slots * std::mem::size_of::<FlashState>()) as u64,
             MTLResourceOptions::StorageModeShared,
         );
         unsafe {
-            let fs = &mut *(flash_state_buffer.contents() as *mut FlashState);
-            *fs = std::mem::zeroed();
-            fs.data_width = 1; // SPI single-bit mode (reset by posedge_csn, but first tx has none)
-            fs.prev_csn = 1; // CSN starts high (deselected)
-            fs.model_prev_csn = 1; // Model internal edge detection starts high
-            fs.d_i = 0x0F; // Flash output starts high
-            fs.in_reset = 1; // Start in reset
-                             // Verify write
-            let verify = std::ptr::read_volatile(&fs.d_i);
-            assert_eq!(
-                verify, 0x0F,
-                "FlashState.d_i not written correctly: got 0x{:02X}",
-                verify
-            );
-            clilog::info!(
-                "FlashState init: d_i=0x{:02X}, data_width={}, prev_csn={}, in_reset={}",
-                fs.d_i,
-                fs.data_width,
-                fs.prev_csn,
-                fs.in_reset
-            );
+            let slots = flash_state_buffer.contents() as *mut FlashState;
+            for s in 0..n_slots {
+                let fs = &mut *slots.add(s);
+                *fs = std::mem::zeroed();
+                fs.data_width = 1; // SPI single-bit mode
+                fs.prev_csn = 1; // CSN starts high (deselected)
+                fs.model_prev_csn = 1; // model internal edge detection starts high
+                fs.d_i = 0x0F; // flash output starts high
+                fs.in_reset = 1; // start in reset
+            }
         }
 
-        // FlashDinParams (constant)
+        // FlashDinParamsAll (constant): per-instance MISO input bit positions.
         let flash_din_params_buffer = device.new_buffer(
-            std::mem::size_of::<FlashDinParams>() as u64,
+            std::mem::size_of::<FlashDinParamsAll>() as u64,
             MTLResourceOptions::StorageModeShared,
         );
         unsafe {
-            let p = &mut *(flash_din_params_buffer.contents() as *mut FlashDinParams);
-            p.has_flash = if primary.is_some() { 1 } else { 0 };
-            p.xmask_state_offset = script.xprop_state_offset;
-            for i in 0..4 {
-                p.d_in_pos[i] = primary
-                    .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
-                    .unwrap_or(0xFFFFFFFF);
+            let all = &mut *(flash_din_params_buffer.contents() as *mut FlashDinParamsAll);
+            *all = std::mem::zeroed();
+            all.n_flashes = n as u32;
+            for (idx, m) in qspi.iter().enumerate() {
+                let p = &mut all.flashes[idx];
+                p.has_flash = 1;
+                p.xmask_state_offset = script.xprop_state_offset;
+                for i in 0..4 {
+                    p.d_in_pos[i] = gpio_map
+                        .input_bits
+                        .get(&(m.d0_gpio + i))
+                        .copied()
+                        .unwrap_or(0xFFFFFFFF);
+                }
             }
         }
 
-        // FlashModelParams (constant)
+        // FlashModelParamsAll (constant): per-instance pin positions + the
+        // backing slice (flash_data_size + data_offset into `flash_data`).
         let flash_model_params_buffer = device.new_buffer(
-            std::mem::size_of::<FlashModelParams>() as u64,
+            std::mem::size_of::<FlashModelParamsAll>() as u64,
             MTLResourceOptions::StorageModeShared,
         );
         unsafe {
-            let p = &mut *(flash_model_params_buffer.contents() as *mut FlashModelParams);
-            p.state_size = state_size as u32;
-            p.clk_out_pos = primary
-                .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
-                .unwrap_or(0);
-            p.csn_out_pos = primary
-                .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
-                .unwrap_or(0);
-            for i in 0..4 {
-                p.d_out_pos[i] = primary
-                    .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
-                    .unwrap_or(0xFFFFFFFF);
+            let all = &mut *(flash_model_params_buffer.contents() as *mut FlashModelParamsAll);
+            *all = std::mem::zeroed();
+            all.n_flashes = n as u32;
+            for (idx, m) in qspi.iter().enumerate() {
+                let p = &mut all.flashes[idx];
+                p.state_size = state_size as u32;
+                p.clk_out_pos = gpio_map.output_bits.get(&m.clk_gpio).copied().unwrap_or(0);
+                p.csn_out_pos = gpio_map.output_bits.get(&m.csn_gpio).copied().unwrap_or(0);
+                for i in 0..4 {
+                    p.d_out_pos[i] = gpio_map
+                        .output_bits
+                        .get(&(m.d0_gpio + i))
+                        .copied()
+                        .unwrap_or(0xFFFFFFFF);
+                }
+                p.flash_data_size = sizes[idx] as u32;
+                p.data_offset = offsets[idx];
             }
-            p.flash_data_size = 16 * 1024 * 1024; // 16 MB
-            clilog::info!("FlashModelParams: state_size={}, clk_out_pos={}, csn_out_pos={}, d_out_pos={:?}, flash_data_size={}",
-                p.state_size, p.clk_out_pos, p.csn_out_pos, p.d_out_pos, p.flash_data_size);
-        }
-
-        // Log flash din params too
-        unsafe {
-            let p = &*(flash_din_params_buffer.contents() as *const FlashDinParams);
             clilog::info!(
-                "FlashDinParams: has_flash={}, d_in_pos={:?}",
-                p.has_flash,
-                p.d_in_pos
+                "FlashModelParamsAll: n_flashes={}, total_backing={} bytes",
+                n,
+                total
             );
         }
 
-        // Flash data buffer (16 MB, loaded with firmware)
+        // Concatenated backing store: 0xFF (erased) then each instance's
+        // firmware into its own slice — independent per-instance backing stores.
         let flash_data_buffer =
-            device.new_buffer(16 * 1024 * 1024, MTLResourceOptions::StorageModeShared);
+            device.new_buffer(total as u64, MTLResourceOptions::StorageModeShared);
         unsafe {
-            // Fill with 0xFF (erased flash state)
-            std::ptr::write_bytes(
-                flash_data_buffer.contents() as *mut u8,
-                0xFF,
-                16 * 1024 * 1024,
-            );
+            std::ptr::write_bytes(flash_data_buffer.contents() as *mut u8, 0xFF, total);
         }
-        // Load firmware into flash data buffer
-        if let Some(fw_path) = primary.and_then(|f| f.firmware.as_ref()) {
-            use std::io::Read;
-            let flash_cfg = primary.expect("primary present when firmware present");
-            let firmware_path = std::path::Path::new(fw_path);
-            let mut file =
-                std::fs::File::open(firmware_path).expect("Failed to open firmware file");
-            let mut data = Vec::new();
-            file.read_to_end(&mut data)
-                .expect("Failed to read firmware");
-            let offset = flash_cfg.firmware_offset;
-            assert!(
-                offset + data.len() <= 16 * 1024 * 1024,
-                "Firmware too large for flash buffer"
-            );
-            unsafe {
-                let dest = (flash_data_buffer.contents() as *mut u8).add(offset);
-                std::ptr::copy_nonoverlapping(data.as_ptr(), dest, data.len());
+        for (idx, m) in qspi.iter().enumerate() {
+            if let Some(fw_path) = m.firmware.as_ref() {
+                use std::io::Read;
+                let mut file = std::fs::File::open(std::path::Path::new(fw_path))
+                    .expect("Failed to open firmware file");
+                let mut data = Vec::new();
+                file.read_to_end(&mut data)
+                    .expect("Failed to read firmware");
+                let within = m.firmware_offset;
+                assert!(
+                    within + data.len() <= sizes[idx],
+                    "Firmware too large for QSPI memory {idx} backing store"
+                );
+                let abs = offsets[idx] as usize + within;
+                unsafe {
+                    let dest = (flash_data_buffer.contents() as *mut u8).add(abs);
+                    std::ptr::copy_nonoverlapping(data.as_ptr(), dest, data.len());
+                }
+                clilog::info!(
+                    "Loaded {} bytes firmware into QSPI memory {} at 0x{:X} (abs 0x{:X})",
+                    data.len(),
+                    idx,
+                    within,
+                    abs
+                );
             }
-            clilog::info!(
-                "Loaded {} bytes firmware into GPU flash buffer at offset 0x{:X}",
-                data.len(),
-                offset
-            );
         }
 
         (
