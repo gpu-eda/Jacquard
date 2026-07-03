@@ -66,6 +66,13 @@ present.
   cached gate-level `.gv` path. Cache keyed by content hash of (design sources +
   synth script + yosys.wasm hash), under `$XDG_CACHE_HOME/jacquard` alongside the
   compiled-module cache.
+- **Use `read_slang` for the SV frontend.** The pinned `yowasp-yosys
+  0.64.0.0.post1131` wasm bundles **yosys-slang** (verified: `read_slang` +
+  495 `slang` symbols in the 39 MB module) — a near-complete SV-2017 elaborator,
+  far beyond built-in `read_verilog -sv`. Update `synth_script` to front SV input
+  with `read_slang` (fall back to `read_verilog -sv` if `read_slang` errors or is
+  absent in an older wasm — probe `help read_slang` once and cache the result, so
+  the on-ramp degrades gracefully on a pre-slang module).
 - Add the input-dispatch classifier (above) to the shared `sim`/`cosim` netlist
   load path.
 - Add CLI flags to `SimArgs` / `CosimArgs`: `--emit-synth <path>` (dump the
@@ -105,18 +112,20 @@ the feature; green on the branch.
   any `synthesis-flow.md` cross-links to the single-command story.
 - **Write `docs/accepted-rtl.md` — the accepted behavioral-RTL surface.** The
   honest framing: what `sim`/`cosim` accept as behavioral input is exactly what
-  the embedded **YoWASP Yosys `read_verilog -sv` frontend synthesizes** (no
-  Verific in the open-source build), *plus* the project's techmaps and *minus*
-  testbench-only constructs. Document:
-  - **Supported (delegated to Yosys):** synthesizable Verilog-2005 + the Yosys
-    SystemVerilog subset (packages, structs/enums, `always_ff`/`always_comb`,
-    parameters, generate, memories).
+  the embedded **YoWASP Yosys frontend synthesizes** — and that frontend bundles
+  **yosys-slang** (`read_slang`, verified in the pinned 0.64 wasm), *plus* the
+  project's techmaps and *minus* testbench-only constructs. Document:
+  - **Supported (delegated to Yosys + slang):** synthesizable Verilog-2005 and a
+    broad **SystemVerilog-2017** surface via slang (packages, interfaces,
+    structs/enums, `always_ff`/`always_comb`, parameters, advanced generate,
+    memories) — not the narrow built-in `read_verilog -sv` subset.
   - **Project-specific mappings:** immediate assertions → `GEM_ASSERT`
     (`--strip-assertions` removes via `chformal`); `$display` → `GEM_DISPLAY`;
     inferred memories → `RAMGEM` via `memlib_yosys.txt`.
-  - **Known limits:** no Verific → **concurrent SVA is limited** (see #106/#107
-    roadmap); testbench-only constructs (`$display`-as-TB, `#delays`, most
-    `initial`) are dropped by synthesis, not simulated.
+  - **Known limits:** **concurrent-SVA → checker synthesis is partial** (a Yosys
+    formal-flow bound, *independent* of slang's parsing; #106/#107);
+    testbench-only constructs (`#delays`, most `initial`, TB `$display`) are
+    dropped by synthesis, not simulated.
   - State plainly that the *authoritative* accepted-surface is the empirical
     coverage table (Phase 4), not this prose — prose is the orientation.
   - Cross-link from `getting-started.md`.

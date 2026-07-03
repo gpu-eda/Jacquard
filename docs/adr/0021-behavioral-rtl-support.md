@@ -147,11 +147,18 @@ on-ramp.
   pre-synthesized netlist).
 - **The accepted-RTL surface is defined and documented, not implicit.** Because
   synthesis is delegated to Yosys, the accepted behavioral subset *is* the
-  embedded YoWASP Yosys `read_verilog -sv` frontend (no Verific → limited
-  concurrent SVA), plus the project's techmaps (assertions → `GEM_ASSERT`,
-  `$display` → `GEM_DISPLAY`, memories → `RAMGEM`) and minus dropped
-  testbench-only constructs. This gets a dedicated `docs/accepted-rtl.md`, whose
-  authoritative form is an **empirical coverage table** driven through
+  embedded YoWASP Yosys frontend — and that frontend includes **yosys-slang**
+  (`read_slang`), a near-complete SystemVerilog-2017 elaborator, **verified
+  present in the pinned `yowasp-yosys 0.64.0.0.post1131` wasm** (`read_slang` +
+  495 `slang` symbols). So SystemVerilog *language* coverage is strong
+  (packages, interfaces, advanced generate, structs/enums, most of SV), not the
+  narrow built-in-`read_verilog` subset. The remaining bound is **concurrent-SVA
+  synthesis** — turning SVA into synthesizable checkers is a separate Yosys
+  formal capability, still partial (#106/#107), independent of slang's parsing.
+  On top of the frontend sit the project's techmaps (assertions → `GEM_ASSERT`,
+  `$display` → `GEM_DISPLAY`, memories → `RAMGEM`), minus dropped testbench-only
+  constructs. This gets a dedicated `docs/accepted-rtl.md`, whose authoritative
+  form is an **empirical coverage table** driven through
   [sv-tests](https://github.com/SymbiFlow/sv-tests) (follow-up) rather than a
   hand-claimed feature list — hand-claims about a delegated frontend would
   violate the "verify, don't assert" bar.
