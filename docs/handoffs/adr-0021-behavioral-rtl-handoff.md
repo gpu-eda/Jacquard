@@ -26,7 +26,7 @@ and in the working tree for human review.
 3. **Phase 4 follow-ups** (not gating, tracked in `docs/plans/rtl-onramp-sim-integration.md`):
    - Fetch `yosys.wasm` from GitHub release asset automatically on first use (ADR 0018 / #162 increment 2).
    - `--synth-target sky130|gf180` — synthesize to a real PDK for timing-accurate on-ramp runs.
-   - Wire `TimingLibrary::from_cell_model_ir` onto the runtime timing path (ADR 0019 C2 / `--corner` on-ramp timing).
+   - ~~Wire `TimingLibrary::from_cell_model_ir` onto the runtime timing path~~ — **landed on `main`** (`de8255f3`, ADR 0019 D5); `--corner` on-ramp timing for built-in PDKs is now live.
    - Empirical SV/Verilog coverage table via sv-tests — makes `docs/accepted-rtl.md` authoritative rather than prose.
 
 **Verification (Phases 1+2, already committed):**
