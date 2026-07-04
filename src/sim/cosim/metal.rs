@@ -1691,9 +1691,15 @@ impl CosimBackend for MetalBackend {
     }
 
     fn flash_set_in_reset(&mut self, in_reset: bool) {
+        // Drive the reset line for EVERY QSPI memory instance, not just slot 0,
+        // else the extra memories stay stuck in reset (d_i=0x0F) forever.
         unsafe {
-            let fs = &mut *(self.flash_state_buffer.contents() as *mut FlashState);
-            fs.in_reset = if in_reset { 1 } else { 0 };
+            let n_slots =
+                self.flash_state_buffer.length() as usize / std::mem::size_of::<FlashState>();
+            let slots = self.flash_state_buffer.contents() as *mut FlashState;
+            for s in 0..n_slots {
+                (*slots.add(s)).in_reset = if in_reset { 1 } else { 0 };
+            }
         }
     }
 
