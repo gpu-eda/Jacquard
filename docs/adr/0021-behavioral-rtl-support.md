@@ -23,7 +23,7 @@ RTL *is* the intended design input. But it is an **emulator** (GEM =
 GPU-Emulator-inspired; [ADR 0014](0014-aig-as-simulation-ir.md)): it maps a
 *synthesized* and-inverter graph onto a virtual manycore, exactly as an
 FPGA-based emulator runs a synthesized bitstream, not behavioral source. So the
-input to `jacquard sim` / `cosim` / `map` is a **gate-level netlist** —
+input to `jacquard sim` / `cosim` is a **gate-level netlist** —
 structural Verilog mapped to `aigpdk` / SKY130 / GF180MCU cells — and the parser
 (`sverilogparse`) is structural-only.
 

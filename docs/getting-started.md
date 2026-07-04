@@ -5,11 +5,12 @@ increasing order of realism. Every command here runs against designs that ship
 **in the repository** — no synthesis, no large downloads, no extra EDA tools.
 Each one is also a CI job, so it is known-green.
 
-> **Already have your own RTL?** This page runs *bundled* designs to prove your
-> build works. To prepare and run *your own* design (memory + logic synthesis,
-> VCD scope handling, timing back-annotation) see the
-> [Synthesis Flow](synthesis-flow.md). For UVM/cocotb/SVA questions see
-> [Testbench Interop](interop.md).
+> **Already have your own RTL?** Pass it directly to `jacquard sim design.v …`
+> — the simulator auto-detects behavioral Verilog / SystemVerilog and
+> synthesizes it transparently (see [Accepted RTL surface](accepted-rtl.md)).
+> For peak GPU performance, or to use a commercial synthesizer (DC) for best
+> mapping quality, see [Synthesis Flow](synthesis-flow.md). For UVM/cocotb/SVA
+> questions see [Testbench Interop](interop.md).
 
 ## Prerequisites
 
@@ -145,7 +146,8 @@ run `jacquard sim` exactly as in 3a.
 
 | You want to… | Go to |
 |---|---|
-| Prepare and run **your own RTL** (synthesis, memory mapping, scopes) | [Synthesis Flow](synthesis-flow.md) |
+| Simulate **your own behavioral RTL** (one command, auto-synthesized) | [Accepted RTL surface](accepted-rtl.md) |
+| Prepare a **high-QoR gate-level netlist** (DC / Yosys, memory mapping) | [Synthesis Flow](synthesis-flow.md) |
 | Run the large research **benchmarks** (NVDLA, Rocket, Gemmini) | [`benchmarks/README.md`](https://github.com/gpu-eda/Jacquard/blob/main/benchmarks/README.md) |
 | Add **timing** (Liberty / SDF / violation checks) | [Timing Simulation](timing-simulation.md) |
 | Use **UVM / cocotb / SVA**, or understand interop limits | [Testbench Interop](interop.md) |
