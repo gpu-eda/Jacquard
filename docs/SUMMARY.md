@@ -5,6 +5,7 @@
 - [Installation](installation.md)
 - [Getting Started](getting-started.md)
 - [Input: Netlist Language & RTL](input-netlist.md)
+- [Accepted RTL Surface](accepted-rtl.md)
 - [Synthesis Flow](synthesis-flow.md)
 - [Testbench Interop](interop.md)
 - [Why Jacquard](why-jacquard.md)
@@ -69,4 +70,5 @@
   - [Interactive JTAG debug server](plans/jtag-debug-server.md)
   - [netlist-graph xroots query](plans/netlist-graph-xroots.md)
   - [Cell-model IR](plans/cell-model-ir.md)
+  - [RTL on-ramp folded into sim/cosim](plans/rtl-onramp-sim-integration.md)
 - [Spike — OpenTimer on SKY130](spikes/opentimer-sky130.md)
