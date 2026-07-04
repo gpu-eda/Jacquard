@@ -130,9 +130,9 @@ the feature; green on the branch.
     coverage table (Phase 4), not this prose — prose is the orientation.
   - Cross-link from `getting-started.md`.
 - Fix stale `jacquard map` references (`CLAUDE.md`, docs) → `dump-paths`.
-- Correct the `docs/plans/cell-model-ir.md` "Status: Proposed — not started"
-  header (C3 partly shipped via #160); note L4-descriptor projection exists but
-  is not yet on the runtime timing path.
+- `docs/plans/cell-model-ir.md` status — **reconciled with `main`** during rebase:
+  its status is now "Largely delivered" (C3 + the D5 L4-from-descriptor runtime
+  wiring landed on `main` via `de8255f3`), so no further edit here.
 - Update `docs/handoffs/adr-0021-behavioral-rtl-handoff.md` (or resolve/fold it
   per handoff-discipline once this ships).
 
@@ -154,9 +154,10 @@ ceremony; `map`/`build` stale refs gone.
   this is the only trustworthy way to enumerate it (vs hand-claiming a feature
   list). Publish the table into `docs/accepted-rtl.md`; automatable as a CI job
   so the coverage claim stays current as the pinned `yosys.wasm` moves.
-- **Wire L4-from-descriptor onto the runtime timing path** (`from_cell_model_ir`
-  is built + unit-tested but has no runtime caller) — ADR 0019 C2/C3;
-  independent of this plan but the natural partner for `--corner` on-ramp timing.
+- ~~**Wire L4-from-descriptor onto the runtime timing path**~~ — **landed on
+  `main`** (`de8255f3`, ADR 0019 D5): all runtime timing paths now source L4 from
+  the cell-model-IR descriptor, so `--corner` on-ramp timing for built-in PDKs is
+  live. No longer a follow-up.
 - **Project manifest (`Jacquard.toml`)** — collapse the positional
   `sim netlist in.vcd out.vcd N` arg soup and hold synth-target/top/sources,
   referencing the existing `sim_config.json`. Its own ADR when scheduled.
