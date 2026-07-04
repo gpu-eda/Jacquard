@@ -159,8 +159,13 @@
 <blockquote>
 <p><strong>New to Jacquard?</strong> Start with <a href="getting-started.html">Getting Started</a>, which
 runs bundled designs in a few seconds with no synthesis. This page is the
-deeper path: preparing <strong>your own RTL</strong> — memory and logic synthesis, scope
-handling, and timing — for simulation.</p>
+deeper path: preparing <strong>your own RTL</strong> for peak GPU performance using a
+commercial synthesizer (DC) or a native Yosys install.</p>
+<p><strong>Behavioral RTL shortcut:</strong> <code>jacquard sim design.v in.vcd out.vcd N</code> accepts
+behavioral Verilog / SystemVerilog directly — synthesis is automatic and
+transparent. See <a href="accepted-rtl.html">Accepted RTL surface</a>. This page covers
+the <strong>performance path</strong> where synthesis quality is the primary tuner of
+simulation throughput.</p>
 </blockquote>
 <p><strong>Caveats</strong>: <code>jacquard sim</code> drives the design from a static input waveform (e.g. VCD); for reactive testbenches use <code>jacquard cosim</code>. Storage must be <strong>edge-triggered flip-flops</strong> — <em>latches</em> (level-sensitive storage) are not supported. Asynchronous <strong>set/reset on flip-flops is fine</strong> (async reset is <em>not</em> the restriction); what's excluded is latch-based / level-sensitive sequential logic.</p>
 <p><strong>Dataset</strong>: Some (namely, netlists after AIG transformation in Steps 1-2 below, and reference VCDs) input data is available <a href="https://drive.google.com/drive/folders/1M42vFoVZhG4ZjyD1hqYD0Hrw8F1rwNXd?usp=drive_link">here</a> .</p>
@@ -260,9 +265,9 @@ cd Jacquard
 git submodule update --init --recursive
 </code></pre>
 <p>Jacquard supports two GPU backends: <strong>CUDA</strong> (NVIDIA GPUs on Linux) and <strong>Metal</strong> (Apple Silicon Macs).</p>
-<p>All functionality is accessed through the <code>jacquard</code> CLI, which provides <code>map</code>, <code>sim</code>, and <code>cosim</code> subcommands:</p>
-<pre><code class="language-sh"># Mapping (no GPU features needed)
-cargo run -r --bin jacquard -- map --help
+<p>All functionality is accessed through the <code>jacquard</code> CLI, which provides <code>sim</code>, <code>cosim</code>, <code>dump-paths</code>, and other subcommands:</p>
+<pre><code class="language-sh"># Analyze timing / validate a netlist (no GPU features needed)
+cargo run -r --bin jacquard -- dump-paths --help
 
 # Simulation (Metal - macOS)
 cargo run -r --features metal --bin jacquard -- sim --help
@@ -325,7 +330,7 @@ cargo run -r --features cuda --bin jacquard -- sim path/to/gatelevel.gv path/to/
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="input-netlist.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="accepted-rtl.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -339,7 +344,7 @@ cargo run -r --features cuda --bin jacquard -- sim path/to/gatelevel.gv path/to/
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="input-netlist.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="accepted-rtl.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 

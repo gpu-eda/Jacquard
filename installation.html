@@ -175,7 +175,8 @@ from the repo with <code>uv run</code>. The design behind this layout is
 <pre><code class="language-sh">brew install gpu-eda/tap/jacquard      # installs jacquard + opensta-to-ir
 </code></pre>
 <p>The cleanest path on a Mac. Requires an Apple Silicon machine with a
-Metal GPU.</p>
+Metal GPU. The Homebrew formula is built with <code>--features synth</code>, so
+behavioral RTL input works out of the box — see <a href="accepted-rtl.html">Accepted RTL surface</a>.</p>
 <h3 id="cargo-binstall--prebuilt-binary-no-toolchain-build"><a class="header" href="#cargo-binstall--prebuilt-binary-no-toolchain-build">cargo binstall — prebuilt binary, no toolchain build</a></h3>
 <pre><code class="language-sh">brew install llvm     # runtime dependency — see note below
 cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
@@ -188,6 +189,8 @@ straight from the repo rather than looking the crate up on the registry.
 Linux is <strong>not</strong> binstall-able: there are two GPU backends (CUDA, HIP) for
 one target triple, so it can't be auto-selected — use the release tarball
 for your backend, a container, or build from source.</p>
+<p>Release binaries are built with <code>--features synth</code> and support behavioral RTL
+input directly.</p>
 <blockquote>
 <p><strong>Runtime dependency — Homebrew LLVM.</strong> The prebuilt macOS binary links
 Homebrew LLVM's <code>libc++</code> and <code>libomp</code> (the build uses LLVM clang for
@@ -210,12 +213,33 @@ backend.</p>
 cd Jacquard
 git submodule update --init --recursive
 
-cargo build -r --features metal --bin jacquard   # macOS / Apple Silicon
-cargo build -r --features cuda  --bin jacquard   # NVIDIA (CUDA toolkit)
-cargo build -r --features hip   --bin jacquard   # AMD (ROCm)
+cargo build -r --features metal --bin jacquard         # macOS / Apple Silicon
+cargo build -r --features cuda  --bin jacquard         # NVIDIA (CUDA toolkit)
+cargo build -r --features hip   --bin jacquard         # AMD (ROCm)
 </code></pre>
 <p>The binary lands at <code>target/release/jacquard</code>. See the README's
 <em>Dependencies</em> table for optional tooling (<code>flatc</code>, <code>mdbook</code>, OpenSTA).</p>
+<p><strong>Behavioral RTL on-ramp</strong> (<code>jacquard sim design.v …</code>) requires the <code>synth</code>
+feature (embedded YoWASP Yosys engine). Add it to your build:</p>
+<pre><code class="language-sh">cargo build -r --features metal,synth --bin jacquard   # macOS + RTL synthesis
+cargo build -r --features cuda,synth  --bin jacquard   # NVIDIA + RTL synthesis
+cargo build -r --features hip,synth   --bin jacquard   # AMD + RTL synthesis
+</code></pre>
+<p>A binary built without <code>synth</code> still simulates pre-synthesized gate-level
+netlists; it gives an actionable error if handed behavioral RTL.</p>
+<p><strong>Providing <code>yosys.wasm</code> for RTL synthesis</strong> — the synth engine needs the
+YoWASP Yosys wasm module. Discovery order:</p>
+<ol>
+<li><strong><code>--yosys-wasm &lt;path&gt;</code></strong> flag on <code>sim</code>/<code>cosim</code> (overrides the rest).</li>
+<li><strong><code>JACQUARD_YOSYS_WASM=/path/to/yosys.wasm</code></strong> environment variable.</li>
+<li><strong>Installed <code>yowasp-yosys</code></strong> Python package, found automatically:
+<pre><code class="language-sh">pip install yowasp-yosys
+</code></pre>
+</li>
+<li>Fetch-from-release is a planned follow-up (not yet implemented).</li>
+</ol>
+<p>Prebuilt and Homebrew binaries include the <code>synth</code> feature; the wasm is still
+found via the flag, env var, or installed Python package until auto-fetch ships.</p>
 <h2 id="the-signal-analysis-companion-netlist-graph"><a class="header" href="#the-signal-analysis-companion-netlist-graph">The signal-analysis companion (<code>netlist-graph</code>)</a></h2>
 <p>Pure Python — install from PyPI, no GPU or Rust needed:</p>
 <pre><code class="language-sh">uvx netlist-graph search design.gv psel     # one-off, no install
@@ -239,8 +263,9 @@ jacquard cosim tests/apb_trace/apb_trace_synth.gv \
     --top-module apb_trace --max-clock-edges 200 \
     --bus-trace-csv /tmp/apb.csv
 </code></pre>
-<p>Then head to <a href="getting-started.html">Getting Started</a> to run bundled designs, or the
-<a href="synthesis-flow.html">Synthesis Flow</a> to prepare your own RTL.</p>
+<p>Then head to <a href="getting-started.html">Getting Started</a> to run bundled designs,
+<a href="accepted-rtl.html">Accepted RTL surface</a> to simulate your own behavioral RTL,
+or <a href="synthesis-flow.html">Synthesis Flow</a> to prepare a high-QoR gate-level netlist.</p>
 
                     </main>
 

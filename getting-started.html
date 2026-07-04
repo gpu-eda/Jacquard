@@ -161,11 +161,12 @@ increasing order of realism. Every command here runs against designs that ship
 <strong>in the repository</strong> — no synthesis, no large downloads, no extra EDA tools.
 Each one is also a CI job, so it is known-green.</p>
 <blockquote>
-<p><strong>Already have your own RTL?</strong> This page runs <em>bundled</em> designs to prove your
-build works. To prepare and run <em>your own</em> design (memory + logic synthesis,
-VCD scope handling, timing back-annotation) see the
-<a href="synthesis-flow.html">Synthesis Flow</a>. For UVM/cocotb/SVA questions see
-<a href="interop.html">Testbench Interop</a>.</p>
+<p><strong>Already have your own RTL?</strong> Pass it directly to <code>jacquard sim design.v …</code>
+— the simulator auto-detects behavioral Verilog / SystemVerilog and
+synthesizes it transparently (see <a href="accepted-rtl.html">Accepted RTL surface</a>).
+For peak GPU performance, or to use a commercial synthesizer (DC) for best
+mapping quality, see <a href="synthesis-flow.html">Synthesis Flow</a>. For UVM/cocotb/SVA
+questions see <a href="interop.html">Testbench Interop</a>.</p>
 </blockquote>
 <h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
 <p>A built <code>jacquard</code> binary. Either install it (see <a href="installation.html">Installation</a>)
@@ -264,7 +265,8 @@ run <code>jacquard sim</code> exactly as in 3a.</p>
 <hr />
 <h2 id="where-to-next"><a class="header" href="#where-to-next">Where to next</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>You want to…</th><th>Go to</th></tr></thead><tbody>
-<tr><td>Prepare and run <strong>your own RTL</strong> (synthesis, memory mapping, scopes)</td><td><a href="synthesis-flow.html">Synthesis Flow</a></td></tr>
+<tr><td>Simulate <strong>your own behavioral RTL</strong> (one command, auto-synthesized)</td><td><a href="accepted-rtl.html">Accepted RTL surface</a></td></tr>
+<tr><td>Prepare a <strong>high-QoR gate-level netlist</strong> (DC / Yosys, memory mapping)</td><td><a href="synthesis-flow.html">Synthesis Flow</a></td></tr>
 <tr><td>Run the large research <strong>benchmarks</strong> (NVDLA, Rocket, Gemmini)</td><td><a href="https://github.com/gpu-eda/Jacquard/blob/main/benchmarks/README.md"><code>benchmarks/README.md</code></a></td></tr>
 <tr><td>Add <strong>timing</strong> (Liberty / SDF / violation checks)</td><td><a href="timing-simulation.html">Timing Simulation</a></td></tr>
 <tr><td>Use <strong>UVM / cocotb / SVA</strong>, or understand interop limits</td><td><a href="interop.html">Testbench Interop</a></td></tr>
