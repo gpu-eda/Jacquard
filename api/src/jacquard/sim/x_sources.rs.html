@@ -174,7 +174,7 @@
 <a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">for </span>name <span class="kw">in </span>config.constant_ports.keys() {
 <a href=#175 id=175 data-nosnippet>175</a>        ports.insert(name.clone());
 <a href=#176 id=176 data-nosnippet>176</a>    }
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(flash) = <span class="kw-2">&amp;</span>config.flash {
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">for </span>flash <span class="kw">in </span>config.effective_qspi_memory() {
 <a href=#178 id=178 data-nosnippet>178</a>        gpios.extend([flash.clk_gpio, flash.csn_gpio]);
 <a href=#179 id=179 data-nosnippet>179</a>        <span class="comment">// `set_flash_din` drives 4 data lanes (d0..d0+3) for dual/quad SPI.
 <a href=#180 id=180 data-nosnippet>180</a>        </span>gpios.extend((<span class="number">0</span>..<span class="number">4</span>).map(|i| flash.d0_gpio + i));
