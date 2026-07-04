@@ -439,12 +439,16 @@ impl CosimBackend for CudaBackend {
     }
 
     fn flash_set_in_reset(&mut self, in_reset: bool) {
-        // Write FlashState.in_reset host-side; the mutated host copy uploads on
-        // the next `as_mut_uptr(DEVICE)` in `run_edges`.
+        // Write FlashState.in_reset host-side for EVERY instance slot (not just
+        // slot 0, else the extra QSPI memories stay stuck in reset). The mutated
+        // host copy uploads on the next `as_mut_uptr(DEVICE)` in `run_edges`.
         let fs = self.flash_state.get_mut();
-        let v = u32::from(in_reset);
-        fs[FLASH_STATE_IN_RESET_OFF..FLASH_STATE_IN_RESET_OFF + 4]
-            .copy_from_slice(&v.to_ne_bytes());
+        let v = u32::from(in_reset).to_ne_bytes();
+        let stride = std::mem::size_of::<super::FlashState>();
+        for s in 0..(fs.len() / stride) {
+            let off = s * stride + FLASH_STATE_IN_RESET_OFF;
+            fs[off..off + 4].copy_from_slice(&v);
+        }
     }
 
     fn enable_vcd_ring(&mut self) {

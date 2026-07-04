@@ -160,7 +160,7 @@ void gpu_apply_flash_din_cuda(
   gpu_apply_flash_din<<<1, 256>>>(
     states,
     (const FlashState *)flash_state,
-    (const FlashDinParams *)flash_din_params);
+    (const FlashDinParamsAll *)flash_din_params);
   checkCudaErrors(cudaGetLastError());
 }
 
@@ -179,7 +179,7 @@ void gpu_flash_model_step_cuda(
   gpu_flash_model_step<<<1, 256>>>(
     states,
     (FlashState *)flash_state,
-    (const FlashModelParams *)flash_model_params,
+    (const FlashModelParamsAll *)flash_model_params,
     flash_data);
   checkCudaErrors(cudaGetLastError());
 }
