@@ -450,7 +450,13 @@ jobs:
       - name: Resolve pinned yosys.wasm
         run: |
           set -euo pipefail
-          WASM=$(uv run --with yowasp-yosys python3 -c \
+          # PIN the version — keep in sync with uv.lock's yowasp-yosys. An
+          # unpinned `--with yowasp-yosys` fetches the latest wheel, whose wasm is
+          # now built with the exception-handling proposal that our wasmtime
+          # engine (no `gc` feature) can't load. Loading newer wasm robustly is a
+          # tracked follow-up (ADR 0021 Phase 4); until then the on-ramp targets
+          # the verified 0.64 module (which also carries yosys-slang).
+          WASM=$(uv run --with 'yowasp-yosys==0.64.0.0.post1131' python3 -c \
             "import yowasp_yosys, pathlib; print(next(pathlib.Path(yowasp_yosys.__file__).parent.rglob('*.wasm')))")
           test -f "$WASM"
           echo "JACQUARD_YOSYS_WASM=$WASM" >> "$GITHUB_ENV"

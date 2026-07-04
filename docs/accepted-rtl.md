@@ -59,6 +59,14 @@ module). It is located in this order:
 4. **Fetch from release** — a planned follow-up (ADR 0021 / #162 Phase 4); not
    yet implemented. Until then, one of the three methods above is required.
 
+> **Version caveat.** Pin to **`yowasp-yosys==0.64.0.0.post1131`** (the version in
+> the project's `uv.lock`, verified to carry `read_slang`). *Newer* wheels ship a
+> wasm built with the WebAssembly exception-handling proposal, which the current
+> embedded `wasmtime` engine cannot load yet (`pip install yowasp-yosys` gets the
+> latest and may fail with "exception refs not supported"). Loading newer modules
+> is a tracked Phase-4 follow-up; until then, `pip install
+> 'yowasp-yosys==0.64.0.0.post1131'`.
+
 > Released `jacquard` binaries are built with `--features synth` and include
 > the Yosys WASM runtime. Source builds must add `--features synth` explicitly:
 > `cargo build -r --features metal,synth --bin jacquard`.
