@@ -308,6 +308,11 @@ struct SimArgs {
     /// intermediate synthesized gate-level netlist here for inspection.
     #[clap(long = "emit-synth", value_name = "PATH")]
     emit_synth: Option<PathBuf>,
+
+    /// Explicit path to `yosys.wasm` for the RTL on-ramp. Overrides the
+    /// `JACQUARD_YOSYS_WASM` env var and installed-`yowasp-yosys` discovery.
+    #[clap(long = "yosys-wasm", value_name = "PATH")]
+    yosys_wasm: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -490,6 +495,11 @@ struct CosimArgs {
     /// intermediate synthesized gate-level netlist here for inspection.
     #[clap(long = "emit-synth", value_name = "PATH")]
     emit_synth: Option<PathBuf>,
+
+    /// Explicit path to `yosys.wasm` for the RTL on-ramp. Overrides the
+    /// `JACQUARD_YOSYS_WASM` env var and installed-`yowasp-yosys` discovery.
+    #[clap(long = "yosys-wasm", value_name = "PATH")]
+    yosys_wasm: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -626,7 +636,7 @@ fn cmd_sim(args: SimArgs) {
         force_rtl: args.rtl,
         force_netlist: args.netlist,
         emit_synth: args.emit_synth.clone(),
-        yosys_wasm: None,
+        yosys_wasm: args.yosys_wasm.clone(),
         top_module: args.top_module.clone(),
         has_cell_hint: args.cell_descriptor.is_some()
             || !args.cell_library.is_empty()
@@ -2250,7 +2260,7 @@ fn cmd_cosim(args: CosimArgs) {
             force_rtl: args.rtl,
             force_netlist: args.netlist,
             emit_synth: args.emit_synth.clone(),
-            yosys_wasm: None,
+            yosys_wasm: args.yosys_wasm.clone(),
             top_module: args.top_module.clone(),
             has_cell_hint: args.cell_descriptor.is_some()
                 || !args.cell_library.is_empty()
