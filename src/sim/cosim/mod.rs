@@ -1161,79 +1161,103 @@ pub(crate) fn build_flash_buffers_dev(
     ulib::UVec<u8>,
     ulib::UVec<u8>,
 ) {
-    // Stage A: GPU flash kernels are single-instance (Stage B is N-instance).
-    // Guard N>1 in the GPU build path; the plural CPU backend handles N>1.
+    // ADR 0013 plural QSPI memory (Stage B) — mirror MetalBackend::build_flash_buffers.
+    const FLASH_SIZE_DEFAULT: usize = FLASH_DATA_SIZE;
     let qspi = config.effective_qspi_memory();
     assert!(
-        qspi.len() <= 1,
-        "multiple QSPI memories ({}) on the GPU backend requires stage B; \
-         use the CPU backend (build without a GPU feature / `--backend cpu`)",
-        qspi.len()
+        qspi.len() <= MAX_QSPI_MEMS,
+        "too many QSPI memories ({}); GPU backend supports at most {}",
+        qspi.len(),
+        MAX_QSPI_MEMS
     );
-    let primary = qspi.first();
+    let n = qspi.len();
 
-    // FlashState (shared, persistent across edges) — mirror build_flash_buffers.
-    let mut fs: FlashState = unsafe { std::mem::zeroed() };
-    fs.data_width = 1; // SPI single-bit mode
-    fs.prev_csn = 1; // CSN starts high (deselected)
-    fs.model_prev_csn = 1; // model internal edge detection starts high
-    fs.d_i = 0x0F; // flash output starts high
-    fs.in_reset = 1; // start in reset
-    let flash_state = struct_to_dev(&fs, device);
+    // Per-instance backing-store sizes + byte offsets into the shared buffer.
+    let sizes: Vec<usize> = qspi
+        .iter()
+        .map(|m| m.size_bytes.unwrap_or(FLASH_SIZE_DEFAULT))
+        .collect();
+    let mut offsets = vec![0u32; n];
+    let mut total = 0usize;
+    for i in 0..n {
+        offsets[i] = total as u32;
+        total += sizes[i];
+    }
+    let total = total.max(1);
 
-    // FlashDinParams (constant).
-    let mut din = FlashDinParams {
-        d_in_pos: [0xFFFFFFFF; 4],
-        has_flash: if primary.is_some() { 1 } else { 0 },
-        xmask_state_offset: script.xprop_state_offset,
-    };
-    for (i, slot) in din.d_in_pos.iter_mut().enumerate() {
-        *slot = primary
-            .and_then(|f| gpio_map.input_bits.get(&(f.d0_gpio + i)).copied())
-            .unwrap_or(0xFFFFFFFF);
+    // FlashState: one slot per instance (>=1 to avoid a 0-byte buffer).
+    let n_slots = n.max(1);
+    let mut states: Vec<FlashState> = vec![unsafe { std::mem::zeroed() }; n_slots];
+    for fs in states.iter_mut() {
+        fs.data_width = 1;
+        fs.prev_csn = 1;
+        fs.model_prev_csn = 1;
+        fs.d_i = 0x0F;
+        fs.in_reset = 1;
+    }
+    let flash_state = slice_to_dev(&states, device);
+
+    // FlashDinParamsAll (per-instance MISO input positions).
+    let mut din: FlashDinParamsAll = unsafe { std::mem::zeroed() };
+    din.n_flashes = n as u32;
+    for (idx, m) in qspi.iter().enumerate() {
+        let p = &mut din.flashes[idx];
+        p.has_flash = 1;
+        p.xmask_state_offset = script.xprop_state_offset;
+        for i in 0..4 {
+            p.d_in_pos[i] = gpio_map
+                .input_bits
+                .get(&(m.d0_gpio + i))
+                .copied()
+                .unwrap_or(0xFFFFFFFF);
+        }
     }
     let flash_din_params = struct_to_dev(&din, device);
 
-    // FlashModelParams (constant).
-    let mut model = FlashModelParams {
-        state_size: state_size as u32,
-        clk_out_pos: primary
-            .and_then(|f| gpio_map.output_bits.get(&f.clk_gpio).copied())
-            .unwrap_or(0),
-        csn_out_pos: primary
-            .and_then(|f| gpio_map.output_bits.get(&f.csn_gpio).copied())
-            .unwrap_or(0),
-        d_out_pos: [0xFFFFFFFF; 4],
-        flash_data_size: FLASH_DATA_SIZE as u32,
-    };
-    for (i, slot) in model.d_out_pos.iter_mut().enumerate() {
-        *slot = primary
-            .and_then(|f| gpio_map.output_bits.get(&(f.d0_gpio + i)).copied())
-            .unwrap_or(0xFFFFFFFF);
+    // FlashModelParamsAll (pin positions + per-instance backing slice).
+    let mut model: FlashModelParamsAll = unsafe { std::mem::zeroed() };
+    model.n_flashes = n as u32;
+    for (idx, m) in qspi.iter().enumerate() {
+        let p = &mut model.flashes[idx];
+        p.state_size = state_size as u32;
+        p.clk_out_pos = gpio_map.output_bits.get(&m.clk_gpio).copied().unwrap_or(0);
+        p.csn_out_pos = gpio_map.output_bits.get(&m.csn_gpio).copied().unwrap_or(0);
+        for i in 0..4 {
+            p.d_out_pos[i] = gpio_map
+                .output_bits
+                .get(&(m.d0_gpio + i))
+                .copied()
+                .unwrap_or(0xFFFFFFFF);
+        }
+        p.flash_data_size = sizes[idx] as u32;
+        p.data_offset = offsets[idx];
     }
     let flash_model_params = struct_to_dev(&model, device);
 
-    // Flash firmware buffer (16 MiB) — 0xFF (erased) then firmware overlaid.
-    let mut firmware = vec![0xFFu8; FLASH_DATA_SIZE];
-    if let Some(fw_path) = primary.and_then(|f| f.firmware.as_ref()) {
-        use std::io::Read;
-        let flash_cfg = primary.expect("primary present when firmware present");
-        let firmware_path = std::path::Path::new(fw_path);
-        let mut file = std::fs::File::open(firmware_path).expect("Failed to open firmware file");
-        let mut data = Vec::new();
-        file.read_to_end(&mut data)
-            .expect("Failed to read firmware");
-        let offset = flash_cfg.firmware_offset;
-        assert!(
-            offset + data.len() <= FLASH_DATA_SIZE,
-            "Firmware too large for flash buffer"
-        );
-        firmware[offset..offset + data.len()].copy_from_slice(&data);
-        clilog::info!(
-            "Loaded {} bytes firmware into GPU flash buffer at offset 0x{:X}",
-            data.len(),
-            offset
-        );
+    // Concatenated backing store: 0xFF (erased) then each instance's firmware.
+    let mut firmware = vec![0xFFu8; total];
+    for (idx, m) in qspi.iter().enumerate() {
+        if let Some(fw_path) = m.firmware.as_ref() {
+            use std::io::Read;
+            let mut file = std::fs::File::open(std::path::Path::new(fw_path))
+                .expect("Failed to open firmware file");
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)
+                .expect("Failed to read firmware");
+            let within = m.firmware_offset;
+            assert!(
+                within + data.len() <= sizes[idx],
+                "Firmware too large for QSPI memory {idx} backing store"
+            );
+            let abs = offsets[idx] as usize + within;
+            firmware[abs..abs + data.len()].copy_from_slice(&data);
+            clilog::info!(
+                "Loaded {} bytes firmware into QSPI memory {} at abs 0x{:X}",
+                data.len(),
+                idx,
+                abs
+            );
+        }
     }
     let flash_data = host_bytes_to_dev(firmware, device);
 

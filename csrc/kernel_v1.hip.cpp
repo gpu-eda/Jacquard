@@ -182,7 +182,7 @@ void gpu_apply_flash_din_hip(
   hipLaunchKernelGGL(gpu_apply_flash_din, dim3(1), dim3(256), 0, (hipStream_t)0,
                      states,
                      (const FlashState *)flash_state,
-                     (const FlashDinParams *)flash_din_params);
+                     (const FlashDinParamsAll *)flash_din_params);
   checkHipErrors(hipGetLastError());
 }
 
@@ -201,7 +201,7 @@ void gpu_flash_model_step_hip(
   hipLaunchKernelGGL(gpu_flash_model_step, dim3(1), dim3(256), 0, (hipStream_t)0,
                      states,
                      (FlashState *)flash_state,
-                     (const FlashModelParams *)flash_model_params,
+                     (const FlashModelParamsAll *)flash_model_params,
                      flash_data);
   checkHipErrors(hipGetLastError());
 }
