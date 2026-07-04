@@ -5,7 +5,7 @@
 Jacquard is a gate-level **emulator** — it maps a *synthesized* and-inverter
 graph onto a virtual manycore GPU processor (see
 [ADR 0014](adr/0014-aig-as-simulation-ir.md)). So the direct input to
-`jacquard sim` / `cosim` / `map` is a **gate-level Verilog netlist**: structural
+`jacquard sim` / `cosim` is a **gate-level Verilog netlist**: structural
 Verilog whose leaf cells are `aigpdk`, SKY130, or GF180MCU standard cells.
 
 **Behavioral RTL is the intended design input — via a synthesis step.** You

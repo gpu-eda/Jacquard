@@ -18,8 +18,8 @@ Requires Rust toolchain (via rustup.rs) and either CUDA, HIP (ROCm), or Metal su
 # Initialize submodules (required first time)
 git submodule update --init --recursive
 
-# Build and run mapping tool (no GPU features needed)
-cargo run -r --bin jacquard -- map --help
+# Analyze timing / validate a netlist (no GPU features needed)
+cargo run -r --bin jacquard -- dump-paths --help
 
 # Metal simulation (macOS)
 cargo run -r --features metal --bin jacquard -- sim --help
@@ -29,9 +29,22 @@ cargo run -r --features cuda --bin jacquard -- sim --help
 
 # HIP simulation (Linux/AMD)
 cargo run -r --features hip --bin jacquard -- sim --help
+
+# Metal + behavioral RTL on-ramp (adds the embedded Yosys synth engine)
+cargo run -r --features metal,synth --bin jacquard -- sim --help
 ```
 
 ## Typical Workflow
+
+**RTL on-ramp (easy path):** Pass behavioral RTL directly — synthesis is transparent and cached:
+
+```
+jacquard sim design.v input.vcd output.vcd NUM_BLOCKS
+```
+
+See `docs/accepted-rtl.md` for the accepted language surface, wasm sourcing, and known limits.
+
+**Performance path** (best GPU QoR — synthesis quality drives GPU speed):
 
 1. **Memory synthesis** (Yosys): Map memories using `memlib_yosys.txt` → outputs `memory_mapped.v`
 2. **Logic synthesis** (DC or Yosys): Synthesize to `aigpdk.lib` cells → outputs `gatelevel.gv`
@@ -55,6 +68,7 @@ NetlistDB (Verilog) → AIG → StagedAIG → Partitions → FlattenedScript →
 - **`repcut.rs`**: Hypergraph partitioning using mt-kahypar for mapping to GPU blocks
 - **`pe.rs`**: Partition executor - builds BoomerangStage structures (hierarchical 8192→1 reduction) that map to GPU block resources
 - **`flatten.rs`**: Generates FlattenedScriptV1 - the final GPU execution script with packed instructions
+- **`synth.rs`**: Embedded Yosys synthesis engine (ADR 0021) — behavioral RTL on-ramp, behind the `synth` feature
 
 ### GPU Kernels (`csrc/`)
 
@@ -64,7 +78,7 @@ NetlistDB (Verilog) → AIG → StagedAIG → Partitions → FlattenedScript →
 
 ### Binary Tools (`src/bin/`)
 
-- **`jacquard.rs`**: Unified CLI — `jacquard sim` (GPU simulation), `jacquard cosim` (co-simulation)
+- **`jacquard.rs`**: Unified CLI — `jacquard sim` (GPU simulation), `jacquard cosim` (co-simulation), `jacquard dump-paths` (timing analysis, no GPU)
 - **`timing_analysis.rs`**: Static timing analysis utility (development tool)
 
 ### Dependencies (`vendor/eda-infra-rs` submodule)
@@ -84,6 +98,7 @@ Open-source Rust gate-level EDA infrastructure (https://github.com/gzz2000/eda-i
 - `aigpdk_nomem.lib`: Library without memory cells (for Yosys)
 - `aigpdk.v`: Verilog models including `CKLNQD` clock gate
 - `memlib_yosys.txt`: Memory mapping rules for Yosys
+- `gem_formal.v`: Techmap rules for assertions (`GEM_ASSERT`) and `$display` (`GEM_DISPLAY`)
 
 ## Key Constraints
 

@@ -23,7 +23,8 @@ brew install gpu-eda/tap/jacquard      # installs jacquard + opensta-to-ir
 ```
 
 The cleanest path on a Mac. Requires an Apple Silicon machine with a
-Metal GPU.
+Metal GPU. The Homebrew formula is built with `--features synth`, so
+behavioral RTL input works out of the box — see [Accepted RTL surface](accepted-rtl.md).
 
 ### cargo binstall — prebuilt binary, no toolchain build
 
@@ -40,6 +41,9 @@ straight from the repo rather than looking the crate up on the registry.
 Linux is **not** binstall-able: there are two GPU backends (CUDA, HIP) for
 one target triple, so it can't be auto-selected — use the release tarball
 for your backend, a container, or build from source.
+
+Release binaries are built with `--features synth` and support behavioral RTL
+input directly.
 
 > **Runtime dependency — Homebrew LLVM.** The prebuilt macOS binary links
 > Homebrew LLVM's `libc++` and `libomp` (the build uses LLVM clang for
@@ -67,13 +71,39 @@ git clone https://github.com/gpu-eda/Jacquard.git
 cd Jacquard
 git submodule update --init --recursive
 
-cargo build -r --features metal --bin jacquard   # macOS / Apple Silicon
-cargo build -r --features cuda  --bin jacquard   # NVIDIA (CUDA toolkit)
-cargo build -r --features hip   --bin jacquard   # AMD (ROCm)
+cargo build -r --features metal --bin jacquard         # macOS / Apple Silicon
+cargo build -r --features cuda  --bin jacquard         # NVIDIA (CUDA toolkit)
+cargo build -r --features hip   --bin jacquard         # AMD (ROCm)
 ```
 
 The binary lands at `target/release/jacquard`. See the README's
 *Dependencies* table for optional tooling (`flatc`, `mdbook`, OpenSTA).
+
+**Behavioral RTL on-ramp** (`jacquard sim design.v …`) requires the `synth`
+feature (embedded YoWASP Yosys engine). Add it to your build:
+
+```sh
+cargo build -r --features metal,synth --bin jacquard   # macOS + RTL synthesis
+cargo build -r --features cuda,synth  --bin jacquard   # NVIDIA + RTL synthesis
+cargo build -r --features hip,synth   --bin jacquard   # AMD + RTL synthesis
+```
+
+A binary built without `synth` still simulates pre-synthesized gate-level
+netlists; it gives an actionable error if handed behavioral RTL.
+
+**Providing `yosys.wasm` for RTL synthesis** — the synth engine needs the
+YoWASP Yosys wasm module. Discovery order:
+
+1. **`--yosys-wasm <path>`** flag on `sim`/`cosim` (overrides the rest).
+2. **`JACQUARD_YOSYS_WASM=/path/to/yosys.wasm`** environment variable.
+3. **Installed `yowasp-yosys`** Python package, found automatically:
+   ```sh
+   pip install yowasp-yosys
+   ```
+4. Fetch-from-release is a planned follow-up (not yet implemented).
+
+Prebuilt and Homebrew binaries include the `synth` feature; the wasm is still
+found via the flag, env var, or installed Python package until auto-fetch ships.
 
 ## The signal-analysis companion (`netlist-graph`)
 
@@ -108,5 +138,6 @@ jacquard cosim tests/apb_trace/apb_trace_synth.gv \
     --bus-trace-csv /tmp/apb.csv
 ```
 
-Then head to [Getting Started](getting-started.md) to run bundled designs, or the
-[Synthesis Flow](synthesis-flow.md) to prepare your own RTL.
+Then head to [Getting Started](getting-started.md) to run bundled designs,
+[Accepted RTL surface](accepted-rtl.md) to simulate your own behavioral RTL,
+or [Synthesis Flow](synthesis-flow.md) to prepare a high-QoR gate-level netlist.

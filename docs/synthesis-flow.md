@@ -2,8 +2,14 @@
 
 > **New to Jacquard?** Start with [Getting Started](getting-started.md), which
 > runs bundled designs in a few seconds with no synthesis. This page is the
-> deeper path: preparing **your own RTL** — memory and logic synthesis, scope
-> handling, and timing — for simulation.
+> deeper path: preparing **your own RTL** for peak GPU performance using a
+> commercial synthesizer (DC) or a native Yosys install.
+>
+> **Behavioral RTL shortcut:** `jacquard sim design.v in.vcd out.vcd N` accepts
+> behavioral Verilog / SystemVerilog directly — synthesis is automatic and
+> transparent. See [Accepted RTL surface](accepted-rtl.md). This page covers
+> the **performance path** where synthesis quality is the primary tuner of
+> simulation throughput.
 
 **Caveats**: `jacquard sim` drives the design from a static input waveform (e.g. VCD); for reactive testbenches use `jacquard cosim`. Storage must be **edge-triggered flip-flops** — *latches* (level-sensitive storage) are not supported. Asynchronous **set/reset on flip-flops is fine** (async reset is *not* the restriction); what's excluded is latch-based / level-sensitive sequential logic.
 
@@ -125,11 +131,11 @@ git submodule update --init --recursive
 
 Jacquard supports two GPU backends: **CUDA** (NVIDIA GPUs on Linux) and **Metal** (Apple Silicon Macs).
 
-All functionality is accessed through the `jacquard` CLI, which provides `map`, `sim`, and `cosim` subcommands:
+All functionality is accessed through the `jacquard` CLI, which provides `sim`, `cosim`, `dump-paths`, and other subcommands:
 
 ``` sh
-# Mapping (no GPU features needed)
-cargo run -r --bin jacquard -- map --help
+# Analyze timing / validate a netlist (no GPU features needed)
+cargo run -r --bin jacquard -- dump-paths --help
 
 # Simulation (Metal - macOS)
 cargo run -r --features metal --bin jacquard -- sim --help

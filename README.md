@@ -119,7 +119,7 @@ mdbook serve   # opens at http://localhost:3000
 
 ## Input
 
-Jacquard is a gate-level **emulator**: the input to `sim` / `cosim` / `map` is a
+Jacquard is a gate-level **emulator**: the input to `sim` / `cosim` is a
 **synthesized gate-level Verilog netlist** (structural Verilog mapped to
 `aigpdk` / SKY130 / GF180MCU cells).
 
