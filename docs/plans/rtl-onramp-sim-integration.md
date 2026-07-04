@@ -141,6 +141,13 @@ ceremony; `map`/`build` stale refs gone.
 
 ### Phase 4 — Follow-ups (deferred, not gating)
 
+- **Load exception-handling wasm** — newer `yowasp-yosys` wheels build the wasm
+  with the WebAssembly exception-handling proposal, which our `wasmtime` engine
+  (`Engine::default()`, no `gc` feature) rejects: *"exception refs not supported
+  without the exception handling feature."* `Config::wasm_exceptions(true)` exists
+  but is `#[cfg(feature = "gc")]`, so it needs the `gc` feature **and** a spike
+  confirming wasm-EH actually *runs* yosys (not just parses). Until then CI + docs
+  pin `yowasp-yosys==0.64.0.0.post1131`. Removing that pin is the exit criterion.
 - **Fetch `yosys.wasm` from GitHub release** (increment 2, ADR 0018): publish the
   pinned wasm as a Jacquard release asset; first behavioral run fetches to cache
   + sha256-verifies.
