@@ -118,6 +118,16 @@ if [ "$SCOPE" = all ]; then
         --config tests/apb_trace/sim_config.json --top-module apb_trace \
         --max-clock-edges 200 --xprop --bus-trace-csv "$OUT/apb_trace_xprop.csv" || true
     check apb_trace_xprop "$OUT/apb_trace_xprop.csv" tests/apb_trace/expected/apb_trace_xprop.csv
+
+    # multi_mem: three QSPI flash instances + two on-chip SRAMs, each with an
+    # independent backing store (ADR 0013 plural QSPI, Stage B). The DUT reads a
+    # distinct byte from each flash (0xA1/0xB2/0xC3) and each SRAM (0xA1/0xB2)
+    # and asserts `all_match`. Golden captured on CpuBackend; byte-identical to
+    # the Metal N-instance kernels, so it gates CUDA/HIP/CpuBackend alike.
+    run multi_mem "$BIN" cosim tests/multi_mem_cosim/multi_mem_dut_synth.gv \
+        --config tests/multi_mem_cosim/sim_config.json --top-module multi_mem_dut \
+        --output-vcd "$OUT/multi_mem.vcd" || true
+    check multi_mem "$OUT/multi_mem.vcd" tests/multi_mem_cosim/expected/multi_mem_cosim.vcd
 fi
 
 # --- flash fixture (mcu_soc) — `flash` scope only ------------------------
