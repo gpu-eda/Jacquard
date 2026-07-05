@@ -105,8 +105,10 @@ struct HipBackend {
     flash_din_params: UVec<u8>,
     /// `FlashModelParams` (const after `new`): clk/csn/d_out output positions.
     flash_model_params: UVec<u8>,
-    /// 16 MiB firmware image (const after `new`); read by `gpu_flash_model_step`.
-    flash_data: UVec<u8>,
+    /// Firmware / QSPI-PSRAM backing store; read by `gpu_flash_model_step` and,
+    /// in RAM (writable) mode, written by the quad-write path — hence the
+    /// `UnsafeCell` (the kernel takes a mutable `u8*`).
+    flash_data: UnsafeCell<UVec<u8>>,
     // ── GPU peripheral IO buffers (Stage B), device-resident `UVec<u8>` ──────
     /// `UartDecoderState[MAX_UARTS]`, persistent across edges.
     uart_state: UnsafeCell<UVec<u8>>,
@@ -366,7 +368,7 @@ impl CosimBackend for HipBackend {
             flash_state: UnsafeCell::new(flash_state),
             flash_din_params,
             flash_model_params,
-            flash_data,
+            flash_data: UnsafeCell::new(flash_data),
             uart_state: UnsafeCell::new(uart_state),
             uart_params,
             uart_channel: UnsafeCell::new(uart_channel),
@@ -619,11 +621,14 @@ impl CosimBackend for HipBackend {
 
             // ── GPU flash model step (dual-step SPI FSM; sees SPI CLK after
             // this edge). Mirrors the Metal order: simulate → flash_model_step.
+            // RAM (writable) mode has the kernel write `flash_data`, so it takes
+            // a mutable `u8*` (interior mutability via the `UnsafeCell`).
+            let flash_data = unsafe { &mut *self.flash_data.get() };
             ucci_hip::gpu_flash_model_step(
                 &mut *state,
                 &mut *flash_state,
                 &self.flash_model_params,
-                &self.flash_data,
+                &mut *flash_data,
                 DEVICE,
             );
 

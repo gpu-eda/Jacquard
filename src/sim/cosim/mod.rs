@@ -343,6 +343,10 @@ struct FlashState {
     in_reset: u32,
     last_error_cmd: u32,
     model_prev_csn: u32,
+    /// QSPI PSRAM mode latch: 1 → command bytes sample 4-lane. Appended last so
+    /// existing field offsets (`FLASH_STATE_D_I_OFF`, `_IN_RESET_OFF`) are
+    /// unchanged. Mirrors `FlashState::qpi` in the CUDA/HIP/Metal kernels.
+    qpi: u32,
 }
 
 /// Maximum number of QSPI memory instances a single GPU cosim can drive.
@@ -388,6 +392,15 @@ struct FlashModelParams {
     /// `flash_data[data_offset .. data_offset + flash_data_size]`, so each
     /// memory has an independent backing store. 0 for the single-instance case.
     data_offset: u32,
+    // ── QSPI PSRAM (RAM-mode) config — all zero/sentinel for plain flash ──
+    /// 1 = writable store + qpi/quad-write enabled.
+    writable: u32,
+    /// Command byte that latches QPI mode (`0xFFFF_FFFF` = none).
+    enter_qpi_cmd: u32,
+    /// Command byte that quad-writes the store (`0xFFFF_FFFF` = none).
+    quad_write_cmd: u32,
+    /// Dummy SCK cycles for a QPI `0xEB` read (e.g. 6).
+    qpi_read_dummy: u32,
 }
 
 /// All-instance `gpu_flash_model_step` params (plural; mirrors `BusTraceParamsAll`).
@@ -402,13 +415,43 @@ struct FlashModelParamsAll {
 #[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
 const _: () = {
     use std::mem::size_of;
-    assert!(size_of::<FlashState>() == 48);
+    assert!(size_of::<FlashState>() == 52);
     assert!(size_of::<FlashDinParams>() == 24);
-    assert!(size_of::<FlashModelParams>() == 36);
+    assert!(size_of::<FlashModelParams>() == 52);
     // n_flashes(4) + _pad(12) + N * per-instance.
     assert!(size_of::<FlashDinParamsAll>() == 16 + MAX_QSPI_MEMS * 24);
-    assert!(size_of::<FlashModelParamsAll>() == 16 + MAX_QSPI_MEMS * 36);
+    assert!(size_of::<FlashModelParamsAll>() == 16 + MAX_QSPI_MEMS * 52);
 };
+
+/// The QSPI PSRAM (RAM-mode) subset of `FlashModelParams`, resolved once from a
+/// `FlashConfig` and packed identically into the Metal/CUDA/HIP `FlashModelParams`
+/// buffers. `Default` (all-zero, `writable == 0`) reproduces plain-flash
+/// behaviour; the command sentinels are only consulted when `writable != 0`.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+#[derive(Clone, Copy, Default)]
+pub(crate) struct FlashRamParams {
+    writable: u32,
+    enter_qpi_cmd: u32,
+    quad_write_cmd: u32,
+    qpi_read_dummy: u32,
+}
+
+/// Resolve the RAM-mode kernel params from a `FlashConfig`. Plain flash configs
+/// (`writable == false`) yield `writable = 0` + sentinels, so the kernels stay
+/// byte-identical to the original flash behaviour.
+#[cfg(any(feature = "metal", feature = "cuda", feature = "hip"))]
+pub(crate) fn flash_ram_params(cfg: &crate::testbench::FlashConfig) -> FlashRamParams {
+    FlashRamParams {
+        writable: if cfg.writable { 1 } else { 0 },
+        enter_qpi_cmd: cfg.enter_qpi_cmd.map(u32::from).unwrap_or(0xFFFFFFFF),
+        quad_write_cmd: cfg.quad_write_cmd.map(u32::from).unwrap_or(0xFFFFFFFF),
+        // Default the QPI 0xEB read dummy to the APS6404L/controller value (6)
+        // when RAM mode is on but unset; unused (0) for plain flash.
+        qpi_read_dummy: cfg
+            .read_dummy_cycles
+            .unwrap_or(if cfg.writable { 6 } else { 0 }),
+    }
+}
 
 /// Backend-agnostic per-bus pin positions resolved from the netlist. Plain
 /// Rust (no `repr(C)`, no `metal::`): the Metal backend packs these field-for-
@@ -1231,11 +1274,25 @@ pub(crate) fn build_flash_buffers_dev(
         }
         p.flash_data_size = sizes[idx] as u32;
         p.data_offset = offsets[idx];
+        // RAM-mode (QSPI PSRAM) config — sentinels/zero for plain flash.
+        let ram = flash_ram_params(m);
+        p.writable = ram.writable;
+        p.enter_qpi_cmd = ram.enter_qpi_cmd;
+        p.quad_write_cmd = ram.quad_write_cmd;
+        p.qpi_read_dummy = ram.qpi_read_dummy;
     }
     let flash_model_params = struct_to_dev(&model, device);
 
-    // Concatenated backing store: 0xFF (erased) then each instance's firmware.
+    // Concatenated backing store. Per-instance fill: 0xFF (erased flash) or, for
+    // a writable QSPI PSRAM, 0x00 (power-on, cocotb `bytearray(size)`). Firmware
+    // (if any) is overlaid at each instance's `firmware_offset` afterwards.
     let mut firmware = vec![0xFFu8; total];
+    for (idx, m) in qspi.iter().enumerate() {
+        if m.writable {
+            let base = offsets[idx] as usize;
+            firmware[base..base + sizes[idx]].fill(0x00);
+        }
+    }
     for (idx, m) in qspi.iter().enumerate() {
         if let Some(fw_path) = m.firmware.as_ref() {
             use std::io::Read;
@@ -2193,6 +2250,14 @@ fn run_cosim_generic<B: CosimBackend>(
     let _flash: Option<CppSpiFlash> = qspi_primary.as_ref().map(|flash_cfg| {
         let mut fl = CppSpiFlash::new(flash_cfg.backing_size_bytes());
         fl.set_verbose(opts.flash_verbose);
+        if flash_cfg.writable {
+            fl.set_ram_mode(
+                true,
+                flash_cfg.enter_qpi_cmd,
+                flash_cfg.quad_write_cmd,
+                flash_cfg.read_dummy_cycles.unwrap_or(6),
+            );
+        }
         if let Some(ref fw) = flash_cfg.firmware {
             let firmware_path = std::path::Path::new(fw);
             match fl.load_firmware(firmware_path, flash_cfg.firmware_offset) {
@@ -4599,6 +4664,17 @@ impl CosimBackend for CpuBackend {
             .enumerate()
             .map(|(idx, flash_cfg)| {
                 let mut fl = CppSpiFlash::new(flash_cfg.backing_size_bytes());
+                // RAM (QSPI PSRAM) mode: enable the writable store + enter-QPI /
+                // quad-write commands so the CPU oracle matches the GPU kernel.
+                // Zero-fills the store (before any firmware overlay below).
+                if flash_cfg.writable {
+                    fl.set_ram_mode(
+                        true,
+                        flash_cfg.enter_qpi_cmd,
+                        flash_cfg.quad_write_cmd,
+                        flash_cfg.read_dummy_cycles.unwrap_or(6),
+                    );
+                }
                 if let Some(ref fw) = flash_cfg.firmware {
                     let firmware_path = std::path::Path::new(fw);
                     match fl.load_firmware(firmware_path, flash_cfg.firmware_offset) {

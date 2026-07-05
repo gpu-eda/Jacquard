@@ -195,7 +195,7 @@ void gpu_flash_model_step_hip(
   u32 *states,
   u8 *flash_state,
   const u8 *flash_model_params,
-  const u8 *flash_data
+  u8 *flash_data        // writable in RAM mode; read-only for flash
   )
 {
   hipLaunchKernelGGL(gpu_flash_model_step, dim3(1), dim3(256), 0, (hipStream_t)0,

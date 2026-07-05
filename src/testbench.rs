@@ -30,6 +30,14 @@ pub mod spiflash_ffi {
             offset: usize,
         ) -> c_int;
         pub fn spiflash_step(flash: *mut SpiFlashModel, clk: c_int, csn: c_int, d_o: u8) -> u8;
+        pub fn spiflash_set_ram_mode(
+            flash: *mut SpiFlashModel,
+            writable: c_int,
+            enter_qpi_cmd: c_int,
+            quad_write_cmd: c_int,
+            qpi_read_dummy: u32,
+        );
+        pub fn spiflash_peek(flash: *mut SpiFlashModel, addr: usize) -> u8;
         pub fn spiflash_get_command(flash: *mut SpiFlashModel) -> u8;
         pub fn spiflash_get_byte_count(flash: *mut SpiFlashModel) -> u32;
         pub fn spiflash_get_step_count(flash: *mut SpiFlashModel) -> u32;
@@ -107,6 +115,34 @@ impl CppSpiFlash {
 
     pub fn set_verbose(&mut self, verbose: bool) {
         unsafe { spiflash_ffi::spiflash_set_verbose(self.ptr, if verbose { 1 } else { 0 }) }
+    }
+
+    /// Enable writable QSPI PSRAM (RAM) mode with its enter-QPI / quad-write
+    /// commands (see `spiflash_set_ram_mode` in `csrc/spiflash_model.cc`).
+    /// `enter_qpi_cmd`/`quad_write_cmd` of `None` disable that behaviour.
+    /// Zero-fills the backing store; call `load_firmware` afterwards to preload.
+    pub fn set_ram_mode(
+        &mut self,
+        writable: bool,
+        enter_qpi_cmd: Option<u8>,
+        quad_write_cmd: Option<u8>,
+        qpi_read_dummy: u32,
+    ) {
+        unsafe {
+            spiflash_ffi::spiflash_set_ram_mode(
+                self.ptr,
+                if writable { 1 } else { 0 },
+                enter_qpi_cmd.map(|c| c as i32).unwrap_or(-1),
+                quad_write_cmd.map(|c| c as i32).unwrap_or(-1),
+                qpi_read_dummy,
+            )
+        }
+    }
+
+    /// Read back a byte from the backing store (test introspection).
+    #[allow(dead_code)]
+    pub fn peek(&self, addr: usize) -> u8 {
+        unsafe { spiflash_ffi::spiflash_peek(self.ptr, addr) }
     }
 }
 

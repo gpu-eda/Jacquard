@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cstdio>
 #include <array>
+#include <algorithm>
 
 struct SpiFlashModel {
     // State pattern matching CXXRTL: s = current state, sn = next state
@@ -18,7 +19,15 @@ struct SpiFlashModel {
         uint8_t curr_byte = 0;
         uint8_t command = 0;
         uint8_t out_buffer = 0;
+        unsigned qpi = 0;      // QPI mode latch (set by enter_qpi_cmd, e.g. 0x35)
     } s, sn;
+
+    // ── QSPI PSRAM (RAM) mode configuration (constant after set_ram_mode) ──
+    // All zero/-1 by default → byte-identical original SPI-flash behaviour.
+    bool ram_writable = false;      // writable backing store + qpi/quad-write
+    int  enter_qpi_cmd = -1;        // command that latches QPI mode (e.g. 0x35)
+    int  quad_write_cmd = -1;       // command that quad-writes the store (0x38)
+    unsigned qpi_read_dummy = 0;    // dummy SCK cycles for QPI 0xEB reads (6)
 
     // Signals (matching CXXRTL p_* naming)
     bool p_clk_o = false;      // Clock output from controller
@@ -49,9 +58,19 @@ struct SpiFlashModel {
         sn.out_buffer = 0;
         if (sn.byte_count == 0) {
             sn.addr = 0;
-            sn.data_width = 1;
+            // In QPI mode even the command byte is sampled 4-lane; otherwise
+            // 1-lane (original flash behaviour). The latch is set below.
+            sn.data_width = (sn.qpi != 0) ? 4U : 1U;
             sn.command = sn.curr_byte;
-            if (sn.command == 0xab) {
+            if (ram_writable && enter_qpi_cmd >= 0
+                && sn.command == (uint8_t)enter_qpi_cmd) {
+                // Enter-QPI (single-lane): all later commands sample 4-lane.
+                sn.qpi = 1;
+            } else if (ram_writable && quad_write_cmd >= 0
+                && sn.command == (uint8_t)quad_write_cmd) {
+                // Quad write: address + data phases are 4-lane.
+                sn.data_width = 4;
+            } else if (sn.command == 0xab) {
                 // power up
             } else if (sn.command == 0x03 || sn.command == 0x9f || sn.command == 0xff
                 || sn.command == 0x35 || sn.command == 0x31 || sn.command == 0x50
@@ -82,12 +101,35 @@ struct SpiFlashModel {
                 if (sn.byte_count <= 3) {
                     sn.addr |= (uint32_t(sn.curr_byte) << ((3 - sn.byte_count) * 8));
                 }
-                if (sn.byte_count >= 6) { // 1 mode, 2 dummy clocks
+                // In QPI mode the transaction is uniform 4-lane: cmd@posedges
+                // 0-1, 24-bit addr@2-7, then qpi_read_dummy dummy posedges,
+                // then data. out_buffer must be loaded on the posedge *before*
+                // the first data posedge (driven on the following negedge,
+                // sampled next posedge), so the threshold is 3 +
+                // qpi_read_dummy/2 (= 6 for the APS6404L QRD_DUMMY=6). The
+                // original (non-QPI) flash path keeps its byte_count>=6.
+                unsigned data_start = (sn.qpi != 0)
+                    ? (3U + (qpi_read_dummy >> 1)) : 6U;
+                if ((unsigned)sn.byte_count >= data_start) {
                     size_t idx = sn.addr & 0x00FFFFFF;
                     if (idx < data.size()) {
                         sn.out_buffer = data[idx];
                     } else {
                         sn.out_buffer = 0xFF;
+                    }
+                    sn.addr = (sn.addr + 1) & 0x00FFFFFF;
+                }
+            } else if (ram_writable && quad_write_cmd >= 0
+                && sn.command == (uint8_t)quad_write_cmd) {
+                // Quad write: 24-bit address in bytes 1..3 (MSB first), then
+                // data bytes stored into the backing memory (4-lane).
+                if (sn.byte_count <= 3) {
+                    sn.addr |= (uint32_t(sn.curr_byte) << ((3 - sn.byte_count) * 8));
+                }
+                if (sn.byte_count >= 4) {
+                    size_t idx = sn.addr & 0x00FFFFFF;
+                    if (idx < data.size()) {
+                        data[idx] = sn.curr_byte;
                     }
                     sn.addr = (sn.addr + 1) & 0x00FFFFFF;
                 }
@@ -121,7 +163,9 @@ struct SpiFlashModel {
             }
             sn.bit_count = 0;
             sn.byte_count = 0;
-            sn.data_width = 1;
+            // In QPI mode the next transaction's command byte is 4-lane; the
+            // qpi latch itself persists across CS# (mode change, not a reset).
+            sn.data_width = (sn.qpi != 0) ? 4U : 1U;
         } else if (posedge_clk() && !p_csn_o) {
             // Rising clock edge while selected - sample input
             // Sample current data - the Rust caller is responsible for passing
@@ -215,6 +259,26 @@ uint8_t spiflash_step(SpiFlashModel* flash, int clk, int csn, uint8_t d_o) {
 
 void spiflash_set_verbose(SpiFlashModel* flash, int verbose) {
     if (flash) flash->verbose = (verbose != 0);
+}
+
+void spiflash_set_ram_mode(SpiFlashModel* flash, int writable,
+                           int enter_qpi_cmd, int quad_write_cmd,
+                           unsigned qpi_read_dummy) {
+    if (!flash) return;
+    flash->ram_writable = (writable != 0);
+    flash->enter_qpi_cmd = enter_qpi_cmd;
+    flash->quad_write_cmd = quad_write_cmd;
+    flash->qpi_read_dummy = qpi_read_dummy;
+    if (flash->ram_writable) {
+        // RAM power-on: zero-fill the store (cocotb `bytearray(size)`), matching
+        // the GPU RAM-mode zero init. spiflash_load may overlay a preload after.
+        std::fill(flash->data.begin(), flash->data.end(), (uint8_t)0x00);
+    }
+}
+
+uint8_t spiflash_peek(SpiFlashModel* flash, size_t addr) {
+    if (!flash || addr >= flash->data.size()) return 0;
+    return flash->data[addr];
 }
 
 uint8_t spiflash_get_command(SpiFlashModel* flash) {

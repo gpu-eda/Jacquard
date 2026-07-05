@@ -35,8 +35,8 @@ if [ ! -x "$BIN" ]; then
     exit 2
 fi
 case "$SCOPE" in
-    all|logic|flash) ;;
-    *) echo "error: COSIM_SCOPE must be 'all', 'logic', or 'flash' (got '$SCOPE')" >&2; exit 2 ;;
+    all|logic|flash|qspi) ;;
+    *) echo "error: COSIM_SCOPE must be 'all', 'logic', 'flash', or 'qspi' (got '$SCOPE')" >&2; exit 2 ;;
 esac
 
 OUT="$(mktemp -d)"
@@ -76,8 +76,8 @@ check() {
 }
 
 # --- xprop_cosim: xprop / 2state / reg-init variants (peripheral-free) ----
-# `all` and `logic` run these; `flash` skips straight to the mcu_soc fixture.
-if [ "$SCOPE" != flash ]; then
+# `all` and `logic` run these; `flash`/`qspi` skip straight to their fixture.
+if [ "$SCOPE" = all ] || [ "$SCOPE" = logic ]; then
     run xprop_xprop "$BIN" cosim tests/xprop_cosim/xprop_demo_synth.gv \
         --config tests/xprop_cosim/sim_config.json --top-module xprop_demo \
         --max-clock-edges 40 --xprop --output-vcd "$OUT/xprop.vcd" || true
@@ -128,6 +128,28 @@ if [ "$SCOPE" = all ]; then
         --config tests/multi_mem_cosim/sim_config.json --top-module multi_mem_dut \
         --output-vcd "$OUT/multi_mem.vcd" || true
     check multi_mem "$OUT/multi_mem.vcd" tests/multi_mem_cosim/expected/multi_mem_cosim.vcd
+fi
+
+# --- qspi_psram fixture (writable RAM-mode flash) — `all` + `qspi` scopes ----
+# The DUT enters QPI (0x35), quad-writes 0xA5 to 0x000001 (0x38), then quad-reads
+# it back (0xEB) and asserts rdata==0xA5. Exercises the writable-store + enter-QPI
+# + quad-write extensions of the flash GPU peripheral. Tiny AIGPDK netlist (~160
+# cells), so it rides `all` (CpuBackend CI) and also has a dedicated `qspi` scope
+# so the GPU test suite can validate it on CUDA/HIP without the full `all` set.
+# Golden captured on CpuBackend, byte-identical to the Metal/CUDA/HIP kernels.
+# See tests/qspi_psram/README.md.
+if [ "$SCOPE" = all ] || [ "$SCOPE" = qspi ]; then
+    run qspi_psram "$BIN" cosim tests/qspi_psram/qspi_psram_dut_synth.gv \
+        --config tests/qspi_psram/sim_config.json --top-module qspi_psram_dut \
+        --max-clock-edges 200 --output-vcd "$OUT/qspi_psram.vcd" || true
+    check qspi_psram "$OUT/qspi_psram.vcd" tests/qspi_psram/expected/qspi_psram.vcd
+    # Content assertion (write→read round-trip), independent of the byte-diff.
+    total=$((total + 1))
+    if python3 tests/qspi_psram/check.py "$OUT/qspi_psram.vcd" >/dev/null 2>&1; then
+        pass "qspi_psram_content"
+    else
+        fail "qspi_psram_content"
+    fi
 fi
 
 # --- flash fixture (mcu_soc) — `flash` scope only ------------------------
