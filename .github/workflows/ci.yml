@@ -310,9 +310,7 @@ jobs:
     # Compile once on the free, autoscaling GitHub-hosted macos-latest
     # (Apple Silicon, Metal-capable) and hand the self-contained binary to
     # the GPU test jobs — the metallib is embedded via include_bytes!, so the
-    # artifact is just the binary, no separate .metallib to ship. This moves
-    # the serial compile off the single self-hosted macos-runner-1, unclogging
-    # the macOS queue every PR waits behind.
+    # artifact is just the binary, no separate .metallib to ship.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -375,14 +373,7 @@ jobs:
     # PRs (code=='false') still skip the whole job.
     if: always() && needs.changes.outputs.code == 'true'
     name: Metal Tests (macOS)
-    # Routine PR pushes run on the free self-hosted macos-runner-1
-    # (Apple Silicon + Metal GPU). On `main` — or any PR carrying the
-    # `ci:metal-xl` label — this light job offloads to the GitHub-hosted
-    # macos-latest-xlarge (M2 Pro) so it runs in parallel with the
-    # disk-heavy MCU SoC Metal job (which stays pinned to macos-runner-1,
-    # since xlarge has only 14 GB storage). This is the billed runner, so
-    # it's gated to main/label rather than every push.
-    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
+    runs-on: macos-latest-xlarge
     steps:
       - name: Gate on the build
         if: needs.metal-build.result != 'success'
@@ -1324,7 +1315,7 @@ jobs:
     # Re-enabled 2026-05-12 against the self-hosted chipflow org runner
     # macos-runner-1 (Apple Silicon + Metal GPU). The dependent jobs
     # (mcu-soc-cvc, mcu-soc-comparison) gate on this via `needs:`.
-    runs-on: macos-runner-1
+    runs-on: macos-latest-xlarge
     timeout-minutes: 30
     needs: [changes, prepare-mcu-soc-jtir, metal-build]
     if: always() && needs.changes.outputs.code == 'true'
@@ -1497,17 +1488,7 @@ jobs:
     needs: [changes, metal-build]
     if: always() && needs.changes.outputs.code == 'true'
     name: JTAG Minimal Cosim (Hazard3 DTM+DM)
-    # HEAVY Metal cosim (4M edges, ~10min self-hosted). On `main` / `ci:metal-xl`
-    # it offloads to the GitHub-hosted macos-latest-xlarge so it runs in
-    # PARALLEL with the other Metal jobs (which stay on the single self-hosted
-    # macos-runner-1) — pinning it self-hosted instead serialised all the Metal
-    # jobs and was slower wall-clock. xlarge is ~3x slower for this per-edge
-    # JTAG-replay workload (model-driven TCK forces single-edge dispatch,
-    # ~500µs/tick vs ~150µs self-hosted) → ~32min for 4M edges, so the step
-    # timeout below is generous. Re-evaluate once multi-clock/island batching
-    # cuts the per-edge tail (multi-clock plan MC.3/MC.4) — then the run is fast
-    # enough that the runner choice stops mattering.
-    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
+    runs-on: macos-latest-xlarge
     timeout-minutes: 45
     # Regression gate for #84 (model-driven clock edge flags).
     continue-on-error: false
@@ -1578,7 +1559,7 @@ jobs:
     needs: [changes, metal-build]
     if: always() && needs.changes.outputs.code == 'true'
     name: JTAG Minimal Cosim Server (live remote_bitbang)
-    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
+    runs-on: macos-latest-xlarge
     timeout-minutes: 45
     continue-on-error: false
     steps:
@@ -1655,9 +1636,9 @@ jobs:
     needs: [changes, metal-build]
     if: always() && needs.changes.outputs.code == 'true'
     name: JTAG Minimal OpenOCD (real remote_bitbang attach)
-    runs-on: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'ci:metal-xl')) && 'macos-latest-xlarge' || 'macos-runner-1' }}
     timeout-minutes: 45
     continue-on-error: false
+    runs-on: macos-latest-xlarge
     steps:
       - name: Gate on the build
         if: needs.metal-build.result != 'success'
