@@ -252,27 +252,48 @@ only validate the purely-combinational sub-case.</p>
 <p>With A′ proving the <code>abc_new</code> flow works, A0 adds the <strong>origins</strong>: build the
 patched wasm and confirm <code>\src</code> rides the XAIGER <code>"y"</code> channel through mapping.
 The spike <strong>is</strong> the build (the wasm is the A1 artifact — no throwaway work).</p>
-<p><strong>Build inputs (recon'd against the live Codeberg <code>YoWASP/yosys</code>, 2026-07-04).</strong>
-The two load-bearing forks <strong>already exist</strong> (<code>robtaylor/yosys@src-retention-y-ext</code>,
-<code>robtaylor/abc@origin-tracking-clean</code> #487). The build repo's <code>.gitmodules</code> has
-<code>yosys-src</code> (→ <code>YosysHQ/yosys</code>) and a <strong>separate <code>yosys-slang-src</code></strong> (→
-<code>povik/yosys-slang</code>, the SV frontend); <strong>abc is <em>nested</em> inside <code>yosys-src</code></strong>, not
-a top-level submodule. So the repoints are:</p>
+<p><strong>Build inputs — ✅ ALL WIRED + VERIFIED 2026-07-06</strong> (the two repoints below are
+done; recon was against Codeberg <code>YoWASP/yosys</code>, 2026-07-04). Chain:</p>
+<pre><code>robtaylor/yowasp-yosys @ yowasp-yosys-integration   (NEW; mirror of Codeberg, base develop-0.64)
+  └─ yosys-src → robtaylor/yosys@src-retention-y-ext  (bcc5698)
+       └─ abc  → robtaylor/abc@origin-tracking-clean  (2daf32f2, #487)   ← abc is nested in yosys-src
+       └─ yosys-slang-src → povik/yosys-slang          (SV frontend, upstream)
+</code></pre>
 <ol>
-<li><strong><code>yowasp</code> overlay:</strong> <code>yosys-src</code> → <code>robtaylor/yosys@src-retention-y-ext</code> (one
-repoint). <code>robtaylor/yowasp-yosys</code> <strong>does not exist yet</strong> — create it.</li>
-<li><strong>Inside the yosys fork — NOT yet done:</strong> <code>robtaylor/yosys@src-retention-y-ext</code>
-still points its <code>abc</code> submodule at <strong><code>YosysHQ/abc</code></strong> (upstream), so the
-origins patches aren't wired in. <strong>A0 step-0: repoint the yosys fork's <code>abc</code> →
-<code>robtaylor/abc@origin-tracking-clean</code>.</strong> Without this the build has yosys-side
-<code>\src</code> retention but stock abc, and provenance dies at mapping.</li>
+<li>✅ <strong><code>yowasp</code> overlay:</strong> created <code>robtaylor/yowasp-yosys</code> (full mirror; default
+<code>develop</code> = clean mirror, <code>yowasp-yosys-integration</code> carries the repoint), repointed
+<code>yosys-src</code> → <code>robtaylor/yosys@src-retention-y-ext</code>.</li>
+<li>✅ <strong>Inside the yosys fork:</strong> repointed <code>robtaylor/yosys@src-retention-y-ext</code>'s <code>abc</code>
+submodule <code>YosysHQ/abc</code> → <code>robtaylor/abc@origin-tracking-clean</code> (commit <code>bcc5698</code>).
+Without this the build would have yosys-side <code>\src</code> retention but stock abc, and
+provenance would die at mapping.</li>
 </ol>
-<p><strong>Build mechanics (current, ≠ the ADR's stale description):</strong> <code>build.sh</code> is
-<strong>CMake</strong> driving <code>wasi-sdk-p1.cmake</code> — <code>wasi-sdk **33**</code> (not 27), no
-Makefile/<code>CONFIG=wasi</code>/flex/LTO; disables zlib/libffi/readline/editline/tcl; uses
-ccache. It hardcodes the <strong>x86_64-linux</strong> wasi-sdk, so building on this Apple-Silicon
-Mac needs the macOS wasi-sdk variant or a <strong>Linux/Docker/CI</strong> build (prefer CI —
-it's the A1 reproducible-build home anyway).</p>
+<p><strong>Build mechanics — ⚠️ CORRECTED 2026-07-06 (supersedes the "CMake + wasi-sdk 33"
+recon; that was <code>develop</code> HEAD, the WRONG base for our fork).</strong> Two hard constraints
+force the <strong><code>develop-0.64</code> Makefile recipe</strong>, not <code>develop</code>'s CMake:</p>
+<ol>
+<li><code>robtaylor/yosys@src-retention-y-ext</code> is <strong>Makefile-only (no <code>CMakeLists.txt</code>)</strong> —
+<code>develop</code>'s <code>cmake -S yosys-src</code> cannot build the patched fork at all.</li>
+<li><code>develop</code>'s CMake migration (<code>61073ed "CI: switch to CMake based builds"</code>)
+<strong>dropped yosys-slang</strong> — its wasm has <strong>no <code>read_slang</code></strong>, the SV frontend the
+on-ramp depends on. <code>develop</code> also moved to wasi-sdk 33.</li>
+</ol>
+<p>So base the overlay's integration branch on <strong><code>develop-0.64</code></strong>: <code>build.sh</code> is the
+<strong>Makefile</strong> flow (<code>make -f yosys-src/Makefile CONFIG=wasi</code>, <code>-flto</code>, <code>-Wl,-z,stack-size=8M</code>)</p>
+<ul>
+<li><strong>wasi-sdk 27</strong> + <strong>flex-2.6.4 built from source</strong> + <strong>yosys-slang built via cmake
+and whole-archive-linked</strong> (<code>libyosys-slang.a</code>) — the exact recipe that built the
+pinned <code>yowasp-yosys 0.64</code> the on-ramp uses. It hardcodes <strong>x86_64-linux</strong> wasi-sdk →
+<strong>Linux/Docker/CI only</strong> (done: the A0 CI runs <code>ubuntu-latest</code>).</li>
+</ul>
+<p><strong>A0 CI (authored 2026-07-06):</strong> <code>robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml</code>
+— <code>build</code> (compile → WASI, link slang, smoke <code>read_slang</code>/<code>abc_new</code>, upload wasm+wheel)</p>
+<ul>
+<li><code>provenance-check</code> (origin-shell's <code>abc_new</code> origins flow on <code>comb</code>+<code>seq2</code> vs sky130,
+<code>\src</code> coverage; seq2@0% fails). <strong>Residual risk CI will surface:</strong> develop-0.64's
+yosys-slang pin <code>4e53d772</code> targets yosys 0.64 (Apr); our fork's yosys is ~Jun 2026, so
+slang may need a newer pin to compile.</li>
+</ul>
 <ul>
 <li>Repoint (steps 1–2 above), run <code>build.sh</code>, and run the A′ <code>abc_new</code> synth flow
 <strong>with <code>origins_max</code> set and <code>-noattr</code> dropped</strong> on a small multi-module design;
