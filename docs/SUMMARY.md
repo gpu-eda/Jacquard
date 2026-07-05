@@ -71,4 +71,5 @@
   - [netlist-graph xroots query](plans/netlist-graph-xroots.md)
   - [Cell-model IR](plans/cell-model-ir.md)
   - [RTL on-ramp folded into sim/cosim](plans/rtl-onramp-sim-integration.md)
+  - [RTL-source provenance](plans/rtl-source-provenance.md)
 - [Spike — OpenTimer on SKY130](spikes/opentimer-sky130.md)

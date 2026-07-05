@@ -120,12 +120,14 @@ GPU-sim results **speak RTL** — `--trace-signals`, timing violations, and
 X-debugging reporting source lines instead of flattened gate names.
 
 The tractable route is **building our own `yosys.wasm` from source** rather than
-depending on the stock upstream wheel. YoWASP's build (`build.sh`: wasi-sdk 27 →
-flex → yosys `CONFIG=wasi` + LTO) compiles abc **in-tree from yosys's own bundled
-`abc/` submodule** — verified against the shipped `yosys.wasm`, which embeds the
-abc engine (the build path `…/yosys-src/abc/src/base/abci/…` and the full set of
-`&`-prefixed GIA commands are present in the module). So a provenance build is
-mechanical: **fork [YoWASP/yosys](https://codeberg.org/YoWASP/yosys)** (now on
+depending on the stock upstream wheel. YoWASP's build (`build.sh`: **CMake +
+wasi-sdk 33** via `wasi-sdk-p1.cmake`, zlib/libffi/readline/editline/tcl disabled;
+recon'd 2026-07-04 — supersedes an earlier "wasi-sdk 27 / Makefile `CONFIG=wasi`"
+description) compiles abc **in-tree from yosys's own bundled `abc/` submodule** —
+verified against the shipped `yosys.wasm`, which embeds the abc engine (the build
+path `…/yosys-src/abc/src/base/abci/…` and the full set of `&`-prefixed GIA
+commands are present in the module). So a provenance build is mechanical: **fork
+[YoWASP/yosys](https://codeberg.org/YoWASP/yosys)** (now on
 Codeberg; the old GitHub repo was archived read-only 2026-03-11), repoint
 `yosys-src` → `robtaylor/yosys@src-retention-y-ext` and yosys's bundled `abc`
 submodule → `robtaylor/abc@origin-tracking-clean` (#487), and rerun `build.sh`.

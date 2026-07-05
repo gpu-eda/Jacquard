@@ -32,6 +32,7 @@ persistent plans here.
 | [Cosim backend portability](cosim-backend-portability.md) | Active — design captured (#105); see ADR 0017 amendment |
 | [Cell-model IR](cell-model-ir.md) | Proposed — realises ADR 0019 (#130, #67) |
 | [RTL on-ramp folded into `sim`/`cosim`](rtl-onramp-sim-integration.md) | Active — reworks #167, realises ADR 0021 (#162) |
+| [RTL-source provenance](rtl-source-provenance.md) | Active — design captured; ADR 0021 Phase 2 (#162), gated on A0 (build forked wasm, check `\src` survives) |
 
 ## Reading order for new contributors
 
