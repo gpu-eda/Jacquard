@@ -108,26 +108,44 @@ With A′ proving the `abc_new` flow works, A0 adds the **origins**: build the
 patched wasm and confirm `\src` rides the XAIGER `"y"` channel through mapping.
 The spike **is** the build (the wasm is the A1 artifact — no throwaway work).
 
-**Build inputs (recon'd against the live Codeberg `YoWASP/yosys`, 2026-07-04).**
-The two load-bearing forks **already exist** (`robtaylor/yosys@src-retention-y-ext`,
-`robtaylor/abc@origin-tracking-clean` #487). The build repo's `.gitmodules` has
-`yosys-src` (→ `YosysHQ/yosys`) and a **separate `yosys-slang-src`** (→
-`povik/yosys-slang`, the SV frontend); **abc is *nested* inside `yosys-src`**, not
-a top-level submodule. So the repoints are:
-1. **`yowasp` overlay:** `yosys-src` → `robtaylor/yosys@src-retention-y-ext` (one
-   repoint). `robtaylor/yowasp-yosys` **does not exist yet** — create it.
-2. **Inside the yosys fork — NOT yet done:** `robtaylor/yosys@src-retention-y-ext`
-   still points its `abc` submodule at **`YosysHQ/abc`** (upstream), so the
-   origins patches aren't wired in. **A0 step-0: repoint the yosys fork's `abc` →
-   `robtaylor/abc@origin-tracking-clean`.** Without this the build has yosys-side
-   `\src` retention but stock abc, and provenance dies at mapping.
+**Build inputs — ✅ ALL WIRED + VERIFIED 2026-07-06** (the two repoints below are
+done; recon was against Codeberg `YoWASP/yosys`, 2026-07-04). Chain:
+```
+robtaylor/yowasp-yosys @ yowasp-yosys-integration   (NEW; mirror of Codeberg, base develop-0.64)
+  └─ yosys-src → robtaylor/yosys@src-retention-y-ext  (bcc5698)
+       └─ abc  → robtaylor/abc@origin-tracking-clean  (2daf32f2, #487)   ← abc is nested in yosys-src
+       └─ yosys-slang-src → povik/yosys-slang          (SV frontend, upstream)
+```
+1. ✅ **`yowasp` overlay:** created `robtaylor/yowasp-yosys` (full mirror; default
+   `develop` = clean mirror, `yowasp-yosys-integration` carries the repoint), repointed
+   `yosys-src` → `robtaylor/yosys@src-retention-y-ext`.
+2. ✅ **Inside the yosys fork:** repointed `robtaylor/yosys@src-retention-y-ext`'s `abc`
+   submodule `YosysHQ/abc` → `robtaylor/abc@origin-tracking-clean` (commit `bcc5698`).
+   Without this the build would have yosys-side `\src` retention but stock abc, and
+   provenance would die at mapping.
 
-**Build mechanics (current, ≠ the ADR's stale description):** `build.sh` is
-**CMake** driving `wasi-sdk-p1.cmake` — `wasi-sdk **33**` (not 27), no
-Makefile/`CONFIG=wasi`/flex/LTO; disables zlib/libffi/readline/editline/tcl; uses
-ccache. It hardcodes the **x86_64-linux** wasi-sdk, so building on this Apple-Silicon
-Mac needs the macOS wasi-sdk variant or a **Linux/Docker/CI** build (prefer CI —
-it's the A1 reproducible-build home anyway).
+**Build mechanics — ⚠️ CORRECTED 2026-07-06 (supersedes the "CMake + wasi-sdk 33"
+recon; that was `develop` HEAD, the WRONG base for our fork).** Two hard constraints
+force the **`develop-0.64` Makefile recipe**, not `develop`'s CMake:
+1. `robtaylor/yosys@src-retention-y-ext` is **Makefile-only (no `CMakeLists.txt`)** —
+   `develop`'s `cmake -S yosys-src` cannot build the patched fork at all.
+2. `develop`'s CMake migration (`61073ed "CI: switch to CMake based builds"`)
+   **dropped yosys-slang** — its wasm has **no `read_slang`**, the SV frontend the
+   on-ramp depends on. `develop` also moved to wasi-sdk 33.
+
+So base the overlay's integration branch on **`develop-0.64`**: `build.sh` is the
+**Makefile** flow (`make -f yosys-src/Makefile CONFIG=wasi`, `-flto`, `-Wl,-z,stack-size=8M`)
++ **wasi-sdk 27** + **flex-2.6.4 built from source** + **yosys-slang built via cmake
+and whole-archive-linked** (`libyosys-slang.a`) — the exact recipe that built the
+pinned `yowasp-yosys 0.64` the on-ramp uses. It hardcodes **x86_64-linux** wasi-sdk →
+**Linux/Docker/CI only** (done: the A0 CI runs `ubuntu-latest`).
+
+**A0 CI (authored 2026-07-06):** `robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml`
+— `build` (compile → WASI, link slang, smoke `read_slang`/`abc_new`, upload wasm+wheel)
++ `provenance-check` (origin-shell's `abc_new` origins flow on `comb`+`seq2` vs sky130,
+`\src` coverage; seq2@0% fails). **Residual risk CI will surface:** develop-0.64's
+yosys-slang pin `4e53d772` targets yosys 0.64 (Apr); our fork's yosys is ~Jun 2026, so
+slang may need a newer pin to compile.
 
 - Repoint (steps 1–2 above), run `build.sh`, and run the A′ `abc_new` synth flow
   **with `origins_max` set and `-noattr` dropped** on a small multi-module design;

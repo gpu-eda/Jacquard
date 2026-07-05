@@ -74,22 +74,33 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
    ```
    Pins: yosys-src gitlink `bcc5698` == `src-retention-y-ext` HEAD; abc gitlink
    `2daf32f2` == `origin-tracking-clean` HEAD (both `.gitmodules` `branch=` keys set
-   for `--remote` tracking). Two commits added:
-   `robtaylor/yosys@src-retention-y-ext` `bcc5698` (abc repoint; was `67137e21`, force-pushed
-   once to fix trailer) and `robtaylor/yowasp-yosys@yowasp-yosys-integration` (yosys-src
-   repoint, off `develop`). **The yowasp overlay's whole delta is this one repoint commit
-   on `yowasp-yosys-integration`** — that's the branch the build must check out (NOT
-   `develop`, which is the untouched upstream mirror kept for easy rebasing).
-2. **← NEXT: Build the fork wasm** — clone `robtaylor/yowasp-yosys` at branch
-   **`yowasp-yosys-integration`**, `git submodule update --init --recursive`, run
-   `build.sh` (**CMake + wasi-sdk 33**, not the ADR's stale "27/Makefile"), hardcoded
-   x86_64-linux → build in **Docker/Linux or CI**, not natively on macOS. `yosys-slang`
-   is a separate `yosys-slang-src` submodule (pulled recursively). No fork/repoint work
-   remains before this — it's the head of the queue now.
-3. **Run the abc_new flow on the fork wasm** on a small seq+comb design; confirm it
-   (a) maps flops without the `ff.cc` error, (b) QoR parity vs classic, (c) carries
-   `\src` on mapped cells (coverage %). Drop `-noattr`; set `scratchpad -set
-   abc9.origins_max N`.
+   for `--remote` tracking). **The `yowasp-yosys-integration` branch is based on
+   `develop-0.64`, NOT `develop`** — see the ⚠️ build-recipe correction below; that's
+   the branch the build checks out (`develop` stays an untouched upstream mirror).
+   ⚠️ **BUILD-RECIPE CORRECTION (2026-07-06) — the plan/ADR's "CMake + wasi-sdk 33"
+   is WRONG for our fork.** Two hard constraints force the `develop-0.64` Makefile
+   recipe instead:
+   - `robtaylor/yosys@src-retention-y-ext` is **Makefile-only (no `CMakeLists.txt`)**,
+     so `develop`'s `cmake -S yosys-src` cannot build it at all.
+   - `develop`'s CMake migration (`61073ed`) **dropped yosys-slang**, so its wasm has
+     **no `read_slang`** — the SV frontend the on-ramp depends on.
+   `develop-0.64` = **Makefile (`CONFIG=wasi`, `-flto`) + wasi-sdk 27 + flex-from-source
+   + yosys-slang whole-archive** — the exact recipe that built the pinned `yowasp-yosys
+   0.64` the on-ramp uses today. Our only delta is the yosys-src repoint.
+2. **✅ IN PROGRESS (2026-07-06) — A0 CI build authored + running.**
+   `robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml` (on push to
+   `yowasp-yosys-integration` + `workflow_dispatch`), two jobs:
+   - **build** — compiles the patched fork to WASM under WASI, links yosys-slang,
+     smoke-tests `read_slang` + `abc_new`, uploads `yosys.wasm` + wheel.
+   - **provenance-check** — the go/no-go: runs origin-shell's validated `abc_new`
+     origins flow (`scratchpad -set abc9.origins_max 100; abc_new -script +&dch,-f;&nf`)
+     on `comb` + `seq2` (sequential) against sky130 (Jacquard's pinned volare hash
+     `c6d73a35`), counts `\src` on mapped cells; **seq2 at 0% fails the job**.
+   First run: `28758370102`. **Residual build risk CI will surface:** develop-0.64's
+   yosys-slang pin (`4e53d772`, targets yosys 0.64/Apr) vs our fork's ~Jun-2026 yosys
+   — slang may need a newer pin to compile. **NEXT once green:** read the coverage %
+   (esp. seq2) → if high, we already hold the provenance wasm (A1 done); then wire
+   `src/synth.rs` to the `abc_new` flow + drop `write_verilog -noattr`.
 4. **In parallel: WS-B B0** — teach `sverilogparse` to capture `(* src *)` (fork
    `vendor/eda-infra-rs` per `~/.claude/FORKED_DEPS_WORKFLOW.md`), attach to
    `SVerilogCell` (`lib.rs:113`, constructed `sverilognom.rs:385`); prove with a
