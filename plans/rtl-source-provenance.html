@@ -1,0 +1,412 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>RTL-source provenance - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="plan--rtl-source-provenance-adr-0021-phase-2"><a class="header" href="#plan--rtl-source-provenance-adr-0021-phase-2">Plan — RTL-source provenance (ADR 0021 Phase 2)</a></h1>
+<p><strong>Status:</strong> Active — design captured; <strong>WS-A gated on A0</strong> (build the forked wasm,
+check <code>\src</code> survives in-process abc — the spike <em>is</em> the build). Large,
+dependency-gated; not started.</p>
+<p><strong>ADRs:</strong> <a href="../adr/0021-behavioral-rtl-support.html">0021</a> Phase 2 (the roadmap this
+realises), <a href="../adr/0014-aig-as-simulation-ir.html">0014</a> (AIG core the provenance
+rides through), <a href="../adr/0018-distribution-and-installation.html">0018</a> (wasm
+distribution).</p>
+<p><strong>Predecessors:</strong> ADR 0021 Phase 1 (the on-ramp — <code>sim</code>/<code>cosim</code> synthesize
+behavioral RTL via embedded YoWASP Yosys). This plan makes the <em>results</em> of that
+simulation speak RTL source locations instead of flattened gate names.</p>
+<p><strong>Tracking:</strong> <a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a> Phase 2.</p>
+<hr />
+<h2 id="goal"><a class="header" href="#goal">Goal</a></h2>
+<p>Thread <strong><code>\src</code></strong> (RTL source <code>file:line</code>, Yosys's source-provenance attribute)
+from synthesis all the way to Jacquard's user-facing outputs, so that
+<code>--trace-signals</code>, timing-violation reports, and X-debugging (<code>xsources</code>/<code>xroots</code>)
+report <strong>RTL source locations</strong> rather than post-synthesis flattened gate names.
+"Why is <code>spiflash.ctrl.\$auto$…$1234</code> X?" becomes "<code>spiflash.v:88</code>".</p>
+<h2 id="why-its-two-independent-problems"><a class="header" href="#why-its-two-independent-problems">Why it's two independent problems</a></h2>
+<ol>
+<li><strong>The toolchain must <em>emit</em> <code>\src</code>.</strong> Stock YoWASP Yosys drops source
+provenance through std-cell mapping (abc). Carrying it needs a patched
+toolchain — the <a href="https://github.com/robtaylor/origin-shell">origin-shell</a>
+<code>\src</code> pass-through: berkeley-abc <strong>#487</strong> (<code>vOrigins</code>/<code>&amp;origins</code>) +
+<code>robtaylor/yosys@src-retention-y-ext</code>.</li>
+<li><strong>Jacquard must <em>ingest</em> <code>\src</code>.</strong> Even with a perfect provenance netlist,
+Jacquard throws it away today: <code>sverilogparse</code> <strong>discards all attributes</strong>
+(<code>vendor/eda-infra-rs/sverilogparse/src/sverilognom.rs:44</code> — <em>"we regard
+attributes as comments"</em>), and <code>netlistdb</code> has no source-location field.</li>
+</ol>
+<p>These are <strong>independent</strong> and should be de-risked <strong>in parallel</strong>: WS-B (ingestion)
+can be prototyped end-to-end against a <strong>hand-annotated</strong> <code>(* src=… *)</code> netlist
+before the real toolchain (WS-A) exists. Only invest in the heavy wasm build
+(A1) once <em>both</em> the A0 spike passes and WS-B is proven.</p>
+<hr />
+<h2 id="ws-a--provenance-carrying-toolchain"><a class="header" href="#ws-a--provenance-carrying-toolchain">WS-A — Provenance-carrying toolchain</a></h2>
+<h3 id="a0--gating-build-the-forked-wasm-check-src-survives-the-spike-is-the-build"><a class="header" href="#a0--gating-build-the-forked-wasm-check-src-survives-the-spike-is-the-build">A0 — GATING: build the forked wasm, check <code>\src</code> survives (the spike <strong>is</strong> the build)</a></h3>
+<p><strong>The one unproven thing the workstream rests on:</strong> does <code>\src</code> survive abc's
+std-cell mapping? origin-shell validated retention only through <strong>external</strong> abc
+(<code>ABCEXTERNAL</code>, temp-<code>.aig</code> round-trips). But <strong>in WASM the external/internal abc
+distinction does not exist</strong> — WASI has no <code>exec</code>, so abc is <em>always</em> in-process
+(compiled in-tree; verified in the shipped module). So there is <strong>no separate
+native spike</strong>: a native in-process build wouldn't faithfully model the wasm abc,
+and the wasm build is work we'd do anyway (it's the A1 artifact). The spike <strong>is</strong>
+building the forked wasm — no throwaway work, and the real target is tested
+directly.</p>
+<p><strong>Build inputs (recon'd against the live Codeberg <code>YoWASP/yosys</code>, 2026-07-04).</strong>
+The two load-bearing forks <strong>already exist</strong> (<code>robtaylor/yosys@src-retention-y-ext</code>,
+<code>robtaylor/abc@origin-tracking-clean</code> #487). The build repo's <code>.gitmodules</code> has
+<code>yosys-src</code> (→ <code>YosysHQ/yosys</code>) and a <strong>separate <code>yosys-slang-src</code></strong> (→
+<code>povik/yosys-slang</code>, the SV frontend); <strong>abc is <em>nested</em> inside <code>yosys-src</code></strong>, not
+a top-level submodule. So the repoints are:</p>
+<ol>
+<li><strong><code>yowasp</code> overlay:</strong> <code>yosys-src</code> → <code>robtaylor/yosys@src-retention-y-ext</code> (one
+repoint). <code>robtaylor/yowasp-yosys</code> <strong>does not exist yet</strong> — create it.</li>
+<li><strong>Inside the yosys fork — NOT yet done:</strong> <code>robtaylor/yosys@src-retention-y-ext</code>
+still points its <code>abc</code> submodule at <strong><code>YosysHQ/abc</code></strong> (upstream), so the
+origins patches aren't wired in. <strong>A0 step-0: repoint the yosys fork's <code>abc</code> →
+<code>robtaylor/abc@origin-tracking-clean</code>.</strong> Without this the build has yosys-side
+<code>\src</code> retention but stock abc, and provenance dies at mapping.</li>
+</ol>
+<p><strong>Build mechanics (current, ≠ the ADR's stale description):</strong> <code>build.sh</code> is
+<strong>CMake</strong> driving <code>wasi-sdk-p1.cmake</code> — <code>wasi-sdk **33**</code> (not 27), no
+Makefile/<code>CONFIG=wasi</code>/flex/LTO; disables zlib/libffi/readline/editline/tcl; uses
+ccache. It hardcodes the <strong>x86_64-linux</strong> wasi-sdk, so building on this Apple-Silicon
+Mac needs the macOS wasi-sdk variant or a <strong>Linux/Docker/CI</strong> build (prefer CI —
+it's the A1 reproducible-build home anyway).</p>
+<ul>
+<li>Repoint (steps 1–2 above), run <code>build.sh</code>, synthesize a tiny multi-module design
+to aigpdk; inspect the output for <code>(* src=… *)</code> on mapped cells.</li>
+<li><strong>Go/no-go:</strong> <code>\src</code> present + correct on ≥ most mapped cells → <strong>you already
+hold the provenance wasm</strong> (A1 done); proceed to harden (A1) + distribute (A2).
+Absent/scrambled → the defect is abc's in-process <code>&amp;origins</code> handling; take a
+fallback before investing further.</li>
+<li><strong>Fallbacks if it fails:</strong> (a) fix <code>&amp;origins</code> on abc's in-process entry points
+(extend abc#487) — most direct, since in-process keeps everything in one memory
+space (no <code>.aig</code> serialization to lose it, so this may be <em>easier</em> than the
+validated external path, not harder); (b) Nix <strong>native</strong> toolchain using the
+validated external-abc path; (c) native-only provenance, on-ramp wasm stays
+provenance-free.</li>
+</ul>
+<h3 id="a1--harden--pin-the-provenance-build"><a class="header" href="#a1--harden--pin-the-provenance-build">A1 — Harden &amp; pin the provenance build</a></h3>
+<p>The A0 build, productionized. <strong>Thin harness fork, not our own build recipe:</strong>
+YoWASP/yosys is just a build harness, so the overlay's whole delta is the two
+submodule repoints — trivial to rebase when upstream moves, and it beats
+hand-rolling a WASI/LTO build (where subtle divergence bites hardest). The durable
+maintenance is keeping the <em>existing</em> <code>yosys</code>/<code>abc</code> patch branches rebased on
+upstream — unavoidable in any approach, already owned. Per
+[<code>~/.claude/FORKED_DEPS_WORKFLOW.md</code>], carry each of the three on an
+<code>-integration</code> branch.</p>
+<p><strong>Pinning — track our branches, don't freeze SHAs.</strong> These are <em>our</em> actively
+developed branches (we'll tweak the <code>\src</code> patches, and want to fold in upstream
+review of abc#487), so pinning them to frozen SHAs would fight normal development.
+Instead:</p>
+<ul>
+<li><strong>Track by branch</strong>, not SHA, for the three forks we own (<code>yosys</code>/<code>abc</code>/<code>yowasp</code>
+overlay) — new patches and upstream-review changes flow through automatically;
+when a patch merges upstream, retarget the branch to upstream.</li>
+<li><strong>Pin only genuinely-third-party build inputs</strong> we don't control and need
+reproducible: <strong>wasi-sdk version</strong>, flex, and the rest of <code>build.sh</code>'s toolchain.</li>
+<li><strong>Stamp provenance into each built artifact</strong>, not the source: when CI builds a
+released wasm, record the exact <code>yosys</code>/<code>abc</code>/<code>yowasp</code> SHAs (release notes /
+asset metadata). That gives <em>release-level</em> reproducibility — any shipped wasm
+is recreatable — without freezing the dev branches. Develop freely; ship
+traceably.</li>
+</ul>
+<p><strong>Exit strategy:</strong> upstream the patches (abc#487 → yosys → a YoWASP build knob) to
+shrink the forks toward zero.</p>
+<ul>
+<li><strong>Exit:</strong> a pinned, CI-reproducible wasm that runs the existing <code>synth_script</code>
+and emits <code>(* src *)</code> on mapped cells; byte-diff vs the stock wasm shows only
+provenance additions.</li>
+<li><strong>Escape hatch (own-recipe):</strong> only if A0 shows <code>build.sh</code> is
+gnarly/undermaintained enough that rebasing the overlay is painful — then
+reimplement a minimal pinned WASI build in-repo. Default is the thin fork.</li>
+</ul>
+<h3 id="a2--distribute-the-provenance-wasm"><a class="header" href="#a2--distribute-the-provenance-wasm">A2 — Distribute the provenance wasm</a></h3>
+<p>Publish as a Jacquard release asset (shares the Phase-4 fetch-from-release
+mechanism). Decide: is provenance the <em>default</em> on-ramp wasm, or an opt-in
+(<code>--yosys-wasm</code>/a <code>provenance</code> flag) larger asset? Recommend opt-in first.</p>
+<hr />
+<h2 id="ws-b--jacquard-src-ingestion-startable-now-with-a-synthetic-netlist"><a class="header" href="#ws-b--jacquard-src-ingestion-startable-now-with-a-synthetic-netlist">WS-B — Jacquard <code>\src</code> ingestion (startable <strong>now</strong> with a synthetic netlist)</a></h2>
+<h3 id="b0--capture-attributes-in-sverilogparse"><a class="header" href="#b0--capture-attributes-in-sverilogparse">B0 — Capture attributes in <code>sverilogparse</code></a></h3>
+<p>Stop discarding <code>(* … *)</code> (<code>sverilognom.rs:44</code>). Parse <code>src</code> (and keep the door
+open for other attrs) and attach to the cell/wire in the <code>SVerilog</code> AST.
+<code>vendor/eda-infra-rs</code> is a <strong>vendored submodule</strong> → fork + integration branch per
+<a href="../../"><code>~/.claude/FORKED_DEPS_WORKFLOW.md</code></a>.</p>
+<ul>
+<li><strong>Exit:</strong> a <code>(* src="f.v:12" *)</code>-annotated netlist round-trips through
+<code>SVerilog::parse_*</code> with the attribute retrievable per cell.</li>
+</ul>
+<h3 id="b1--carry-source-location-through-netlistdb"><a class="header" href="#b1--carry-source-location-through-netlistdb">B1 — Carry source location through <code>netlistdb</code></a></h3>
+<p>Add an optional per-cell (and where meaningful, per-net) <code>source_loc</code> on
+<code>NetlistDB</code>, populated from B0. Keep it <code>Option</code> — most cells post-synthesis may
+have 0 provenance.</p>
+<ul>
+<li><strong>Exit:</strong> <code>NetlistDB::from_sverilog_file</code> exposes <code>\src</code> for annotated cells;
+zero overhead / behaviour change when absent.</li>
+</ul>
+<h3 id="b2--preserve-provenance-through-aig--staging--flatten"><a class="header" href="#b2--preserve-provenance-through-aig--staging--flatten">B2 — Preserve provenance through AIG / staging / flatten</a></h3>
+<p>Thread a mapping from AIG nodes / endpoint groups back to <code>\src</code> so a
+sim-visible signal can be traced to a source line. Provenance is <strong>lossy</strong> by
+nature (abc merges/splits nodes): design for <strong>0, 1, or many</strong> source locations
+per signal; never assert exactly one.</p>
+<ul>
+<li><strong>Exit:</strong> given an annotated netlist, a chosen output/endpoint resolves to its
+source location(s) through the built <code>FlattenedScript</code>.</li>
+</ul>
+<h3 id="b3--surface-src-in-the-user-facing-outputs"><a class="header" href="#b3--surface-src-in-the-user-facing-outputs">B3 — Surface <code>\src</code> in the user-facing outputs</a></h3>
+<p>Add source locations to the three consumers, gated on availability (fall back to
+today's hierarchical gate name when absent):</p>
+<ul>
+<li>
+<p><code>--trace-signals</code> (<code>docs/signal-tracing.md</code>) — annotate traced signals.</p>
+</li>
+<li>
+<p>Timing-violation reports (<code>docs/timing-violations.md</code>).</p>
+</li>
+<li>
+<p>X-debugging <code>xsources</code> / <code>xroots</code> (<code>docs/x-debugging.md</code>) — the highest-value
+target: report the RTL line of an X-source, not the flattened gate.</p>
+</li>
+<li>
+<p><strong>Exit:</strong> an end-to-end run on a synthetic annotated netlist prints source
+locations in all three; a design with no provenance is unchanged.</p>
+</li>
+</ul>
+<hr />
+<h2 id="sequencing"><a class="header" href="#sequencing">Sequencing</a></h2>
+<pre><code>A0 build+check ─(go)─► A1 harden/pin ──► A2 distribute ─┐
+                                                     ├─► integrate: on-ramp emits + surfaces \src
+B0 parser ─► B1 netlistdb ─► B2 AIG ─► B3 outputs ──┘   (validated on synthetic netlist first)
+</code></pre>
+<ul>
+<li><strong>Parallel:</strong> A0 and B0–B3 have no dependency; B is provable against a
+hand-written annotated netlist.</li>
+<li><strong>Barrier:</strong> full end-to-end (RTL → provenance wasm → surfaced source lines)
+needs A1+A2 <em>and</em> B0–B3.</li>
+<li><strong>Kill-switch:</strong> if A0 fails, WS-B still delivers value for any <em>externally</em>
+produced provenance netlist (DC/native Yosys with origins); the on-ramp just
+doesn't auto-generate it until a fallback toolchain lands.</li>
+</ul>
+<h2 id="risks--open-questions"><a class="header" href="#risks--open-questions">Risks / open questions</a></h2>
+<ul>
+<li><strong>A0 in-process <code>&amp;origins</code> survival</strong> — the gating unknown (see A0).</li>
+<li><strong><code>sverilogparse</code> fork maintenance</strong> — vendored submodule; carry the patch on a
+<code>-integration</code> branch per FORKED_DEPS_WORKFLOW; upstreamable (attribute capture
+is generally useful).</li>
+<li><strong>Does <code>\src</code> survive Yosys <code>flatten</code></strong> (separate from abc)? origin-shell
+targets the full flow, but confirm in the A0 spike, since the on-ramp flattens.</li>
+<li><strong>Provenance granularity</strong> — post-optimization a gate may map to 0/1/many source
+lines; the reporting (B3) and IR (B2) must not assume 1:1.</li>
+<li><strong>Asset size</strong> — a second (provenance) wasm ~doubles the fetched-asset story;
+A2's opt-in-vs-default call interacts with Phase-4 distribution.</li>
+</ul>
+<h2 id="non-goals"><a class="header" href="#non-goals">Non-goals</a></h2>
+<ul>
+<li>No change to the emulator AIG/boomerang core (ADR 0014/0015).</li>
+<li>Not blocked on upstream YoWASP adopting the patches (we build our own wasm).</li>
+<li>Full SVA / Verific-grade provenance is out of scope (bounded by the patched
+open-source toolchain).</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../plans/rtl-onramp-sim-integration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../spikes/opentimer-sky130.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../plans/rtl-onramp-sim-integration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../spikes/opentimer-sky130.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

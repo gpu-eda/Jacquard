@@ -273,12 +273,14 @@ std-cell mapping. Jacquard could then thread <code>\src</code> through <code>net
 GPU-sim results <strong>speak RTL</strong> — <code>--trace-signals</code>, timing violations, and
 X-debugging reporting source lines instead of flattened gate names.</p>
 <p>The tractable route is <strong>building our own <code>yosys.wasm</code> from source</strong> rather than
-depending on the stock upstream wheel. YoWASP's build (<code>build.sh</code>: wasi-sdk 27 →
-flex → yosys <code>CONFIG=wasi</code> + LTO) compiles abc <strong>in-tree from yosys's own bundled
-<code>abc/</code> submodule</strong> — verified against the shipped <code>yosys.wasm</code>, which embeds the
-abc engine (the build path <code>…/yosys-src/abc/src/base/abci/…</code> and the full set of
-<code>&amp;</code>-prefixed GIA commands are present in the module). So a provenance build is
-mechanical: <strong>fork <a href="https://codeberg.org/YoWASP/yosys">YoWASP/yosys</a></strong> (now on
+depending on the stock upstream wheel. YoWASP's build (<code>build.sh</code>: <strong>CMake +
+wasi-sdk 33</strong> via <code>wasi-sdk-p1.cmake</code>, zlib/libffi/readline/editline/tcl disabled;
+recon'd 2026-07-04 — supersedes an earlier "wasi-sdk 27 / Makefile <code>CONFIG=wasi</code>"
+description) compiles abc <strong>in-tree from yosys's own bundled <code>abc/</code> submodule</strong> —
+verified against the shipped <code>yosys.wasm</code>, which embeds the abc engine (the build
+path <code>…/yosys-src/abc/src/base/abci/…</code> and the full set of <code>&amp;</code>-prefixed GIA
+commands are present in the module). So a provenance build is mechanical: <strong>fork
+<a href="https://codeberg.org/YoWASP/yosys">YoWASP/yosys</a></strong> (now on
 Codeberg; the old GitHub repo was archived read-only 2026-03-11), repoint
 <code>yosys-src</code> → <code>robtaylor/yosys@src-retention-y-ext</code> and yosys's bundled <code>abc</code>
 submodule → <code>robtaylor/abc@origin-tracking-clean</code> (#487), and rerun <code>build.sh</code>.
