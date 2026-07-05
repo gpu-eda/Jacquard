@@ -1053,6 +1053,12 @@ impl MetalBackend {
                 }
                 p.flash_data_size = sizes[idx] as u32;
                 p.data_offset = offsets[idx];
+                // RAM-mode (QSPI PSRAM) config — sentinels/zero for plain flash.
+                let ram = super::flash_ram_params(m);
+                p.writable = ram.writable;
+                p.enter_qpi_cmd = ram.enter_qpi_cmd;
+                p.quad_write_cmd = ram.quad_write_cmd;
+                p.qpi_read_dummy = ram.qpi_read_dummy;
             }
             clilog::info!(
                 "FlashModelParamsAll: n_flashes={}, total_backing={} bytes",
@@ -1061,12 +1067,19 @@ impl MetalBackend {
             );
         }
 
-        // Concatenated backing store: 0xFF (erased) then each instance's
-        // firmware into its own slice — independent per-instance backing stores.
+        // Concatenated backing store. Per-instance fill: 0xFF (erased flash) or,
+        // for a writable QSPI PSRAM, 0x00 (power-on, cocotb `bytearray(size)`).
+        // Each instance's firmware (if any) is overlaid into its own slice below.
         let flash_data_buffer =
             device.new_buffer(total as u64, MTLResourceOptions::StorageModeShared);
         unsafe {
             std::ptr::write_bytes(flash_data_buffer.contents() as *mut u8, 0xFF, total);
+            for (idx, m) in qspi.iter().enumerate() {
+                if m.writable {
+                    let base = (flash_data_buffer.contents() as *mut u8).add(offsets[idx] as usize);
+                    std::ptr::write_bytes(base, 0x00, sizes[idx]);
+                }
+            }
         }
         for (idx, m) in qspi.iter().enumerate() {
             if let Some(fw_path) = m.firmware.as_ref() {

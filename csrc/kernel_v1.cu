@@ -173,7 +173,7 @@ void gpu_flash_model_step_cuda(
   u32 *states,
   u8 *flash_state,
   const u8 *flash_model_params,
-  const u8 *flash_data
+  u8 *flash_data        // writable in RAM mode; read-only for flash
   )
 {
   gpu_flash_model_step<<<1, 256>>>(

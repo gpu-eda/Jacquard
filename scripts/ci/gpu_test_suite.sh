@@ -74,4 +74,11 @@ echo "::group::[$PREFIX] cosim Stage C — flash (#105)"
 JACQUARD_BIN="$JACQUARD_BIN" COSIM_SCOPE=flash bash scripts/ci/cosim_cpu_check.sh
 echo "::endgroup::"
 
+# QSPI PSRAM: writable RAM-mode flash peripheral (enter-QPI / quad-write /
+# quad-read round-trip). Tiny AIGPDK netlist, so cheap — but kept as its own
+# scope alongside the flash fixture it extends.
+echo "::group::[$PREFIX] cosim — QSPI PSRAM (RAM-mode flash)"
+JACQUARD_BIN="$JACQUARD_BIN" COSIM_SCOPE=qspi bash scripts/ci/cosim_cpu_check.sh
+echo "::endgroup::"
+
 echo "[$PREFIX] GPU test suite passed."

@@ -1,0 +1,48 @@
+{
+    "_comment": "Jacquard cosim testbench for the QSPI PSRAM (RAM-mode flash) peripheral. The DUT (tests/qspi_psram/qspi_psram_dut.v) enters QPI (0x35), quad-writes 0xA5 to address 0x000001 (0x38), then quad-reads it back (0xEB) and asserts rdata==0xA5 via `match`. The `flash` peripheral is put in writable QSPI-PSRAM mode (writable + enter_qpi_cmd 0x35 + quad_write_cmd 0x38 + 6 read-dummy cycles). d0_gpio=4 indexes both the sio_o outputs (MOSI, model samples) and sio_i inputs (MISO, model drives). See tests/qspi_psram/check.py for the pass criterion.",
+    "netlist_path": "tests/qspi_psram/qspi_psram_dut_synth.gv",
+    "clock_gpio": 0,
+    "reset_gpio": 1,
+    "reset_active_high": false,
+    "reset_cycles": 10,
+    "num_cycles": 4000,
+    "clock_period_ps": 40000,
+    "flash": {
+        "clk_gpio": 2,
+        "csn_gpio": 3,
+        "d0_gpio": 4,
+        "writable": true,
+        "enter_qpi_cmd": 53,
+        "quad_write_cmd": 56,
+        "read_dummy_cycles": 6,
+        "size_bytes": 65536
+    },
+    "port_mapping": {
+        "inputs": {
+            "0": "clk",
+            "1": "rst_n",
+            "4": "sio_i[0]",
+            "5": "sio_i[1]",
+            "6": "sio_i[2]",
+            "7": "sio_i[3]"
+        },
+        "outputs": {
+            "2": "sck",
+            "3": "cs_n",
+            "4": "sio_o[0]",
+            "5": "sio_o[1]",
+            "6": "sio_o[2]",
+            "7": "sio_o[3]",
+            "8": "rdata[0]",
+            "9": "rdata[1]",
+            "10": "rdata[2]",
+            "11": "rdata[3]",
+            "12": "rdata[4]",
+            "13": "rdata[5]",
+            "14": "rdata[6]",
+            "15": "rdata[7]",
+            "16": "done",
+            "17": "match"
+        }
+    }
+}

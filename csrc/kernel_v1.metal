@@ -753,6 +753,7 @@ struct FlashState {
     uint in_reset;       // 1 = reset active, forces d_i=0x0F
     uint last_error_cmd; // nonzero if unknown command encountered
     uint model_prev_csn; // model internal: last csn seen by flash_eval_commit (for edge detection)
+    uint qpi;            // QSPI PSRAM mode latch: 1 → command bytes sample 4-lane
 };
 
 // Max QSPI memory instances (mirror MAX_QSPI_MEMS in src/sim/cosim/mod.rs).
@@ -778,6 +779,11 @@ struct FlashModelParams {
     u32 d_out_pos[4];     // output state bit positions: d0..d3
     u32 flash_data_size;  // this instance's backing-store size in bytes
     u32 data_offset;      // byte offset of this instance's store in flash_data
+    // ── QSPI PSRAM (RAM-mode) config — all zero/sentinel for plain flash ──
+    u32 writable;         // 1 = writable store + qpi/quad-write enabled
+    u32 enter_qpi_cmd;    // command latching QPI mode (0xFFFFFFFF = none)
+    u32 quad_write_cmd;   // command quad-writing the store (0xFFFFFFFF = none)
+    u32 qpi_read_dummy;   // dummy SCK cycles for a QPI 0xEB read (e.g. 6)
 };
 
 struct FlashModelParamsAll {
@@ -798,15 +804,29 @@ inline void flash_process_byte(
     thread uchar& command,
     thread uchar& out_buffer,
     thread uint& last_error_cmd,
-    device const uchar* flash_data,
+    thread uint& qpi,          // QSPI PSRAM mode latch (read/write)
+    uint ram_writable,         // 1 = writable store + qpi/quad-write enabled
+    uint enter_qpi_cmd,        // command latching QPI mode (0xFFFFFFFF = none)
+    uint quad_write_cmd,       // command quad-writing the store (0xFFFFFFFF = none)
+    uint qpi_read_dummy,       // dummy SCK cycles for a QPI 0xEB read
+    device uchar* flash_data,  // writable in RAM mode; read-only for flash
     u32 flash_data_size
 ) {
     out_buffer = 0;
     if (byte_count == 0) {
         addr = 0;
-        data_width = 1;
+        // In QPI mode even the command byte is 4-lane; else 1-lane (flash).
+        data_width = (qpi != 0u) ? 4u : 1u;
         command = curr_byte;
-        if (command == 0xab) {
+        if (ram_writable != 0u && enter_qpi_cmd != 0xFFFFFFFFu
+            && (uint)command == enter_qpi_cmd) {
+            // Enter-QPI (single-lane): all later commands sample 4-lane.
+            qpi = 1u;
+        } else if (ram_writable != 0u && quad_write_cmd != 0xFFFFFFFFu
+            && (uint)command == quad_write_cmd) {
+            // Quad write: address + data phases are 4-lane.
+            data_width = 4u;
+        } else if (command == 0xab) {
             // power up - nothing to do
         } else if (command == 0x03 || command == 0x9f || command == 0xff
             || command == 0x35 || command == 0x31 || command == 0x50
@@ -837,12 +857,32 @@ inline void flash_process_byte(
             if (byte_count <= 3) {
                 addr |= (uint(curr_byte) << ((3 - byte_count) * 8));
             }
-            if (byte_count >= 6) { // 1 mode, 2 dummy clocks
+            // In QPI mode the transaction is uniform 4-lane: cmd@posedges 0-1,
+            // 24-bit addr@2-7, then qpi_read_dummy dummy posedges, then data.
+            // out_buffer must be loaded on the posedge *before* the first data
+            // posedge, so the threshold is 3 + qpi_read_dummy/2 (= 6 for the
+            // APS6404L QRD_DUMMY=6). Plain flash keeps its byte_count>=6.
+            uint data_start = (qpi != 0u) ? (3u + (qpi_read_dummy >> 1)) : 6u;
+            if ((uint)byte_count >= data_start) {
                 uint idx = addr & 0x00FFFFFFu;
                 if (idx < flash_data_size) {
                     out_buffer = flash_data[idx];
                 } else {
                     out_buffer = 0xFF;
+                }
+                addr = (addr + 1) & 0x00FFFFFFu;
+            }
+        } else if (ram_writable != 0u && quad_write_cmd != 0xFFFFFFFFu
+            && (uint)command == quad_write_cmd) {
+            // Quad write: 24-bit address in bytes 1..3 (MSB first), then data
+            // bytes stored into the backing memory (4-lane).
+            if (byte_count <= 3) {
+                addr |= (uint(curr_byte) << ((3 - byte_count) * 8));
+            }
+            if (byte_count >= 4) {
+                uint idx = addr & 0x00FFFFFFu;
+                if (idx < flash_data_size) {
+                    flash_data[idx] = curr_byte;
                 }
                 addr = (addr + 1) & 0x00FFFFFFu;
             }
@@ -873,8 +913,13 @@ inline void flash_eval_commit_persistent(
     thread uint& prev_csn,
     thread uint& last_error_cmd,
     thread uchar& d_i,  // persistent: only updated on negedge
+    thread uint& qpi,          // QSPI PSRAM mode latch (read/write)
+    uint ram_writable,         // RAM-mode config (see flash_process_byte)
+    uint enter_qpi_cmd,
+    uint quad_write_cmd,
+    uint qpi_read_dummy,
     // Flash data:
-    device const uchar* flash_data,
+    device uchar* flash_data,  // writable in RAM mode; read-only for flash
     u32 flash_data_size
 ) {
     // Edge detection
@@ -885,7 +930,9 @@ inline void flash_eval_commit_persistent(
     if (posedge_csn) {
         bit_count = 0;
         byte_count = 0;
-        data_width = 1;
+        // In QPI mode the next command byte is 4-lane; the qpi latch persists
+        // across CS# (mode change, not a reset).
+        data_width = (qpi != 0u) ? 4u : 1u;
     } else if (posedge_clk && csn == 0) {
         if (data_width == 4) {
             curr_byte = (curr_byte << 4U) | (d_out & 0xF);
@@ -897,7 +944,8 @@ inline void flash_eval_commit_persistent(
         if ((uint)bit_count >= 8) {
             flash_process_byte(bit_count, byte_count, data_width, addr,
                 curr_byte, command, out_buffer, last_error_cmd,
-                flash_data, flash_data_size);
+                qpi, ram_writable, enter_qpi_cmd, quad_write_cmd,
+                qpi_read_dummy, flash_data, flash_data_size);
             ++byte_count;
             bit_count = 0;
         }
@@ -964,7 +1012,7 @@ kernel void gpu_flash_model_step(
     device u32* states [[buffer(0)]],
     device FlashState* flash_state [[buffer(1)]],
     constant FlashModelParamsAll& params [[buffer(2)]],
-    device const uchar* flash_data [[buffer(3)]],
+    device uchar* flash_data [[buffer(3)]],
     uint tid [[thread_position_in_threadgroup]]
 ) {
     if (tid != 0) return;
@@ -972,8 +1020,9 @@ kernel void gpu_flash_model_step(
     for (uint f = 0; f < params.n_flashes && f < MAX_QSPI_MEMS; f++) {
         device FlashState& fs = flash_state[f];
         constant FlashModelParams& fm = params.flashes[f];
-        // Each instance owns its own slice of the concatenated backing store.
-        device const uchar* fd = flash_data + fm.data_offset;
+        // Each instance owns its own slice of the concatenated backing store
+        // (writable in RAM mode, read-only for plain flash).
+        device uchar* fd = flash_data + fm.data_offset;
 
         u32 state_size = fm.state_size;
 
@@ -1030,17 +1079,22 @@ kernel void gpu_flash_model_step(
         // behavior). It's only updated on negedge_clk inside flash_eval_commit.
         uchar d_i = fs.d_i;
 
+        // QSPI PSRAM mode latch (persists across steps + transactions).
+        uint qpi = fs.qpi;
+
         // Step 1: eval with prev_csn + prev_d_out (posedge, samples old data)
         flash_eval_commit_persistent(clk, prev_csn, prev_d_out,
             bit_count, byte_count, data_width, addr,
             curr_byte, command, out_buffer, prev_clk, model_prev_csn,
-            last_error_cmd, d_i, fd, fm.flash_data_size);
+            last_error_cmd, d_i, qpi, fm.writable, fm.enter_qpi_cmd,
+            fm.quad_write_cmd, fm.qpi_read_dummy, fd, fm.flash_data_size);
 
         // Step 2: eval with prev_csn + current d_out
         flash_eval_commit_persistent(clk, prev_csn, d_out,
             bit_count, byte_count, data_width, addr,
             curr_byte, command, out_buffer, prev_clk, model_prev_csn,
-            last_error_cmd, d_i, fd, fm.flash_data_size);
+            last_error_cmd, d_i, qpi, fm.writable, fm.enter_qpi_cmd,
+            fm.quad_write_cmd, fm.qpi_read_dummy, fd, fm.flash_data_size);
 
         // Write state back
         fs.bit_count = bit_count;
@@ -1056,6 +1110,7 @@ kernel void gpu_flash_model_step(
         fs.d_i = d_i;
         fs.prev_d_out = d_out;
         fs.last_error_cmd = last_error_cmd;
+        fs.qpi = qpi;
     }
 }
 
