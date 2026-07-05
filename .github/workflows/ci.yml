@@ -1530,7 +1530,7 @@ jobs:
             --jtag-hold-cycles 8 \
             --trace-signals tests/jtag_minimal/trace_signals.txt \
             --output-vcd tests/jtag_minimal/data/cosim_trace.vcd \
-            --max-clock-edges 4000000 \
+            --max-clock-edges 400000 \
             2>&1 | tee jtag_minimal_cosim.log
 
       - name: Assert data0_obs == 0xCAFEBABE
@@ -1602,7 +1602,7 @@ jobs:
             --jtag-hold-cycles 8 \
             --trace-signals tests/jtag_minimal/trace_signals.txt \
             --output-vcd tests/jtag_minimal/data/cosim_server_trace.vcd \
-            --max-clock-edges 4000000 \
+            --max-clock-edges 400000 \
             > jtag_minimal_server.log 2>&1 &
           SERVER_PID=$!
           python3 tests/jtag_minimal/scripts/bitbang_client.py \
