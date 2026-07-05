@@ -82,9 +82,25 @@ critical path.
   (no origins to preserve yet).
 - **Exit:** the on-ramp still produces a correct aigpdk netlist via `abc_new`, and
   QoR (cell count / area from `stat`) is at parity with the classic-`abc` baseline
-  on the counter/assert/mem designs. If `abc_new -liberty` isn't wired in the
-  stock wasm, that's an early signal the yosys fork's `aiger2` path is required
-  even for the non-provenance flow — good to know before A0.
+  on the counter/assert/mem designs.
+
+> **A′ spike result (2026-07-05, stock `yowasp-yosys 0.64`) — the early signal
+> fired.** Ran `abc_new -script +&dch,-f;&nf -liberty aigpdk_nomem.lib` on a small
+> design (scratchpad `/tmp/claude/aprime`):
+> - **Combinational-only** (adder) → **works** (maps to `$_NAND_`/`$_XNOR_`/…).
+> - **Sequential** (a `posedge` flop) → **FAILS**: `ERROR: Bad connection
+>   $auto$ff.cc:337:slice$150/D ~ \d [1]` (abc_new marked "experimental").
+> - classic `abc` baseline on the same design → works, **33 cells** (23 AND2 + 4
+>   DFF + 6 INV).
+>
+> The `ff.cc` error is precisely the flop-handling that
+> `robtaylor/yosys@src-retention-y-ext` fixes (origin-shell lists "the
+> `ff.cc`/`memory_map`/`mem.cc` fixes"). **So A′ cannot be fully de-risked on the
+> stock wasm** — the yosys fork is required even to make `abc_new` *function* on
+> sequential logic, not just to carry origins. Consequence: **A′ folds into A0** —
+> the first real test is building the forked wasm and running the `abc_new` flow
+> there (getting flow-correctness + QoR + origins in one shot), since stock can
+> only validate the purely-combinational sub-case.
 
 ### A0 — GATING: build the forked wasm, check `\src` survives
 
