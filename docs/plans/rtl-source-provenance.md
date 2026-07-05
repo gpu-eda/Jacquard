@@ -1,8 +1,9 @@
 # Plan — RTL-source provenance (ADR 0021 Phase 2)
 
-**Status:** Active — design captured; **WS-A gated on A0** (build the forked wasm,
-check `\src` survives in-process abc — the spike *is* the build). Large,
-dependency-gated; not started.
+**Status:** Active — design captured. **WS-A: de-risk the `abc_new` flow on the
+stock wasm (A′) → build the patched wasm and check `\src` coverage (A0).** The
+real gate is the `abc9`/`aiger2` XAIGER-`"y"` path, not "in-process abc" (see the
+WS-A reframe note). Large, dependency-gated; not started.
 
 **ADRs:** [0021](../adr/0021-behavioral-rtl-support.md) Phase 2 (the roadmap this
 realises), [0014](../adr/0014-aig-as-simulation-ir.md) (AIG core the provenance
@@ -46,17 +47,50 @@ before the real toolchain (WS-A) exists. Only invest in the heavy wasm build
 
 ## WS-A — Provenance-carrying toolchain
 
-### A0 — GATING: build the forked wasm, check `\src` survives (the spike **is** the build)
+> **Reframed after reading origin-shell (2026-07-04).** The gate is **not**
+> "does `\src` survive *in-process* abc" — origins ride the **XAIGER `"y"`
+> channel** (an in-memory AIGER round-trip via the `aiger2` reader/writer, keyed
+> by object id), so external-vs-in-process abc is irrelevant to the channel.
+> origin-shell's real lesson: **provenance cannot survive the classic
+> `abc`/BLIF path at all** (BLIF has no object identity), so the std-cell flow
+> must move to `abc9`/`abc_new`. Data path (origin-shell POC):
+> `abc_new: write_xaiger2 → ABC (&read; &origins; &dch -f; &nf) → read_xaiger2`.
+>
+> **This means two things Jacquard's own `synth.rs` must change**, independent of
+> the patched wasm:
+> - `src/synth.rs` maps with **classic `abc -liberty`** (lines 241/244) → must
+>   become the **`abc_new`** flow (`&dch -f; &nf`, `scratchpad -set
+>   abc9.origins_max N`) to carry origins.
+> - It writes with **`write_verilog -noattr`** (line 247) — `-noattr` **strips
+>   `\src`**. Must drop it (attribute-selective if needed).
+>
+> **QoR caveat:** `abc9` std-cell mapping is "the road less travelled" upstream
+> (`YosysHQ/yosys#5679` removed `abc9 -liberty`; the yosys fork carries the
+> `aiger2` std-cell path). Bare `&nf` is 9–22% worse area than classic `abc`;
+> `&dch -f; &nf` recovers to parity. So the flow change carries a **QoR
+> validation obligation**, not just a wiring change.
 
-**The one unproven thing the workstream rests on:** does `\src` survive abc's
-std-cell mapping? origin-shell validated retention only through **external** abc
-(`ABCEXTERNAL`, temp-`.aig` round-trips). But **in WASM the external/internal abc
-distinction does not exist** — WASI has no `exec`, so abc is *always* in-process
-(compiled in-tree; verified in the shipped module). So there is **no separate
-native spike**: a native in-process build wouldn't faithfully model the wasm abc,
-and the wasm build is work we'd do anyway (it's the A1 artifact). The spike **is**
-building the forked wasm — no throwaway work, and the real target is tested
-directly.
+### A′ — De-risk the `abc_new` flow on the **stock** wasm first (no patched toolchain)
+
+`abc_new`/`&nf` exists in the **stock** `yosys.wasm` we already ship (just without
+the `&origins` patch). So the flow migration + its QoR risk can be proven **before**
+any fork/build work, moving the "road less travelled" risk off the patched-wasm
+critical path.
+
+- In `src/synth.rs`, switch the two `abc -liberty aigpdk_nomem.lib` passes to the
+  `abc_new` `&dch -f; &nf` flow against `aigpdk_nomem.lib`; keep `-noattr` for now
+  (no origins to preserve yet).
+- **Exit:** the on-ramp still produces a correct aigpdk netlist via `abc_new`, and
+  QoR (cell count / area from `stat`) is at parity with the classic-`abc` baseline
+  on the counter/assert/mem designs. If `abc_new -liberty` isn't wired in the
+  stock wasm, that's an early signal the yosys fork's `aiger2` path is required
+  even for the non-provenance flow — good to know before A0.
+
+### A0 — GATING: build the forked wasm, check `\src` survives
+
+With A′ proving the `abc_new` flow works, A0 adds the **origins**: build the
+patched wasm and confirm `\src` rides the XAIGER `"y"` channel through mapping.
+The spike **is** the build (the wasm is the A1 artifact — no throwaway work).
 
 **Build inputs (recon'd against the live Codeberg `YoWASP/yosys`, 2026-07-04).**
 The two load-bearing forks **already exist** (`robtaylor/yosys@src-retention-y-ext`,
@@ -79,18 +113,23 @@ ccache. It hardcodes the **x86_64-linux** wasi-sdk, so building on this Apple-Si
 Mac needs the macOS wasi-sdk variant or a **Linux/Docker/CI** build (prefer CI —
 it's the A1 reproducible-build home anyway).
 
-- Repoint (steps 1–2 above), run `build.sh`, synthesize a tiny multi-module design
-  to aigpdk; inspect the output for `(* src=… *)` on mapped cells.
-- **Go/no-go:** `\src` present + correct on ≥ most mapped cells → **you already
-  hold the provenance wasm** (A1 done); proceed to harden (A1) + distribute (A2).
-  Absent/scrambled → the defect is abc's in-process `&origins` handling; take a
-  fallback before investing further.
-- **Fallbacks if it fails:** (a) fix `&origins` on abc's in-process entry points
-  (extend abc#487) — most direct, since in-process keeps everything in one memory
-  space (no `.aig` serialization to lose it, so this may be *easier* than the
-  validated external path, not harder); (b) Nix **native** toolchain using the
-  validated external-abc path; (c) native-only provenance, on-ramp wasm stays
-  provenance-free.
+- Repoint (steps 1–2 above), run `build.sh`, and run the A′ `abc_new` synth flow
+  **with `origins_max` set and `-noattr` dropped** on a small multi-module design;
+  measure the **`\src` coverage** — the % of mapped cells carrying a `src`
+  attribute. Crib origin-shell's `test/src_coverage.sh` harness (loads `write_json`
+  output, counts `'src' in cell['attributes']` over mapped cells) — reuse it near
+  verbatim.
+- **Go/no-go:** high `\src` coverage on mapped cells → **you already hold the
+  provenance wasm** (A1 done); proceed to harden (A1) + distribute (A2). Low/zero →
+  the `aiger2` `"y"` channel or abc `&origins` isn't functioning in the wasm build;
+  diagnose before investing further.
+- **Fallbacks if it fails:** (a) debug the `aiger2`/`&origins` path in the wasm
+  build (the channel is XAIGER round-trip, not exec, so the failure is in the
+  reader/writer or the patch, not "in-process abc" per se); (b) **Nix native
+  toolchain** — origin-shell is already a Nix flake with the *validated* flow, so a
+  native back-end for `jacquard sim --synth-backend nix` is the lowest-risk way to
+  ship provenance if the wasm path proves stubborn; (c) native-only provenance,
+  on-ramp wasm stays provenance-free.
 
 ### A1 — Harden & pin the provenance build
 
@@ -184,13 +223,16 @@ today's hierarchical gate name when absent):
 ## Sequencing
 
 ```
-A0 build+check ─(go)─► A1 harden/pin ──► A2 distribute ─┐
-                                                     ├─► integrate: on-ramp emits + surfaces \src
-B0 parser ─► B1 netlistdb ─► B2 AIG ─► B3 outputs ──┘   (validated on synthetic netlist first)
+A′ abc_new on STOCK wasm (flow+QoR) ─► A0 patched wasm + \src coverage ─(go)─► A1 harden/pin ─► A2 distribute ─┐
+                                                                                                           ├─► integrate: on-ramp emits + surfaces \src
+B0 parser ─► B1 netlistdb ─► B2 AIG ─► B3 outputs ─────────────────────────────────────────────────────────┘   (validated on synthetic netlist first)
 ```
 
-- **Parallel:** A0 and B0–B3 have no dependency; B is provable against a
-  hand-written annotated netlist.
+- **Parallel:** the whole A-track and B0–B3 have no dependency; B is provable
+  against a hand-written annotated netlist, and A′ against the stock wasm.
+- **A′ first within WS-A:** proves the `abc_new` flow + QoR on the stock wasm
+  before any fork/build, moving the "road less travelled" QoR risk off the
+  patched-build critical path.
 - **Barrier:** full end-to-end (RTL → provenance wasm → surfaced source lines)
   needs A1+A2 *and* B0–B3.
 - **Kill-switch:** if A0 fails, WS-B still delivers value for any *externally*
@@ -199,12 +241,16 @@ B0 parser ─► B1 netlistdb ─► B2 AIG ─► B3 outputs ──┘   (valid
 
 ## Risks / open questions
 
-- **A0 in-process `&origins` survival** — the gating unknown (see A0).
+- **`abc9`/`aiger2` `"y"` channel in the wasm build** — the gating unknown (A0):
+  does the XAIGER origins round-trip function in the WASI-built yosys+abc?
+- **QoR of the `abc_new` std-cell flow** — abc9 std-cell mapping is unofficial
+  upstream; `&nf` alone is 9–22% worse area, `&dch -f; &nf` recovers to parity.
+  A′ must confirm parity on Jacquard's designs before committing the flow change.
 - **`sverilogparse` fork maintenance** — vendored submodule; carry the patch on a
   `-integration` branch per FORKED_DEPS_WORKFLOW; upstreamable (attribute capture
   is generally useful).
 - **Does `\src` survive Yosys `flatten`** (separate from abc)? origin-shell
-  targets the full flow, but confirm in the A0 spike, since the on-ramp flattens.
+  targets the full flow, but confirm in A′/A0, since the on-ramp flattens.
 - **Provenance granularity** — post-optimization a gate may map to 0/1/many source
   lines; the reporting (B3) and IR (B2) must not assume 1:1.
 - **Asset size** — a second (provenance) wasm ~doubles the fetched-asset story;
