@@ -64,15 +64,28 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
 
 ## Next-up (priority order)
 
-1. **Fork prerequisites (Rob's GitHub — required before any build):**
-   - Create **`robtaylor/yowasp-yosys`** (fork of Codeberg `YoWASP/yosys`), repoint
-     the `yosys-src` submodule → `robtaylor/yosys@src-retention-y-ext`.
-   - **Repoint the yosys fork's `abc` submodule** → `robtaylor/abc@origin-tracking-clean`.
-     It currently points at stock `YosysHQ/abc` (verified 2026-07-04 via its
-     `.gitmodules`), so origins aren't wired in yet.
-2. **Build the fork wasm** — `build.sh` is **CMake + wasi-sdk 33** (not the ADR's
-   stale "27/Makefile"), hardcoded x86_64-linux → build in **Docker/Linux or CI**,
-   not natively on macOS. `yosys-slang` is a separate `yosys-slang-src` submodule.
+1. **✅ DONE (2026-07-05) — Fork prerequisites wired + verified end-to-end.**
+   The full submodule chain is live:
+   ```
+   robtaylor/yowasp-yosys @ yowasp-yosys-integration   ← NEW repo (mirror of Codeberg
+     └─ yosys-src → robtaylor/yosys@src-retention-y-ext   YoWASP/yosys@develop); default
+          └─ abc  → robtaylor/abc@origin-tracking-clean   branch = develop (clean mirror)
+          └─ yosys-slang-src → povik/yosys-slang (upstream, unchanged)
+   ```
+   Pins: yosys-src gitlink `bcc5698` == `src-retention-y-ext` HEAD; abc gitlink
+   `2daf32f2` == `origin-tracking-clean` HEAD (both `.gitmodules` `branch=` keys set
+   for `--remote` tracking). Two commits added:
+   `robtaylor/yosys@src-retention-y-ext` `bcc5698` (abc repoint; was `67137e21`, force-pushed
+   once to fix trailer) and `robtaylor/yowasp-yosys@yowasp-yosys-integration` (yosys-src
+   repoint, off `develop`). **The yowasp overlay's whole delta is this one repoint commit
+   on `yowasp-yosys-integration`** — that's the branch the build must check out (NOT
+   `develop`, which is the untouched upstream mirror kept for easy rebasing).
+2. **← NEXT: Build the fork wasm** — clone `robtaylor/yowasp-yosys` at branch
+   **`yowasp-yosys-integration`**, `git submodule update --init --recursive`, run
+   `build.sh` (**CMake + wasi-sdk 33**, not the ADR's stale "27/Makefile"), hardcoded
+   x86_64-linux → build in **Docker/Linux or CI**, not natively on macOS. `yosys-slang`
+   is a separate `yosys-slang-src` submodule (pulled recursively). No fork/repoint work
+   remains before this — it's the head of the queue now.
 3. **Run the abc_new flow on the fork wasm** on a small seq+comb design; confirm it
    (a) maps flops without the `ff.cc` error, (b) QoR parity vs classic, (c) carries
    `\src` on mapped cells (coverage %). Drop `-noattr`; set `scratchpad -set
@@ -93,9 +106,14 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
   (was at `/tmp/claude/origin-shell-recon` this session).
 - A′ spike scratch: `/tmp/claude/aprime` (`prov_test.v`, `classic.ys`, `abcnew.ys`,
   `comb.ys` + logs) — **ephemeral `/tmp`, recreate from the plan if gone.**
-- Forks (verified to exist): `robtaylor/abc@origin-tracking-clean` (`2daf32f2`),
-  `robtaylor/yosys@src-retention-y-ext` (`67137e21`); abc#487 in review.
-- yosys fork's abc pointer: still `YosysHQ/abc` (needs repoint — next-up #1).
+- Forks (all live + wired as of 2026-07-05):
+  - `robtaylor/abc@origin-tracking-clean` (`2daf32f2`); abc#487 in review.
+  - `robtaylor/yosys@src-retention-y-ext` (`bcc5698` — abc repoint added on top of the
+    old `67137e21`).
+  - `robtaylor/yowasp-yosys` (**new**, mirror of Codeberg `YoWASP/yosys`): default branch
+    `develop` (clean mirror); **`yowasp-yosys-integration`** carries the `yosys-src` repoint.
+    Codeberg PR refs (`refs/pull/*`) were rejected by GitHub on mirror-push — harmless.
+- yosys fork's abc pointer: ✅ now `robtaylor/abc@origin-tracking-clean` (repoint done).
 
 ---
 **Resume with:** `/resume_handoff docs/handoffs/rtl-source-provenance-handoff.md`
