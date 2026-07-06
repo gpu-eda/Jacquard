@@ -12789,6 +12789,13 @@ have 0 provenance.</p>
 <li><strong>Exit:</strong> <code>NetlistDB::from_sverilog_file</code> exposes <code>\src</code> for annotated cells;
 zero overhead / behaviour change when absent.</li>
 </ul>
+<blockquote>
+<p><strong>✅ B1 DONE (2026-07-06).</strong> <code>gpu-eda/eda-infra-rs@jacquard-integration</code> <code>4f7f0ec</code>;
+<code>NetlistDB.cell_src: Vec&lt;Option&lt;CompactString&gt;&gt;</code> parallel to <code>celltypes</code>/<code>cellnames</code>,
+populated in <code>insert_cell</code> from <code>SVerilogCell.src</code> through flattening. <code>None</code> for
+top cell + synthesised inverters + un-annotated cells. Proven by
+<code>netlistdb/tests/provenance.{rs,v}</code>.</p>
+</blockquote>
 <h3 id="b2--preserve-provenance-through-aig--staging--flatten"><a class="header" href="#b2--preserve-provenance-through-aig--staging--flatten">B2 — Preserve provenance through AIG / staging / flatten</a></h3>
 <p>Thread a mapping from AIG nodes / endpoint groups back to <code>\src</code> so a
 sim-visible signal can be traced to a source line. Provenance is <strong>lossy</strong> by
