@@ -269,7 +269,7 @@ synchronisation beyond Metal's command buffer completion is needed.</p>
 <tr><td>Clock</td><td><code>clocks: Option&lt;Vec&lt;ClockConfig&gt;&gt;</code></td><td>Yes (<code>effective_clocks()</code>)</td></tr>
 <tr><td>GPIO</td><td><code>gpios: Vec&lt;GpioConfig&gt;</code></td><td>Yes</td></tr>
 <tr><td>UART</td><td><code>uart</code> + <code>uarts: Vec&lt;UartConfig&gt;</code></td><td>Yes (<code>effective_uarts()</code>, #90)</td></tr>
-<tr><td>Flash</td><td><code>flash: Option&lt;FlashConfig&gt;</code></td><td>Not yet</td></tr>
+<tr><td>QSPI memory (flash/PSRAM)</td><td><code>flash</code> + <code>qspi_memory: Vec&lt;QspiMemoryConfig&gt;</code></td><td>Yes (<code>effective_qspi_memory()</code>, #170/#171)</td></tr>
 <tr><td>JTAG</td><td><code>jtag: Option&lt;JtagConfig&gt;</code></td><td>Not yet</td></tr>
 <tr><td>Wishbone</td><td><em>(auto-detected, hardcoded signal names)</em></td><td>N/A (legacy)</td></tr>
 <tr><td>Bus trace (AHB/APB)</td><td><code>bus_traces: Vec&lt;BusTraceConfig&gt;</code></td><td>Yes (<code>effective_bus_traces()</code>)</td></tr>
@@ -359,7 +359,7 @@ future <code>cosim_common.rs</code>).</p>
 <tr><td>1b</td><td>Config-driven bus monitor, APB3 + CSV (GPU-capture/CPU-decode split)</td><td><strong>Done</strong></td></tr>
 <tr><td>2</td><td>Refactor <code>gpu_io_step</code> to use common params/ring-buffer layout</td><td>Future</td></tr>
 <tr><td>2b</td><td>AHB-Lite / AHB5 bus tracing + annotated-VCD output; migrate WbTrace onto the general monitor</td><td>Future</td></tr>
-<tr><td>3</td><td>Multi-Flash / external RAM (bidirectional pattern)</td><td>Deferred (no use case yet)</td></tr>
+<tr><td>3</td><td>Multi-Flash / external RAM (bidirectional pattern)</td><td><strong>Done</strong> — plural QSPI memory (<code>Vec&lt;QspiMemoryConfig&gt;</code>, N-instance kernels on Metal + CUDA/HIP) <a href="https://github.com/gpu-eda/Jacquard/pull/170">#170</a>/<a href="https://github.com/gpu-eda/Jacquard/pull/171">#171</a>; writable QSPI PSRAM (RAM mode) <a href="https://github.com/gpu-eda/Jacquard/pull/159">#159</a>. See 2026-07-06 amendment.</td></tr>
 <tr><td>—</td><td>Multi-JTAG</td><td>Not needed (TAP daisy-chain suffices)</td></tr>
 </tbody></table>
 </div>
@@ -396,6 +396,48 @@ the "Not yet" plural column (TAP daisy-chain suffices — single instance).</p>
 </li>
 </ul>
 <p>Plan: <a href="../plans/jtag-debug-server.html"><code>../plans/jtag-debug-server.md</code></a>.</p>
+<h2 id="amendment-2026-07-06-plural-qspi-memory--writable-qspi-psram-phase-3-done"><a class="header" href="#amendment-2026-07-06-plural-qspi-memory--writable-qspi-psram-phase-3-done">Amendment 2026-07-06: plural QSPI memory + writable QSPI PSRAM (Phase 3 done)</a></h2>
+<p>The Flash peripheral went plural and gained a writable RAM mode, completing
+Phase 3. This resolves the <code>plural-qspi-memory</code> working handoff (folded here).</p>
+<ul>
+<li>
+<p><strong>Plural config (Stage A, <a href="https://github.com/gpu-eda/Jacquard/pull/170">#170</a>).</strong>
+<code>flash: Option&lt;FlashConfig&gt;</code> → <strong><code>qspi_memory: Vec&lt;QspiMemoryConfig&gt;</code></strong> with the
+standard back-compat pattern: the legacy <code>flash</code> key folds into instance 0 via
+<code>effective_qspi_memory()</code> (mirrors <code>effective_uarts()</code>). <code>FlashConfig</code> is now a
+type alias of <code>QspiMemoryConfig</code>. Each instance carries its own GPIO map, backing
+size, and (Stage C) firmware.</p>
+</li>
+<li>
+<p><strong>N-instance GPU kernels (Stage B, <a href="https://github.com/gpu-eda/Jacquard/pull/171">#171</a>).</strong>
+<code>FlashDinParams</code>/<code>FlashModelParams</code> are wrapped in <code>*All { u32 n_flashes; u32 _pad[3]; T[MAX_QSPI_MEMS] }</code> blocks (exactly <code>BusTraceParamsAll</code>, the "target
+architecture" convention above). <code>FlashModelParams</code> gains a per-instance
+<code>data_offset</code>; <code>flash_data</code> is <strong>one concatenated buffer</strong> with each instance's
+store at its offset (independent backing stores). <code>FlashState</code> is an N-slot array;
+both kernels loop <code>f &lt; n_flashes</code> instead of the old <code>has_flash</code> guard. Mirrored
+across Metal (<code>kernel_v1.metal</code>) and the shared CUDA/HIP kernel
+(<code>kernel_v1_impl.cuh</code>). Gotcha fixed in-flight: <code>flash_set_in_reset</code> must drive
+<strong>every</strong> slot's reset line, not just slot 0.</p>
+</li>
+<li>
+<p><strong>Writable QSPI PSRAM / RAM mode (<a href="https://github.com/gpu-eda/Jacquard/pull/159">#159</a>).</strong>
+Opt-in <code>FlashConfig</code> fields (<code>writable</code>, <code>enter_qpi_cmd</code>, <code>quad_write_cmd</code>,
+<code>read_dummy_cycles</code>, <code>size_bytes</code>; <code>firmware</code> now optional) turn an instance into
+an APS6404L-class PSRAM: enter-QPI (0x35) latches 4-lane command sampling, quad-
+write (0x38) stores into the now-writable backing store, quad-read (0xEB) inserts
+<code>3 + read_dummy/2</code> dummy boundaries. Mirrored across the CPU <code>CppSpiFlash</code> oracle,
+Metal, and CUDA/HIP with <code>#[repr(C)]</code> size asserts in lockstep (<code>FlashState</code> 52B,
+<code>FlashModelParams</code> 52B); the CUDA/HIP <code>flash_data</code> buffer became a writable
+<code>UnsafeCell&lt;UVec&lt;u8&gt;&gt;</code>. Unset options ⇒ byte-identical to the read-only flash.</p>
+</li>
+<li>
+<p><strong>Tests.</strong> <code>tests/multi_mem_cosim/</code> (3 flashes + 2 SRAMs, independent stores,
+<code>all</code> scope) and <code>tests/qspi_psram/</code> (write→read round-trip, <code>all</code> + a dedicated
+<code>qspi</code> scope for the GPU suite). Goldens captured on CpuBackend, byte-identical to
+Metal/CUDA/HIP (Backend Equivalence CI green). Motivating use case: a C64-subset
+GF180 tapeout whose main RAM is external QSPI PSRAM.</p>
+</li>
+</ul>
 
                     </main>
 
