@@ -1,0 +1,41 @@
+name: Setup CUDA
+description: >
+  Install the CUDA toolkit (for compiling) or just the CUDA runtime (for running
+  a prebuilt binary) on a standard ubuntu runner, and export the matching
+  PATH/CUDA_PATH/LD_LIBRARY_PATH. Standard ubuntu runners don't carry NVIDIA's
+  apt repo, so the keyring is added first. CUDA 12.8 is required for Blackwell
+  (sm_100/sm_120) SASS in the all-major build.
+inputs:
+  runtime-only:
+    description: >
+      "true" installs only cuda-cudart (enough to run a prebuilt binary on a GPU
+      runner); "false" installs the full cuda-toolkit-12-8 (needed to compile).
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Add NVIDIA CUDA apt repo
+      shell: bash
+      run: |
+        wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+        sudo dpkg -i cuda-keyring_1.1-1_all.deb
+        rm -f cuda-keyring_1.1-1_all.deb
+        sudo apt-get update
+
+    - name: Install CUDA toolkit (compile)
+      if: inputs.runtime-only != 'true'
+      shell: bash
+      run: |
+        sudo apt-get install -y --no-install-recommends cuda-toolkit-12-8
+        echo "PATH=/usr/local/cuda-12.8/bin:$PATH" >> "$GITHUB_ENV"
+        echo "CUDA_PATH=/usr/local/cuda-12.8" >> "$GITHUB_ENV"
+        /usr/local/cuda-12.8/bin/nvcc --version
+
+    - name: Install CUDA runtime (run prebuilt)
+      if: inputs.runtime-only == 'true'
+      shell: bash
+      run: |
+        sudo apt-get install -y --no-install-recommends cuda-cudart-12-8 \
+          || sudo apt-get install -y --no-install-recommends cuda-toolkit-12-8
+        echo "LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"

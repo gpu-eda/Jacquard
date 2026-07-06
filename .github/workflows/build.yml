@@ -1,0 +1,110 @@
+name: Build
+
+# Reusable build workflow: compile the jacquard binary for each target
+# configuration on a cheap standard runner and upload it as an artifact for the
+# test workflow (and, later, for release publishing). One artifact per config:
+#   jacquard-cpu   (no GPU backend)      — ubuntu, for the CPU-only test config
+#   jacquard-cuda  (--features cuda)     — ubuntu, all-major SASS
+#   jacquard-hip   (--features hip)      — ubuntu, HIP-on-NVIDIA today
+#   jacquard-metal (--features metal)    — macos, Metal
+# `synth` (the RTL on-ramp) is uniform on every artifact.
+#
+# The cuda + hip artifacts are separate today; ulib already supports both
+# backends in one binary (Device is an additive runtime enum), so they can later
+# collapse into one fat cuda,hip artifact by editing this matrix — no workflow
+# reshape. See docs/plans/ci-build-test-split.md.
+
+on:
+  workflow_call:
+    inputs:
+      retention-days:
+        description: Artifact retention in days (release publishing may want longer).
+        type: number
+        required: false
+        default: 1
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.config }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: cpu
+            runner: ubuntu-latest
+            features: synth
+            submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd vendor/gf180mcu_fd_sc_mcu7t5v0 vendor/gf180mcu_fd_sc_mcu9t5v0
+          - config: cuda
+            runner: ubuntu-22.04
+            features: cuda,synth
+            submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+          - config: hip
+            runner: ubuntu-22.04
+            features: hip,synth
+            submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+          - config: metal
+            runner: macos-latest
+            features: metal,synth
+            submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd vendor/gf180mcu_fd_sc_mcu7t5v0 vendor/gf180mcu_fd_sc_mcu9t5v0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Init submodules
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: ${{ matrix.submodules }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup CUDA toolkit
+        if: matrix.config == 'cuda'
+        uses: ./.github/actions/setup-cuda
+
+      - name: Setup HIP toolchain
+        if: matrix.config == 'hip'
+        uses: ./.github/actions/setup-hip
+
+      - name: Setup Metal toolchain
+        if: matrix.config == 'metal'
+        uses: ./.github/actions/setup-metal
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          # Per-config key so the divergent dependency trees (wasmtime for synth,
+          # cust for cuda, …) don't thrash a shared cache. LLVM_VERSION is only
+          # set for the metal build; empty elsewhere.
+          key: ${{ runner.os }}-cargo-build-${{ matrix.config }}-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ matrix.config }}-
+
+      - name: Build jacquard
+        env:
+          # all-major SASS + PTX (needs CUDA >= 12.8 for Blackwell) for the
+          # distributed cuda binary. Ignored by the non-cuda configs (the cuda
+          # block in build.rs is cfg'd out), so the empty value is harmless.
+          JACQUARD_CUDA_ARCH: ${{ matrix.config == 'cuda' && 'all-major' || '' }}
+        run: cargo build --release --features ${{ matrix.features }} --bin jacquard
+
+      - name: Upload jacquard-${{ matrix.config }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacquard-${{ matrix.config }}
+          path: target/release/jacquard
+          retention-days: ${{ inputs.retention-days }}
