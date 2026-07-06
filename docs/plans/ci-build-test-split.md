@@ -1,5 +1,11 @@
 # Plan: CI build/test split via reusable workflows
 
+> **Status (2026-07-06):** Core split **implemented and green** on PR #172
+> (run 28785097079) — `build.yml` + `test.yml` + composite actions + thin
+> `ci.yml`. Faithful move (each backend keeps its current tests). Remaining:
+> branch-protection check-name swap (below), then the four follow-ups at the
+> end of this doc.
+
 ## Goal
 
 Replace the organically-grown 2056-line `ci.yml` with a clean **build → test**
