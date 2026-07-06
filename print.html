@@ -12805,6 +12805,14 @@ per signal; never assert exactly one.</p>
 <li><strong>Exit:</strong> given an annotated netlist, a chosen output/endpoint resolves to its
 source location(s) through the built <code>FlattenedScript</code>.</li>
 </ul>
+<blockquote>
+<p><strong>✅ B2 DONE (2026-07-06, Jacquard <code>68cc938b</code>).</strong> <code>AIG::aigpin_src_locations</code>
+composes the AIG's existing per-pin cell-origin map (<code>aigpin_cell_origins</code>, built
+for SDF back-annotation) with <code>netlistdb.cell_src</code> (B1) — <strong>no new state threaded
+through the AIG builder.</strong> Returns 0/1/many de-duplicated locations; a primary
+output resolves directly. The resolver is AIG-level (the AIG is retained alongside
+the FlattenedScript). Proven by <code>aig::path_mapping_tests</code> + <code>prov_annotated.v</code>.</p>
+</blockquote>
 <h3 id="b3--surface-src-in-the-user-facing-outputs"><a class="header" href="#b3--surface-src-in-the-user-facing-outputs">B3 — Surface <code>\src</code> in the user-facing outputs</a></h3>
 <p>Add source locations to the three consumers, gated on availability (fall back to
 today's hierarchical gate name when absent):</p>
