@@ -34,6 +34,19 @@ use super::{
     WB_TRACE_CHANNEL_CAP,
 };
 
+/// `(GPUStartTime, GPUEndTime)` of a completed command buffer, in host-clock
+/// seconds — timestamps Metal records for free (no tracing overhead). Valid
+/// only after completion. Shared by the perf report and `profile_kernels`.
+fn cb_gpu_times(cb: &metal::CommandBufferRef) -> (f64, f64) {
+    unsafe {
+        let obj: *mut objc::runtime::Object =
+            &*(cb as *const _ as *const objc::runtime::Object) as *const _ as *mut _;
+        let start: f64 = msg_send![obj, GPUStartTime];
+        let end: f64 = msg_send![obj, GPUEndTime];
+        (start, end)
+    }
+}
+
 // ── Simulation Parameters (must match Metal shader) ──────────────────────────
 
 #[repr(C)]
@@ -168,6 +181,10 @@ struct MetalSimulator {
     batch_index: std::cell::Cell<usize>,
     /// Whether an `MTLCaptureManager` capture is currently open.
     capture_active: std::cell::Cell<bool>,
+    /// Most recently committed batch command buffer, retained so its GPU
+    /// timestamps (`GPUStartTime`/`GPUEndTime`) can be read after completion for
+    /// the perf report. Replaced each batch; one command buffer stays alive.
+    last_cb: std::cell::RefCell<Option<metal::CommandBuffer>>,
 }
 
 impl MetalSimulator {
@@ -268,6 +285,7 @@ impl MetalSimulator {
             gpu_capture,
             batch_index: std::cell::Cell::new(0),
             capture_active: std::cell::Cell::new(false),
+            last_cb: std::cell::RefCell::new(None),
         }
     }
 
@@ -326,6 +344,19 @@ impl MetalSimulator {
                 clilog::info!("GPU capture written → {}", cfg.path);
             }
         }
+    }
+
+    /// GPU-execution wall (seconds) of the last committed batch, from device
+    /// timestamps. `None` before the first batch. The spin-wait only observes
+    /// the shared event; the driver posts `GPUStartTime`/`GPUEndTime` at full
+    /// command-buffer completion, so `wait_until_completed` (which returns
+    /// immediately here — the event already fired) is needed before reading.
+    fn last_batch_gpu_seconds(&self) -> Option<f64> {
+        self.last_cb.borrow().as_ref().map(|cb| {
+            cb.wait_until_completed();
+            let (start, end) = cb_gpu_times(cb);
+            end - start
+        })
     }
 
     /// Dispatch a single stage (standalone, with own command buffer).
@@ -677,6 +708,10 @@ impl MetalSimulator {
         cb.encode_signal_event(&self.shared_event, batch_done);
         cb.commit();
 
+        // Retain this batch's command buffer so its GPU timestamps can be read
+        // after completion (perf report). One command buffer stays alive.
+        *self.last_cb.borrow_mut() = Some(cb.to_owned());
+
         self.event_counter.set(batch_done);
 
         // Advance the capture batch counter and, once the window has closed,
@@ -727,16 +762,8 @@ impl MetalSimulator {
     ) {
         // Use schedule position 0 for profiling (all patterns have same kernel cost).
         let (ref edge_prep_params_buffer, ref edge_ops_buffer) = schedule_buffers.edge_buffers[0];
-        #[inline]
-        fn gpu_times(cb: &metal::CommandBufferRef) -> (f64, f64) {
-            unsafe {
-                let obj: *mut objc::runtime::Object =
-                    &*(cb as *const _ as *const objc::runtime::Object) as *const _ as *mut _;
-                let start: f64 = msg_send![obj, GPUStartTime];
-                let end: f64 = msg_send![obj, GPUEndTime];
-                (start, end)
-            }
-        }
+        // Per-kernel GPU timing uses the shared `cb_gpu_times` helper.
+        let gpu_times = cb_gpu_times;
 
         println!("\n=== GPU Kernel Profiling ({} edges) ===\n", num_ticks);
 
@@ -2059,6 +2086,14 @@ impl CosimBackend for MetalBackend {
     #[inline]
     fn wait(&self, token: u64) {
         self.sim.spin_wait(token);
+    }
+
+    fn last_batch_gpu_seconds(&self) -> Option<f64> {
+        self.sim.last_batch_gpu_seconds()
+    }
+
+    fn backend_name(&self) -> &'static str {
+        "metal"
     }
 }
 
