@@ -26,7 +26,9 @@ use crate::testbench::TestbenchConfig;
 
 /// Schema version of the emitted manifest. Additive-only: new fields and new
 /// `XSourceKind` variants may be added without a major bump.
-pub const X_SOURCE_SCHEMA_VERSION: &str = "1.0";
+///
+/// 1.1: added the optional per-source `src` (RTL `file:line` provenance, WS-B).
+pub const X_SOURCE_SCHEMA_VERSION: &str = "1.1";
 
 /// Classification of an X-source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -57,6 +59,23 @@ pub struct XSource {
     /// Driving cell instance name (DFF/SRAM sources only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cell: Option<String>,
+    /// RTL source location (`file:line`) of the driving cell, from Yosys
+    /// `(* src *)` provenance (WS-B). Present for DFF/SRAM sources when the
+    /// netlist carried provenance; `None` for undriven inputs (no cell) and for
+    /// `-noattr`/non-provenance netlists. Lets a query report `spiflash.v:88`
+    /// instead of the flattened cell name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src: Option<String>,
+}
+
+/// The RTL source location of a netlist cell, from its `(* src *)` provenance
+/// (`NetlistDB.cell_src`, WS-B B1), as an owned `String` for serialization.
+fn cell_src_string(netlistdb: &NetlistDB, cell_id: usize) -> Option<String> {
+    netlistdb
+        .cell_src
+        .get(cell_id)
+        .and_then(|o| o.as_ref())
+        .map(|s| s.to_string())
 }
 
 /// The full manifest emitted by `jacquard xsources`.
@@ -224,6 +243,7 @@ pub fn compute_x_source_manifest(
             net,
             kind,
             cell: Some(netlistdb.cellnames[cell_id].dbg_fmt_hier()),
+            src: cell_src_string(netlistdb, cell_id),
         });
     }
 
@@ -238,6 +258,7 @@ pub fn compute_x_source_manifest(
                 net: net_name_of(rd_pin, &aigpin2net, netlistdb),
                 kind: XSourceKind::SramRead,
                 cell: Some(cell.clone()),
+                src: cell_src_string(netlistdb, cell_id),
             });
         }
     }
@@ -273,6 +294,8 @@ pub fn compute_x_source_manifest(
                     net: net_name_of(aigpin, &aigpin2net, netlistdb),
                     kind: XSourceKind::UndrivenInput,
                     cell: None,
+                    // Undriven inputs are ports, not cells — no `(* src *)`.
+                    src: None,
                 });
             }
         }
@@ -381,11 +404,46 @@ mod tests {
         assert!(kind_of(&m, "rst_n").is_none());
     }
 
+    const ANNOTATED_NETLIST: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/xprop_cosim/xprov_annotated.gv"
+    );
+
+    #[test]
+    fn x_source_carries_src_provenance() {
+        // WS-B B3: an annotated netlist's X-source reports its RTL `src`.
+        let (netlistdb, aig) =
+            build_netlist_and_aig(Path::new(ANNOTATED_NETLIST), None, &[], None, None);
+        let m = compute_x_source_manifest(&netlistdb, &aig, None, ANNOTATED_NETLIST);
+
+        let s = m
+            .x_sources
+            .iter()
+            .find(|s| s.cell.as_deref() == Some("reg0"))
+            .expect("no reg0 x-source in manifest");
+        assert_eq!(s.kind, XSourceKind::UnresetDff);
+        assert_eq!(s.src.as_deref(), Some("xprov.v:9.3-9.44"));
+        // ...and it round-trips into the emitted JSON.
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(json.contains("\"src\":\"xprov.v:9.3-9.44\""));
+
+        // A source without provenance omits `src` from the JSON entirely
+        // (skip_serializing_if), so un-annotated `-noattr` manifests are
+        // byte-identical to before this field existed.
+        let bare = XSource {
+            net: "n".to_string(),
+            kind: XSourceKind::UndrivenInput,
+            cell: None,
+            src: None,
+        };
+        assert!(!serde_json::to_string(&bare).unwrap().contains("src"));
+    }
+
     #[test]
     fn manifest_is_serializable() {
         let m = demo_manifest(true);
         let json = serde_json::to_string(&m).unwrap();
-        assert!(json.contains("\"schema_version\":\"1.0\""));
+        assert!(json.contains("\"schema_version\":\"1.1\""));
         assert!(json.contains("\"unreset-dff\""));
         assert!(json.contains("\"undriven-input\""));
     }

@@ -1,0 +1,11 @@
+// Annotated sky130 netlist for WS-B B3: `jacquard xsources` must report the
+// RTL `(* src *)` provenance of an X-source cell. `reg0` is an unreset DFF
+// (dfxtp has no reset pin) → an UnresetDff X-source carrying its src line.
+(* top = 1 *)
+module xprov(CLK, D, Q);
+  input CLK;
+  input D;
+  output Q;
+  (* src = "xprov.v:9.3-9.44" *)
+  sky130_fd_sc_hd__dfxtp_1 reg0 (.CLK(CLK), .D(D), .Q(Q));
+endmodule
