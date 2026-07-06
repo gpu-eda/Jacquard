@@ -24,6 +24,7 @@ use crate::sky130_pdk::{
     decompose_with_pdk, is_multi_output_cell, is_sequential_cell, is_tie_cell, CellInputs,
     PdkModels,
 };
+use compact_str::CompactString;
 use indexmap::{IndexMap, IndexSet};
 use netlistdb::{Direction, GeneralPinName, NetlistDB};
 use smallvec::SmallVec;
@@ -322,6 +323,36 @@ impl AIG {
         self.drivers.push(driver);
         self.aigpin_cell_origins.push(Vec::new());
         self.num_aigpins
+    }
+
+    /// Resolve the RTL source location(s) of an AIG pin (WS-B B2), via its
+    /// recorded cell origins ([`aigpin_cell_origins`](Self::aigpin_cell_origins))
+    /// and the netlist's per-cell provenance ([`NetlistDB::cell_src`], captured
+    /// from Yosys `(* src = "file:line" *)`).
+    ///
+    /// Provenance is inherently **lossy** — a single std-cell may decompose into
+    /// several AIG AND nodes, and inverters/buffers merge — so this returns
+    /// **0, 1, or many** distinct locations; callers must never assume exactly
+    /// one. An internal AND node with no recorded origin (or a netlist without
+    /// `src`) yields `[]`, a typical gate output one, and an aigpin fed by
+    /// several merged origin cells many. De-duplicated, in first-seen order.
+    pub fn aigpin_src_locations(
+        &self,
+        aigpin: usize,
+        netlistdb: &NetlistDB,
+    ) -> Vec<CompactString> {
+        let mut locs: Vec<CompactString> = Vec::new();
+        let Some(origins) = self.aigpin_cell_origins.get(aigpin) else {
+            return locs;
+        };
+        for (cell_id, _, _) in origins {
+            if let Some(Some(src)) = netlistdb.cell_src.get(*cell_id) {
+                if !locs.contains(src) {
+                    locs.push(src.clone());
+                }
+            }
+        }
+        locs
     }
 
     fn add_and_gate(&mut self, a: usize, b: usize) -> usize {
@@ -4828,6 +4859,64 @@ mod path_mapping_tests {
             aig.aigpin_cell_origins[0].is_empty(),
             "Index 0 (Tie0) must have no cell origins"
         );
+    }
+
+    // === WS-B B2: RTL source provenance resolves through the AIG ===
+
+    /// Helper: load the `(* src *)`-annotated netlist and build its AIG.
+    fn load_annotated_aig() -> (NetlistDB, AIG) {
+        let verilog_path =
+            std::path::PathBuf::from("tests/timing_test/sky130_timing/prov_annotated.v");
+        assert!(verilog_path.exists(), "prov_annotated.v not found");
+        let netlistdb = NetlistDB::from_sverilog_file(&verilog_path, None, &SKY130LeafPins)
+            .expect("Failed to parse prov_annotated.v");
+        let aig = AIG::from_netlistdb(&netlistdb);
+        (netlistdb, aig)
+    }
+
+    #[test]
+    fn test_src_provenance_resolves_through_aig() {
+        let (netlistdb, aig) = load_annotated_aig();
+
+        // Precondition: netlistdb (B1) carried the annotation onto the nand2 cell.
+        assert!(
+            netlistdb.cell_src.iter().flatten().any(|s| s.as_str() == "prov.v:12.3-12.44"),
+            "B1 regression: cell_src did not carry the (* src *) annotation"
+        );
+
+        // B2: the annotation is reachable from the AIG via aigpin_src_locations.
+        let mut resolved: Vec<CompactString> = Vec::new();
+        for aigpin in 1..=aig.num_aigpins {
+            for s in aig.aigpin_src_locations(aigpin, &netlistdb) {
+                if !resolved.contains(&s) {
+                    resolved.push(s);
+                }
+            }
+        }
+        assert!(
+            resolved.iter().any(|s| s.as_str() == "prov.v:12.3-12.44"),
+            "B2: annotated src not resolved through the AIG; resolved = {resolved:?}"
+        );
+
+        // Internal/un-annotated pins resolve to nothing, and lookups never panic
+        // (0-location case). Tie0 (index 0) has no origins.
+        assert!(aig.aigpin_src_locations(0, &netlistdb).is_empty());
+    }
+
+    #[test]
+    fn test_src_provenance_absent_yields_empty() {
+        // inv_chain.v carries no (* src *); every aigpin must resolve to [].
+        let (netlistdb, aig) = load_inv_chain_aig();
+        assert!(
+            netlistdb.cell_src.iter().all(|s| s.is_none()),
+            "inv_chain.v unexpectedly has src provenance"
+        );
+        for aigpin in 0..=aig.num_aigpins {
+            assert!(
+                aig.aigpin_src_locations(aigpin, &netlistdb).is_empty(),
+                "aigpin {aigpin} resolved a src location on an un-annotated netlist"
+            );
+        }
     }
 
     #[test]
