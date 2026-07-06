@@ -141,7 +141,7 @@ Peripheral config lives in `sim_config.json`, deserialized into
 | Clock | `clocks: Option<Vec<ClockConfig>>` | Yes (`effective_clocks()`) |
 | GPIO | `gpios: Vec<GpioConfig>` | Yes |
 | UART | `uart` + `uarts: Vec<UartConfig>` | Yes (`effective_uarts()`, #90) |
-| Flash | `flash: Option<FlashConfig>` | Not yet |
+| QSPI memory (flash/PSRAM) | `flash` + `qspi_memory: Vec<QspiMemoryConfig>` | Yes (`effective_qspi_memory()`, #170/#171) |
 | JTAG | `jtag: Option<JtagConfig>` | Not yet |
 | Wishbone | *(auto-detected, hardcoded signal names)* | N/A (legacy) |
 | Bus trace (AHB/APB) | `bus_traces: Vec<BusTraceConfig>` | Yes (`effective_bus_traces()`) |
@@ -245,7 +245,7 @@ future `cosim_common.rs`).
 | 1b | Config-driven bus monitor, APB3 + CSV (GPU-capture/CPU-decode split) | **Done** |
 | 2 | Refactor `gpu_io_step` to use common params/ring-buffer layout | Future |
 | 2b | AHB-Lite / AHB5 bus tracing + annotated-VCD output; migrate WbTrace onto the general monitor | Future |
-| 3 | Multi-Flash / external RAM (bidirectional pattern) | Deferred (no use case yet) |
+| 3 | Multi-Flash / external RAM (bidirectional pattern) | **Done** — plural QSPI memory (`Vec<QspiMemoryConfig>`, N-instance kernels on Metal + CUDA/HIP) [#170](https://github.com/gpu-eda/Jacquard/pull/170)/[#171](https://github.com/gpu-eda/Jacquard/pull/171); writable QSPI PSRAM (RAM mode) [#159](https://github.com/gpu-eda/Jacquard/pull/159). See 2026-07-06 amendment. |
 | — | Multi-JTAG | Not needed (TAP daisy-chain suffices) |
 
 Plan docs: [`../plans/multi-peripheral-cosim.md`](../plans/multi-peripheral-cosim.md),
@@ -279,3 +279,42 @@ the execution-model decisions are in
   the "Not yet" plural column (TAP daisy-chain suffices — single instance).
 
 Plan: [`../plans/jtag-debug-server.md`](../plans/jtag-debug-server.md).
+
+## Amendment 2026-07-06: plural QSPI memory + writable QSPI PSRAM (Phase 3 done)
+
+The Flash peripheral went plural and gained a writable RAM mode, completing
+Phase 3. This resolves the `plural-qspi-memory` working handoff (folded here).
+
+- **Plural config (Stage A, [#170](https://github.com/gpu-eda/Jacquard/pull/170)).**
+  `flash: Option<FlashConfig>` → **`qspi_memory: Vec<QspiMemoryConfig>`** with the
+  standard back-compat pattern: the legacy `flash` key folds into instance 0 via
+  `effective_qspi_memory()` (mirrors `effective_uarts()`). `FlashConfig` is now a
+  type alias of `QspiMemoryConfig`. Each instance carries its own GPIO map, backing
+  size, and (Stage C) firmware.
+
+- **N-instance GPU kernels (Stage B, [#171](https://github.com/gpu-eda/Jacquard/pull/171)).**
+  `FlashDinParams`/`FlashModelParams` are wrapped in `*All { u32 n_flashes; u32
+  _pad[3]; T[MAX_QSPI_MEMS] }` blocks (exactly `BusTraceParamsAll`, the "target
+  architecture" convention above). `FlashModelParams` gains a per-instance
+  `data_offset`; `flash_data` is **one concatenated buffer** with each instance's
+  store at its offset (independent backing stores). `FlashState` is an N-slot array;
+  both kernels loop `f < n_flashes` instead of the old `has_flash` guard. Mirrored
+  across Metal (`kernel_v1.metal`) and the shared CUDA/HIP kernel
+  (`kernel_v1_impl.cuh`). Gotcha fixed in-flight: `flash_set_in_reset` must drive
+  **every** slot's reset line, not just slot 0.
+
+- **Writable QSPI PSRAM / RAM mode ([#159](https://github.com/gpu-eda/Jacquard/pull/159)).**
+  Opt-in `FlashConfig` fields (`writable`, `enter_qpi_cmd`, `quad_write_cmd`,
+  `read_dummy_cycles`, `size_bytes`; `firmware` now optional) turn an instance into
+  an APS6404L-class PSRAM: enter-QPI (0x35) latches 4-lane command sampling, quad-
+  write (0x38) stores into the now-writable backing store, quad-read (0xEB) inserts
+  `3 + read_dummy/2` dummy boundaries. Mirrored across the CPU `CppSpiFlash` oracle,
+  Metal, and CUDA/HIP with `#[repr(C)]` size asserts in lockstep (`FlashState` 52B,
+  `FlashModelParams` 52B); the CUDA/HIP `flash_data` buffer became a writable
+  `UnsafeCell<UVec<u8>>`. Unset options ⇒ byte-identical to the read-only flash.
+
+- **Tests.** `tests/multi_mem_cosim/` (3 flashes + 2 SRAMs, independent stores,
+  `all` scope) and `tests/qspi_psram/` (write→read round-trip, `all` + a dedicated
+  `qspi` scope for the GPU suite). Goldens captured on CpuBackend, byte-identical to
+  Metal/CUDA/HIP (Backend Equivalence CI green). Motivating use case: a C64-subset
+  GF180 tapeout whose main RAM is external QSPI PSRAM.
