@@ -375,6 +375,15 @@ open for other attrs) and attach to the cell/wire in the <code>SVerilog</code> A
 <li><strong>Exit:</strong> a <code>(* src="f.v:12" *)</code>-annotated netlist round-trips through
 <code>SVerilog::parse_*</code> with the attribute retrievable per cell.</li>
 </ul>
+<blockquote>
+<p><strong>✅ B0 DONE (2026-07-06).</strong> <code>gpu-eda/eda-infra-rs@jacquard-integration</code> <code>a0772f4</code>;
+<code>SVerilogCell</code> gains <code>src: Option&lt;CompactString&gt;</code>. <code>skip_whitespace_and_comment</code>
+no longer treats <code>(* ... *)</code> as whitespace; <code>leading_attributes</code> captures/skips
+at the 3 grammar leading edges (module / port / module-body item). Proven by
+<code>sverilogparse</code> <code>test_src_attribute</code> (+ <code>tests/attributes.v</code>): parse + round-trip.
+<strong>Caveat:</strong> attributes are now only accepted at those leading edges (narrows vs
+the old "ignored anywhere" — fine for structural netlists).</p>
+</blockquote>
 <h3 id="b1--carry-source-location-through-netlistdb"><a class="header" href="#b1--carry-source-location-through-netlistdb">B1 — Carry source location through <code>netlistdb</code></a></h3>
 <p>Add an optional per-cell (and where meaningful, per-net) <code>source_loc</code> on
 <code>NetlistDB</code>, populated from B0. Keep it <code>Option</code> — most cells post-synthesis may
