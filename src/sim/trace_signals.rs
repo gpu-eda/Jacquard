@@ -279,6 +279,12 @@ pub fn register_trace_signals(
             .entry(iv)
             .or_default()
             .push(raw.clone());
+        // Surface RTL source provenance (WS-B B3) when the netlist carried it:
+        // the traced net's aigpin resolves back to `(* src *)` file:line(s).
+        let src = aig.aigpin_src_locations(iv >> 1, netlistdb);
+        if !src.is_empty() {
+            clilog::info!("--trace-signals: `{raw}` → RTL {}", src.join(", "));
+        }
         registered += 1;
     }
 
@@ -503,6 +509,39 @@ endmodule
             aig.primary_outputs.contains(iv),
             "registered trace signal must be in primary_outputs"
         );
+    }
+
+    /// WS-B B3: a traced signal on a `(* src *)`-annotated netlist resolves back
+    /// to its RTL source location (what `register_trace_signals` surfaces).
+    #[test]
+    fn register_surfaces_src_provenance() {
+        const TOP_VERILOG: &str = "\
+module top(clk, d, q);
+  input clk, d;
+  output q;
+  wire q_internal;
+  (* src = \"top.v:5.3-5.34\" *)
+  DFF u_dff_a(.D(d), .CLK(clk), .Q(q_internal));
+  DFF u_dff_b(.D(q_internal), .CLK(clk), .Q(q));
+endmodule
+";
+        let nl = netlistdb::NetlistDB::from_sverilog_source(
+            TOP_VERILOG,
+            Some("top"),
+            &crate::aigpdk::AIGPDKLeafPins(),
+        )
+        .expect("netlist parse");
+        let mut aig = crate::aig::AIG::from_netlistdb(&nl);
+
+        let names = vec!["q_internal".to_string()];
+        let (registered, dropped) = register_trace_signals(&mut aig, &nl, &names);
+        assert_eq!((registered, dropped), (1, 0));
+
+        // `q_internal` is driven by the annotated DFF, so its aigpin resolves
+        // to that cell's src (this is exactly what registration logs).
+        let (iv, _) = aig.extra_observable_names.iter().next().unwrap();
+        let src = aig.aigpin_src_locations(*iv >> 1, &nl);
+        assert_eq!(src, vec![compact_str::CompactString::from("top.v:5.3-5.34")]);
     }
 
     /// Unresolved names increment `dropped`, log a warning, and do
