@@ -87,19 +87,46 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
    `develop-0.64` = **Makefile (`CONFIG=wasi`, `-flto`) + wasi-sdk 27 + flex-from-source
    + yosys-slang whole-archive** — the exact recipe that built the pinned `yowasp-yosys
    0.64` the on-ramp uses today. Our only delta is the yosys-src repoint.
-2. **✅ IN PROGRESS (2026-07-06) — A0 CI build authored + running.**
-   `robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml` (on push to
+2. **✅ A0 CI authored; BUILD JOB GREEN (2026-07-06).**
+   `robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml` (push to
    `yowasp-yosys-integration` + `workflow_dispatch`), two jobs:
    - **build** — compiles the patched fork to WASM under WASI, links yosys-slang,
-     smoke-tests `read_slang` + `abc_new`, uploads `yosys.wasm` + wheel.
-   - **provenance-check** — the go/no-go: runs origin-shell's validated `abc_new`
-     origins flow (`scratchpad -set abc9.origins_max 100; abc_new -script +&dch,-f;&nf`)
-     on `comb` + `seq2` (sequential) against sky130 (Jacquard's pinned volare hash
-     `c6d73a35`), counts `\src` on mapped cells; **seq2 at 0% fails the job**.
-   First run: `28758370102`. **Residual build risk CI will surface:** develop-0.64's
-   yosys-slang pin (`4e53d772`, targets yosys 0.64/Apr) vs our fork's ~Jun-2026 yosys
-   — slang may need a newer pin to compile. **NEXT once green:** read the coverage %
-   (esp. seq2) → if high, we already hold the provenance wasm (A1 done); then wire
+     smoke-tests `read_slang` + `abc_new`, uploads `yosys.wasm` + wheel. **✅ GREEN**
+     as of run `28760083027` — the ~Jun-yosys × slang-pin skew risk did NOT bite;
+     slang + abc_new both compile + are present in the wasm.
+   - **provenance-check** — ✅ **GREEN (A0 GO), run `28779240456`.** Runs origin-shell's
+     validated `abc_new` origins flow (`read_liberty -lib`; proc/opt/memory/techmap;
+     `dfflibmap`; **`hierarchy -top <d> -purge_lib`** — load-bearing, purges unused
+     `abc9_box` cells that otherwise error "no timing info"; `scratchpad -set
+     abc9.origins_max 100`; `abc_new -script +&dch,-f;&nf -liberty`) on `comb` + `seq2`
+     against sky130 (Jacquard's pinned volare `c6d73a35`; installs at
+     `$PDK_ROOT/volare/sky130/versions/<hash>/…` — note the double `volare`), counts
+     `\src` on mapped cells. **Result: `comb 4/4 = 100%`, `seq2 88/88 = 100%`.**
+
+   **🎯 A0 RESULT — origins survive the WASI in-process `abc_new` round-trip (100% on
+   sequential seq2).** This resolves the ADR/plan's central open risk ("does `&origins`
+   survive the *in-process* abc call path, not just external temp-file abc?") — **YES**.
+   Per the plan, high coverage ⇒ **we hold the provenance wasm (A1's core artifact done)**.
+
+   **⚠️ KEY BLOCKER FOUND + FIXED — abc was 97 commits behind, missing WASI guards.**
+   The first build (`28758370102`) failed at the WASI link:
+   `wasm-ld: error: yosys-libabc.a(NtkNtk.o): undefined symbol: system`. Root cause:
+   `robtaylor/abc@origin-tracking-clean` was based on `berkeley-abc/master` @
+   `bef23270` (2026-03-28) — **8 ahead** (the #487 vOrigins/&origins commits) but
+   **97 behind**, and those 97 upstream commits carry berkeley-abc's `#ifdef __wasm`
+   guards around every `system()` call (`NtkNtk.cpp`, `utilSignal.c`, `abcPart.c`, …).
+   Stock YoWASP builds because yosys 0.64's abc (`YosysHQ/abc@180a6adb`) already has
+   the guards. **Fix (done, Rob-approved):** rebased the 8 origins commits onto current
+   `berkeley-abc/master` — **conflict-free** — and cascaded the new SHAs:
+   - `robtaylor/abc@origin-tracking-clean`: `2daf32f2` → **`3632a04a`** (force-pushed;
+     this also freshens **abc#487**, which was "maintainer_awaiting_reply").
+   - `robtaylor/yosys@src-retention-y-ext` abc gitlink → `3632a04a`; HEAD `bcc5698` → **`fd151be`**.
+   - `robtaylor/yowasp-yosys@yowasp-yosys-integration` yosys-src gitlink → `fd151be`.
+   Lesson: the abc origins fork lives on `berkeley-abc` (correct for #487) and must be
+   kept rebased on master to inherit WASI/build fixes — freezing it breaks the wasm build.
+
+   **NEXT once provenance-check is green:** read the `\src` coverage % (esp. seq2 — the
+   sequential go/no-go). High → we already hold the provenance wasm (A1 done); then wire
    `src/synth.rs` to the `abc_new` flow + drop `write_verilog -noattr`.
 4. **In parallel: WS-B B0** — teach `sverilogparse` to capture `(* src *)` (fork
    `vendor/eda-infra-rs` per `~/.claude/FORKED_DEPS_WORKFLOW.md`), attach to
@@ -117,14 +144,17 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
   (was at `/tmp/claude/origin-shell-recon` this session).
 - A′ spike scratch: `/tmp/claude/aprime` (`prov_test.v`, `classic.ys`, `abcnew.ys`,
   `comb.ys` + logs) — **ephemeral `/tmp`, recreate from the plan if gone.**
-- Forks (all live + wired as of 2026-07-05):
-  - `robtaylor/abc@origin-tracking-clean` (`2daf32f2`); abc#487 in review.
-  - `robtaylor/yosys@src-retention-y-ext` (`bcc5698` — abc repoint added on top of the
-    old `67137e21`).
-  - `robtaylor/yowasp-yosys` (**new**, mirror of Codeberg `YoWASP/yosys`): default branch
-    `develop` (clean mirror); **`yowasp-yosys-integration`** carries the `yosys-src` repoint.
-    Codeberg PR refs (`refs/pull/*`) were rejected by GitHub on mirror-push — harmless.
-- yosys fork's abc pointer: ✅ now `robtaylor/abc@origin-tracking-clean` (repoint done).
+- Forks (all live + wired; SHAs current as of 2026-07-06 after the abc rebase):
+  - `robtaylor/abc@origin-tracking-clean` = **`3632a04a`** (8 origins commits rebased onto
+    current `berkeley-abc/master`; carries the WASI `__wasm` guards). abc#487 in review.
+  - `robtaylor/yosys@src-retention-y-ext` = **`fd151be`** (abc gitlink → `3632a04a`;
+    lineage `67137e21` → `bcc5698` abc-repoint → `fd151be` abc-rebase-bump).
+  - `robtaylor/yowasp-yosys` (mirror of Codeberg `YoWASP/yosys`): default `develop`
+    (clean mirror); **`yowasp-yosys-integration`** (base `develop-0.64`) carries the
+    `yosys-src` repoint (→ `fd151be`) + the A0 CI workflow. Codeberg PR refs
+    (`refs/pull/*`) were rejected by GitHub on mirror-push — harmless.
+- Full chain verified consistent: yowasp yosys-src `fd151be` == yosys HEAD `fd151be`;
+  yosys abc `3632a04a` == abc HEAD `3632a04a`.
 
 ---
 **Resume with:** `/resume_handoff docs/handoffs/rtl-source-provenance-handoff.md`

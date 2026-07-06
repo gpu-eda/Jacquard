@@ -157,6 +157,15 @@ slang may need a newer pin to compile.
   provenance wasm** (A1 done); proceed to harden (A1) + distribute (A2). Low/zero →
   the `aiger2` `"y"` channel or abc `&origins` isn't functioning in the wasm build;
   diagnose before investing further.
+
+> **✅ A0 GO (2026-07-06, CI run `28779240456`).** The provenance wasm builds and
+> carries origins: `comb 4/4 = 100%`, **`seq2 88/88 = 100%`** `\src` coverage on
+> mapped sky130 cells. Origins survive the **in-process WASI `abc_new`** round-trip
+> (including sequential logic) — the ADR's key open risk is resolved. Getting here
+> also required rebasing `robtaylor/abc@origin-tracking-clean` onto current
+> `berkeley-abc/master` (it was 97 commits behind, missing the `#ifdef __wasm` guards
+> around abc's `system()` calls → `wasm-ld: undefined symbol: system`). CI:
+> `robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml`.
 - **Fallbacks if it fails:** (a) debug the `aiger2`/`&origins` path in the wasm
   build (the channel is XAIGER round-trip, not exec, so the failure is in the
   reader/writer or the patch, not "in-process abc" per se); (b) **Nix native
