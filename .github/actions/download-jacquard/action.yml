@@ -1,0 +1,20 @@
+name: Download jacquard binary
+description: >
+  Download a prebuilt jacquard binary artifact (from build.yml) into
+  target/release and mark it executable. The artifact name is jacquard-<backend>
+  — the same convention build.yml uploads under.
+inputs:
+  backend:
+    description: Backend config to download (cpu | cuda | hip | metal).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Download jacquard-${{ inputs.backend }}
+      uses: actions/download-artifact@v8
+      with:
+        name: jacquard-${{ inputs.backend }}
+        path: target/release
+    - name: Make binary executable
+      shell: bash
+      run: chmod +x target/release/jacquard

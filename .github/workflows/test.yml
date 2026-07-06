@@ -1,0 +1,1412 @@
+name: Test
+
+# Reusable test workflow: run the batch of tests against the prebuilt binaries
+# from build.yml, on the appropriate runners (GitHub-hosted GPU runners for the
+# GPU backends, a standard runner for the CPU-only config). Called by ci.yml
+# after build.yml. See docs/plans/ci-build-test-split.md.
+#
+# Gating contract (inputs from the orchestrator):
+#   code         — "true" when code paths changed (docs-only PRs skip the batch)
+#   build_result — result of the build workflow. Artifact-consuming jobs keep an
+#                  explicit "Gate on the build" step so a FAILED build surfaces
+#                  as a FAILED required check rather than a silently-passing skip.
+
+on:
+  workflow_call:
+    inputs:
+      code:
+        description: '"true" when code changed (from the changes paths filter).'
+        type: string
+        required: true
+      build_result:
+        description: Result of the build workflow (success/failure/skipped/cancelled).
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── CPU / Linux compile-in-place jobs (build their own test harnesses; can't
+  #    consume a prebuilt jacquard binary) ────────────────────────────────────
+
+  unit:
+    if: inputs.code == 'true'
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init submodules
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd vendor/gf180mcu_fd_sc_mcu7t5v0 vendor/gf180mcu_fd_sc_mcu9t5v0
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Run library tests
+        run: cargo test --lib
+      # Lightweight sub-crates that carry dev-dependencies are not workspace
+      # members, so `cargo test --lib` above does not reach them.
+      - name: Run cell-model-IR pipeline crate tests
+        run: |
+          cargo test --manifest-path crates/cell-decomp/Cargo.toml
+          cargo test --manifest-path crates/liberty-parse/Cargo.toml
+          cargo test --manifest-path crates/cell-model-ir/Cargo.toml
+          cargo test --manifest-path crates/liberty-to-cellir/Cargo.toml
+
+  synth-onramp:
+    if: inputs.code == 'true'
+    name: Synth on-ramp (Linux compile + classifier tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init submodules
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/eda-infra-rs
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-synth-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-synth-
+      - name: Build jacquard (synth on-ramp, no GPU)
+        run: cargo build --release --features synth --bin jacquard
+      - name: Input-classifier unit tests (synth feature)
+        run: cargo test --lib --features synth input_dispatch
+
+  cosim-cpu:
+    # Artifact-consuming: runs the prebuilt jacquard-cpu binary through the cosim
+    # CpuBackend regression (byte-identical goldens to the Metal backend).
+    if: always() && inputs.code == 'true'
+    name: Cosim CpuBackend (Linux, no GPU)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on the build
+        if: inputs.build_result != 'success'
+        run: |
+          echo "build did not succeed (result: ${{ inputs.build_result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init submodules
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd vendor/gf180mcu_fd_sc_mcu7t5v0 vendor/gf180mcu_fd_sc_mcu9t5v0
+      - name: Download jacquard (CPU)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: cpu
+      - name: Run cosim CpuBackend regression
+        run: bash scripts/ci/cosim_cpu_check.sh
+      # Phase 2 Stage C (#105): the mcu_soc flash cosim (kept out of the fast
+      # `all` fixtures — ~40s partitioning per run).
+      - name: Run cosim CpuBackend flash regression (Stage C, #105)
+        run: COSIM_SCOPE=flash bash scripts/ci/cosim_cpu_check.sh
+
+  opensta-to-ir-tests:
+    if: inputs.code == 'true'
+    name: opensta-to-ir Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init vendor/opensta submodule
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/opensta
+      - name: Resolve OpenSTA submodule SHA
+        id: opensta-sha
+        run: |
+          sha=$(git ls-tree HEAD vendor/opensta | awk '{print $3}')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install OpenSTA build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake bison flex libfl-dev swig \
+            tcl-dev tcl-tclreadline libeigen3-dev libfmt-dev wget
+      - name: Cache CUDD
+        id: cache-cudd
+        uses: actions/cache@v5
+        with:
+          path: ~/cudd-3.0.0
+          key: cudd-3.0.0-v1
+      - name: Build CUDD from source
+        if: steps.cache-cudd.outputs.cache-hit != 'true'
+        run: |
+          cd "$HOME"
+          wget -q https://raw.githubusercontent.com/davidkebo/cudd/main/cudd_versions/cudd-3.0.0.tar.gz
+          tar -xf cudd-3.0.0.tar.gz
+          cd cudd-3.0.0
+          ./configure
+          make -j"$(nproc)"
+      - name: Cache OpenSTA build
+        id: cache-opensta
+        uses: actions/cache@v5
+        with:
+          path: vendor/opensta/build
+          key: opensta-${{ steps.opensta-sha.outputs.sha }}-cudd-3.0.0-v1
+      - name: Build OpenSTA
+        if: steps.cache-opensta.outputs.cache-hit != 'true'
+        env:
+          CUDD_DIR: /home/runner/cudd-3.0.0
+        run: scripts/build-opensta.sh
+      - name: Cache cargo (opensta-to-ir + timing-ir)
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            crates/opensta-to-ir/target/
+            crates/timing-ir/target/
+          key: ${{ runner.os }}-cargo-opensta-to-ir-${{ hashFiles('crates/opensta-to-ir/Cargo.toml', 'crates/timing-ir/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-opensta-to-ir-
+      - name: Run opensta-to-ir tests
+        working-directory: crates/opensta-to-ir
+        run: cargo test
+
+  lint:
+    if: inputs.code == 'true'
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init submodules
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+      # Catch version drift on every PR: the first-party Rust crates must all
+      # carry the same version (docs/release-process.md, scripts/bump_version.py).
+      - name: Check Rust crate versions agree
+        run: python3 scripts/bump_version.py --check
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check || echo "::warning::Formatting issues found"
+      - name: Clippy
+        run: cargo clippy --lib 2>&1 | tee clippy_output.txt || true
+      - name: Check for clippy errors (not warnings)
+        run: |
+          if grep -q "^error" clippy_output.txt; then
+            echo "Clippy errors found!"
+            exit 1
+          fi
+
+  benchmark:
+    if: inputs.code == 'true'
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init submodules
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/eda-infra-rs
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bench-
+      - name: Run benchmarks
+        run: |
+          cargo bench --bench event_buffer -- --noplot 2>&1 | tee benchmark_results.txt
+          cargo bench --bench xprop -- --noplot 2>&1 | tee -a benchmark_results.txt
+      - name: Extract benchmark summary
+        run: |
+          {
+            echo "## Benchmark Results"
+            echo "\`\`\`"
+            grep -E "^(event_buffer|buffer_ops|xprop)" benchmark_results.txt | head -30 || true
+            grep -E "time:" benchmark_results.txt | head -30 || true
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-results
+          path: benchmark_results.txt
+
+  # ── GPU test jobs (consume prebuilt artifacts; GitHub-hosted GPU runners) ───
+
+  metal:
+    if: always() && inputs.code == 'true'
+    name: Metal Tests (macOS)
+    runs-on: macos-latest-xlarge
+    steps:
+      - name: Gate on the build
+        if: inputs.build_result != 'success'
+        run: |
+          echo "build did not succeed (result: ${{ inputs.build_result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init submodules
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+      - name: Install runtime libs (libomp/libc++ for the prebuilt Metal binary)
+        uses: ./.github/actions/setup-metal
+        with:
+          runtime-only: "true"
+      - name: Download jacquard (Metal)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: metal
+
+      - name: Run Metal simulation (timing test)
+        run: |
+          time (target/release/jacquard sim \
+            tests/timing_test/dff_test_synth.gv \
+            tests/timing_test/dff_test.vcd \
+            tests/timing_test/ci_output.vcd \
+            1) 2>&1 | tee metal_timing.txt
+      - name: Report Metal performance
+        run: |
+          {
+            echo "## Metal Simulation Performance"
+            echo "\`\`\`"
+            cat metal_timing.txt
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify simulation output
+        run: |
+          echo "Comparing GEM output with golden VCD..."
+          if diff -q <(grep '^[01]!' tests/timing_test/dff_test.vcd | head -20) \
+                     <(grep '^[01]!' tests/timing_test/ci_output.vcd | head -20); then
+            echo "✓ VCD outputs match!"
+          else
+            echo "VCD comparison (first 20 signal changes):"
+            echo "=== Golden (iverilog) ==="
+            grep '^[01]!' tests/timing_test/dff_test.vcd | head -20
+            echo "=== GEM output ==="
+            grep '^[01]!' tests/timing_test/ci_output.vcd | head -20
+            echo ""
+            echo "Note: Minor differences may be acceptable depending on signal timing"
+          fi
+
+      # ADR 0021 on-ramp: feed the *behavioral* dff_test.v to `sim` — it must
+      # detect RTL, synthesize via embedded YoWASP Yosys, and produce waves
+      # bit-identical to the gate-level fixture run. Only CI coverage of synth on
+      # real GPU (the prebuilt binary was built --features metal,synth).
+      - name: Set up uv (YoWASP Yosys on-ramp)
+        uses: astral-sh/setup-uv@v7
+      - name: Resolve pinned yosys.wasm
+        run: |
+          set -euo pipefail
+          # PIN the version — keep in sync with uv.lock's yowasp-yosys.
+          WASM=$(uv run --with 'yowasp-yosys==0.64.0.0.post1131' python3 -c \
+            "import yowasp_yosys, pathlib; print(next(pathlib.Path(yowasp_yosys.__file__).parent.rglob('*.wasm')))")
+          test -f "$WASM"
+          echo "JACQUARD_YOSYS_WASM=$WASM" >> "$GITHUB_ENV"
+          echo "resolved yosys.wasm: $WASM"
+      - name: Behavioral RTL on-ramp smoke (ADR 0021)
+        run: |
+          set -euo pipefail
+          target/release/jacquard sim \
+            tests/timing_test/dff_test.v \
+            tests/timing_test/dff_test.vcd \
+            tests/timing_test/onramp_output.vcd \
+            1 --emit-synth tests/timing_test/onramp_synth.gv
+          echo "=== on-ramp synthesized netlist (head) ==="
+          head -8 tests/timing_test/onramp_synth.gv
+          echo "=== compare on-ramp waves vs gate-level fixture run (ci_output.vcd) ==="
+          if diff <(grep '^[01]!' tests/timing_test/ci_output.vcd) \
+                  <(grep '^[01]!' tests/timing_test/onramp_output.vcd); then
+            echo "✓ behavioral on-ramp waves are bit-identical to the fixture run"
+          else
+            echo "✗ on-ramp output diverged from the gate-level fixture run"
+            exit 1
+          fi
+
+      - name: Run Metal simulation with X-propagation
+        run: |
+          target/release/jacquard sim \
+            tests/timing_test/dff_test_synth.gv \
+            tests/timing_test/dff_test.vcd \
+            tests/timing_test/ci_xprop_output.vcd \
+            1 --xprop 2>&1 | tee metal_xprop.txt
+      - name: Verify X-propagation output
+        run: |
+          if grep -q 'x' tests/timing_test/ci_xprop_output.vcd; then
+            echo "X-propagation VCD contains X values as expected"
+          else
+            echo "ERROR: No X values in xprop output VCD (X-propagation broken)"
+            exit 1
+          fi
+      # Upload Metal's dff_test outputs so backend-equivalence can diff them
+      # against the CUDA/HIP outputs.
+      - name: Upload Metal artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: metal-outputs
+          path: |
+            tests/timing_test/ci_output.vcd
+            tests/timing_test/ci_xprop_output.vcd
+
+      # End-to-end X-propagation regression guard (#95).
+      - name: X-propagation demo — sim (#95)
+        run: |
+          set -e
+          target/release/jacquard sim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            tests/xprop_cosim/xprop_demo_stim.vcd \
+            target/test-out/ci_sim_xprop.vcd \
+            1 --xprop --check-with-cpu
+          python3 tests/xprop_cosim/check.py target/test-out/ci_sim_xprop.vcd xprop
+          target/release/jacquard sim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            tests/xprop_cosim/xprop_demo_stim.vcd \
+            target/test-out/ci_sim_2state.vcd \
+            1
+          python3 tests/xprop_cosim/check.py target/test-out/ci_sim_2state.vcd two-state
+      # Register value-injection regression (#108).
+      - name: Register value-injection demo — cosim (#108)
+        run: |
+          set -e
+          target/release/jacquard cosim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            --config tests/xprop_cosim/sim_config.json \
+            --output-vcd target/test-out/ci_cosim_noreginit.vcd \
+            --max-clock-edges 200 --xprop
+          python3 tests/xprop_cosim/check.py target/test-out/ci_cosim_noreginit.vcd xprop
+          target/release/jacquard cosim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            --config tests/xprop_cosim/sim_config_reginit.json \
+            --output-vcd target/test-out/ci_cosim_reginit.vcd \
+            --max-clock-edges 200 --xprop
+          python3 tests/xprop_cosim/check.py target/test-out/ci_cosim_reginit.vcd reg-init
+
+      - name: Run Metal simulation with timing (inv_chain_pnr)
+        run: |
+          set -o pipefail
+          target/release/jacquard sim \
+            tests/timing_test/inv_chain_pnr/inv_chain.v \
+            tests/timing_test/inv_chain_pnr/inv_chain_stimulus.vcd \
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd \
+            1 \
+            --timing-ir tests/timing_test/inv_chain_pnr/inv_chain.jtir \
+            --timed \
+            --timing-report tests/timing_test/inv_chain_pnr/timing_report.json \
+            --timing-summary \
+            2>&1 | tee metal_timed.txt
+      - name: Validate timing report JSON shape
+        run: |
+          python3 scripts/ci/validate_timing_report.py \
+            tests/timing_test/inv_chain_pnr/timing_report.json
+
+      - name: Run dual-UART cosim (multi-UART regression, issue #90)
+        run: |
+          set -o pipefail
+          target/release/jacquard cosim \
+            tests/dual_uart/dual_uart_synth.gv \
+            --config tests/dual_uart/sim_config.json \
+            --top-module dual_uart_top \
+            --max-clock-edges 10000 \
+            2>&1 | tee dual_uart_cosim.txt
+      - name: Verify dual-UART output
+        run: python3 tests/dual_uart/check_pass.py target/test-out/dual_uart_events.json
+
+      - name: Run APB3 bus-trace cosim (ADR 0013)
+        run: |
+          set -o pipefail
+          target/release/jacquard cosim \
+            tests/apb_trace/apb_trace_synth.gv \
+            --config tests/apb_trace/sim_config.json \
+            --top-module apb_trace \
+            --max-clock-edges 200 \
+            --bus-trace-csv target/test-out/apb_trace.csv \
+            2>&1 | tee apb_trace_cosim.txt
+      - name: Verify APB3 bus-trace output
+        run: python3 tests/apb_trace/check.py target/test-out/apb_trace.csv
+
+      # End-to-end X-propagation in the reactive cosim path (#95).
+      - name: X-propagation demo — cosim (#95)
+        run: |
+          set -e
+          target/release/jacquard cosim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            --config tests/xprop_cosim/sim_config.json \
+            --top-module xprop_demo --max-clock-edges 40 \
+            --xprop --output-vcd target/test-out/ci_cosim_xprop.vcd
+          python3 tests/xprop_cosim/check.py target/test-out/ci_cosim_xprop.vcd xprop-cosim
+          target/release/jacquard cosim \
+            tests/xprop_cosim/xprop_demo_synth.gv \
+            --config tests/xprop_cosim/sim_config.json \
+            --top-module xprop_demo --max-clock-edges 40 \
+            --output-vcd target/test-out/ci_cosim_2state.vcd
+          python3 tests/xprop_cosim/check.py target/test-out/ci_cosim_2state.vcd two-state
+      # Observe-kernel offset guard (#95 phase 4).
+      - name: Observe kernels under --xprop (#95)
+        run: |
+          set -e
+          target/release/jacquard cosim \
+            tests/apb_trace/apb_trace_synth.gv \
+            --config tests/apb_trace/sim_config.json \
+            --top-module apb_trace --max-clock-edges 200 \
+            --xprop --bus-trace-csv target/test-out/apb_trace_xprop.csv
+          python3 tests/apb_trace/check.py target/test-out/apb_trace_xprop.csv
+          target/release/jacquard cosim \
+            tests/dual_uart/dual_uart_synth.gv \
+            --config tests/dual_uart/sim_config.json \
+            --top-module dual_uart_top --max-clock-edges 10000 --xprop
+          python3 tests/dual_uart/check_pass.py target/test-out/dual_uart_events.json
+
+      - name: Upload VCD artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: vcd-outputs
+          path: |
+            tests/timing_test/ci_output.vcd
+            tests/timing_test/ci_xprop_output.vcd
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd
+            tests/timing_test/inv_chain_pnr/timing_report.json
+            dual_uart_cosim.txt
+            target/test-out/dual_uart_events.json
+            apb_trace_cosim.txt
+            target/test-out/apb_trace.csv
+            target/test-out/apb_trace_xprop.csv
+            target/test-out/ci_sim_xprop.vcd
+            target/test-out/ci_sim_2state.vcd
+            target/test-out/ci_cosim_xprop.vcd
+            target/test-out/ci_cosim_2state.vcd
+            metal_timing.txt
+            metal_xprop.txt
+            metal_timed.txt
+            perf_metrics/
+
+  cuda:
+    if: always() && inputs.code == 'true'
+    name: CUDA Tests
+    runs-on: tesla4-runner
+    steps:
+      - name: Gate on the build
+        if: inputs.build_result != 'success'
+        run: |
+          echo "build did not succeed (result: ${{ inputs.build_result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      # sky130-cell sims (inv_chain_pnr) read the PDK functional models at
+      # runtime. (eda-infra-rs is build-time only — not needed here.)
+      - name: Init runtime PDK models
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/sky130_fd_sc_hd
+      - name: Show GPU
+        run: nvidia-smi
+      - name: Install CUDA runtime for the prebuilt binary
+        uses: ./.github/actions/setup-cuda
+        with:
+          runtime-only: "true"
+      - name: Download jacquard (CUDA)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: cuda
+      # Full functional suite (sim / X-prop / timed + report / cosim Stage B+C),
+      # shared with cuda-blackwell via scripts/ci/gpu_test_suite.sh.
+      - name: Run GPU test suite
+        run: JACQUARD_BIN=target/release/jacquard bash scripts/ci/gpu_test_suite.sh cuda
+      - name: Upload CUDA artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: cuda-outputs
+          path: |
+            tests/timing_test/ci_cuda_output.vcd
+            tests/timing_test/ci_cuda_xprop_output.vcd
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_cuda.vcd
+            tests/timing_test/inv_chain_pnr/timing_report_cuda.json
+            cuda_timing.txt
+            cuda_xprop.txt
+            cuda_timed.txt
+            perf_metrics/
+
+  # Real NVIDIA Blackwell (sm_120) coverage on the self-hosted nvidia1 runner.
+  # Non-gating (perf/async coverage bucket): it skips — rather than fails — when
+  # the build didn't succeed, so an offline self-hosted box never blocks a merge.
+  cuda-blackwell:
+    if: inputs.code == 'true' && inputs.build_result == 'success'
+    name: CUDA Blackwell Tests
+    runs-on: [self-hosted, cuda, blackwell]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init runtime PDK models
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/sky130_fd_sc_hd
+      - name: Download jacquard (CUDA, all-major)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: cuda
+      - name: Show GPU
+        run: nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader
+      - name: Run GPU test suite
+        run: JACQUARD_BIN=target/release/jacquard bash scripts/ci/gpu_test_suite.sh blackwell
+
+  hip-on-nvidia:
+    if: always() && inputs.code == 'true'
+    name: HIP Tests (NVIDIA backend)
+    # HIP_PLATFORM=nvidia lowers HIP onto the CUDA runtime, so only cudart is
+    # needed at run time — no ROCm install on the paid runner.
+    runs-on: tesla4-runner
+    steps:
+      - name: Gate on the build
+        if: inputs.build_result != 'success'
+        run: |
+          echo "build did not succeed (result: ${{ inputs.build_result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init runtime PDK models
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/sky130_fd_sc_hd
+      - name: Show GPU
+        run: nvidia-smi
+      - name: Install CUDA runtime for the prebuilt binary
+        uses: ./.github/actions/setup-cuda
+        with:
+          runtime-only: "true"
+      - name: Download jacquard (HIP)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: hip
+
+      - name: Run HIP simulation (timing test)
+        run: |
+          time (target/release/jacquard sim \
+            tests/timing_test/dff_test_synth.gv \
+            tests/timing_test/dff_test.vcd \
+            tests/timing_test/ci_hip_output.vcd \
+            1) 2>&1 | tee hip_timing.txt
+      - name: Report HIP performance
+        run: |
+          {
+            echo "## HIP (NVIDIA backend) Simulation Performance"
+            echo "\`\`\`"
+            cat hip_timing.txt
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Run HIP simulation with X-propagation
+        run: |
+          target/release/jacquard sim \
+            tests/timing_test/dff_test_synth.gv \
+            tests/timing_test/dff_test.vcd \
+            tests/timing_test/ci_hip_xprop_output.vcd \
+            1 --xprop 2>&1 | tee hip_xprop.txt
+      - name: Verify HIP X-propagation output
+        run: |
+          if grep -q 'x' tests/timing_test/ci_hip_xprop_output.vcd; then
+            echo "X-propagation VCD contains X values as expected"
+          else
+            echo "WARNING: No X values in HIP xprop output VCD"
+          fi
+      # #104: exercise the HIP timed path (timed launcher + EventBuffer drain +
+      # report finalize).
+      - name: Run HIP simulation with timing (inv_chain_pnr, #104)
+        run: |
+          set -o pipefail
+          target/release/jacquard sim \
+            tests/timing_test/inv_chain_pnr/inv_chain.v \
+            tests/timing_test/inv_chain_pnr/inv_chain_stimulus.vcd \
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_hip.vcd \
+            1 \
+            --timing-ir tests/timing_test/inv_chain_pnr/inv_chain.jtir \
+            --timed \
+            --timing-report tests/timing_test/inv_chain_pnr/timing_report_hip.json \
+            --timing-summary \
+            2>&1 | tee hip_timed.txt
+      - name: Validate HIP timing report JSON shape (#104)
+        run: |
+          python3 scripts/ci/validate_timing_report.py \
+            tests/timing_test/inv_chain_pnr/timing_report_hip.json
+      # Phase 2 Stage B (#105): logic + GPU-peripheral cosim vs committed goldens.
+      - name: Run HIP cosim — logic + UART/bus (Stage B, #105)
+        run: |
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=all \
+            bash scripts/ci/cosim_cpu_check.sh
+      # Phase 2 Stage C (#105): mcu_soc flash cosim on HIP vs CpuBackend golden.
+      - name: Run HIP cosim — flash (Stage C, #105)
+        run: |
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=flash \
+            bash scripts/ci/cosim_cpu_check.sh
+      - name: Upload HIP artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: hip-outputs
+          path: |
+            tests/timing_test/ci_hip_output.vcd
+            tests/timing_test/ci_hip_xprop_output.vcd
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_hip.vcd
+            tests/timing_test/inv_chain_pnr/timing_report_hip.json
+            hip_timing.txt
+            hip_xprop.txt
+            hip_timed.txt
+            perf_metrics/
+
+  # ── MCU SoC + JTAG downstream (Metal artifact consumers) ────────────────────
+
+  prepare-mcu-soc-jtir:
+    if: inputs.code == 'true'
+    name: Prepare MCU SoC timing IR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init vendor/opensta submodule
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/opensta
+      - name: Resolve OpenSTA submodule SHA
+        id: opensta-sha
+        run: |
+          sha=$(git ls-tree HEAD vendor/opensta | awk '{print $3}')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install OpenSTA build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake bison flex libfl-dev swig \
+            tcl-dev tcl-tclreadline libeigen3-dev libfmt-dev wget
+      - name: Cache CUDD
+        id: cache-cudd
+        uses: actions/cache@v5
+        with:
+          path: ~/cudd-3.0.0
+          key: cudd-3.0.0-v1
+      - name: Build CUDD from source
+        if: steps.cache-cudd.outputs.cache-hit != 'true'
+        run: |
+          cd "$HOME"
+          wget -q https://raw.githubusercontent.com/davidkebo/cudd/main/cudd_versions/cudd-3.0.0.tar.gz
+          tar -xf cudd-3.0.0.tar.gz
+          cd cudd-3.0.0
+          ./configure
+          make -j"$(nproc)"
+      - name: Cache OpenSTA build
+        id: cache-opensta
+        uses: actions/cache@v5
+        with:
+          path: vendor/opensta/build
+          key: opensta-${{ steps.opensta-sha.outputs.sha }}-cudd-3.0.0-v1
+      - name: Build OpenSTA
+        if: steps.cache-opensta.outputs.cache-hit != 'true'
+        env:
+          CUDD_DIR: /home/runner/cudd-3.0.0
+        run: scripts/build-opensta.sh
+      - name: Cache cargo (opensta-to-ir)
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            crates/opensta-to-ir/target/
+          key: ${{ runner.os }}-cargo-opensta-to-ir-${{ hashFiles('crates/opensta-to-ir/Cargo.toml', 'crates/timing-ir/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-opensta-to-ir-
+      - name: Cache volare PDK (sky130A)
+        id: cache-volare
+        uses: actions/cache@v5
+        with:
+          path: ~/.volare
+          key: volare-sky130A-c6d73a35f524070e85faff4a6a9eef49553ebc2b
+      - name: Install sky130A PDK via volare
+        if: steps.cache-volare.outputs.cache-hit != 'true'
+        run: |
+          uv sync --group dev
+          uv run volare enable c6d73a35f524070e85faff4a6a9eef49553ebc2b
+      - name: Build opensta-to-ir
+        working-directory: crates/opensta-to-ir
+        run: cargo build --release --bin opensta-to-ir
+      - name: Generate MCU SoC timing IR
+        run: |
+          LIB=$HOME/.volare/volare/sky130/versions/c6d73a35f524070e85faff4a6a9eef49553ebc2b/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+          crates/opensta-to-ir/target/release/opensta-to-ir \
+            --liberty "$LIB" \
+            --verilog tests/mcu_soc/data/6_final.v \
+            --sdf tests/mcu_soc/data/6_final.sdf \
+            --top top \
+            --output tests/mcu_soc/data/6_final.jtir
+      - name: Upload MCU SoC timing IR artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcu-soc-jtir
+          path: tests/mcu_soc/data/6_final.jtir
+
+  mcu-soc-metal:
+    if: always() && inputs.code == 'true'
+    name: MCU SoC Metal Simulation
+    runs-on: macos-latest-xlarge
+    timeout-minutes: 30
+    needs: [prepare-mcu-soc-jtir]
+    steps:
+      - name: Gate on the build
+        if: inputs.build_result != 'success'
+        run: |
+          echo "build did not succeed (result: ${{ inputs.build_result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: true
+      - name: Install runtime libs (libomp/libc++ for the prebuilt Metal binary)
+        uses: ./.github/actions/setup-metal
+        with:
+          runtime-only: "true"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Download jacquard (Metal)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: metal
+      - name: Build firmware
+        run: |
+          cd designs/mcu_soc_sky130
+          uv sync
+          uv run chipflow software
+      - name: Generate sim_config.json
+        run: |
+          python3 scripts/gen_sim_config.py \
+            designs/mcu_soc_sky130/pins.lock tests/mcu_soc/ \
+            --netlist tests/mcu_soc/data/6_final.v \
+            --firmware designs/mcu_soc_sky130/build/software/software.bin \
+            --port-mapping \
+            --constant-port por_l=1 \
+            --constant-port porb_h=1 \
+            --constant-port porb_l=1 \
+            --constant-port resetb_h=1 \
+            --constant-port resetb_l=1
+      - name: Run GPU co-simulation (500K ticks)
+        timeout-minutes: 30
+        run: |
+          set -o pipefail
+          target/release/jacquard cosim \
+            tests/mcu_soc/data/6_final.v \
+            --config tests/mcu_soc/sim_config.json --top-module top \
+            --max-clock-edges 500000 \
+            2>&1 | tee cosim_output.txt
+      - name: Verify UART boot output
+        run: |
+          if grep -q "nyaa" cosim_output.txt; then
+            echo "MCU SoC booted successfully - UART output detected"
+          else
+            echo "FAIL: Expected UART output 'nyaa' not found in cosim output"
+            echo "--- Last 50 lines of simulation output ---"
+            tail -50 cosim_output.txt
+            exit 1
+          fi
+      - name: Download MCU SoC timing IR
+        uses: actions/download-artifact@v8
+        with:
+          name: mcu-soc-jtir
+          path: tests/mcu_soc/data/
+      - name: Capture stimulus + timing VCD via cosim (10K ticks)
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          target/release/jacquard cosim \
+            tests/mcu_soc/data/6_final.v \
+            --config tests/mcu_soc/sim_config.json --top-module top \
+            --max-clock-edges 10000 \
+            --timing-ir tests/mcu_soc/data/6_final.jtir \
+            --stimulus-vcd tests/mcu_soc/stimulus.vcd \
+            --output-vcd tests/mcu_soc/jacquard_timed_mcu.vcd \
+            2>&1 | tee cosim_stimulus.txt
+      - name: Replay stimulus (non-timed, for CVC comparison)
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          target/release/jacquard sim \
+            tests/mcu_soc/data/6_final.v \
+            tests/mcu_soc/stimulus.vcd \
+            tests/mcu_soc/jacquard_replay_mcu.vcd \
+            1 \
+            --top-module top \
+            --max-clock-edges 10000 \
+            2>&1 | tee metal_mcu_replay.txt
+      - name: Report simulation results
+        if: always()
+        run: |
+          {
+            echo "## MCU SoC Metal Co-simulation"
+            echo "\`\`\`"
+            tail -20 cosim_output.txt
+            echo "\`\`\`"
+            if [ -f metal_mcu_replay.txt ]; then
+              echo "## MCU SoC Non-timed Replay"
+              echo "\`\`\`"
+              tail -20 metal_mcu_replay.txt
+              echo "\`\`\`"
+            fi
+            if [ -f cosim_stimulus.txt ]; then
+              echo "## MCU SoC Cosim Timing VCD"
+              echo "\`\`\`"
+              tail -20 cosim_stimulus.txt
+              echo "\`\`\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mcu-soc-results
+          path: |
+            cosim_output.txt
+            cosim_stimulus.txt
+            metal_mcu_replay.txt
+            tests/mcu_soc/sim_config.json
+            tests/mcu_soc/stimulus.vcd
+            tests/mcu_soc/jacquard_replay_mcu.vcd
+            tests/mcu_soc/jacquard_timed_mcu.vcd
+
+  jtag-minimal-cosim:
+    if: always() && inputs.code == 'true'
+    name: JTAG Minimal Cosim (Hazard3 DTM+DM)
+    runs-on: macos-latest-xlarge
+    timeout-minutes: 45
+    continue-on-error: false
+    steps:
+      - name: Gate on the build
+        if: inputs.build_result != 'success'
+        run: |
+          echo "build did not succeed (result: ${{ inputs.build_result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: true
+      - name: Install runtime libs (libomp/libc++ for the prebuilt Metal binary)
+        uses: ./.github/actions/setup-metal
+        with:
+          runtime-only: "true"
+      - name: Download jacquard (Metal)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: metal
+      - name: Run JTAG-replay cosim against post-PnR netlist
+        timeout-minutes: 40
+        run: |
+          set -o pipefail
+          target/release/jacquard cosim \
+            tests/jtag_minimal/data/top.pnl.v \
+            --config tests/jtag_minimal/sim_config.json \
+            --top-module top \
+            --jtag-replay tests/jtag_minimal/data/bitbang.rec \
+            --jtag-hold-cycles 8 \
+            --trace-signals tests/jtag_minimal/trace_signals.txt \
+            --output-vcd tests/jtag_minimal/data/cosim_trace.vcd \
+            --max-clock-edges 400000 \
+            2>&1 | tee jtag_minimal_cosim.log
+      - name: Assert data0_obs == 0xCAFEBABE
+        run: |
+          python3 tests/jtag_minimal/scripts/check_pass.py \
+            tests/jtag_minimal/data/cosim_trace.vcd
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: jtag-minimal-results
+          path: |
+            jtag_minimal_cosim.log
+            tests/jtag_minimal/data/cosim_trace.vcd
+
+  jtag-minimal-cosim-server:
+    if: always() && inputs.code == 'true'
+    name: JTAG Minimal Cosim Server (live remote_bitbang)
+    runs-on: macos-latest-xlarge
+    timeout-minutes: 45
+    continue-on-error: false
+    steps:
+      - name: Gate on the build
+        if: inputs.build_result != 'success'
+        run: |
+          echo "build did not succeed (result: ${{ inputs.build_result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: true
+      - name: Install runtime libs (libomp/libc++ for the prebuilt Metal binary)
+        uses: ./.github/actions/setup-metal
+        with:
+          runtime-only: "true"
+      - name: Download jacquard (Metal)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: metal
+      - name: Run live --jtag-server cosim + bitbang client
+        timeout-minutes: 40
+        run: |
+          set -o pipefail
+          ./target/release/jacquard cosim \
+            tests/jtag_minimal/data/top.pnl.v \
+            --config tests/jtag_minimal/sim_config.json \
+            --top-module top \
+            --jtag-server 9999 \
+            --jtag-hold-cycles 8 \
+            --trace-signals tests/jtag_minimal/trace_signals.txt \
+            --output-vcd tests/jtag_minimal/data/cosim_server_trace.vcd \
+            --max-clock-edges 400000 \
+            > jtag_minimal_server.log 2>&1 &
+          SERVER_PID=$!
+          python3 tests/jtag_minimal/scripts/bitbang_client.py \
+            127.0.0.1 9999 tests/jtag_minimal/data/bitbang.rec
+          wait $SERVER_PID
+      - name: Assert data0_obs == 0xCAFEBABE (live server)
+        run: |
+          python3 tests/jtag_minimal/scripts/check_pass.py \
+            tests/jtag_minimal/data/cosim_server_trace.vcd
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: jtag-minimal-server-results
+          path: |
+            jtag_minimal_server.log
+            tests/jtag_minimal/data/cosim_server_trace.vcd
+
+  jtag-minimal-openocd:
+    if: always() && inputs.code == 'true'
+    name: JTAG Minimal OpenOCD (real remote_bitbang attach)
+    timeout-minutes: 45
+    continue-on-error: false
+    runs-on: macos-latest-xlarge
+    steps:
+      - name: Gate on the build
+        if: inputs.build_result != 'success'
+        run: |
+          echo "build did not succeed (result: ${{ inputs.build_result }})" >&2
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: true
+      - name: Install runtime libs (libomp/libc++) and OpenOCD
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          brew install llvm open-ocd
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+          "$(brew --prefix)/bin/openocd" --version
+      - name: Download jacquard (Metal)
+        uses: ./.github/actions/download-jacquard
+        with:
+          backend: metal
+      - name: Attach with real OpenOCD and assert IDCODE + DMI read-back
+        timeout-minutes: 40
+        run: |
+          ./target/release/jacquard cosim \
+            tests/jtag_minimal/data/top.pnl.v \
+            --config tests/jtag_minimal/sim_config.json \
+            --top-module top \
+            --jtag-server 0 \
+            --jtag-hold-cycles 8 \
+            --output-vcd tests/jtag_minimal/data/cosim_openocd_trace.vcd \
+            --max-clock-edges 8000000 \
+            > jtag_minimal_openocd_server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill -9 $SERVER_PID 2>/dev/null || true' EXIT
+          PORT=""
+          for _ in $(seq 1 240); do
+            PORT=$(grep -oE "listening on 127\.0\.0\.1:[0-9]+" \
+              jtag_minimal_openocd_server.log | head -1 | grep -oE "[0-9]+$" || true)
+            [ -n "$PORT" ] && break
+            kill -0 "$SERVER_PID" 2>/dev/null || { echo "server exited during setup"; cat jtag_minimal_openocd_server.log; exit 1; }
+            sleep 1
+          done
+          [ -n "$PORT" ] || { echo "server never logged a listening port"; exit 1; }
+          echo "JTAG server listening on port $PORT"
+          OPENOCD_LOG=openocd_debug.log \
+            bash tests/jtag_minimal/scripts/openocd_debug.sh "$PORT"
+          STATUS=$?
+          kill -9 $SERVER_PID 2>/dev/null || true
+          exit $STATUS
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: jtag-minimal-openocd-results
+          path: |
+            jtag_minimal_openocd_server.log
+            openocd_debug.log
+
+  # ── CVC reference + comparisons ─────────────────────────────────────────────
+
+  cvc-reference:
+    if: inputs.code == 'true'
+    name: CVC Reference Simulation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Cache CVC binary
+        id: cache-cvc
+        uses: actions/cache@v5
+        with:
+          path: ~/cvc/bin
+          key: cvc-binary-debug-v4-toplevel-makefile
+      - name: Build CVC from source
+        if: steps.cache-cvc.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential zlib1g-dev
+          git clone --depth 1 https://github.com/cambridgehackers/open-src-cvc.git ~/cvc-src
+          cd ~/cvc-src/src
+          make -j$(nproc) \
+            CFLAGS="-pipe -Wall -Wno-incompatible-pointer-types -Wno-implicit-function-declaration -I../pli_incs -D__RHEL6X__ -fno-pie -no-pie -O0"
+          mkdir -p ~/cvc/bin
+          cp ../build64/cvc64 ~/cvc/bin/
+      - name: Add CVC to PATH
+        run: echo "$HOME/cvc/bin" >> "$GITHUB_PATH"
+      - name: Run CVC simulation with SDF
+        working-directory: tests/timing_test/inv_chain_pnr
+        run: |
+          echo "=== Running CVC on inv_chain with SDF ==="
+          cvc64 +typdelays tb_cvc.v inv_chain.v 2>&1 | tee cvc_compile.log
+          ./cvcsim 2>&1 | tee cvc_output.log
+          echo ""
+          echo "=== CVC simulation complete ==="
+      - name: Validate CVC timing results
+        working-directory: tests/timing_test/inv_chain_pnr
+        run: |
+          echo "Checking CVC produced timing results..."
+          if grep -q "RESULT: total_delay=" cvc_output.log; then
+            echo "CVC timing results found:"
+            grep "RESULT:" cvc_output.log
+          else
+            echo "ERROR: CVC did not produce expected RESULT: lines"
+            echo "--- Full CVC output ---"
+            cat cvc_output.log
+            exit 1
+          fi
+      - name: Validate CVC timing range
+        working-directory: tests/timing_test/inv_chain_pnr
+        run: |
+          echo "=== Validating CVC timing results ==="
+          CVC_TOTAL=$(grep "RESULT: total_delay=" cvc_output.log | sed 's/.*=//')
+          echo "CVC total delay: ${CVC_TOTAL}ps"
+          if [ "$CVC_TOTAL" -gt 800 ] && [ "$CVC_TOTAL" -lt 2000 ]; then
+            echo "PASS: CVC total delay is in expected range (800-2000ps)"
+          else
+            echo "FAIL: CVC total delay ${CVC_TOTAL}ps outside expected range"
+            exit 1
+          fi
+      - name: Report results
+        if: always()
+        run: |
+          {
+            echo "## CVC Reference Simulation Results"
+            echo ""
+            echo "### CVC Output"
+            echo "\`\`\`"
+            cat tests/timing_test/inv_chain_pnr/cvc_output.log 2>/dev/null || echo "No CVC output"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: cvc-reference-results
+          path: |
+            tests/timing_test/inv_chain_pnr/cvc_compile.log
+            tests/timing_test/inv_chain_pnr/cvc_output.log
+            tests/timing_test/inv_chain_pnr/cvc_inv_chain_output.vcd
+
+  timing-comparison:
+    name: Timing Comparison (CVC vs Jacquard)
+    runs-on: ubuntu-latest
+    needs: [metal, cvc-reference]
+    if: always() && needs.metal.result == 'success' && needs.cvc-reference.result == 'success'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Download Metal artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: vcd-outputs
+          path: metal-results/
+      - name: Download CVC artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: cvc-reference-results
+          path: cvc-results/
+      - name: Compare timing
+        run: |
+          uv run scripts/compare_timing.py \
+            --cvc-log cvc-results/tests/timing_test/inv_chain_pnr/cvc_output.log \
+            --cvc-vcd cvc-results/tests/timing_test/inv_chain_pnr/cvc_inv_chain_output.vcd \
+            --jacquard-vcd metal-results/tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd \
+            --clock-period-ps 10000 \
+            --clock-signal CLK \
+            --output-signal Q \
+            --output-json timing_comparison.json \
+            2>&1 | tee comparison.txt
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "## Timing Comparison (CVC vs Jacquard)"
+            echo ""
+            echo "\`\`\`"
+            cat comparison.txt 2>/dev/null || echo "No comparison output"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: timing-comparison-results
+          path: |
+            timing_comparison.json
+            comparison.txt
+
+  # CVC SDF-annotated MCU SoC sim — advisory *guide*, not a gate
+  # (continue-on-error): surfaces CVC↔Metal differences in the step summary for
+  # a human to read, without committing the fragile CVC-from-source build as a
+  # required check. See docs/plans/ci-build-test-split.md.
+  mcu-soc-cvc:
+    name: MCU SoC CVC Reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [mcu-soc-metal]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init runtime PDK models
+        uses: ./.github/actions/init-submodules
+        with:
+          submodules: vendor/sky130_fd_sc_hd
+      - uses: astral-sh/setup-uv@v7
+      - name: Cache CVC binary
+        id: cache-cvc
+        uses: actions/cache@v5
+        with:
+          path: ~/cvc/bin
+          key: cvc-binary-debug-v2
+      - name: Build CVC from source
+        if: steps.cache-cvc.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential zlib1g-dev
+          git clone --depth 1 https://github.com/cambridgehackers/open-src-cvc.git ~/cvc-src
+          cd ~/cvc-src/src
+          make -j$(nproc) \
+            CFLAGS="-pipe -Wall -Wno-incompatible-pointer-types -Wno-implicit-function-declaration -I../pli_incs -D__RHEL6X__ -fno-pie -no-pie -O0"
+          mkdir -p ~/cvc/bin
+          cp ../build64/cvc64 ~/cvc/bin/
+      - name: Add CVC to PATH
+        run: echo "$HOME/cvc/bin" >> "$GITHUB_PATH"
+      - name: Download Metal artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: mcu-soc-results
+          path: metal-results/
+      - name: Generate cell models
+        run: uv run tests/mcu_soc/cvc/gen_cell_models.py
+      - name: Strip SDF timing checks
+        run: |
+          uv run tests/mcu_soc/cvc/strip_sdf_checks.py \
+            tests/mcu_soc/data/6_final.sdf \
+            tests/mcu_soc/cvc/6_final_nocheck.sdf
+      - name: Convert stimulus to Verilog
+        run: |
+          uv run tests/mcu_soc/cvc/convert_stimulus.py \
+            metal-results/tests/mcu_soc/stimulus.vcd \
+            tests/mcu_soc/cvc/stimulus_gen.v \
+            --config metal-results/tests/mcu_soc/sim_config.json
+      - name: Run CVC simulation
+        timeout-minutes: 45
+        working-directory: tests/mcu_soc/cvc
+        run: |
+          ln -sf ../data/6_final.v .
+          cvc64 +typdelays tb_cvc.v sky130_cells.v cf_sram.v 6_final.v \
+            2>&1 | tee cvc_compile.log
+          ./cvcsim 2>&1 | tee cvc_sim.log
+      - name: Report results
+        if: always()
+        run: |
+          {
+            echo "## MCU SoC CVC Reference Simulation"
+            echo ""
+            echo "### CVC Compilation"
+            echo "\`\`\`"
+            tail -20 tests/mcu_soc/cvc/cvc_compile.log 2>/dev/null || echo "No compile output"
+            echo "\`\`\`"
+            echo ""
+            echo "### CVC Simulation"
+            echo "\`\`\`"
+            tail -20 tests/mcu_soc/cvc/cvc_sim.log 2>/dev/null || echo "No sim output"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mcu-soc-cvc-results
+          path: |
+            tests/mcu_soc/cvc/cvc_compile.log
+            tests/mcu_soc/cvc/cvc_sim.log
+            tests/mcu_soc/cvc/cvc_output.vcd
+
+  # Guide, not gate (continue-on-error): reports the CVC↔Jacquard MCU SoC diff
+  # to the step summary; a mismatch never blocks a merge.
+  mcu-soc-comparison:
+    name: MCU SoC Functional Comparison
+    runs-on: ubuntu-latest
+    needs: [mcu-soc-metal, mcu-soc-cvc]
+    if: always() && needs.mcu-soc-metal.result == 'success' && needs.mcu-soc-cvc.result == 'success'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Download Metal artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: mcu-soc-results
+          path: metal-results/
+      - name: Download CVC artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: mcu-soc-cvc-results
+          path: cvc-results/
+      - name: Compare outputs (non-timed Jacquard vs CVC)
+        run: |
+          JACQUARD_VCD="metal-results/tests/mcu_soc/jacquard_replay_mcu.vcd"
+          CVC_VCD="cvc-results/cvc_output.vcd"
+          if [ ! -f "$JACQUARD_VCD" ]; then
+            echo "SKIP: Jacquard replay VCD not found" | tee mcu_comparison.txt
+            exit 0
+          fi
+          if [ ! -f "$CVC_VCD" ]; then
+            echo "SKIP: CVC output VCD not found (CVC simulation may have failed)" | tee mcu_comparison.txt
+            exit 0
+          fi
+          JACQUARD_TIMING_VCD="metal-results/tests/mcu_soc/jacquard_timed_mcu.vcd"
+          TIMING_ARGS=""
+          if [ -f "$JACQUARD_TIMING_VCD" ]; then
+            TIMING_ARGS="--jacquard-timing-vcd $JACQUARD_TIMING_VCD"
+          fi
+          uv run tests/mcu_soc/cvc/compare_simulation.py \
+            "$JACQUARD_VCD" "$CVC_VCD" \
+            --skip-cycles 5 \
+            --num-cycles 10000 \
+            --skip-bits 0-5 \
+            --config metal-results/tests/mcu_soc/sim_config.json \
+            $TIMING_ARGS \
+            2>&1 | tee mcu_comparison.txt
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "## MCU SoC Simulation Comparison (CVC vs Jacquard)"
+            echo ""
+            echo "\`\`\`"
+            cat mcu_comparison.txt 2>/dev/null || echo "No comparison output"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mcu-soc-comparison-results
+          path: mcu_comparison.txt
+
+  backend-equivalence:
+    name: Backend Equivalence (CUDA/HIP/Metal)
+    runs-on: ubuntu-latest
+    needs: [cuda, hip-on-nvidia, metal]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Download CUDA outputs
+        uses: actions/download-artifact@v8
+        with:
+          name: cuda-outputs
+          path: out/cuda
+      - name: Download HIP outputs
+        uses: actions/download-artifact@v8
+        with:
+          name: hip-outputs
+          path: out/hip
+      - name: Download Metal outputs
+        uses: actions/download-artifact@v8
+        with:
+          name: metal-outputs
+          path: out/metal
+      - name: Compare functional output VCDs
+        run: |
+          set -euo pipefail
+          cuda=$(find out/cuda -name ci_cuda_output.vcd | head -1)
+          hip=$(find out/hip -name ci_hip_output.vcd | head -1)
+          metal=$(find out/metal -name ci_output.vcd | head -1)
+          python3 scripts/ci/compare_backend_vcds.py --label functional "$cuda" "$hip" "$metal"
+      - name: Compare X-propagation output VCDs
+        run: |
+          set -euo pipefail
+          cuda=$(find out/cuda -name ci_cuda_xprop_output.vcd | head -1)
+          hip=$(find out/hip -name ci_hip_xprop_output.vcd | head -1)
+          metal=$(find out/metal -name ci_xprop_output.vcd | head -1)
+          python3 scripts/ci/compare_backend_vcds.py --label xprop "$cuda" "$hip" "$metal"
