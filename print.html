@@ -12660,6 +12660,18 @@ verbatim.</li>
 provenance wasm</strong> (A1 done); proceed to harden (A1) + distribute (A2). Low/zero →
 the <code>aiger2</code> <code>"y"</code> channel or abc <code>&amp;origins</code> isn't functioning in the wasm build;
 diagnose before investing further.</li>
+</ul>
+<blockquote>
+<p><strong>✅ A0 GO (2026-07-06, CI run <code>28779240456</code>).</strong> The provenance wasm builds and
+carries origins: <code>comb 4/4 = 100%</code>, <strong><code>seq2 88/88 = 100%</code></strong> <code>\src</code> coverage on
+mapped sky130 cells. Origins survive the <strong>in-process WASI <code>abc_new</code></strong> round-trip
+(including sequential logic) — the ADR's key open risk is resolved. Getting here
+also required rebasing <code>robtaylor/abc@origin-tracking-clean</code> onto current
+<code>berkeley-abc/master</code> (it was 97 commits behind, missing the <code>#ifdef __wasm</code> guards
+around abc's <code>system()</code> calls → <code>wasm-ld: undefined symbol: system</code>). CI:
+<code>robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml</code>.</p>
+</blockquote>
+<ul>
 <li><strong>Fallbacks if it fails:</strong> (a) debug the <code>aiger2</code>/<code>&amp;origins</code> path in the wasm
 build (the channel is XAIGER round-trip, not exec, so the failure is in the
 reader/writer or the patch, not "in-process abc" per se); (b) <strong>Nix native
