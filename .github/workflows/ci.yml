@@ -1286,11 +1286,29 @@ jobs:
         timeout-minutes: 30
         run: |
           set -o pipefail
+          # --cosim-perf-json emits a per-edge timing breakdown incl.
+          # ground-truth GPU-execution time from Metal device timestamps
+          # (GPUStartTime/GPUEndTime). Report-only — surfaced in the step
+          # summary below; no perf gate. See docs/cosim-perf-report.md.
           target/release/jacquard cosim \
             tests/mcu_soc/data/6_final.v \
             --config tests/mcu_soc/sim_config.json --top-module top \
             --max-clock-edges 500000 \
+            --cosim-perf-json cosim_perf.json \
             2>&1 | tee cosim_output.txt
+
+      - name: Report cosim timing (Metal, mcu_soc)
+        if: always()
+        run: |
+          # Report-only: log the device-timestamp timing breakdown to the job
+          # summary. Never fails the job (no regression gate — see
+          # docs/cosim-perf-report.md for the rationale and follow-up gating).
+          {
+            echo "## Cosim perf — mcu_soc (Metal, 500K edges)"
+            echo '```json'
+            cat cosim_perf.json 2>/dev/null || echo '{ "error": "no perf report produced" }'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify UART boot output
         run: |

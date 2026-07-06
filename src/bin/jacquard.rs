@@ -482,6 +482,13 @@ struct CosimArgs {
     #[clap(long = "bus-trace-csv", value_name = "PATH")]
     bus_trace_csv: Option<PathBuf>,
 
+    /// Write a machine-readable JSON cosim perf report to <PATH>: per-edge
+    /// timing breakdown including ground-truth GPU-execution time from device
+    /// timestamps (Metal `GPUStartTime`/`GPUEndTime`). Report-only; consumed by
+    /// the CI timing step. The same numbers print in the profiling breakdown.
+    #[clap(long = "cosim-perf-json", value_name = "PATH")]
+    cosim_perf_json: Option<PathBuf>,
+
     /// Force the behavioral-RTL synthesis path (ADR 0021), overriding
     /// auto-detection. Requires a `--features synth` build.
     #[clap(long, conflicts_with = "netlist")]
@@ -2330,6 +2337,7 @@ fn cmd_cosim(args: CosimArgs) {
             jtag_hold_cycles: args.jtag_hold_cycles,
             run_params: args.run_params.clone(),
             bus_trace_csv: args.bus_trace_csv.clone(),
+            cosim_perf_json: args.cosim_perf_json.clone(),
         };
 
         // Backend selection (priority metal > cuda > hip > cpu, mirroring the

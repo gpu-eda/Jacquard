@@ -674,6 +674,12 @@ impl CosimBackend for HipBackend {
     fn wait(&self, _token: u64) {
         // run_edges synchronizes at end-of-batch; nothing left to await.
     }
+
+    fn backend_name(&self) -> &'static str {
+        "hip"
+    }
+    // last_batch_gpu_seconds: default None for now; HIP-event timing is a
+    // follow-up (hipEventElapsedTime around the batch), validated on nvidia1.
 }
 
 /// Public HIP-backend cosim entry point (Stage B). Drives the same agnostic

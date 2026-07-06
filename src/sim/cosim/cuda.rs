@@ -669,6 +669,12 @@ impl CosimBackend for CudaBackend {
     fn wait(&self, _token: u64) {
         // run_edges synchronizes at end-of-batch; nothing left to await.
     }
+
+    fn backend_name(&self) -> &'static str {
+        "cuda"
+    }
+    // last_batch_gpu_seconds: default None for now; CUDA-event timing is a
+    // follow-up (cudaEventElapsedTime around the batch), validated on nvidia1.
 }
 
 /// Public CUDA-backend cosim entry point (Stage B). Drives the same agnostic

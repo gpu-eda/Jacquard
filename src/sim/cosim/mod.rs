@@ -65,6 +65,13 @@ pub struct CosimOpts {
     /// Path to write decoded AHB/APB bus transactions as CSV. Requires
     /// at least one `bus_traces` entry in the config. See ADR 0013.
     pub bus_trace_csv: Option<std::path::PathBuf>,
+    /// Path to write a machine-readable JSON cosim perf report (per-edge timing
+    /// breakdown incl. device-timestamp GPU-exec time). Report-only; consumed by
+    /// the CI timing step. `None` → no JSON file is written. (The GPU-exec
+    /// timing itself is always collected so the human summary can show it; its
+    /// cost is negligible — one command-buffer completion read per ~1024-edge
+    /// batch.)
+    pub cosim_perf_json: Option<std::path::PathBuf>,
 }
 
 /// Result of a co-simulation run.
@@ -1939,6 +1946,24 @@ trait CosimBackend {
     /// no-op — a CPU backend has no GPU kernels to profile.
     fn profile_kernels(&self, _num_ticks: usize) {}
 
+    /// GPU-execution wall time, in seconds, of the most recently completed
+    /// batch — measured from device timestamps (Metal: `MTLCommandBuffer`
+    /// `GPUStartTime`/`GPUEndTime`; CUDA/HIP: event elapsed time). Called by the
+    /// orchestration after `wait()`, so the batch is already complete. Returns
+    /// `None` for backends without a GPU clock (the CPU reference backend) or
+    /// when the last batch has no timing recorded yet. This is the ground-truth
+    /// GPU-vs-CPU split, free of the tracing overhead that Metal System Trace /
+    /// nsys impose on a workload of thousands of tiny dispatches per batch.
+    fn last_batch_gpu_seconds(&self) -> Option<f64> {
+        None
+    }
+
+    /// Short backend identifier for perf reports (`"metal"`, `"cuda"`, `"hip"`,
+    /// `"cpu"`).
+    fn backend_name(&self) -> &'static str {
+        "unknown"
+    }
+
     /// Materialise the backend's native per-edge schedule storage *once* from
     /// the backend-agnostic ops description (one `Vec<BitOp>` per scheduler
     /// edge). The orchestration keeps only scalars (`edges_per_period`,
@@ -3181,6 +3206,10 @@ fn run_cosim_generic<B: CosimBackend>(
     let mut prof_drain: u64 = 0;
     let mut prof_stimulus_vcd: u64 = 0;
     let mut prof_output_vcd: u64 = 0;
+    // Ground-truth GPU-execution time (device timestamps), summed over batches.
+    // Distinct from `prof_gpu_wait` (CPU wall spent spinning), which is a CPU
+    // measurement; this is the GPU-side clock and is 0 when the backend has none.
+    let mut prof_gpu_exec_ns: u64 = 0;
     let mut total_batches: u64 = 0;
     // Batch-utilisation telemetry: how often the GPU-only batched fast path
     // (batch>1) is exercised vs. forced single-edge dispatch. Informs the
@@ -3406,6 +3435,12 @@ fn run_cosim_generic<B: CosimBackend>(
         let t_wait = std::time::Instant::now();
         backend.wait(batch_done);
         prof_gpu_wait += t_wait.elapsed().as_nanos() as u64;
+
+        // Ground-truth GPU-execution time from device timestamps (the batch is
+        // complete now). `None` on the CPU backend / until a backend records it.
+        if let Some(gpu_s) = backend.last_batch_gpu_seconds() {
+            prof_gpu_exec_ns += (gpu_s * 1e9) as u64;
+        }
 
         // ── Drain VCD ring buffer (stimulus + timing) ──────────────────────
         if vcd_enabled {
@@ -4009,6 +4044,13 @@ fn run_cosim_generic<B: CosimBackend>(
     // Print profiling results
     let total_ns =
         prof_batch_encode + prof_gpu_wait + prof_drain + prof_stimulus_vcd + prof_output_vcd;
+    // GPU-busy share of the instrumented wall — computed once, used by both the
+    // human summary line and the JSON report.
+    let gpu_util_pct = if total_ns > 0 {
+        100.0 * prof_gpu_exec_ns as f64 / total_ns as f64
+    } else {
+        0.0
+    };
     let print_prof = |name: &str, ns: u64| {
         let us = ns as f64 / 1000.0 / max_edges as f64;
         let pct = if total_ns > 0 {
@@ -4030,6 +4072,17 @@ fn run_cosim_generic<B: CosimBackend>(
         "TOTAL (instrumented)",
         total_ns as f64 / 1000.0 / max_edges as f64
     );
+    // Ground-truth GPU-execution time from device timestamps — a *separate*
+    // measure from the CPU categories above (it overlaps the "GPU wait (spin)"
+    // line, which is the CPU wall spent waiting). The % is GPU-busy share of the
+    // instrumented wall. Absent on the CPU backend.
+    if prof_gpu_exec_ns > 0 {
+        let us = prof_gpu_exec_ns as f64 / 1000.0 / max_edges as f64;
+        println!(
+            "  {:<32} {:>8.1}μs/tick  {:>5.1}%  (GPU-busy share of wall)",
+            "GPU exec (device ts)", us, gpu_util_pct
+        );
+    }
     println!();
     println!("  Total batches:                 {}", total_batches);
     let total_edges = tick.max(1);
@@ -4048,6 +4101,40 @@ fn run_cosim_generic<B: CosimBackend>(
 
     let sim_elapsed = sim_start.elapsed();
     clilog::finish!(timer_sim);
+
+    // ── Machine-readable perf report (--cosim-perf-json, report-only) ────
+    // A flat JSON record of the per-edge timing breakdown for CI to log/track.
+    // `gpu_*` fields are 0 / `gpu_exec_recorded:false` on the CPU backend (no
+    // device clock). Report format, not a stable contract — may gain fields.
+    if let Some(json_path) = opts.cosim_perf_json.as_ref() {
+        let per_edge = |ns: u64| ns as f64 / 1000.0 / max_edges.max(1) as f64;
+        let report = serde_json::json!({
+            "backend": backend.backend_name(),
+            "edges": max_edges,
+            "wall_seconds": sim_elapsed.as_secs_f64(),
+            "total_us_per_edge": per_edge(total_ns),
+            "gpu_exec_us_per_edge": per_edge(prof_gpu_exec_ns),
+            "gpu_util_pct": gpu_util_pct,
+            "gpu_exec_recorded": prof_gpu_exec_ns > 0,
+            "cpu_encode_us_per_edge": per_edge(prof_batch_encode),
+            "gpu_wait_spin_us_per_edge": per_edge(prof_gpu_wait),
+            "drain_us_per_edge": per_edge(prof_drain),
+            "output_vcd_us_per_edge": per_edge(prof_output_vcd),
+            "batches": total_batches,
+            "mean_batch": mean_batch,
+        });
+        match serde_json::to_string_pretty(&report)
+            .map_err(|e| e.to_string())
+            .and_then(|s| std::fs::write(json_path, s).map_err(|e| e.to_string()))
+        {
+            Ok(()) => clilog::info!("cosim perf report → {}", json_path.display()),
+            Err(e) => clilog::warn!(
+                "failed to write cosim perf report to {}: {}",
+                json_path.display(),
+                e
+            ),
+        }
+    }
 
     // ── Bus transaction trace output (ADR 0013) ──────────────────────────
     if !bus_lanes.is_empty() {
@@ -5176,6 +5263,12 @@ impl CosimBackend for CpuBackend {
     fn wait(&self, _token: u64) {
         // Synchronous CPU backend — run_edges already completed.
     }
+
+    fn backend_name(&self) -> &'static str {
+        "cpu"
+    }
+    // last_batch_gpu_seconds: default None — the CPU reference backend has no
+    // GPU clock; the perf report's gpu_* fields stay 0 / gpu_exec_recorded=false.
 }
 
 /// Public CPU-backend cosim entry point (Phase 1 step 5a). Drives the same
