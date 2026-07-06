@@ -1,9 +1,13 @@
 # Plan — RTL-source provenance (ADR 0021 Phase 2)
 
-**Status:** Active — design captured. **WS-A: de-risk the `abc_new` flow on the
-stock wasm (A′) → build the patched wasm and check `\src` coverage (A0).** The
-real gate is the `abc9`/`aiger2` XAIGER-`"y"` path, not "in-process abc" (see the
-WS-A reframe note). Large, dependency-gated; not started.
+**Status:** Active — **in flight** (updated 2026-07-06; per-section ✅ markers below
+are authoritative). **WS-A: A0 is GO** — the forked provenance wasm builds and
+carries origins through the in-process WASI `abc_new`/`aiger2` XAIGER-`"y"` path
+(100% `\src` coverage on comb + seq2); remaining A1 (harden/pin) + A2 (distribute)
++ the `src/synth.rs` → `abc_new` integration. **WS-B: B0–B2 done** (`sverilogparse`
+capture → `netlistdb.cell_src` → `AIG::aigpin_src_locations`); **B3** (surface in
+`--trace-signals` / timing / `xsources`-`xroots`) is next. WS-A and WS-B are
+independent; full end-to-end needs A1+A2 *and* B3.
 
 **ADRs:** [0021](../adr/0021-behavioral-rtl-support.md) Phase 2 (the roadmap this
 realises), [0014](../adr/0014-aig-as-simulation-ir.md) (AIG core the provenance
@@ -281,6 +285,17 @@ today's hierarchical gate name when absent):
 
 - **Exit:** an end-to-end run on a synthetic annotated netlist prints source
   locations in all three; a design with no provenance is unchanged.
+
+> **⏳ B3 IN PROGRESS (2026-07-06) — 2 of 3 consumers done.**
+> - ✅ `xsources` (`ec7b648f`): optional `src` on the `XSource` record from
+>   `cell_src[cell_id]`; schema `1.0`→`1.1`. (`xprop_demo_synth.gv` already carried
+>   `(* src *)` → provenance flows through the real pipeline.)
+> - ✅ `--trace-signals` (`ca55c786`): logs each traced net's RTL `src` via the B2
+>   resolver at registration.
+> - ⏳ **timing-violation reports** — deferred (largest; governed schema). Path:
+>   `word_id → cell_id` via `dff_constraints`; add `src` to `DffSiteName` →
+>   `ViolationRecord`. A word packs many DFFs → 0/1/many. **ADR 0008 permits
+>   additive** → bump `SCHEMA_VERSION` `1.2.0`→`1.3.0` + ADR note.
 
 ---
 

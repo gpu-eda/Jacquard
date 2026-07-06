@@ -164,14 +164,32 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
    `primary_outputs`) resolves directly. Tests in `path_mapping_tests` (+ fixture
    `tests/timing_test/sky130_timing/prov_annotated.v`): annotated nand2 resolves;
    un-annotated `inv_chain` → `[]` everywhere. All 30 aig tests pass.
-   **NEXT (WS-B B3):** surface the locations in the three consumers, gated on
-   availability (fall back to today's hierarchical gate name when `[]`):
-   `--trace-signals` (`docs/signal-tracing.md`), timing-violation reports
-   (`docs/timing-violations.md`), and — highest value — `xsources`/`xroots`
-   (`docs/x-debugging.md`): report the **RTL line** of an X-source, not the
-   flattened gate. Call `aig.aigpin_src_locations(...)` at the point each consumer
-   names a signal. (B2's resolver is AIG-level; the AIG is retained alongside the
-   FlattenedScript, so it's reachable wherever signals are named.)
+7. **⏳ IN PROGRESS (2026-07-06) — WS-B B3: surface `\src` in the three consumers.**
+   **2 of 3 done** (Jacquard `main`, commits below):
+   - ✅ **`xsources`** (`ec7b648f`) — `src/sim/x_sources.rs`. Added optional `src` to
+     the `XSource` record, populated from `cell_src[cell_id]` (DFF/SRAM sources; the
+     X-source *is* a cell, so direct `cell_src` lookup, not the aigpin resolver).
+     Undriven inputs = ports → `None`. Schema `1.0`→`1.1` (additive, skip-if-none).
+     **Bonus:** the committed `tests/xprop_cosim/xprop_demo_synth.gv` already carries
+     `(* src *)`, so provenance now flows through the *real* pipeline, not just the
+     new fixture.
+   - ✅ **`--trace-signals`** (`ca55c786`) — `src/sim/trace_signals.rs`. At
+     registration, resolve the traced net's aigpin via `aig.aigpin_src_locations`
+     (B2) and log `\`raw\` → RTL file:line`. Prints the source location per traced
+     signal; no output change when absent.
+   - ⏳ **timing-violation reports** — **NOT DONE (largest, governed schema).**
+     Feasibility scoped: `word_id → cell_id` exists via `FlattenedScript.dff_constraints`
+     (`c.cell_id`) in `build_word_symbol_map` (`flatten.rs:1852`); add `src` to
+     `DffSiteName` (`flatten.rs:128`) from `cell_src[c.cell_id]`, thread into the
+     `WordSymbolMap`-backed resolver and onto `ViolationRecord`/`PerWordSummary`
+     (`timing_report.rs:31/90`). **A state-word packs multiple DFFs**, so a
+     violation's `src` is itself **0/1/many** — collect distinct. The timing-report
+     JSON is **governed by ADR 0008** (`docs/adr/0008-structured-timing-output.md`),
+     which *permits additive extensions* (line 93) — so bump `SCHEMA_VERSION`
+     `1.2.0`→`1.3.0` and add an ADR 0008 note. Deliberately deferred rather than
+     rushed at session end.
+   B3 exit ("prints source locations in all three") reached for xsources +
+   trace-signals; timing-report remains.
 
 ## Artifacts / references
 
