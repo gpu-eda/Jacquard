@@ -152,14 +152,26 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
    asserts `cell_src` is parallel to the cell arrays, annotated cell carries its
    `src`, un-annotated/top cells are `None`. All netlistdb + sverilogparse tests pass;
    Jacquard builds.
-   **NEXT (WS-B B2):** thread `src` through **AIG / staging / flatten** so a
-   sim-visible signal (endpoint/output) resolves back to source line(s). Provenance
-   is **lossy** (abc merges/splits nodes) — design for **0, 1, or many** locations
-   per signal; never assert exactly one. Entry points: `src/aig.rs` (NetlistDB→AIG,
-   `DriverType`/`EndpointGroup`), then `staging.rs`/`flatten.rs`. Then **B3**: surface
-   in `--trace-signals`, timing-violation reports, and `xsources`/`xroots` (highest
-   value — report the RTL line of an X-source), gated on availability with fallback
-   to today's hierarchical gate name.
+6. **✅ DONE (2026-07-06) — WS-B B2: `\src` resolves through the AIG.**
+   Jacquard `main` @ **`68cc938b`** (Jacquard-only; no submodule change). Added
+   **`AIG::aigpin_src_locations(aigpin, netlistdb) -> Vec<CompactString>`**
+   (`src/aig.rs`). **Key win:** the AIG already carried a per-pin cell-origin map
+   (`aigpin_cell_origins: Vec<Vec<(cell_id, type, pin)>>`, built for SDF
+   back-annotation) — so B2 just *composes* it with `netlistdb.cell_src` (B1); **no
+   new state threaded through the 5500-line builder.** `cell_id` from the origins
+   indexes `cell_src`. Handles **0/1/many** naturally (origins accumulate; internal
+   AND nodes / un-annotated → `[]`), de-duplicated. A primary output (aigpin in
+   `primary_outputs`) resolves directly. Tests in `path_mapping_tests` (+ fixture
+   `tests/timing_test/sky130_timing/prov_annotated.v`): annotated nand2 resolves;
+   un-annotated `inv_chain` → `[]` everywhere. All 30 aig tests pass.
+   **NEXT (WS-B B3):** surface the locations in the three consumers, gated on
+   availability (fall back to today's hierarchical gate name when `[]`):
+   `--trace-signals` (`docs/signal-tracing.md`), timing-violation reports
+   (`docs/timing-violations.md`), and — highest value — `xsources`/`xroots`
+   (`docs/x-debugging.md`): report the **RTL line** of an X-source, not the
+   flattened gate. Call `aig.aigpin_src_locations(...)` at the point each consumer
+   names a signal. (B2's resolver is AIG-level; the AIG is retained alongside the
+   FlattenedScript, so it's reachable wherever signals are named.)
 
 ## Artifacts / references
 
