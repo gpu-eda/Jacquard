@@ -1,0 +1,17 @@
+name: Init submodules
+description: >
+  Initialise a specific set of git submodules (space-separated). The repo is
+  checked out with submodules:false and only the submodules a job actually needs
+  are fetched here, keeping checkout fast. build.rs generates PDK pin tables from
+  the vendored cell/liberty trees, so a job's list must cover every PDK its
+  design/tests touch.
+inputs:
+  submodules:
+    description: Space-separated list of submodule paths to init (e.g. "vendor/eda-infra-rs vendor/sky130_fd_sc_hd")
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: git submodule update --init
+      shell: bash
+      run: git submodule update --init ${{ inputs.submodules }}

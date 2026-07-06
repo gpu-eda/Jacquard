@@ -1,0 +1,39 @@
+name: Setup Metal build toolchain
+description: >
+  Install Homebrew LLVM (clang + OpenMP) for the Metal build and export
+  CC/CXX/LIBRARY_PATH plus LLVM_VERSION (used in the cargo cache key so an LLVM
+  bump invalidates the cache). The prebuilt Metal binary links Homebrew LLVM's
+  libc++/libomp, so the matching runtime install on the test runner uses the
+  same brew llvm.
+inputs:
+  runtime-only:
+    description: >
+      "true" installs llvm for its runtime dylibs only (libc++/libomp for a
+      prebuilt binary) and skips exporting the compiler env. "false" sets up the
+      full build toolchain.
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Install LLVM (clang + OpenMP)
+      shell: bash
+      run: |
+        # The self-hosted runner's non-interactive shell doesn't inherit
+        # Homebrew on PATH; source shellenv before invoking brew. On the
+        # GitHub-hosted macos runners brew is already on PATH, so this is a
+        # harmless no-op there.
+        eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+        brew install llvm
+
+    - name: Export compiler env
+      if: inputs.runtime-only != 'true'
+      shell: bash
+      run: |
+        eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+        LLVM_PREFIX=$(brew --prefix llvm)
+        echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+        echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+        echo "LIBRARY_PATH=${LLVM_PREFIX}/lib/c++:${LLVM_PREFIX}/lib" >> "$GITHUB_ENV"
+        LLVM_VER=$(${LLVM_PREFIX}/bin/clang --version | head -1 | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
+        echo "LLVM_VERSION=$LLVM_VER" >> "$GITHUB_ENV"
