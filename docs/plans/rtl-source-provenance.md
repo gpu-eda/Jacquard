@@ -230,6 +230,14 @@ open for other attrs) and attach to the cell/wire in the `SVerilog` AST.
 - **Exit:** a `(* src="f.v:12" *)`-annotated netlist round-trips through
   `SVerilog::parse_*` with the attribute retrievable per cell.
 
+> **✅ B0 DONE (2026-07-06).** `gpu-eda/eda-infra-rs@jacquard-integration` `a0772f4`;
+> `SVerilogCell` gains `src: Option<CompactString>`. `skip_whitespace_and_comment`
+> no longer treats `(* ... *)` as whitespace; `leading_attributes` captures/skips
+> at the 3 grammar leading edges (module / port / module-body item). Proven by
+> `sverilogparse` `test_src_attribute` (+ `tests/attributes.v`): parse + round-trip.
+> **Caveat:** attributes are now only accepted at those leading edges (narrows vs
+> the old "ignored anywhere" — fine for structural netlists).
+
 ### B1 — Carry source location through `netlistdb`
 
 Add an optional per-cell (and where meaningful, per-net) `source_loc` on

@@ -128,10 +128,25 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
    **NEXT once provenance-check is green:** read the `\src` coverage % (esp. seq2 — the
    sequential go/no-go). High → we already hold the provenance wasm (A1 done); then wire
    `src/synth.rs` to the `abc_new` flow + drop `write_verilog -noattr`.
-4. **In parallel: WS-B B0** — teach `sverilogparse` to capture `(* src *)` (fork
-   `vendor/eda-infra-rs` per `~/.claude/FORKED_DEPS_WORKFLOW.md`), attach to
-   `SVerilogCell` (`lib.rs:113`, constructed `sverilognom.rs:385`); prove with a
-   hand-annotated netlist.
+4. **✅ DONE (2026-07-06) — WS-B B0: `sverilogparse` captures `(* src *)`.**
+   `gpu-eda/eda-infra-rs@jacquard-integration` `b518f55` → **`a0772f4`**; Jacquard
+   submodule pin bumped (Jacquard `main` @ `6e08bc71`). `SVerilogCell` gains
+   `src: Option<CompactString>`. Key design: `skip_whitespace_and_comment` **no
+   longer eats `(* ... *)`** (it treated them as comments) — attributes are captured/
+   skipped explicitly at the 3 grammar leading edges (`module` decl, `port_item`,
+   module-body loop) via `leading_attributes`. This narrows accepted input to
+   "attributes only at those positions" — sound for Yosys/DC structural netlists.
+   `fmt::Display` re-emits `src` (round-trips). Test `test_src_attribute` +
+   `sverilogparse/tests/attributes.v` prove capture (src-on-own-line, src-not-first
+   in a multi-attr block, no-src cell) + round-trip. `/simplify` run (short-circuit
+   `extract_src_attr`, shared `is_ident_char`, rename). All sverilogparse +
+   netlistdb tests pass; Jacquard builds.
+   **NEXT (WS-B B1):** carry `src` through `netlistdb` — add an optional per-cell
+   `source_loc` on `NetlistDB`, populated from `SVerilogCell.src` (see
+   `netlistdb/src/utils.rs` cell iteration ~L335 and `builder.rs`). Keep it `Option`;
+   zero behaviour change when absent. Then B2 (thread through AIG/staging/flatten,
+   0/1/many locations per signal) and B3 (surface in `--trace-signals`,
+   timing-violations, `xsources`/`xroots`).
 
 ## Artifacts / references
 
