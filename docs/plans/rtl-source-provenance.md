@@ -247,6 +247,12 @@ have 0 provenance.
 - **Exit:** `NetlistDB::from_sverilog_file` exposes `\src` for annotated cells;
   zero overhead / behaviour change when absent.
 
+> **✅ B1 DONE (2026-07-06).** `gpu-eda/eda-infra-rs@jacquard-integration` `4f7f0ec`;
+> `NetlistDB.cell_src: Vec<Option<CompactString>>` parallel to `celltypes`/`cellnames`,
+> populated in `insert_cell` from `SVerilogCell.src` through flattening. `None` for
+> top cell + synthesised inverters + un-annotated cells. Proven by
+> `netlistdb/tests/provenance.{rs,v}`.
+
 ### B2 — Preserve provenance through AIG / staging / flatten
 
 Thread a mapping from AIG nodes / endpoint groups back to `\src` so a

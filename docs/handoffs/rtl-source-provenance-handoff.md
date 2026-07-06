@@ -141,12 +141,25 @@ into A0** (build the fork wasm, then test flow-correctness + QoR + origins toget
    in a multi-attr block, no-src cell) + round-trip. `/simplify` run (short-circuit
    `extract_src_attr`, shared `is_ident_char`, rename). All sverilogparse +
    netlistdb tests pass; Jacquard builds.
-   **NEXT (WS-B B1):** carry `src` through `netlistdb` — add an optional per-cell
-   `source_loc` on `NetlistDB`, populated from `SVerilogCell.src` (see
-   `netlistdb/src/utils.rs` cell iteration ~L335 and `builder.rs`). Keep it `Option`;
-   zero behaviour change when absent. Then B2 (thread through AIG/staging/flatten,
-   0/1/many locations per signal) and B3 (surface in `--trace-signals`,
-   timing-violations, `xsources`/`xroots`).
+5. **✅ DONE (2026-07-06) — WS-B B1: `netlistdb` carries `\src`.**
+   `gpu-eda/eda-infra-rs@jacquard-integration` `a0772f4` → **`4f7f0ec`**; Jacquard pin
+   bumped (`main` @ `984c1036`). `NetlistDB` gains **`cell_src: Vec<Option<CompactString>>`**,
+   parallel to `celltypes`/`cellnames`, populated in `insert_cell` (`builder.rs:156`)
+   from `SVerilogCell.src` through hierarchy flattening. `None` for the top cell
+   (idx 0) and synthesised inverters (`assign` inversions, `builder.rs:358`);
+   `Option`-typed and `None`-heavy → zero behaviour change when absent. Test
+   `netlistdb/tests/provenance.{rs,v}` builds a DB from an annotated netlist and
+   asserts `cell_src` is parallel to the cell arrays, annotated cell carries its
+   `src`, un-annotated/top cells are `None`. All netlistdb + sverilogparse tests pass;
+   Jacquard builds.
+   **NEXT (WS-B B2):** thread `src` through **AIG / staging / flatten** so a
+   sim-visible signal (endpoint/output) resolves back to source line(s). Provenance
+   is **lossy** (abc merges/splits nodes) — design for **0, 1, or many** locations
+   per signal; never assert exactly one. Entry points: `src/aig.rs` (NetlistDB→AIG,
+   `DriverType`/`EndpointGroup`), then `staging.rs`/`flatten.rs`. Then **B3**: surface
+   in `--trace-signals`, timing-violation reports, and `xsources`/`xroots` (highest
+   value — report the RTL line of an X-source), gated on availability with fallback
+   to today's hierarchical gate name.
 
 ## Artifacts / references
 
