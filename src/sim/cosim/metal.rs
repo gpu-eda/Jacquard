@@ -15,8 +15,8 @@ use crate::flatten::FlattenedScriptV1;
 use crate::sim::setup::LoadedDesign;
 use crate::testbench::TestbenchConfig;
 use metal::{
-    CommandQueue, ComputePipelineState, Device as MTLDevice, MTLResourceOptions, MTLSize,
-    SharedEvent,
+    CaptureDescriptor, CaptureManager, CommandQueue, ComputePipelineState, Device as MTLDevice,
+    MTLCaptureDestination, MTLResourceOptions, MTLSize, SharedEvent,
 };
 use netlistdb::NetlistDB;
 use ulib::{AsUPtr, Device};
@@ -116,6 +116,29 @@ impl ScheduleBuffers {
     }
 }
 
+// ── GPU frame capture (env-gated, Metal only) ────────────────────────────────
+
+/// Configuration for an optional `MTLCaptureManager` GPU trace, enabled by the
+/// `JACQUARD_GPU_CAPTURE` env var. When set, the simulator brackets a bounded
+/// window of batch command buffers with a Metal capture and writes a
+/// `.gputrace` document for offline analysis (Xcode GPU debugger / the
+/// apple-profiler `profiler_gpu_*` tools). Because the simulation commits one
+/// command buffer per edge-batch, a single captured batch already contains the
+/// full per-edge dispatch stream (state_prep → flash_din → simulate stages →
+/// flash_model → io_step → VCD blit). See `docs/gpu-capture.md`.
+struct GpuCaptureConfig {
+    /// Output path for the `.gputrace` bundle (`JACQUARD_GPU_CAPTURE`).
+    path: String,
+    /// Batches to let run before opening the capture window
+    /// (`JACQUARD_GPU_CAPTURE_SKIP`, default 0). Skipping the reset/warm-up
+    /// batches captures a steady-state batch instead.
+    skip_batches: usize,
+    /// Number of consecutive batches to capture
+    /// (`JACQUARD_GPU_CAPTURE_BATCHES`, default 1). Keep this small — each batch
+    /// is thousands of dispatches.
+    num_batches: usize,
+}
+
 // ── Metal Simulator ──────────────────────────────────────────────────────────
 
 struct MetalSimulator {
@@ -137,6 +160,14 @@ struct MetalSimulator {
     shared_event: SharedEvent,
     /// Monotonic counter for shared event signaling
     event_counter: std::cell::Cell<u64>,
+    /// Optional GPU frame capture (env `JACQUARD_GPU_CAPTURE`); `None` in normal
+    /// runs so there is zero overhead when capture is not requested.
+    gpu_capture: Option<GpuCaptureConfig>,
+    /// Count of batch command buffers committed so far — drives the capture
+    /// window (start at `skip_batches`, stop after `skip + num_batches`).
+    batch_index: std::cell::Cell<usize>,
+    /// Whether an `MTLCaptureManager` capture is currently open.
+    capture_active: std::cell::Cell<bool>,
 }
 
 impl MetalSimulator {
@@ -207,6 +238,22 @@ impl MetalSimulator {
 
         let shared_event = device.new_shared_event();
 
+        // Optional GPU frame capture, gated on `JACQUARD_GPU_CAPTURE=<path>`.
+        // Absent env → `None` → no capture code runs on the hot path.
+        let gpu_capture = std::env::var("JACQUARD_GPU_CAPTURE").ok().map(|path| {
+            let usize_env = |key: &str, default: usize| {
+                std::env::var(key)
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(default)
+            };
+            GpuCaptureConfig {
+                path,
+                skip_batches: usize_env("JACQUARD_GPU_CAPTURE_SKIP", 0),
+                num_batches: usize_env("JACQUARD_GPU_CAPTURE_BATCHES", 1).max(1),
+            }
+        });
+
         Self {
             device,
             command_queue,
@@ -218,6 +265,66 @@ impl MetalSimulator {
             params_buffers,
             shared_event,
             event_counter: std::cell::Cell::new(0),
+            gpu_capture,
+            batch_index: std::cell::Cell::new(0),
+            capture_active: std::cell::Cell::new(false),
+        }
+    }
+
+    /// Open an `MTLCaptureManager` GPU trace scoped to our command queue,
+    /// writing a `.gputrace` document. Metal refuses programmatic
+    /// `GpuTraceDocument` capture unless `METAL_CAPTURE_ENABLED=1` is set in the
+    /// environment, so this is best-effort: on any failure it logs a hint and
+    /// leaves the simulation running normally (uncaptured).
+    fn start_gpu_capture(&self, cfg: &GpuCaptureConfig) {
+        let manager = CaptureManager::shared();
+        if !manager.supports_destination(MTLCaptureDestination::GpuTraceDocument) {
+            clilog::warn!(
+                "JACQUARD_GPU_CAPTURE set but the .gputrace destination is \
+                 unavailable — re-run with METAL_CAPTURE_ENABLED=1. Continuing \
+                 without capture."
+            );
+            return;
+        }
+        // MTLCaptureManager errors out rather than overwriting an existing
+        // document, so clear any stale bundle at the target path first.
+        let path = std::path::Path::new(&cfg.path);
+        if path.exists() {
+            if let Err(e) = std::fs::remove_dir_all(path) {
+                clilog::warn!("Could not remove existing {}: {e}", cfg.path);
+            }
+        }
+
+        let descriptor = CaptureDescriptor::new();
+        descriptor.set_capture_command_queue(&self.command_queue);
+        descriptor.set_destination(MTLCaptureDestination::GpuTraceDocument);
+        descriptor.set_output_url(path);
+
+        match manager.start_capture(&descriptor) {
+            Ok(()) => {
+                self.capture_active.set(true);
+                clilog::info!(
+                    "GPU capture started → {} (skipping {} batch(es), capturing {})",
+                    cfg.path,
+                    cfg.skip_batches,
+                    cfg.num_batches
+                );
+            }
+            Err(e) => clilog::warn!(
+                "GPU capture failed to start ({e}) — ensure METAL_CAPTURE_ENABLED=1 \
+                 is set. Continuing without capture."
+            ),
+        }
+    }
+
+    /// Close an open capture and finalize the `.gputrace` document.
+    fn stop_gpu_capture(&self) {
+        if self.capture_active.get() {
+            CaptureManager::shared().stop_capture();
+            self.capture_active.set(false);
+            if let Some(cfg) = &self.gpu_capture {
+                clilog::info!("GPU capture written → {}", cfg.path);
+            }
         }
     }
 
@@ -484,6 +591,15 @@ impl MetalSimulator {
         arrival_state_offset: u32,
         vcd_ring_buffer: Option<&metal::Buffer>,
     ) -> u64 {
+        // Open the GPU capture window immediately before this batch's command
+        // buffer is created, once the requested number of warm-up batches have
+        // been skipped. No-op unless JACQUARD_GPU_CAPTURE is set.
+        if let Some(cfg) = &self.gpu_capture {
+            if self.batch_index.get() == cfg.skip_batches {
+                self.start_gpu_capture(cfg);
+            }
+        }
+
         let batch_done = self.event_counter.get() + 1;
         let cb = self.command_queue.new_command_buffer();
         let edges_per_period = schedule_buffers.edge_buffers.len();
@@ -562,6 +678,21 @@ impl MetalSimulator {
         cb.commit();
 
         self.event_counter.set(batch_done);
+
+        // Advance the capture batch counter and, once the window has closed,
+        // finalize the trace. Wait for the last captured command buffer so its
+        // GPU work is recorded before stopCapture(); the outer loop's own wait()
+        // on this batch is idempotent. The whole block is skipped when capture
+        // is off, so normal runs never touch this state.
+        if let Some(cfg) = &self.gpu_capture {
+            let next_batch = self.batch_index.get() + 1;
+            self.batch_index.set(next_batch);
+            if self.capture_active.get() && next_batch >= cfg.skip_batches + cfg.num_batches {
+                cb.wait_until_completed();
+                self.stop_gpu_capture();
+            }
+        }
+
         batch_done
     }
 
