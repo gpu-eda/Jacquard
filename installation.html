@@ -177,6 +177,10 @@ from the repo with <code>uv run</code>. The design behind this layout is
 <p>The cleanest path on a Mac. Requires an Apple Silicon machine with a
 Metal GPU. The Homebrew formula is built with <code>--features synth</code>, so
 behavioral RTL input works out of the box — see <a href="accepted-rtl.html">Accepted RTL surface</a>.</p>
+<p>To try a <strong>release candidate</strong> before it ships, install from the prerelease
+tap instead (it tracks the latest <code>-rc</code> tag):</p>
+<pre><code class="language-sh">brew install gpu-eda/tap-prerelease/jacquard
+</code></pre>
 <h3 id="cargo-binstall--prebuilt-binary-no-toolchain-build"><a class="header" href="#cargo-binstall--prebuilt-binary-no-toolchain-build">cargo binstall — prebuilt binary, no toolchain build</a></h3>
 <pre><code class="language-sh">brew install llvm     # runtime dependency — see note below
 cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
