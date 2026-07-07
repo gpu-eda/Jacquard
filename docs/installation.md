@@ -37,14 +37,24 @@ brew install gpu-eda/tap-prerelease/jacquard
 
 ```sh
 brew install llvm     # runtime dependency — see note below
-cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
+cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard-sim \
+  --disable-strategies compile,quick-install
 ```
 
-Fetches the release binaries (`jacquard` + `timing_analysis`) on
-**macOS/Metal**. The `--git` form is required: `jacquard` is **not on
-crates.io** (its dependencies are a vendored fork carrying in-flight
-patches), so binstall reads the `[package.metadata.binstall]` pkg-url
-straight from the repo rather than looking the crate up on the registry.
+Installs the `jacquard` binary (+ `timing_analysis`) on **macOS/Metal**. The
+crate is the **`jacquard-sim`** package (the binary it installs is still
+`jacquard`); the `--git` form is required because it's **not on crates.io**
+(its dependencies are a vendored fork carrying in-flight patches), so binstall
+reads the `[package.metadata.binstall]` pkg-url straight from the repo.
+
+> **Why `jacquard-sim`, not `jacquard`.** The package is named `jacquard-sim`
+> because the crate name `jacquard` is taken on crates.io by an **unrelated**
+> project (an AT-Protocol client library) — so `cargo install jacquard` would
+> build *that*, not this. Naming our package `jacquard-sim` makes resolution
+> unambiguous. `--disable-strategies compile,quick-install` is kept as
+> belt-and-suspenders: it turns a missing prebuilt binary into a clean hard
+> error rather than any source-build fallback. (`validate-install.yml` uses the
+> same guard.)
 Linux is **not** binstall-able: there are two GPU backends (CUDA, HIP) for
 one target triple, so it can't be auto-selected — use the release tarball
 for your backend, a container, or build from source.
