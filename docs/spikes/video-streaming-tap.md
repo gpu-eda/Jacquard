@@ -90,9 +90,18 @@ Config surface: extend `TestbenchConfig` (`src/testbench.rs`) with a `video_taps
 
 Rough size: about 40 lines of Rust for the sink plus config plumbing, and about 60 lines for a minimal renderer.
 
+## Spike artifacts
+
+The tap is implemented in-tree (`src/sim/cosim/signal_stream.rs`, config in
+`src/testbench.rs`). The C64-specific renderer and config fragment live under
+`video-streaming-tap/` next to this doc — a `uv`-runnable pygame renderer and
+the `signal_streams` block to merge into the C64 `cocotb/sim_config.json`. They
+are C64-specific and will move to the c64-tapeout project; they sit here so the
+spike runs end-to-end. See `video-streaming-tap/README.md`.
+
 ## Open questions and next steps
 
-1. Prototype the sink at `mod.rs:3438` plus a minimal renderer, wired to the C64 config above. This is the actual spike execution; the design above is validated but unbuilt.
+1. Run it end-to-end: a real cosim run streaming to the renderer, confirming the C64 net names resolve. The tap and renderer exist; this is the remaining validation.
 2. Confirm `colorIndex` bit order at the pad — whether `\bidir_CORE2PAD[1]` is `colorIndex[0]` or `[3]` — against the `out_drive` assignment in `chip_core.sv`. Cheap to check; wrong order just permutes the palette.
 3. Backpressure policy: drop whole batches vs a bounded ring with newest-wins. Start with drop-whole-batch; revisit if the picture tears badly.
 4. Whether to land the generic "signal-bundle stream" surface now or start video-specific and generalise once a second consumer appears. Leaning generic, since the CIA case will want it.
