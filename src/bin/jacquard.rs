@@ -2289,11 +2289,20 @@ fn cmd_cosim(args: CosimArgs) {
 
         // Bus-trace pins must be registered as observable before
         // partitioning so they get output-state slots the GPU can read.
-        let bus_trace_signals: Vec<String> = config
+        // Nets that must be observable (output-state slots the GPU can
+        // snapshot) before partitioning: bus-trace pins and signal-stream
+        // tap bundles (plus any strobe net).
+        let mut extra_observable_signals: Vec<String> = config
             .effective_bus_traces()
             .iter()
             .flat_map(jacquard::sim::models::bus_trace::observed_net_names)
             .collect();
+        for tap in config.effective_signal_streams() {
+            extra_observable_signals.extend(tap.signals.iter().cloned());
+            if let jacquard::testbench::StreamTrigger::Strobe(net) = &tap.trigger {
+                extra_observable_signals.push(net.clone());
+            }
+        }
 
         // Derived (on-die divided) clocks (gpu-eda/Jacquard#185): collect the
         // `net` of every `clocks[]` entry that declares one, so the AIG can cut
@@ -2345,7 +2354,7 @@ fn cmd_cosim(args: CosimArgs) {
             cell_descriptor: args.cell_descriptor.clone(),
             bundled_descriptor: args.bundled_descriptor.clone(),
             trace_signals: args.trace_signals.clone(),
-            extra_observable_signals: bus_trace_signals,
+            extra_observable_signals,
             // cosim has no `--corner`/`--timed`; its no-SDF path stays off
             // unless a timing IR is supplied (handled by load_timing_ir, whose
             // descriptor fallback still uses `default_corner`).
