@@ -156,6 +156,18 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="plan--rtl-source-provenance-adr-0021-phase-2"><a class="header" href="#plan--rtl-source-provenance-adr-0021-phase-2">Plan — RTL-source provenance (ADR 0021 Phase 2)</a></h1>
+<blockquote>
+<p><strong>2026-07-07 — end-to-end closed (PR pending on <code>ws-a-abc-new-provenance</code>).</strong>
+The WS-A↔WS-B loop works: behavioral RTL → <code>sim</code> → a signal resolves to its RTL
+line. <code>src/synth.rs</code> maps via <code>abc_new</code> and emits <code>\src</code>; <strong>A1/A2 landed</strong> — the
+provenance fork was moved to <strong><code>gpu-eda/yowasp-yosys</code></strong>, whose CI builds +
+validates + <strong>releases</strong> the wheel, and <code>jacquard</code> fetches that pinned release on
+first use (no PAT, no artifact expiry). WS-B B0–B2 + B3 (xsources, trace-signals)
+done; B3 timing-report remains (see below). aigpdk mapping needed two fixes the
+sky130 A0 didn't surface: <code>read_liberty -lib</code> + <code>hierarchy -purge_lib</code> before a
+single <code>abc_new</code> pass. The per-section markers below predate this and are being
+folded in at merge.</p>
+</blockquote>
 <p><strong>Status:</strong> Active — <strong>in flight</strong> (updated 2026-07-06; per-section ✅ markers below
 are authoritative). <strong>WS-A: A0 is GO</strong> — the forked provenance wasm builds and
 carries origins through the in-process WASI <code>abc_new</code>/<code>aiger2</code> XAIGER-<code>"y"</code> path
