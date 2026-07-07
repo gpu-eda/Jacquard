@@ -127,16 +127,28 @@ jobs:
       - name: Extract release notes from CHANGELOG
         if: steps.meta.outputs.is_release == 'true'
         id: notes
+        env:
+          IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
         run: |
           set -euo pipefail
           ver="${{ steps.meta.outputs.version }}"
-          awk -v ver="$ver" '
-            $0 ~ "^## \\[" ver "\\]" {flag=1; next}
-            flag && /^## \[/ {flag=0}
-            flag {print}
-          ' CHANGELOG.md > notes.md || true
+          extract() {
+            awk -v ver="$1" '
+              $0 ~ "^## \\[" ver "\\]" {flag=1; next}
+              flag && /^## \[/ {flag=0}
+              flag {print}
+            ' CHANGELOG.md
+          }
+          extract "$ver" > notes.md || true
+          # Prereleases (X.Y.Z-rc.N) have no dated [X.Y.Z-rc.N] section — their
+          # entries live under [Unreleased] during the RC window — so fall back
+          # to it, giving RC releases the curated draft notes for review.
+          if [ ! -s notes.md ] && [ "${IS_PRERELEASE}" = "true" ]; then
+            echo "no [$ver] section; prerelease → using [Unreleased] draft notes" >&2
+            extract "Unreleased" > notes.md || true
+          fi
           if [ ! -s notes.md ]; then
-            echo "no [$ver] section in CHANGELOG; using auto-generated notes" >&2
+            echo "no matching CHANGELOG section; using auto-generated notes" >&2
             echo "AUTO=true" >> "$GITHUB_OUTPUT"
           else
             echo "AUTO=false" >> "$GITHUB_OUTPUT"
