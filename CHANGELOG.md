@@ -9,8 +9,16 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-07
+
 ### Added
 
+- **Behavioral-RTL on-ramp (ADR 0021).** `jacquard sim` and `jacquard cosim`
+  now accept **behavioral Verilog / SystemVerilog directly** — synthesis is
+  transparent and cached, run through an embedded YoWASP Yosys (with the
+  `yosys-slang` SystemVerilog frontend) via Rust + `wasmtime`. Built into
+  release binaries via the `synth` feature; `--yosys-wasm <PATH>` overrides
+  the bundled wasm. See `docs/accepted-rtl.md`.
 - **Cell-model IR descriptors (ADR 0019).** Standard-cell libraries are now
   consumed as generated JSON descriptors — pin directions, combinational AIG,
   sequential roles, and timing — produced from Liberty by the
@@ -21,6 +29,27 @@ the public contracts in `docs/release-process.md` follow stricter rules).
   cells** — no vendored-PDK read at simulation time — and the `PdkVariant`
   enum, per-PDK stdcell classifiers, and `build.rs` pin-table generation are
   retired. See `docs/adding-a-pdk.md`.
+- **Plural QSPI memory + writable PSRAM (ADR 0013).** The SPI-flash peripheral
+  went plural: **`qspi_memory: Vec<QspiMemoryConfig>`** with N independent
+  instances (the legacy `flash` key folds into instance 0), N-instance GPU
+  kernels on **Metal + CUDA + HIP** with independent backing stores, and an
+  opt-in **writable QSPI-PSRAM (RAM) mode** (APS6404L-class: enter-QPI /
+  quad-write / quad-read). Enables post-PnR cosim of chips whose main RAM is
+  external QSPI PSRAM. Unset options ⇒ byte-identical to the read-only flash.
+- **GPU frame capture (Metal).** `JACQUARD_GPU_CAPTURE=<path>` (with
+  `METAL_CAPTURE_ENABLED=1`) brackets an `MTLCaptureManager` scope around a
+  bounded window of cosim batches and writes an Xcode `.gputrace` for
+  per-dispatch GPU analysis. `JACQUARD_GPU_CAPTURE_SKIP` / `_BATCHES` select
+  the window. See `docs/gpu-capture.md`. (#174)
+- **Cosim perf report.** `jacquard cosim` reports a per-edge CPU/GPU timing
+  breakdown including **ground-truth GPU-execution time from device
+  timestamps** (Metal `GPUStartTime`/`GPUEndTime`) — free of the distortion a
+  full GPU trace imposes on thousands of tiny dispatches per batch.
+  `--cosim-perf-json <PATH>` emits it as JSON for CI. See
+  `docs/cosim-perf-report.md`. (#175)
+- **RTL-source provenance.** `sverilogparse` now captures `(* src *)`
+  attributes and carries them through the netlist and AIG; `jacquard xsources`
+  reports the RTL source location of each design X-source.
 - **TNS / THS timing metrics** in `--timing-summary` and `--timing-report`.
   Alongside the existing worst-single-slack WNS/WHS, the report now carries
   Total Negative Slack and Total Hold Slack — the sum of every negative
@@ -28,6 +57,13 @@ the public contracts in `docs/release-process.md` follow stricter rules).
   `stats.total_hold_slack_ps`). Additive JSON-schema change, bumped to
   `1.2.0` (older reports still parse via `#[serde(default)]`). Salvaged from
   the timing logic in #17. (#9)
+- **`JACQUARD_VENDOR_DIR`** environment override for the vendored-PDK root.
+
+### Changed
+
+- **`jacquard build` folded into `sim`/`cosim`.** The standalone `build`
+  subcommand is removed; behavioral RTL is synthesized transparently by
+  `sim`/`cosim` (see the on-ramp entry above).
 
 ## [0.2.4] - 2026-06-26
 
@@ -424,7 +460,8 @@ runners land (ADR 0018).
   CUDA / HIP detect violations on the GPU but don't currently route
   them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gpu-eda/Jacquard/compare/v0.2.4...v0.3.0
 [0.2.4]: https://github.com/gpu-eda/Jacquard/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/gpu-eda/Jacquard/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/gpu-eda/Jacquard/compare/v0.2.1...v0.2.2
