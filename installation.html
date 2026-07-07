@@ -183,16 +183,27 @@ tap instead (it tracks the latest <code>-rc</code> tag):</p>
 </code></pre>
 <h3 id="cargo-binstall--prebuilt-binary-no-toolchain-build"><a class="header" href="#cargo-binstall--prebuilt-binary-no-toolchain-build">cargo binstall — prebuilt binary, no toolchain build</a></h3>
 <pre><code class="language-sh">brew install llvm     # runtime dependency — see note below
-cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
+cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard-sim \
+  --disable-strategies compile,quick-install
 </code></pre>
-<p>Fetches the release binaries (<code>jacquard</code> + <code>timing_analysis</code>) on
-<strong>macOS/Metal</strong>. The <code>--git</code> form is required: <code>jacquard</code> is <strong>not on
-crates.io</strong> (its dependencies are a vendored fork carrying in-flight
-patches), so binstall reads the <code>[package.metadata.binstall]</code> pkg-url
-straight from the repo rather than looking the crate up on the registry.
+<p>Installs the <code>jacquard</code> binary (+ <code>timing_analysis</code>) on <strong>macOS/Metal</strong>. The
+crate is the <strong><code>jacquard-sim</code></strong> package (the binary it installs is still
+<code>jacquard</code>); the <code>--git</code> form is required because it's <strong>not on crates.io</strong>
+(its dependencies are a vendored fork carrying in-flight patches), so binstall
+reads the <code>[package.metadata.binstall]</code> pkg-url straight from the repo.</p>
+<blockquote>
+<p><strong>Why <code>jacquard-sim</code>, not <code>jacquard</code>.</strong> The package is named <code>jacquard-sim</code>
+because the crate name <code>jacquard</code> is taken on crates.io by an <strong>unrelated</strong>
+project (an AT-Protocol client library) — so <code>cargo install jacquard</code> would
+build <em>that</em>, not this. Naming our package <code>jacquard-sim</code> makes resolution
+unambiguous. <code>--disable-strategies compile,quick-install</code> is kept as
+belt-and-suspenders: it turns a missing prebuilt binary into a clean hard
+error rather than any source-build fallback. (<code>validate-install.yml</code> uses the
+same guard.)
 Linux is <strong>not</strong> binstall-able: there are two GPU backends (CUDA, HIP) for
 one target triple, so it can't be auto-selected — use the release tarball
 for your backend, a container, or build from source.</p>
+</blockquote>
 <p>Release binaries are built with <code>--features synth</code> and support behavioral RTL
 input directly.</p>
 <blockquote>

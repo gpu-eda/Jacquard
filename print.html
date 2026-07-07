@@ -411,16 +411,27 @@ tap instead (it tracks the latest <code>-rc</code> tag):</p>
 </code></pre>
 <h3 id="cargo-binstall--prebuilt-binary-no-toolchain-build"><a class="header" href="#cargo-binstall--prebuilt-binary-no-toolchain-build">cargo binstall — prebuilt binary, no toolchain build</a></h3>
 <pre><code class="language-sh">brew install llvm     # runtime dependency — see note below
-cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard
+cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard-sim \
+  --disable-strategies compile,quick-install
 </code></pre>
-<p>Fetches the release binaries (<code>jacquard</code> + <code>timing_analysis</code>) on
-<strong>macOS/Metal</strong>. The <code>--git</code> form is required: <code>jacquard</code> is <strong>not on
-crates.io</strong> (its dependencies are a vendored fork carrying in-flight
-patches), so binstall reads the <code>[package.metadata.binstall]</code> pkg-url
-straight from the repo rather than looking the crate up on the registry.
+<p>Installs the <code>jacquard</code> binary (+ <code>timing_analysis</code>) on <strong>macOS/Metal</strong>. The
+crate is the <strong><code>jacquard-sim</code></strong> package (the binary it installs is still
+<code>jacquard</code>); the <code>--git</code> form is required because it's <strong>not on crates.io</strong>
+(its dependencies are a vendored fork carrying in-flight patches), so binstall
+reads the <code>[package.metadata.binstall]</code> pkg-url straight from the repo.</p>
+<blockquote>
+<p><strong>Why <code>jacquard-sim</code>, not <code>jacquard</code>.</strong> The package is named <code>jacquard-sim</code>
+because the crate name <code>jacquard</code> is taken on crates.io by an <strong>unrelated</strong>
+project (an AT-Protocol client library) — so <code>cargo install jacquard</code> would
+build <em>that</em>, not this. Naming our package <code>jacquard-sim</code> makes resolution
+unambiguous. <code>--disable-strategies compile,quick-install</code> is kept as
+belt-and-suspenders: it turns a missing prebuilt binary into a clean hard
+error rather than any source-build fallback. (<code>validate-install.yml</code> uses the
+same guard.)
 Linux is <strong>not</strong> binstall-able: there are two GPU backends (CUDA, HIP) for
 one target triple, so it can't be auto-selected — use the release tarball
 for your backend, a container, or build from source.</p>
+</blockquote>
 <p>Release binaries are built with <code>--features synth</code> and support behavioral RTL
 input directly.</p>
 <blockquote>
@@ -5068,12 +5079,26 @@ repos) and the <code>gpu-eda/homebrew-tap-prerelease</code> repo.</p>
 <em>documented install commands</em> work against a staging artifact before
 promoting. There is no "test crates registry", so a <strong>GitHub prerelease</strong>
 is the staging tier for the binary channels.</p>
+<blockquote>
+<p><strong>Sequence matters — do NOT roll main to the final version before the RC
+validates.</strong> During the RC window <code>main</code> <strong>is</strong> the candidate: it stays at
+<code>X.Y.Z-rc.N</code> with the changelog still under <code>[Unreleased]</code>. Only the
+<strong>Promote</strong> step (below) rolls <code>[Unreleased] → [X.Y.Z]</code> and bumps to the
+final <code>X.Y.Z</code>. Rolling the release onto <code>main</code> first leaves <code>main</code>
+advertising a version that has no release — the version pin and dated
+changelog claim <code>X.Y.Z</code> is shipped while only the RC tag exists, which also
+breaks <code>cargo binstall --git</code> (it reads <code>main</code>'s version and fetches a
+non-existent <code>vX.Y.Z</code> tarball). Each new RC is a <code>main</code> commit bumped to the
+next <code>-rc.N</code>; <code>main == the latest RC tag</code> throughout.</p>
+</blockquote>
 <ol>
 <li>
-<p><strong>Cut an RC.</strong> <code>python3 scripts/bump_version.py &lt;X.Y.Z&gt;-rc.&lt;N&gt;</code>, commit,
-tag <code>v&lt;X.Y.Z&gt;-rc.&lt;N&gt;</code>, push the tag. <code>release.yml</code> detects the SemVer
+<p><strong>Cut an RC.</strong> On <code>main</code> at <code>X.Y.Z-rc.N</code> (changelog under <code>[Unreleased]</code>),
+<code>python3 scripts/bump_version.py &lt;X.Y.Z&gt;-rc.&lt;N&gt;</code>, commit, tag
+<code>v&lt;X.Y.Z&gt;-rc.&lt;N&gt;</code>, push the tag. <code>release.yml</code> detects the SemVer
 pre-release suffix and publishes a GitHub <strong>prerelease</strong> (never shown as
-"Latest") with the Metal tarball attached.</p>
+"Latest") with the Metal tarball attached, and <code>bump-tap</code> pushes the
+formula to <code>gpu-eda/homebrew-tap-prerelease</code>.</p>
 </li>
 <li>
 <p><strong>Validate.</strong> Dispatch the <strong>Validate install (staging)</strong> workflow
