@@ -262,19 +262,19 @@ stat
     )
 }
 
-// Pinned provenance-carrying `yosys.wasm` (ADR 0021 Phase 2 / A2). Built by
-// `robtaylor/yowasp-yosys`'s `provenance-wasm` CI (fork yosys `fd151be` + fork
-// abc `&origins`) and published as a Jacquard release asset (the exact CI wheel,
-// attached by `.github/workflows/publish-yosys-wasm.yml` running on a GitHub
-// runner). The abc_new origins flow the on-ramp now uses REQUIRES this fork —
-// stock `abc_new` breaks on flops (`ff.cc: Bad connection .../CLK`) — so this is
-// the default wasm source rather than a discovered stock YoWASP wheel. Bump all
-// three together when re-pinning.
-const YOSYS_WASM_TAG: &str = "yosys-wasm-0.63.0.0.post1135";
-const YOSYS_WASM_URL: &str = "https://github.com/gpu-eda/Jacquard/releases/download/\
-yosys-wasm-0.63.0.0.post1135/yowasp_yosys-0.63.0.0.post1135-py3-none-any.whl";
-const YOSYS_WASM_SHA256: &str =
-    "fecc687f15270f25a44ea976dba7e5fc750336378d363ad60d8b37939e7125af";
+// Pinned provenance-carrying `yosys.wasm` (ADR 0021 Phase 2 / A2). Built,
+// validated (comb + seq2 `\src` coverage), and released by `gpu-eda/yowasp-yosys`'s
+// `provenance-wasm` CI — a fork of YoWASP Yosys carrying forked yosys + abc
+// `&origins` + yosys-slang. Its `release` job attaches the wheel to a
+// gpu-eda/yowasp-yosys release (in-org, public), which this fetch pins. The
+// abc_new origins flow the on-ramp uses REQUIRES this fork — stock `abc_new`
+// breaks on flops (`ff.cc: Bad connection .../CLK`) — so this is the default wasm
+// source rather than a discovered stock YoWASP wheel. Re-pin all three together
+// from the release the CI publishes (its sha256 is in the release body).
+const YOSYS_WASM_TAG: &str = "wasm-de797e07";
+const YOSYS_WASM_URL: &str = "https://github.com/gpu-eda/yowasp-yosys/releases/download/\
+wasm-de797e07/yowasp_yosys-0.63.0.0.post1136-py3-none-any.whl";
+const YOSYS_WASM_SHA256: &str = "15726fed2b85eb8c55a50bbacb68c5812d270cbcf46bea310d23351d320ef007";
 
 /// Resolve `yosys.wasm` and its `share/` dir: explicit arg → `JACQUARD_YOSYS_WASM`
 /// env → the pinned provenance wasm (fetched + cached on first use, A2). The old
