@@ -73,6 +73,25 @@ For maintainers cutting a release:
    section for that version. No artefacts attached unless someone has
    asked for them.
 
+## Homebrew tap (automated)
+
+The Homebrew formula is **auto-bumped by `release.yml`** — no manual step
+(this closes the drift that had left the tap stale at 0.2.3). On every
+release tag the `bump-tap` job rewrites `packaging/homebrew/jacquard.rb`'s
+`url`/`version`/`sha256` from the just-published tarball + `.sha256` and
+pushes `Formula/jacquard.rb` to the tap:
+
+- **final release** → `gpu-eda/homebrew-tap` (`brew install gpu-eda/tap/jacquard`);
+- **prerelease (RC)** → `gpu-eda/homebrew-tap-prerelease`
+  (`brew install gpu-eda/tap-prerelease/jacquard`), so RCs are
+  `brew install`-able for staging without touching the stable channel.
+
+`packaging/homebrew/jacquard.rb` is the **template** — edit it only to change
+the formula's *structure* (deps, install, test); its version pin is a
+placeholder the job overwrites. Requires the one-time org setup:
+`secrets.HOMEBREW_TAP_TOKEN` (a token with `contents: write` on both tap
+repos) and the `gpu-eda/homebrew-tap-prerelease` repo.
+
 ## Staging validation (release candidates)
 
 Optional but recommended before a user-facing release: prove the

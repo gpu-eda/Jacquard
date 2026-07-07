@@ -26,6 +26,13 @@ The cleanest path on a Mac. Requires an Apple Silicon machine with a
 Metal GPU. The Homebrew formula is built with `--features synth`, so
 behavioral RTL input works out of the box — see [Accepted RTL surface](accepted-rtl.md).
 
+To try a **release candidate** before it ships, install from the prerelease
+tap instead (it tracks the latest `-rc` tag):
+
+```sh
+brew install gpu-eda/tap-prerelease/jacquard
+```
+
 ### cargo binstall — prebuilt binary, no toolchain build
 
 ```sh

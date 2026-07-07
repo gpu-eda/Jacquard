@@ -27,6 +27,10 @@ jobs:
     runs-on: macos-runner-1
     env:
       GH_TOKEN: ${{ github.token }}
+    # Expose the version/mode decision so the tap-bump job can gate on it.
+    outputs:
+      is_release: ${{ steps.meta.outputs.is_release }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -187,3 +191,76 @@ jobs:
           path: |
             ${{ steps.package.outputs.tarball }}
             ${{ steps.package.outputs.sha }}
+
+  # Auto-bump the Homebrew formula in the tap so `brew install` tracks releases
+  # without a manual edit (the tap had been drifting — stale at 0.2.3). Final
+  # releases push to the production tap; prereleases push to a separate
+  # prerelease tap so RCs are `brew install`-able for staging without polluting
+  # the stable channel. See docs/release-process.md § Homebrew.
+  #
+  # Requires (org-admin one-time setup):
+  #   - secrets.HOMEBREW_TAP_TOKEN — a fine-grained PAT / App token with
+  #     `contents: write` on both tap repos below.
+  #   - the gpu-eda/homebrew-tap-prerelease repo (for the RC channel).
+  bump-tap:
+    name: Bump Homebrew tap
+    needs: release-metal
+    # Real tags only (skip workflow_dispatch dry-runs).
+    if: needs.release-metal.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the formula template
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Generate the bumped formula from the published asset
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          tarball="jacquard-${ver}-macos-arm64-metal.tar.gz"
+          # Read the sha256 the release job published alongside the tarball.
+          # Retry on transient errors too — a just-published release asset can
+          # 404 briefly while GitHub propagates the download URL.
+          sha="$(curl -fsSL --retry 6 --retry-delay 5 --retry-all-errors "${base}/${tarball}.sha256" | awk '{print $1}')"
+          test -n "${sha}"
+          # Rewrite the source-of-truth template's url/version/sha256 from the
+          # actual asset (identical mechanism to validate-install.yml).
+          sed -e "s|url \".*\"|url \"${base}/${tarball}\"|" \
+              -e "s|version \".*\"|version \"${ver}\"|" \
+              -e "s|sha256 \".*\"|sha256 \"${sha}\"|" \
+              packaging/homebrew/jacquard.rb > /tmp/jacquard.rb
+          echo "--- generated formula ---"; cat /tmp/jacquard.rb
+      - name: Push to the tap (production or prerelease channel)
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          IS_PRERELEASE: ${{ needs.release-metal.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN is not set — provision it to enable tap auto-bump." >&2
+            exit 1
+          fi
+          if [ "${IS_PRERELEASE}" = "true" ]; then
+            tap_repo="gpu-eda/homebrew-tap-prerelease"
+          else
+            tap_repo="gpu-eda/homebrew-tap"
+          fi
+          git clone --depth 1 \
+            "https://x-access-token:${TAP_TOKEN}@github.com/${tap_repo}.git" tap
+          mkdir -p tap/Formula
+          cp /tmp/jacquard.rb tap/Formula/jacquard.rb
+          cd tap
+          git config user.name "jacquard-release-bot"
+          git config user.email "noreply@github.com"
+          git add Formula/jacquard.rb
+          if git diff --cached --quiet; then
+            echo "Formula already up to date for ${TAG}; nothing to push."
+            exit 0
+          fi
+          git commit -m "jacquard ${TAG#v}"
+          git push
+          echo "Pushed jacquard ${TAG#v} to ${tap_repo}."

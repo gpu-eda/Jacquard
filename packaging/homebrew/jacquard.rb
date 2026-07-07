@@ -2,15 +2,15 @@
 
 # Homebrew formula for Jacquard (macOS / Metal prebuilt binary).
 #
-# This is the SOURCE OF TRUTH for the formula; it is copied/PR'd into the
-# `gpu-eda/homebrew-tap` repo as `Formula/jacquard.rb` (see
-# packaging/README.md). Apple Silicon + Metal only — the simulator needs a
-# Metal GPU.
+# This is the SOURCE-OF-TRUTH TEMPLATE for the formula. Apple Silicon + Metal
+# only — the simulator needs a Metal GPU.
 #
-# Per release, bump `url` (both version occurrences), `version`, and
-# `sha256` to the `jacquard-<version>-macos-arm64-metal.tar.gz` asset. The
-# release workflow emits the `.sha256` alongside the tarball; bump by hand,
-# with `brew bump-formula-pr`, or via a future release-CI step.
+# The `url`/`version`/`sha256` below are placeholders: on every release tag,
+# the `bump-tap` job in `.github/workflows/release.yml` rewrites them from the
+# published tarball + `.sha256` and pushes the result to the tap —
+# `gpu-eda/homebrew-tap` for final releases, `gpu-eda/homebrew-tap-prerelease`
+# for RCs. So this file need not be bumped by hand; edit it only to change the
+# formula *structure* (deps, install steps, test), not the version pin.
 class Jacquard < Formula
   desc "GPU-accelerated RTL logic simulator (Metal backend)"
   homepage "https://github.com/gpu-eda/Jacquard"
