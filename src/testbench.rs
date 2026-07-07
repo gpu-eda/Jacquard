@@ -295,6 +295,11 @@ pub struct TestbenchConfig {
     /// and ADR 0013.
     #[serde(default)]
     pub bus_traces: Vec<BusTraceConfig>,
+    /// Live signal-streaming taps (observe-only). Each samples a bundle of
+    /// design output nets per triggered edge and streams packed bytes out a
+    /// UNIX socket. See `src/sim/cosim/signal_stream.rs`.
+    #[serde(default)]
+    pub signal_streams: Vec<SignalStreamConfig>,
 }
 
 impl TestbenchConfig {
@@ -352,6 +357,12 @@ impl TestbenchConfig {
     /// uniform across peripherals.
     pub fn effective_bus_traces(&self) -> &[BusTraceConfig] {
         &self.bus_traces
+    }
+
+    /// Return the configured signal-streaming taps. No legacy singular form;
+    /// named for symmetry with the other `effective_*` accessors.
+    pub fn effective_signal_streams(&self) -> &[SignalStreamConfig] {
+        &self.signal_streams
     }
 }
 
@@ -556,6 +567,48 @@ fn default_bus_addr_bits() -> usize {
 
 fn default_bus_data_bits() -> usize {
     DEFAULT_BUS_WIDTH
+}
+
+/// A live signal-streaming tap (observe-only). Samples a bundle of design
+/// output nets per triggered edge and streams packed bytes out a
+/// UNIX-domain socket to an external renderer (first use: a live C64 video
+/// debug view). See `src/sim/cosim/signal_stream.rs` and
+/// `docs/spikes/video-streaming-tap.md`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SignalStreamConfig {
+    /// Name, used in logs.
+    pub name: String,
+    /// UNIX-domain socket path. Cosim listens; a renderer connects.
+    pub socket: String,
+    /// Ordered output net names to sample. Packed LSB-first: `signals[0]`
+    /// → bit 0 of byte 0, etc. Bit order in the stream is this list's order.
+    pub signals: Vec<String>,
+    /// When to emit a sample. Defaults to every scheduler edge.
+    #[serde(default)]
+    pub trigger: StreamTrigger,
+}
+
+/// When a [`SignalStreamConfig`] emits a sample. Serialized externally
+/// tagged: `{ "strobe": "enablePixel" }` or `{ "every": 4 }`.
+///
+/// `strobe` gates on the rising edge of a design net (a pixel/clock enable),
+/// which is correct regardless of clock topology. `every` counts scheduler
+/// edges and is simplest for a single-master-clock design. A domain-relative
+/// `clock` + `divider` mode is planned (see the spike) but not yet
+/// implemented.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum StreamTrigger {
+    /// Emit on the rising edge of the named design net.
+    Strobe(String),
+    /// Emit every Nth scheduler edge.
+    Every(u32),
+}
+
+impl Default for StreamTrigger {
+    fn default() -> Self {
+        StreamTrigger::Every(1)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -940,5 +993,53 @@ mod tests {
         assert_eq!(mems.len(), 2);
         assert_ne!(mems[0].csn_gpio, mems[1].csn_gpio);
         assert_ne!(mems[0].d0_gpio, mems[1].d0_gpio);
+    }
+
+    #[test]
+    fn signal_stream_config_parses_strobe_and_defaults() {
+        // The external contract the C64 video renderer config depends on:
+        // `{ "strobe": "net" }` and a defaulted `{ "every": 1 }`.
+        let cfg: TestbenchConfig = serde_json::from_str(
+            r#"{
+                "clock_gpio": 0, "reset_gpio": 1, "reset_active_high": true,
+                "reset_cycles": 10, "num_cycles": 100,
+                "signal_streams": [
+                    { "name": "video", "socket": "/tmp/v.sock",
+                      "trigger": { "strobe": "enablePixel" },
+                      "signals": ["colorIndex[3]", "hsync", "vsync"] },
+                    { "name": "raw", "socket": "/tmp/r.sock",
+                      "signals": ["a", "b"] }
+                ]
+            }"#,
+        )
+        .unwrap();
+        let streams = cfg.effective_signal_streams();
+        assert_eq!(streams.len(), 2);
+        assert!(matches!(
+            &streams[0].trigger,
+            StreamTrigger::Strobe(net) if net == "enablePixel"
+        ));
+        assert_eq!(streams[0].signals.len(), 3);
+        // Omitted trigger defaults to every-edge.
+        assert!(matches!(streams[1].trigger, StreamTrigger::Every(1)));
+    }
+
+    #[test]
+    fn signal_stream_every_trigger_parses() {
+        let cfg: TestbenchConfig = serde_json::from_str(
+            r#"{
+                "clock_gpio": 0, "reset_gpio": 1, "reset_active_high": true,
+                "reset_cycles": 10, "num_cycles": 100,
+                "signal_streams": [
+                    { "name": "v", "socket": "/tmp/v.sock",
+                      "trigger": { "every": 4 }, "signals": ["x"] }
+                ]
+            }"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            cfg.effective_signal_streams()[0].trigger,
+            StreamTrigger::Every(4)
+        ));
     }
 }
