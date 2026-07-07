@@ -80,3 +80,4 @@
   - [RTL-source provenance](plans/rtl-source-provenance.md)
 - [Spike — OpenTimer on SKY130](spikes/opentimer-sky130.md)
 - [Spike — reaching AMD laptops](spikes/amd-laptop-backend.md)
+- [Spike — Live video streaming tap for cosim](spikes/video-streaming-tap.md)
