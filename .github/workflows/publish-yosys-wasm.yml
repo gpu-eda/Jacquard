@@ -1,0 +1,88 @@
+name: Publish yosys.wasm (provenance)
+
+# Publishes the pinned provenance-carrying yosys.wasm as a Jacquard release asset
+# for the ADR-0021 Phase-2 RTL-source on-ramp (WS-A / A2). The wasm is built by
+# robtaylor/yowasp-yosys' `provenance-wasm` CI (fork yosys + fork abc &origins);
+# this job pulls that CI wheel and attaches it to a gpu-eda/Jacquard release.
+#
+# Why a workflow instead of `gh release upload` from a dev box: the wheel is
+# ~12 MB and GitHub's asset-upload endpoint has a ~120 s connection cap, which a
+# slow upstream link can't beat. A GitHub runner uploads it in seconds.
+#
+# Single source of truth: the release tag + expected sha256 are read straight out
+# of `src/synth.rs` (YOSYS_WASM_TAG / YOSYS_WASM_SHA256), so a re-pin only edits
+# the Rust consts — this workflow can never drift from what the runtime expects.
+#
+# Manual prerequisite (once): add a repo secret `YOWASP_WASM_PAT` — a fine-grained
+# PAT with `Actions: read` on robtaylor/yowasp-yosys (to download the CI artifact).
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: robtaylor/yowasp-yosys provenance-wasm run id holding the wheel artifact
+        required: true
+        default: "28779240456"
+
+permissions:
+  contents: write # create the release + upload the asset
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (to read the pin from src/synth.rs)
+        uses: actions/checkout@v4
+
+      - name: Read pinned tag + sha256 from src/synth.rs
+        id: pin
+        run: |
+          set -euo pipefail
+          tag=$(grep -oE 'YOSYS_WASM_TAG: &str = "[^"]+"' src/synth.rs | grep -oE '"[^"]+"' | tr -d '"')
+          sha=$(grep -A1 'YOSYS_WASM_SHA256' src/synth.rs | grep -oE '"[0-9a-f]{64}"' | tr -d '"')
+          if [ -z "$tag" ] || [ -z "$sha" ]; then
+            echo "::error::could not parse YOSYS_WASM_TAG / YOSYS_WASM_SHA256 from src/synth.rs"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "Pinned tag=$tag sha256=$sha"
+
+      - name: Download provenance wheel from robtaylor/yowasp-yosys CI
+        uses: actions/download-artifact@v4
+        with:
+          name: provenance-yowasp-yosys-wheel
+          repository: robtaylor/yowasp-yosys
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.YOWASP_WASM_PAT }}
+          path: wheel
+
+      - name: Verify wheel sha256 matches the src/synth.rs pin
+        id: whl
+        run: |
+          set -euo pipefail
+          f=$(ls wheel/*.whl)
+          got=$(sha256sum "$f" | cut -d' ' -f1)
+          echo "Wheel: $f  sha256=$got"
+          if [ "$got" != "${{ steps.pin.outputs.sha256 }}" ]; then
+            echo "::error::wheel sha256 $got != src/synth.rs pin ${{ steps.pin.outputs.sha256 }}"
+            exit 1
+          fi
+          echo "path=$f" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release + attach wheel
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pin.outputs.tag }}
+          name: yosys.wasm (provenance) — ${{ steps.pin.outputs.tag }}
+          make_latest: false
+          body: |
+            Provenance-carrying `yosys.wasm` for the ADR-0021 Phase-2 RTL-source
+            on-ramp (WS-A / A2). Fork yosys `fd151be` + fork abc `&origins`,
+            yosys-slang SV frontend. Source: robtaylor/yowasp-yosys
+            `provenance-wasm` run ${{ inputs.run_id }}.
+
+            Consumed by the `jacquard sim/cosim` synth on-ramp via the pinned
+            fetch in `src/synth.rs` (sha256 `${{ steps.pin.outputs.sha256 }}`).
+            This is a toolchain artifact, not a Jacquard code release.
+          files: ${{ steps.whl.outputs.path }}
