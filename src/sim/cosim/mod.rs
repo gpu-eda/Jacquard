@@ -3158,7 +3158,56 @@ fn run_cosim_generic<B: CosimBackend>(
     // When stimulus or output VCD is active, we snapshot output_state after
     // each edge via a GPU blit into a ring buffer. This allows batched dispatch
     // (no batch=1 override) while preserving per-tick VCD accuracy.
-    let vcd_enabled = stimulus_vcd_state.is_some() || output_vcd_state.is_some();
+    // ── Signal-streaming taps (observe-only live socket streams) ───────────
+    //
+    // Each tap samples a bundle of design output nets per triggered edge and
+    // streams packed bytes out a UNIX socket. Reuses the per-edge vcd_snapshot
+    // ring below; drives nothing, so no batch=1 penalty. See
+    // docs/spikes/video-streaming-tap.md.
+    let mut stream_taps: Vec<signal_stream::SignalStreamTap> = Vec::new();
+    for cfg in config.effective_signal_streams() {
+        let resolve = |name: &str| {
+            crate::sim::trace_signals::resolve_to_state_pos(aig, netlistdb, script, name)
+        };
+        let Some(positions) = cfg.signals.iter().map(|s| resolve(s)).collect::<Option<Vec<u32>>>()
+        else {
+            clilog::warn!(
+                "signal-stream `{}`: one or more signals did not resolve; tap disabled",
+                cfg.name
+            );
+            continue;
+        };
+        let strobe_pos = match &cfg.trigger {
+            crate::testbench::StreamTrigger::Strobe(net) => {
+                let Some(p) = resolve(net) else {
+                    clilog::warn!(
+                        "signal-stream `{}`: strobe net `{}` did not resolve; tap disabled",
+                        cfg.name,
+                        net
+                    );
+                    continue;
+                };
+                Some(p)
+            }
+            crate::testbench::StreamTrigger::Every(_) => None,
+        };
+        match signal_stream::SignalStreamTap::new(cfg, positions, strobe_pos) {
+            Ok(tap) => {
+                clilog::info!(
+                    "signal-stream `{}`: listening on {} ({} signals)",
+                    cfg.name,
+                    cfg.socket,
+                    cfg.signals.len()
+                );
+                stream_taps.push(tap);
+            }
+            Err(e) => clilog::warn!("signal-stream `{}`: {}; tap disabled", cfg.name, e),
+        }
+    }
+
+    // Streaming taps also need the per-edge snapshot ring.
+    let vcd_enabled =
+        stimulus_vcd_state.is_some() || output_vcd_state.is_some() || !stream_taps.is_empty();
     if vcd_enabled {
         backend.enable_vcd_ring();
     }
@@ -3590,6 +3639,11 @@ fn run_cosim_generic<B: CosimBackend>(
                 let output_state = &slot_base[state_size..];
                 let edge_tick = tick + edge_in_batch;
 
+                // Signal-stream taps: sample this edge (trigger-gated).
+                for tap in stream_taps.iter_mut() {
+                    tap.on_edge(output_state, edge_tick as u64);
+                }
+
                 // Stimulus VCD
                 let t_stim = std::time::Instant::now();
                 if let Some((ref mut writer, ref mapping, ref mut prev_values)) = stimulus_vcd_state
@@ -3708,6 +3762,11 @@ fn run_cosim_generic<B: CosimBackend>(
                     }
                 }
                 prof_output_vcd += t_timing.elapsed().as_nanos() as u64;
+            }
+
+            // Stream this batch's samples to any connected renderer.
+            for tap in stream_taps.iter_mut() {
+                tap.flush_batch();
             }
         }
 
@@ -5459,6 +5518,8 @@ pub fn run_cosim_cpu(
 ) -> CosimResult {
     run_cosim_generic::<CpuBackend>(design, config, opts, timing_constraints)
 }
+
+mod signal_stream;
 
 #[cfg(feature = "metal")]
 mod metal;
