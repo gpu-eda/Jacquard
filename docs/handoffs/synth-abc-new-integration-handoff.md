@@ -1,10 +1,34 @@
 # Handoff — WS-A integration: `synth.rs` → `abc_new` origins flow + A2 fetch
 
 **Updated:** 2026-07-07
-**Branch:** `ws-a-abc-new-provenance` (pushed to origin; **1 commit** `42607dcc`).
-**Status:** code done + committed; **BLOCKED** on a user PAT to publish the wasm
-release, then end-to-end fetch validation, then docs + PR to `main`.
+**Branch:** `ws-a-abc-new-provenance` (pushed; commits `42607dcc` synth+A2,
+`9a29615c` handoff; local uncommitted: `publish-yosys-wasm.yml` deletion +
+pending `synth.rs` re-pin).
+**Status:** on-ramp done + validated; A2 hosting **redesigned** — see below.
 **Parent thread:** [`rtl-source-provenance-handoff.md`](rtl-source-provenance-handoff.md).
+
+## A2 hosting — REDESIGNED 2026-07-07 (supersedes the PAT/Jacquard-asset plan)
+
+Earlier iterations (Jacquard release asset via local upload → blocked by GitHub's
+~120 s upload cap; then a Jacquard workflow pulling the fork CI artifact → needed a
+cross-repo PAT + a 14-day-expiring artifact) were **abandoned**. Final design:
+
+- **Transferred `robtaylor/yowasp-yosys` → `gpu-eda/yowasp-yosys`** (done; public;
+  robtaylor URL redirects). Nested `robtaylor/yosys`→`robtaylor/abc` + `povik/yosys-slang`
+  stay under their owners (public → in-repo CI clones them anonymously, no PAT).
+- **The fork's own `provenance-wasm` CI now self-publishes the release.** Added a
+  gated `release` job (`gpu-eda/yowasp-yosys@yowasp-yosys-integration`, commit
+  `de797e07`): on `workflow_dispatch` with a `release_tag`, after build +
+  provenance-check pass, it attaches the validated wheel to a `gpu-eda/yowasp-yosys`
+  release via softprops — **in-repo `GITHUB_TOKEN`, no PAT, no artifact expiry**.
+  README got a fork-purpose banner.
+- **jacquard pins the `gpu-eda/yowasp-yosys` release** (in-org, public). Jacquard's
+  own `publish-yosys-wasm.yml` is **deleted** (the fork self-publishes now).
+
+**IN FLIGHT:** build+publish run **`28836059973`** (tag **`wasm-de797e07`**), ~50 min.
+NOTE: the 2 new fork commits bump the wheel `postNNNN` version, so the published
+wheel filename + sha256 **differ from A0's** (`fecc687f…` / `post1135`) — pin what
+this run actually publishes (its sha256 is in the release body + job summary).
 
 ## What this thread achieved
 
@@ -37,46 +61,32 @@ resolves to its RTL line.
   wheel** (download → verify sha256 → unzip → cache on first use). `discover_yowasp` is
   **removed** (a discovered stock wheel silently breaks abc_new on flops). Adds
   `ureq`/`sha2`/`zip` under the `synth` feature. Unit test `pinned_wasm_consts_consistent`
-  guards URL⊇TAG + sha256 format. Pin (`src/synth.rs`):
-  - `YOSYS_WASM_TAG = "yosys-wasm-0.63.0.0.post1135"`
-  - `YOSYS_WASM_SHA256 = "fecc687f15270f25a44ea976dba7e5fc750336378d363ad60d8b37939e7125af"`
-    (sha256 of the CI wheel `yowasp_yosys-0.63.0.0.post1135-py3-none-any.whl`).
+  guards URL⊇TAG + sha256 format. **Pin must be updated** from the in-flight run
+  (see below) — the current committed values (`yosys-wasm-0.63.0.0.post1135` /
+  `fecc687f…`, gpu-eda/Jacquard URL) are STALE and point at the abandoned plan.
 
-- **Publish workflow** `.github/workflows/publish-yosys-wasm.yml` (`workflow_dispatch`):
-  pulls the fork wheel from `robtaylor/yowasp-yosys` `provenance-wasm` **run
-  `28779240456`** (artifact `provenance-yowasp-yosys-wheel`) and attaches it to a
-  `gpu-eda/Jacquard` release via `softprops/action-gh-release`. Reads tag+sha256
-  **straight from `src/synth.rs`** (single source of truth — no drift). Runs on a GitHub
-  runner because **local upload from this env is infeasible** (~68 KB/s upstream vs
-  GitHub's ~120 s asset-upload cap; an 8 MB asset dies at the cliff).
+## Remaining steps (after run `28836059973` completes)
 
-## ⚠️ BLOCKING NEXT STEP — user must create a PAT
-
-The release can't be published without a cross-repo token (no repo secrets exist on
-`gpu-eda/Jacquard`; the wheel lives in `robtaylor/yowasp-yosys` CI):
-
-1. Create a **fine-grained PAT** with **`Actions: read`** on `robtaylor/yowasp-yosys`.
-2. `gh secret set YOWASP_WASM_PAT --repo gpu-eda/Jacquard --body '<PAT>'`
-
-## Remaining steps (after the PAT is set)
-
-1. **Dispatch the workflow:** `gh workflow run publish-yosys-wasm.yml --ref ws-a-abc-new-provenance`
-   → cuts release `yosys-wasm-0.63.0.0.post1135` with the wheel attached. (gpu-eda/Jacquard
-   uses **immutable releases** — softprops handles the draft→publish flow; manual
-   `gh release create ... <asset>` does NOT work here, and local upload hits the 120 s cap.)
-2. **Validate the default fetch end-to-end:** clear `JACQUARD_YOSYS_WASM` + the cache
-   (`~/.cache/jacquard/wasm/`), run `jacquard sim counter.v … --trace-signals` → confirm
-   it downloads the wheel, verifies the sha256, and still resolves `count[0] → counter.v:11.5`.
-3. **Docs (fold-in at resolution):** update ADR 0021 Phase 2 / `docs/plans/rtl-source-provenance.md`
-   WS-A/A2 with: abc_new flow is live, the aigpdk `read_liberty`+`purge_lib` finding,
-   A2 = fetch-from-release (resolves the ADR/#162 "bundle vs fetch" open sub-decision),
-   the publish-workflow mechanism. Then **delete this handoff**.
-4. **On-ramp fixture check:** the committed `tests/**/*_synth.gv` fixtures were generated
-   by the OLD classic-abc flow; if any on-ramp test regenerates via the new flow and
-   diffs, regenerate deliberately (`--emit-synth`). Not yet checked.
-5. **PR `ws-a-abc-new-provenance` → `main`.** Kept off `main` deliberately: the pinned
-   URL 404s until step 1 publishes the release, so `main`'s default on-ramp must not
-   carry the pin until the asset exists.
+1. **Read the published wheel's sha256 + filename** from the `gpu-eda/yowasp-yosys`
+   release `wasm-de797e07` (release body / job summary), then **re-pin `src/synth.rs`**:
+   - `YOSYS_WASM_TAG = "wasm-de797e07"`
+   - `YOSYS_WASM_URL = "https://github.com/gpu-eda/yowasp-yosys/releases/download/wasm-de797e07/<wheel>"`
+   - `YOSYS_WASM_SHA256 = "<published sha256>"`
+   - Fix the const doc comment (drop the deleted-workflow reference; point at the fork release).
+2. **Commit** the batched Jacquard change: `publish-yosys-wasm.yml` deletion (already
+   `git rm`'d) + the re-pin. `cargo test --features metal,synth --lib pinned_wasm_consts`.
+3. **Validate the default fetch end-to-end:** clear `JACQUARD_YOSYS_WASM` + cache
+   (`rm -rf ~/.cache/jacquard/wasm`), run `jacquard sim counter.v … --trace-signals`
+   (fixtures in `/tmp/claude/synthtest/`) → confirm it downloads from gpu-eda/yowasp-yosys,
+   verifies the sha256, and still resolves `count[0] → counter.v:11.5`.
+4. **Docs (fold-in at resolution):** ADR 0021 Phase 2 / `docs/plans/rtl-source-provenance.md`
+   WS-A/A2 — abc_new flow live, the aigpdk `read_liberty`+`purge_lib` finding, A2 =
+   fetch a fork-self-published release (resolves ADR/#162 "bundle vs fetch"), the repo
+   move. Then **delete this handoff**.
+5. **On-ramp fixture check:** committed `tests/**/*_synth.gv` were generated by the OLD
+   classic-abc flow; if any on-ramp test regenerates via the new flow and diffs,
+   regenerate deliberately (`--emit-synth`). Not yet checked.
+6. **PR `ws-a-abc-new-provenance` → `main`** once the release exists + fetch validated.
 
 ## Scratch / artifacts (ephemeral `/tmp`)
 
