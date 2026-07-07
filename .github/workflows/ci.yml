@@ -444,24 +444,14 @@ jobs:
       # (read_slang), and produce waves bit-identical to the fixture run. This is
       # the only CI coverage of the synth feature on real GPU; the prebuilt binary
       # was built --features metal,synth by the metal-build job.
-      - name: Set up uv (YoWASP Yosys on-ramp)
-        uses: astral-sh/setup-uv@v7
-
-      - name: Resolve pinned yosys.wasm
-        run: |
-          set -euo pipefail
-          # PIN the version — keep in sync with uv.lock's yowasp-yosys. An
-          # unpinned `--with yowasp-yosys` fetches the latest wheel, whose wasm is
-          # now built with the exception-handling proposal that our wasmtime
-          # engine (no `gc` feature) can't load. Loading newer wasm robustly is a
-          # tracked follow-up (ADR 0021 Phase 4); until then the on-ramp targets
-          # the verified 0.64 module (which also carries yosys-slang).
-          WASM=$(uv run --with 'yowasp-yosys==0.64.0.0.post1131' python3 -c \
-            "import yowasp_yosys, pathlib; print(next(pathlib.Path(yowasp_yosys.__file__).parent.rglob('*.wasm')))")
-          test -f "$WASM"
-          echo "JACQUARD_YOSYS_WASM=$WASM" >> "$GITHUB_ENV"
-          echo "resolved yosys.wasm: $WASM"
-
+      #
+      # No JACQUARD_YOSYS_WASM override: the on-ramp now fetches the pinned
+      # provenance fork wasm from its gpu-eda/yowasp-yosys release by default
+      # (ADR 0021 Phase 2 / A2). That fork is REQUIRED — the abc_new origins flow
+      # in src/synth.rs breaks on flops (dff_test.v has one) on the stock wasm.
+      # It's a develop-0.64-era build, so our wasmtime engine loads it (the
+      # exception-handling issue that forced the old 0.64 pin doesn't apply). This
+      # step therefore also exercises the real fetch-from-release path on GPU.
       - name: Behavioral RTL on-ramp smoke (ADR 0021)
         run: |
           set -euo pipefail
