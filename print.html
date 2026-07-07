@@ -5367,6 +5367,7 @@ the code before writing it.</p>
 <tr><td><a href="adr/0017-cosim-execution-model.html">0017</a></td><td>Cosim execution model</td><td>Accepted (amended 2026-06-25)</td></tr>
 <tr><td><a href="adr/0018-distribution-and-installation.html">0018</a></td><td>Distribution and installation model</td><td>Accepted (amended 2026-06-25) — Phase 4 &amp; 7 open</td></tr>
 <tr><td><a href="adr/0019-cell-model-ir.html">0019</a></td><td>Cell-model IR: a complete per-cell-type library descriptor</td><td>Proposed</td></tr>
+<tr><td><a href="adr/0020-python-engine-binary-wheel.html">0020</a></td><td>Python engine as a bundled binary wheel (cibuildwheel)</td><td>Draft — deferred (PyO3 preferred; see ADR)</td></tr>
 <tr><td><a href="adr/0021-behavioral-rtl-support.html">0021</a></td><td>Behavioral RTL support via an embedded synthesis front-end (YoWASP)</td><td>Proposed</td></tr>
 </tbody></table>
 </div>
@@ -8462,6 +8463,159 @@ L2 payload <em>is</em> AIG (D3), spliced into the design AIG at load.</li>
 <p>Staged delivery: <a href="adr/../plans/cell-model-ir.html"><code>docs/plans/cell-model-ir.md</code></a>.
 Tracks <a href="https://github.com/gpu-eda/Jacquard/issues/130">#130</a> and
 <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0020--python-engine-as-a-bundled-binary-wheel"><a class="header" href="#adr-0020--python-engine-as-a-bundled-binary-wheel">ADR 0020 — Python engine as a bundled binary wheel</a></h1>
+<p><strong>Status:</strong> Draft — decision deferred (2026-07-01). Not ratified; not scheduled.</p>
+<blockquote>
+<p><strong>Direction note (2026-07-01).</strong> This ADR drafts a <em>subprocess-bundled binary
+wheel</em> (embed the CLI, keep PR #53's subprocess API). On review, a <strong>native
+PyO3 binding</strong> is the preferred long-term direction — an in-process engine is
+a materially better "first-class" Python surface than shelling out to a
+bundled binary, and if we're going to invest in per-platform wheels
+(cibuildwheel + dylib repair) either way, doing it once for a PyO3 extension
+avoids building the subprocess-wheel machinery only to replace it. We are
+<strong>not doing this now</strong>; the decision (subprocess-wheel-first vs. straight to
+PyO3) is deferred and tracked in <a href="https://github.com/gpu-eda/Jacquard/issues/161">#161</a>. The
+subprocess-wheel design below is preserved as the worked alternative and as
+the analysis of the shared hard part (per-platform wheels + vendoring the
+<code>libc++</code>/<code>libomp</code> runtime tail), which a PyO3 binding faces too.</p>
+</blockquote>
+<p><strong>Relates to:</strong> <a href="adr/0018-distribution-and-installation.html">ADR 0018</a> (distribution
+model — this extends it with a Python channel), PR #53 (the subprocess API this
+would adopt), <a href="adr/../plans/python-engine-binary-wheel.html"><code>docs/plans/python-engine-binary-wheel.md</code></a>
+(implementation phases + tracking).</p>
+<h2 id="context-19"><a class="header" href="#context-19">Context</a></h2>
+<p>Jacquard ships as a Rust CLI (<code>jacquard sim</code> / <code>cosim</code> / <code>map</code>). Batch
+automation, regression sweeps, and result analysis are naturally Python work,
+and PR #53 drafted a Python API for exactly that: <code>JacquardConfig</code>, <code>sim()</code> /
+<code>map()</code>, <code>SimResult</code> / <code>DesignStats</code>, and a <code>run_regression()</code> harness.</p>
+<p>PR #53 as drafted is a <strong>pure-Python subprocess wrapper</strong>: a <code>hatchling</code>
+noarch wheel with <code>dependencies = []</code> that locates a <em>separately installed</em>
+<code>jacquard</code> binary (<code>JACQUARD_BIN</code> env → <code>PATH</code> → <code>shutil.which</code>) and shells out
+via <code>subprocess.run</code>. That means a user must install two things from two
+channels — the binary (<code>brew</code> / <code>cargo binstall</code>, per ADR 0018) <strong>and</strong> the
+Python package — and keep their versions in step by hand.</p>
+<p>We want a <strong>first-class</strong> Python engine: <code>pip install jacquard</code> yields a
+working simulator with no separate binary step. That is a distribution
+decision PR #53 does not make, and it is the subject of this ADR.</p>
+<p>Two forces shape it:</p>
+<ol>
+<li><strong>The binary is self-contained <em>except</em> for a runtime-library tail.</strong> The
+<code>sim</code> Metal kernel is embedded via <code>include_bytes!</code> (ADR 0018 / v0.2.1), so
+the relocated binary needs no sidecar <code>.metallib</code>. But it links Homebrew
+LLVM's <code>libc++</code> and <code>libomp</code> (via mt-kahypar/OpenMP), so a bare binary
+fails to launch without LLVM present — the same defect that broke the
+v0.2.1 install channels and is worked around today by the Homebrew formula's
+<code>depends_on "llvm"</code>. A wheel has no <code>depends_on</code>; those dylibs must travel
+<strong>inside</strong> the wheel.</li>
+<li><strong>The GPU backend is a per-platform build.</strong> <code>metal</code> (macOS/arm64) is the
+shipping backend; <code>cuda</code>/<code>hip</code> are Linux and heavy. A universal wheel is not
+possible; wheels are per-platform, and the backend matrix must be phased.</li>
+</ol>
+<h2 id="decision-18"><a class="header" href="#decision-18">Decision</a></h2>
+<p>Ship the Python engine as a <strong>binary wheel that embeds the compiled <code>jacquard</code>
+binary and its runtime libraries</strong>, built with <strong>cibuildwheel</strong>, published to
+PyPI. Keep PR #53's subprocess API and config/result model unchanged — the
+wheel changes <em>packaging</em>, not the Python surface.</p>
+<p>Concretely:</p>
+<ol>
+<li>
+<p><strong>Adopt PR #53's API</strong> (<code>config</code>, <code>runner</code>, <code>result</code>, <code>regression</code>,
+<code>errors</code>) as the package's Python layer, moved into the uv workspace
+(<code>python/jacquard/</code>, a 5th workspace member alongside <code>netlist_graph</code>,
+<code>chipflow_harness</code>, <code>mcu_soc</code>, root).</p>
+</li>
+<li>
+<p><strong>Embed the binary.</strong> The wheel carries the release binary at
+<code>jacquard/_bin/jacquard</code> (per-platform). <code>runner.find_jacquard_binary()</code>
+grows a step <strong>0</strong>: prefer the packaged <code>_bin/jacquard</code>, then fall back to
+its existing env → <code>PATH</code> → <code>which</code> chain (so a dev pointing <code>JACQUARD_BIN</code>
+at a local build still wins, and a source checkout with no embedded binary
+still works).</p>
+</li>
+<li>
+<p><strong>Vendor the runtime tail into the wheel.</strong> cibuildwheel's repair step
+(<code>delocate</code> on macOS, <code>auditwheel</code> on Linux) copies <code>libc++</code>/<code>libomp</code> (and
+any other non-system dylib the binary links) into the wheel and rewrites the
+install names, so <code>pip install</code> needs no Homebrew LLVM. This is the crux and
+the main risk; the plan spikes it first.</p>
+</li>
+<li>
+<p><strong>Phase the platform matrix</strong> (<code>docs/plans/...</code>):</p>
+<ul>
+<li><strong>P1 — macOS/arm64 + Metal.</strong> The shipping backend; validates the whole
+embed-plus-delocate story on the platform we already release for.</li>
+<li><strong>P2 — Linux/x86_64 CPU fallback.</strong> The cosim CPU backend (ADR 0017) with
+no GPU runtime, so <code>pip install</code> works in plain CI containers.</li>
+<li><strong>P3 — CUDA / HIP.</strong> Gated on ADR 0018 Phase 4 (prebuilt GPU binaries) and
+on the wheel-size / CUDA-runtime questions below; may ship as separate
+extras (<code>jacquard[cuda]</code>) or a manylinux variant rather than the default
+wheel.</li>
+</ul>
+</li>
+<li>
+<p><strong>Publish via the established OIDC path.</strong> Mirror
+<code>publish-netlist-graph.yml</code> (trusted publishing, no stored token; TestPyPI
+dry-run on <code>workflow_dispatch</code>, real PyPI on tag). cibuildwheel replaces the
+single <code>uv build</code> with a per-platform build matrix.</p>
+</li>
+<li>
+<p><strong>Version with the binary, not independently.</strong> The wheel embeds a specific
+<code>jacquard</code> build, so its version tracks the binary release (extend
+<code>scripts/bump_version.py</code>), unlike <code>netlist-graph</code> which versions
+independently. A wheel's embedded binary and its Python API are one artifact.</p>
+</li>
+</ol>
+<h3 id="why-subprocess-not-native-pyo3-bindings"><a class="header" href="#why-subprocess-not-native-pyo3-bindings">Why subprocess, not native (PyO3) bindings</a></h3>
+<p>A native PyO3/maturin binding would give in-process state access (drive the
+sim, peek signals without a subprocess) — a deeper "engine." We defer it:</p>
+<ul>
+<li>It multiplies the build matrix by the GPU-feature axis <em>inside</em> the extension
+module, where the runtime-library and feature-gating problems are far harder
+than embedding an already-built binary.</li>
+<li>PR #53's subprocess API is backend-agnostic: it works for <code>metal</code>/<code>cuda</code>/<code>hip</code>
+unchanged, because the binary owns the backend. A binding does not.</li>
+<li>The subprocess wheel delivers the user-visible win (<code>pip install</code> → working
+simulator) now; PyO3 is a strictly larger follow-on that a later ADR can take
+up if in-process access becomes a real requirement.</li>
+</ul>
+<h2 id="consequences-19"><a class="header" href="#consequences-19">Consequences</a></h2>
+<ul>
+<li><strong><code>pip install jacquard</code> is self-contained</strong> on supported platforms — the
+headline win. The two-channel version-skew problem goes away.</li>
+<li><strong>cibuildwheel + delocate/auditwheel become release-critical infrastructure.</strong>
+A new failure surface (dylib repair) that the plan de-risks with a P1 spike
+and a post-build "install into a clean venv and run <code>sim</code>" smoke gate,
+mirroring the existing relocated-tarball user-acceptance gate.</li>
+<li><strong>Wheels are large</strong> (embedded binary + vendored dylibs; CUDA especially).
+Acceptable for Metal/CPU; a gating question for P3.</li>
+<li><strong>The PyPI name <code>jacquard</code> must be secured</strong> (see open questions). Until
+then, TestPyPI validates the pipeline.</li>
+<li><strong><code>netlist-graph</code> stays a separate, independently-versioned noarch package.</strong>
+This ADR is only about the simulator engine wheel.</li>
+</ul>
+<h2 id="alternatives-considered-1"><a class="header" href="#alternatives-considered-1">Alternatives considered</a></h2>
+<ul>
+<li><strong>Ship PR #53 as-is (pure-Python noarch + separate binary).</strong> Simplest, no
+cibuildwheel, and a fine <em>interim</em> — but it is not the first-class,
+single-command install the goal calls for; it defers the real distribution
+decision rather than making it. Rejected as the end state; effectively
+subsumed as pre-P1 (the API lands first, the embed follows).</li>
+<li><strong>Native PyO3/maturin bindings.</strong> Highest ceiling, deferred — see above.</li>
+<li><strong>Document-and-require the LLVM runtime</strong> (as the raw tarball does) instead of
+vendoring dylibs. Pushes the v0.2.1-class failure onto every <code>pip</code> user;
+rejected — self-containment is the entire point.</li>
+</ul>
+<h2 id="open-questions-tracked-in-the-plan"><a class="header" href="#open-questions-tracked-in-the-plan">Open questions (tracked in the plan)</a></h2>
+<ul>
+<li><strong>PyPI name.</strong> Is <code>jacquard</code> available/securable? If not, <code>jacquard-eda</code> or
+<code>gpu-eda-jacquard</code>, aliasing the import name. Blocks nothing until publish.</li>
+<li><strong>CUDA/HIP wheel viability.</strong> Size and CUDA-runtime bundling may make P3 an
+extras/manylinux special case rather than a default wheel — decide in P3 with
+data, and <code>log</code>/document any platform the wheel silently omits.</li>
+<li><strong>delocate coverage of <code>libomp</code>.</strong> OpenMP runtime vendoring has known
+sharp edges (duplicate-runtime aborts if a user's other packages also load
+libomp); the P1 spike must confirm a clean load in a mixed environment.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0021--behavioral-rtl-support-via-an-embedded-synthesis-front-end"><a class="header" href="#adr-0021--behavioral-rtl-support-via-an-embedded-synthesis-front-end">ADR 0021 — Behavioral RTL support via an embedded synthesis front-end</a></h1>
 <p><strong>Status:</strong> Proposed</p>
 <blockquote>
@@ -8478,7 +8632,7 @@ why synthesis is a front-end at all), the Python-engine work
 hosts this, <a href="adr/0018-distribution-and-installation.html">ADR 0018</a> (distribution),
 <a href="adr/../synthesis-flow.html"><code>docs/synthesis-flow.md</code></a> (the manual flow this wraps),
 <a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a> (implementation tracking).</p>
-<h2 id="context-19"><a class="header" href="#context-19">Context</a></h2>
+<h2 id="context-20"><a class="header" href="#context-20">Context</a></h2>
 <p>Jacquard is described as a "GPU-accelerated <strong>RTL</strong> simulator", and behavioral
 RTL <em>is</em> the intended design input. But it is an <strong>emulator</strong> (GEM =
 GPU-Emulator-inspired; <a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a>): it maps a
@@ -8509,7 +8663,7 @@ ships Yosys as WebAssembly wheels (<code>yowasp-yosys</code>) — no system Yosy
 vendoring, cross-platform. It is <strong>already in this workspace's <code>uv.lock</code></strong>
 (transitively via <code>amaranth[builtin-yosys]</code> in the mcu_soc design).</li>
 </ol>
-<h2 id="decision-18"><a class="header" href="#decision-18">Decision</a></h2>
+<h2 id="decision-19"><a class="header" href="#decision-19">Decision</a></h2>
 <p>Add an <strong>embedded synthesis front-end</strong> so behavioral RTL is a first-class
 input, while keeping the emulator's synthesized-netlist core unchanged:</p>
 <ol>
@@ -8616,7 +8770,7 @@ surface — the <code>&amp;origins</code> data must survive the in-process call 
 temp-file hand-off. This is unproven and is the first Phase-2 task. A large build
 effort overall; tracked as Phase 2 in #162, out of scope for ratifying the
 on-ramp.</p>
-<h2 id="consequences-19"><a class="header" href="#consequences-19">Consequences</a></h2>
+<h2 id="consequences-20"><a class="header" href="#consequences-20">Consequences</a></h2>
 <ul>
 <li><strong>RTL becomes a first-class, single-command input</strong> — the onboarding cliff is
 removed, and "what does it accept?" has a clean answer: <em>your RTL</em> (or a
@@ -8664,7 +8818,7 @@ via <code>--corner</code>. <code>--liberty</code> / <code>--cell-descriptor</cod
 <li><strong>Provenance (Phase 2)</strong> is a large, dependency-gated follow-on, not promised
 by this ADR.</li>
 </ul>
-<h2 id="alternatives-considered-1"><a class="header" href="#alternatives-considered-1">Alternatives considered</a></h2>
+<h2 id="alternatives-considered-2"><a class="header" href="#alternatives-considered-2">Alternatives considered</a></h2>
 <ul>
 <li><strong>Keep synthesis external (status quo), document better.</strong> The honest interim
 and still the <em>performance</em> path — but rejected as the end state: it leaves the
@@ -12152,6 +12306,109 @@ config surface; <code>--jtag-server</code> as the interactive sibling of <code>-
 <li>Existing replay path: <code>src/sim/models/jtag.rs</code>, <code>tests/jtag_minimal/</code>
 (<code>bitbang.rec</code>, <code>sim_config.json</code>, the <code>jtag-minimal-cosim</code> CI gate).</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="plan--python-engine-as-a-bundled-binary-wheel"><a class="header" href="#plan--python-engine-as-a-bundled-binary-wheel">Plan — Python engine as a bundled binary wheel</a></h1>
+<p>Implementation plan for <a href="plans/../adr/0020-python-engine-binary-wheel.html">ADR 0020</a>:
+turn PR #53's subprocess API into a <code>pip install jacquard</code> self-contained
+binary wheel built with cibuildwheel.</p>
+<blockquote>
+<p><strong>Deferred (2026-07-01).</strong> ADR 0020 is a <strong>draft</strong> — a native PyO3 binding is
+the preferred long-term direction, and whether we build this subprocess-wheel
+path at all is deferred (<a href="https://github.com/gpu-eda/Jacquard/issues/161">#161</a>). <strong>P0</strong> (adopt
+PR #53's API into the uv workspace) is worth doing regardless — it's the
+Python surface either approach exposes. <strong>P1–P3</strong> (embed-and-delocate the
+subprocess binary) are on hold pending the subprocess-vs-PyO3 decision; note
+the shared hard part (per-platform wheels + <code>libc++</code>/<code>libomp</code> vendoring)
+carries over to a PyO3 extension either way.</p>
+</blockquote>
+<h2 id="guiding-constraints"><a class="header" href="#guiding-constraints">Guiding constraints</a></h2>
+<ul>
+<li><strong>The Python surface is PR #53's</strong> — <code>config</code> / <code>runner</code> / <code>result</code> /
+<code>regression</code> / <code>errors</code>. This plan changes packaging and adds a binary; it
+does not redesign the API.</li>
+<li><strong>Reuse, don't reinvent, the release machinery.</strong> The binary to embed is the
+one <code>release.yml</code> already builds (<code>cargo build --release --features metal --bin jacquard</code>, metallib embedded). The publish path is
+<code>publish-netlist-graph.yml</code>'s OIDC trusted-publishing shape. The smoke idea
+is <code>scripts/ci/user_acceptance_smoke.sh</code> (install relocated → run <code>sim</code>).</li>
+<li><strong>Every phase ends green in CI</strong> with an install-into-clean-venv smoke test,
+and any platform the wheel does <em>not</em> cover is <code>log</code>-ged, not silently
+dropped.</li>
+</ul>
+<h2 id="p0--land-the-api-in-the-workspace-no-binary-yet"><a class="header" href="#p0--land-the-api-in-the-workspace-no-binary-yet">P0 — Land the API in the workspace (no binary yet)</a></h2>
+<p>Adopt PR #53 as a uv workspace member; ship nothing to PyPI yet.</p>
+<ol>
+<li>Move #53's <code>python/jacquard/</code> in as the 5th workspace member; wire it into
+the root <code>pyproject.toml</code> workspace list next to <code>netlist_graph</code> /
+<code>chipflow_harness</code> / <code>mcu_soc</code>.</li>
+<li>Keep <code>find_jacquard_binary()</code>'s current env → <code>PATH</code> → <code>which</code> chain (no
+embedded binary yet); it resolves a dev's local <code>target/release/jacquard</code>.</li>
+<li>CI: a <code>python-api</code> job — <code>uv sync</code>, <code>ruff</code>, <code>pytest</code> — plus one integration
+test that builds <code>jacquard</code> and drives <code>sim()</code> against a tiny fixture
+(guarded like the other Metal jobs; reuses the <code>metal-build</code> artifact from
+the build/test split).</li>
+<li><strong>Exit:</strong> #53's tests green in CI; <code>from jacquard import sim</code> works against a
+locally built binary. #53 can be closed/superseded by this branch.</li>
+</ol>
+<h2 id="p1--macosarm64--metal-binary-wheel-the-spike--the-crux"><a class="header" href="#p1--macosarm64--metal-binary-wheel-the-spike--the-crux">P1 — macOS/arm64 + Metal binary wheel (the spike + the crux)</a></h2>
+<p>The whole ADR rests on "embed the binary + vendor its dylibs into a wheel that
+launches with no Homebrew LLVM." Prove it here on the platform we already
+release for.</p>
+<ol>
+<li><strong>Embed step.</strong> Package build copies the release binary to
+<code>jacquard/_bin/jacquard</code>. <code>find_jacquard_binary()</code> gains step 0: prefer the
+packaged <code>_bin/jacquard</code>; existing chain remains the fallback.</li>
+<li><strong>cibuildwheel + delocate.</strong> Configure <code>cibuildwheel</code> for <code>macos/arm64</code>,
+with <code>delocate</code> repairing the wheel — copying <code>libc++</code>/<code>libomp</code> in and
+rewriting install names. Confirm with <code>otool -L</code> that the repaired binary
+references <code>@loader_path</code>-relative dylibs, not <code>/opt/homebrew</code>.</li>
+<li><strong>Clean-environment smoke (the gate).</strong> In a runner <em>without</em> Homebrew LLVM
+on the load path (or with it hidden), <code>pip install</code> the wheel into a fresh
+venv and run a real <code>sim</code> — the <code>pip</code>-user analogue of the relocated-tarball
+user-acceptance gate. This is the test that would have caught v0.2.1.</li>
+<li><strong>libomp duplicate-runtime check.</strong> Load jacquard in a venv that also imports
+a numpy/scipy stack (which ship their own libomp) and confirm no
+duplicate-OpenMP abort.</li>
+<li><strong>Exit:</strong> a macOS/arm64 wheel that <code>pip install</code>s and runs <code>sim</code> on a clean
+box; TestPyPI upload validated via <code>workflow_dispatch</code>.</li>
+</ol>
+<h2 id="p2--linuxx86_64-cpu-fallback-wheel"><a class="header" href="#p2--linuxx86_64-cpu-fallback-wheel">P2 — Linux/x86_64 CPU-fallback wheel</a></h2>
+<p>Make <code>pip install jacquard</code> work in a plain Linux CI container (no GPU).</p>
+<ol>
+<li>Build the cosim <strong>CPU backend</strong> (ADR 0017) for <code>manylinux</code>; <code>auditwheel</code>
+repairs the (smaller, no-GPU) dylib set.</li>
+<li>Same clean-venv <code>sim</code>/<code>cosim</code> smoke, in a stock <code>manylinux</code>/ubuntu container.</li>
+<li>Document the backend the Linux wheel provides (CPU) vs. what needs P3.</li>
+<li><strong>Exit:</strong> Linux CPU wheel installs and runs in a bare container.</li>
+</ol>
+<h2 id="p3--cuda--hip-gated-likely-extras"><a class="header" href="#p3--cuda--hip-gated-likely-extras">P3 — CUDA / HIP (gated, likely extras)</a></h2>
+<ol>
+<li><strong>Gate:</strong> ADR 0018 Phase 4 (prebuilt CUDA/HIP binaries) must exist first —
+this reuses those binaries, it does not invent GPU CI.</li>
+<li>Decide with data: default manylinux wheel vs. <code>jacquard[cuda]</code> extra vs.
+a separate package — driven by wheel size and CUDA-runtime bundling. <code>log</code>
+and document whichever platforms the default wheel omits.</li>
+<li><strong>Exit:</strong> a documented, working install path for at least one GPU backend on
+Linux, or a recorded decision to keep GPU on the tarball/binstall channel.</li>
+</ol>
+<h2 id="publish-pipeline-built-across-p1p3"><a class="header" href="#publish-pipeline-built-across-p1p3">Publish pipeline (built across P1–P3)</a></h2>
+<ul>
+<li>New <code>publish-jacquard-wheel.yml</code>, modeled on <code>publish-netlist-graph.yml</code>:
+cibuildwheel build matrix → artifact → <strong>TestPyPI</strong> on <code>workflow_dispatch</code>
+(dry-run) → <strong>PyPI</strong> via OIDC trusted publishing on a release tag. No stored
+token; configure the trusted publisher once (mind the case-sensitive
+<code>gpu-eda/Jacquard</code> repo claim — the same gotcha <code>netlist-graph</code> hit).</li>
+<li>Version tracks the binary release via <code>scripts/bump_version.py</code> (the embedded
+binary and the wheel are one artifact), not <code>netlist-graph</code>'s independent line.</li>
+<li>Extend <code>docs/installation.md</code> (a <code>pip install jacquard</code> path) and
+<code>docs/release-process.md</code> (the wheel channel + its staging-validation gate).</li>
+</ul>
+<h2 id="open-questions-from-the-adr"><a class="header" href="#open-questions-from-the-adr">Open questions (from the ADR)</a></h2>
+<ul>
+<li><strong>PyPI name</strong> <code>jacquard</code> — confirm availability; fall back to <code>jacquard-eda</code>
+with an aliased import name if taken. Blocks only the first real publish.</li>
+<li><strong>CUDA wheel size / runtime</strong> — P3 decision, with data.</li>
+<li><strong>libomp duplicate runtime</strong> — must be cleared in the P1 spike (step 4) before
+committing to delocate as the vendoring mechanism.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="plan-xroots--backward-x-source-frontier-query"><a class="header" href="#plan-xroots--backward-x-source-frontier-query">Plan: <code>xroots</code> — backward X-source frontier query</a></h1>
 <p>Issue: <a href="https://github.com/gpu-eda/Jacquard/issues/98">#98</a>. Builds on the
 <code>netlist-graph</code> cone/driver fixes in <a href="https://github.com/gpu-eda/Jacquard/pull/101">#101</a>
@@ -13064,7 +13321,7 @@ it's the surrounding ecosystem that doesn't.</p>
 <p>Q3 (cross-check vs OpenSTA) and Q4 (correlation with Jacquard's
 <code>timing-analysis</code>) both depend on OpenTimer producing arrivals. With Q2
 unable to produce a single path, they're moot for this spike.</p>
-<h3 id="decision-19"><a class="header" href="#decision-19">Decision</a></h3>
+<h3 id="decision-20"><a class="header" href="#decision-20">Decision</a></h3>
 <p><strong>ADR 0003 → Superseded.</strong> Per the spike's decision matrix
 ("Fail on any → ADR 0003 → Superseded. Fall back to OpenSTA-subprocess-only
 validation"), the right move is to retire the in-process-OpenTimer plan
