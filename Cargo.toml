@@ -1,6 +1,12 @@
 [package]
-name = "jacquard"
-version = "0.3.0"
+# Registry/package name. Renamed from "jacquard" (which is an unrelated,
+# actively-published crates.io crate — an AT-Protocol client library) so
+# `cargo install` / `cargo binstall` resolve unambiguously and never fall back
+# to building that other project. The library and binary targets below keep the
+# `jacquard` name, so the binary users run, the release asset, and every
+# `use jacquard::…` in the source are unchanged.
+name = "jacquard-sim"
+version = "0.3.0-rc.2"
 edition = "2021"
 description = "GPU-accelerated RTL logic simulator with vector-driven setup/hold timing analysis. Maps gate-level netlists to a virtual manycore Boolean processor and runs them on Metal / CUDA / HIP."
 repository = "https://github.com/gpu-eda/Jacquard"
@@ -92,6 +98,11 @@ optional = true
 [dependencies.block]
 version = "0.1"
 optional = true
+
+[lib]
+# Keep the library crate name `jacquard` (independent of the package name
+# above) so every `use jacquard::…` in src/bin and tests stays untouched.
+name = "jacquard"
 
 [[bin]]
 name = "jacquard"

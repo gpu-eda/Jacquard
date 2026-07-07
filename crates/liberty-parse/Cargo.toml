@@ -1,6 +1,6 @@
 [package]
 name = "liberty-parse"
-version = "0.3.0"
+version = "0.3.0-rc.2"
 edition = "2021"
 description = "Generic Liberty (.lib) tokenizer + group/attribute parser. The single Liberty front-end in Jacquard: jacquard's TimingLibrary and the (future) Liberty->cell-model-ir converter both consume this. See docs/adr/0019-cell-model-ir.md (D6)."
 license = "Apache-2.0"

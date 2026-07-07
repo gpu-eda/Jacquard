@@ -99,10 +99,23 @@ Optional but recommended before a user-facing release: prove the
 promoting. There is no "test crates registry", so a **GitHub prerelease**
 is the staging tier for the binary channels.
 
-1. **Cut an RC.** `python3 scripts/bump_version.py <X.Y.Z>-rc.<N>`, commit,
-   tag `v<X.Y.Z>-rc.<N>`, push the tag. `release.yml` detects the SemVer
+> **Sequence matters — do NOT roll main to the final version before the RC
+> validates.** During the RC window `main` **is** the candidate: it stays at
+> `X.Y.Z-rc.N` with the changelog still under `[Unreleased]`. Only the
+> **Promote** step (below) rolls `[Unreleased] → [X.Y.Z]` and bumps to the
+> final `X.Y.Z`. Rolling the release onto `main` first leaves `main`
+> advertising a version that has no release — the version pin and dated
+> changelog claim `X.Y.Z` is shipped while only the RC tag exists, which also
+> breaks `cargo binstall --git` (it reads `main`'s version and fetches a
+> non-existent `vX.Y.Z` tarball). Each new RC is a `main` commit bumped to the
+> next `-rc.N`; `main == the latest RC tag` throughout.
+
+1. **Cut an RC.** On `main` at `X.Y.Z-rc.N` (changelog under `[Unreleased]`),
+   `python3 scripts/bump_version.py <X.Y.Z>-rc.<N>`, commit, tag
+   `v<X.Y.Z>-rc.<N>`, push the tag. `release.yml` detects the SemVer
    pre-release suffix and publishes a GitHub **prerelease** (never shown as
-   "Latest") with the Metal tarball attached.
+   "Latest") with the Metal tarball attached, and `bump-tap` pushes the
+   formula to `gpu-eda/homebrew-tap-prerelease`.
 
 2. **Validate.** Dispatch the **Validate install (staging)** workflow
    (`validate-install.yml`) with that tag. It runs the real install

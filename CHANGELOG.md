@@ -9,8 +9,6 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-07-07
-
 ### Added
 
 - **Behavioral-RTL on-ramp (ADR 0021).** `jacquard sim` and `jacquard cosim`
@@ -460,8 +458,7 @@ runners land (ADR 0018).
   CUDA / HIP detect violations on the GPU but don't currently route
   them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/gpu-eda/Jacquard/compare/v0.2.4...v0.3.0
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.4...HEAD
 [0.2.4]: https://github.com/gpu-eda/Jacquard/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/gpu-eda/Jacquard/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/gpu-eda/Jacquard/compare/v0.2.1...v0.2.2
