@@ -1,5 +1,16 @@
 # Plan — RTL-source provenance (ADR 0021 Phase 2)
 
+> **2026-07-07 — end-to-end closed (PR pending on `ws-a-abc-new-provenance`).**
+> The WS-A↔WS-B loop works: behavioral RTL → `sim` → a signal resolves to its RTL
+> line. `src/synth.rs` maps via `abc_new` and emits `\src`; **A1/A2 landed** — the
+> provenance fork was moved to **`gpu-eda/yowasp-yosys`**, whose CI builds +
+> validates + **releases** the wheel, and `jacquard` fetches that pinned release on
+> first use (no PAT, no artifact expiry). WS-B B0–B2 + B3 (xsources, trace-signals)
+> done; B3 timing-report remains (see below). aigpdk mapping needed two fixes the
+> sky130 A0 didn't surface: `read_liberty -lib` + `hierarchy -purge_lib` before a
+> single `abc_new` pass. The per-section markers below predate this and are being
+> folded in at merge.
+
 **Status:** Active — **in flight** (updated 2026-07-06; per-section ✅ markers below
 are authoritative). **WS-A: A0 is GO** — the forked provenance wasm builds and
 carries origins through the in-process WASI `abc_new`/`aiger2` XAIGER-`"y"` path

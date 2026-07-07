@@ -112,6 +112,21 @@ Implementation phasing lives in **[#162](https://github.com/gpu-eda/Jacquard/iss
 
 ### Phase 2 — RTL-source provenance (roadmap, not this decision's gate)
 
+> **Landed (2026-07).** RTL in → source-annotated waves out. The on-ramp maps via
+> **`abc_new`** (abc9/aiger2 XAIGER path) so Yosys `(* src *)` origins survive
+> std-cell mapping, and the WS-B ingestion (`sverilogparse` → `netlistdb.cell_src`
+> → `AIG::aigpin_src_locations`) surfaces them in `xsources` + `--trace-signals`.
+> Two facts below were corrected in flight: (1) the fork wasm builds via the
+> **`develop-0.64` Makefile recipe (wasi-sdk 27 + yosys-slang whole-archive)**, NOT
+> CMake/wasi-sdk-33 — the patched yosys fork is Makefile-only and CMake dropped
+> `read_slang`. (2) The in-process `&origins` risk flagged below is **resolved** —
+> origins survive the in-process WASI `abc_new` round-trip (100% `\src` on comb +
+> sequential). The provenance wasm is built + released by the
+> **`gpu-eda/yowasp-yosys`** fork's own CI; `jacquard` fetches the pinned release
+> (A2). aigpdk-specific mapping needs `read_liberty -lib` + `hierarchy -purge_lib`
+> before `abc_new` and a single mapping pass. Details:
+> [`docs/plans/rtl-source-provenance.md`](../plans/rtl-source-provenance.md).
+
 A patched toolchain carrying the [origin-shell](https://github.com/robtaylor/origin-shell)
 `\src` pass-through — berkeley-abc **#487** (`vOrigins`/`&origins`) +
 `robtaylor/yosys@src-retention-y-ext` — keeps RTL source locations alive through
@@ -174,7 +189,11 @@ on-ramp.
   — otherwise `sim design.v` on RTL fails with a build-without-synth message.
   A pre-synthesized netlist still simulates with the feature off. The ~39 MB
   wasm is either bundled into the binary or fetched to a cache on first use
-  (open sub-decision, #162).
+  (open sub-decision, #162). **Resolved (2026-07, Phase 2): fetch-on-first-use.**
+  `locate_yosys_wasm` (`src/synth.rs`) resolves `--yosys-wasm` → `JACQUARD_YOSYS_WASM`
+  → a pinned provenance wheel downloaded (sha256-verified, cached) from a
+  `gpu-eda/yowasp-yosys` release. Provenance forces this: the abc_new origins flow
+  needs the fork wasm, so a bundled/stock wasm won't do (see Phase 2 below).
 - **Decouples the on-ramp from ADR 0020 / #161:** because synthesis runs Yosys
   from Rust via `wasmtime`, it needs neither the PyO3 binding nor a
   subprocess-bundled Python wheel. The Python-engine packaging call can be made
