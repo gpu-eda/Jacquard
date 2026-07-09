@@ -5074,6 +5074,25 @@ the formula's <em>structure</em> (deps, install, test); its version pin is a
 placeholder the job overwrites. Requires the one-time org setup:
 <code>secrets.HOMEBREW_TAP_TOKEN</code> (a token with <code>contents: write</code> on both tap
 repos) and the <code>gpu-eda/homebrew-tap-prerelease</code> repo.</p>
+<h2 id="release-notes--versioned-docs-automated"><a class="header" href="#release-notes--versioned-docs-automated">Release notes &amp; versioned docs (automated)</a></h2>
+<p>Release notes come from the CHANGELOG, and doc links are pinned to the release
+— both automatic in <code>release.yml</code>:</p>
+<ul>
+<li><strong>Notes body</strong> = the CHANGELOG section for the tag's version. A prerelease
+(<code>X.Y.Z-rc.N</code>) has no dated section, so the extractor falls back to
+<code>[Unreleased]</code> — RCs ship the same curated draft you'll ship at promotion.
+So: <strong>write the notes in <code>[Unreleased]</code></strong>, including a one-sentence summary
+lead-in before <code>### Added</code> (it becomes the release intro).</li>
+<li><strong>Doc links are version-pinned.</strong> The extractor rewrites <code>`docs/foo.md`</code>
+references into <code>[docs/foo.md](https://gpu-eda.github.io/Jacquard/&lt;tag&gt;/foo.html)</code>
+— the mdBook page frozen for <em>this</em> release. So keep CHANGELOG doc references
+as repo-relative <code>`docs/foo.md`</code> (clean in-repo); the workflow does the
+URL rewrite.</li>
+<li><strong>Versioned docs deploy.</strong> The <code>docs-version</code> job publishes the book to
+gh-pages <code>/(tag)/</code> on every release tag (<code>keep_files: true</code>), while the
+<code>main</code> push keeps deploying "latest" to the site root. Version subdirs
+accumulate side by side; the pinned links above resolve to them.</li>
+</ul>
 <h2 id="staging-validation-release-candidates"><a class="header" href="#staging-validation-release-candidates">Staging validation (release candidates)</a></h2>
 <p>Optional but recommended before a user-facing release: prove the
 <em>documented install commands</em> work against a staging artifact before
