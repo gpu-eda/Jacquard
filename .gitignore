@@ -28,6 +28,8 @@ __pycache__/
 !tests/xprop_cosim/expected/*.vcd
 # Stage C flash cosim golden (mcu_soc; CpuBackend == Metal, #105).
 !tests/mcu_soc/expected/*.vcd
+# Shared-bus QSPI arbitration golden (CpuBackend == Metal/CUDA/HIP).
+!tests/qspi_shared_bus/expected/*.vcd
 *.tar.gz
 debug_trace.csv
 *_watchlist.json

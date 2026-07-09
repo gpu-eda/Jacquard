@@ -333,8 +333,9 @@ impl TestbenchConfig {
     ///
     /// Merges the legacy singular `flash` (prepended, so it is instance 0) with
     /// the plural `qspi_memory` list, mirroring `effective_uarts()`. This is the
-    /// single surface every backend consumes: the CPU backend steps every entry
-    /// independently; the GPU backends (Stage A) require `len() <= 1`.
+    /// single surface every backend consumes: every backend steps each entry
+    /// independently, up to `MAX_QSPI_MEMS` (4) instances. Instances may share
+    /// one SCK/SIO bus with distinct CS (see ADR 0013's 2026-07-09 amendment).
     pub fn effective_qspi_memory(&self) -> Vec<QspiMemoryConfig> {
         let mut out = self.qspi_memory.clone();
         if let Some(ref f) = self.flash {

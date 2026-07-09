@@ -4534,6 +4534,51 @@ struct CpuFlashInstance {
     prev_d_out: UnsafeCell<u8>,
 }
 
+/// Inject one QSPI instance's MISO nibble into its `d_in` bit positions —
+/// but only when the instance is **selected** (`csn` low). A deselected
+/// instance (csn high) presents high-Z and must not drive: otherwise, on a
+/// shared SIO bus where instances share `d_in_pos`, a deselected memory
+/// clobbers the selected driver's data (the raw per-instance loop is
+/// last-writer-wins). `xmask_off == 0` means xprop is disabled.
+///
+/// This is the CS gate mirrored by `gpu_apply_flash_din` (Metal / CUDA / HIP),
+/// which skips a flash whose `FlashState.prev_csn` is high. Kept as a free fn
+/// so the shared-bus arbitration is unit-testable without a GPU or a netlist.
+///
+/// `csn` is the **delayed** (`prev_csn`) chip-select, not the live output-slot
+/// value: `d_i` was produced by the setup-delay dual-step using that same
+/// `prev_csn`, so gating injection on it keeps the driven value and the
+/// selection decision in phase. Gating on live `csn` would skew them by one
+/// edge — the very skew the delay model exists to avoid.
+fn apply_flash_din_gated(
+    state: &mut [u32],
+    xmask_off: usize,
+    d_i: u8,
+    csn: u32,
+    d_in_pos: &[u32; 4],
+) {
+    if csn != 0 {
+        return; // deselected → high-Z, don't drive the (possibly shared) line
+    }
+    for i in 0..4usize {
+        let pos = d_in_pos[i];
+        if pos == 0xFFFFFFFF {
+            continue;
+        }
+        let word_idx = (pos >> 5) as usize;
+        let bit_mask = 1u32 << (pos & 31);
+        if (d_i >> i) & 1 != 0 {
+            state[word_idx] |= bit_mask;
+        } else {
+            state[word_idx] &= !bit_mask;
+        }
+        // Driven ⇒ known: clear the X-mask so a shared MISO bit isn't X-seeded.
+        if xmask_off != 0 {
+            state[xmask_off + word_idx] &= !bit_mask;
+        }
+    }
+}
+
 struct CpuBackend {
     /// Full design state `[input_state | output_state]`, `2 × state_size` words.
     state: UnsafeCell<Vec<u32>>,
@@ -5007,26 +5052,14 @@ impl CosimBackend for CpuBackend {
             // ── CPU apply_flash_din (mirror gpu_apply_flash_din, shader:904) ─
             // Inject each memory's current MISO nibble into ITS input-state
             // d_in bits BEFORE simulate, clearing their X-mask (driven ⇒ known,
-            // #95 ph3). Every QSPI instance drives its own lanes independently.
+            // #95 ph3). Gated on selection (prev_csn low) so a deselected memory
+            // presents high-Z and can't clobber a shared SIO bus — see
+            // `apply_flash_din_gated`.
             for inst in &self.flashes {
                 // SAFETY: sequential dispatch — no concurrent borrow.
                 let d_i = unsafe { *inst.d_i.get() };
-                for i in 0..4usize {
-                    let pos = inst.d_in_pos[i];
-                    if pos == 0xFFFFFFFF {
-                        continue;
-                    }
-                    let word_idx = (pos >> 5) as usize;
-                    let bit_mask = 1u32 << (pos & 31);
-                    if (d_i >> i) & 1 != 0 {
-                        state[word_idx] |= bit_mask;
-                    } else {
-                        state[word_idx] &= !bit_mask;
-                    }
-                    if xmask_off != 0 {
-                        state[xmask_off + word_idx] &= !bit_mask;
-                    }
-                }
+                let csn = unsafe { *inst.prev_csn.get() };
+                apply_flash_din_gated(state, xmask_off, d_i, csn, &inst.d_in_pos);
             }
 
             // ── Simulate every partition for this edge ─────────────────────
@@ -5297,3 +5330,68 @@ pub use cuda::run_cosim_cuda;
 mod hip;
 #[cfg(feature = "hip")]
 pub use hip::run_cosim_hip;
+
+#[cfg(test)]
+mod flash_din_tests {
+    use super::apply_flash_din_gated;
+    use crate::sim::models::read_bit;
+
+    #[test]
+    fn selected_instance_drives_its_lane() {
+        let mut state = vec![0u32; 8];
+        // Instance selected (csn=0), d_i = 0b0010 → lane 1 high. d0 at pos 33.
+        apply_flash_din_gated(&mut state, 0, 0b0010, 0, &[33, 34, 35, 36]);
+        assert_eq!(read_bit(&state, 34), 1); // lane 1 driven high
+        assert_eq!(read_bit(&state, 33), 0); // lane 0 low
+    }
+
+    #[test]
+    fn deselected_instance_does_not_drive() {
+        let mut state = vec![0u32; 8];
+        // Pre-set the shared lane high, then a DESELECTED instance (csn=1)
+        // with d_i=0 must NOT pull it low.
+        state[1] |= 1 << (34 & 31); // pos 34 = word 1, bit 2
+        apply_flash_din_gated(&mut state, 0, 0b0000, 1, &[33, 34, 35, 36]);
+        assert_eq!(read_bit(&state, 34), 1); // untouched — high-Z
+    }
+
+    #[test]
+    fn shared_bus_selected_wins_regardless_of_order() {
+        // Two instances share the SAME d_in positions (shared SIO bus).
+        // A is SELECTED with data (lane1=1); B is DESELECTED with stale idle
+        // (all lanes high). The historical bug was last-writer-wins, so assert
+        // both application orders leave the shared line reflecting A, not B.
+        let shared = [33u32, 34, 35, 36];
+
+        // Order 1: selected A first, then deselected B.
+        let mut s1 = vec![0u32; 8];
+        apply_flash_din_gated(&mut s1, 0, 0b0010, 0, &shared); // A selected
+        apply_flash_din_gated(&mut s1, 0, 0b1111, 1, &shared); // B deselected
+        assert_eq!(read_bit(&s1, 34), 1);
+        assert_eq!(read_bit(&s1, 33), 0);
+        assert_eq!(read_bit(&s1, 36), 0); // B's idle-high did NOT leak onto lane 3
+
+        // Order 2: deselected B first, then selected A. Same result.
+        let mut s2 = vec![0u32; 8];
+        apply_flash_din_gated(&mut s2, 0, 0b1111, 1, &shared); // B deselected
+        apply_flash_din_gated(&mut s2, 0, 0b0010, 0, &shared); // A selected
+        assert_eq!(read_bit(&s2, 34), 1);
+        assert_eq!(read_bit(&s2, 33), 0);
+        assert_eq!(read_bit(&s2, 36), 0);
+    }
+
+    #[test]
+    fn xmask_cleared_only_when_driven() {
+        // xprop enabled: selected drive clears the x-mask bit; deselected leaves
+        // it untouched. xmask_off = 4 words in.
+        let mut state = vec![0u32; 8];
+        state[4 + 1] |= 1 << (34 & 31); // x-mask bit set for pos 34
+        apply_flash_din_gated(&mut state, 4, 0b0010, 0, &[33, 34, 35, 36]);
+        assert_eq!((state[4 + 1] >> (34 & 31)) & 1, 0); // cleared (driven known)
+
+        let mut state2 = vec![0u32; 8];
+        state2[4 + 1] |= 1 << (34 & 31);
+        apply_flash_din_gated(&mut state2, 4, 0b0010, 1, &[33, 34, 35, 36]);
+        assert_eq!((state2[4 + 1] >> (34 & 31)) & 1, 1); // deselected → untouched
+    }
+}

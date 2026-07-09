@@ -1,0 +1,65 @@
+{
+  "netlist_path": "tests/qspi_shared_bus/shared_bus_dut_synth.gv",
+  "clock_gpio": 0,
+  "reset_gpio": 1,
+  "reset_active_high": false,
+  "reset_cycles": 6,
+  "num_cycles": 300,
+  "clock_period_ps": 40000,
+  "_comment": "Two flashes on a SHARED bus: both use clk_gpio=2 and d0_gpio=5 (shared SCK + SIO), distinct csn_gpio (3 vs 4). Exercises the CS-gated MISO arbitration — a deselected flash must not drive the shared MISO.",
+  "qspi_memory": [
+    {
+      "name": "fa",
+      "clk_gpio": 2,
+      "csn_gpio": 3,
+      "d0_gpio": 5,
+      "firmware": "tests/qspi_shared_bus/fw/flashA.bin",
+      "size_bytes": 65536
+    },
+    {
+      "name": "fb",
+      "clk_gpio": 2,
+      "csn_gpio": 4,
+      "d0_gpio": 5,
+      "firmware": "tests/qspi_shared_bus/fw/flashB.bin",
+      "size_bytes": 65536
+    }
+  ],
+  "port_mapping": {
+    "inputs": {
+      "0": "clk",
+      "1": "rst_n",
+      "5": "sio_i[0]",
+      "6": "sio_i[1]",
+      "7": "sio_i[2]",
+      "8": "sio_i[3]"
+    },
+    "outputs": {
+      "2": "sck",
+      "3": "cs_n_a",
+      "4": "cs_n_b",
+      "5": "sio_o[0]",
+      "6": "sio_o[1]",
+      "7": "sio_o[2]",
+      "8": "sio_o[3]",
+      "9": "fa[0]",
+      "10": "fa[1]",
+      "11": "fa[2]",
+      "12": "fa[3]",
+      "13": "fa[4]",
+      "14": "fa[5]",
+      "15": "fa[6]",
+      "16": "fa[7]",
+      "17": "fb[0]",
+      "18": "fb[1]",
+      "19": "fb[2]",
+      "20": "fb[3]",
+      "21": "fb[4]",
+      "22": "fb[5]",
+      "23": "fb[6]",
+      "24": "fb[7]",
+      "25": "done",
+      "26": "all_match"
+    }
+  }
+}

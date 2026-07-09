@@ -150,6 +150,24 @@ if [ "$SCOPE" = all ] || [ "$SCOPE" = qspi ]; then
     else
         fail "qspi_psram_content"
     fi
+
+    # qspi_shared_bus: two flashes on ONE shared SCK/SIO bus, distinct CS. The
+    # master reads addr 0 from each in turn; a deselected flash must present
+    # high-Z on the shared MISO (CS-gated din injection) or it clobbers the
+    # other's read. Regression for the shared-bus arbitration fix. Golden
+    # captured on CpuBackend, byte-identical to the Metal/CUDA/HIP kernels.
+    # See tests/qspi_shared_bus/README.md.
+    run qspi_shared_bus "$BIN" cosim tests/qspi_shared_bus/shared_bus_dut_synth.gv \
+        --config tests/qspi_shared_bus/sim_config.json --top-module shared_bus_dut \
+        --max-clock-edges 2000 --output-vcd "$OUT/qspi_shared_bus.vcd" || true
+    check qspi_shared_bus "$OUT/qspi_shared_bus.vcd" tests/qspi_shared_bus/expected/qspi_shared_bus.vcd
+    # Content assertion (each flash returned its own byte), independent of the diff.
+    total=$((total + 1))
+    if python3 tests/qspi_shared_bus/check.py "$OUT/qspi_shared_bus.vcd" >/dev/null 2>&1; then
+        pass "qspi_shared_bus_content"
+    else
+        fail "qspi_shared_bus_content"
+    fi
 fi
 
 # --- flash fixture (mcu_soc) — `flash` scope only ------------------------
