@@ -6698,6 +6698,22 @@ not the source build. (2) The note that <code>step_edge</code> receives an empty
 receives <code>&amp;backend.state()[state_size..]</code> (<code>cosim/mod.rs</code>). The original
 text below is retained for the record.</p>
 </blockquote>
+<blockquote>
+<p><strong>Amendment (2026-07-09):</strong> Plural QSPI memories may now share one SCK/SIO
+bus, selected by distinct CS lines (config: same <code>clk_gpio</code>/<code>d0_gpio</code>,
+distinct <code>csn_gpio</code>). This requires CS-gated MISO injection: a deselected
+instance (<code>prev_csn</code> high) presents high-Z and must not drive. Previously
+<code>gpu_apply_flash_din</code> (and the CpuBackend mirror) wrote every instance's
+<code>d_i</code> to its <code>d_in_pos</code> unconditionally, so on a shared bus the
+last-iterated (typically deselected) memory clobbered the selected driver.
+The gate lives in <code>gpu_apply_flash_din</code> (Metal + the shared CUDA/HIP
+<code>kernel_v1_impl.cuh</code>) and <code>CpuBackend::apply_flash_din_gated</code>; regression:
+<code>tests/qspi_shared_bus/</code> (golden + content, <code>all</code>/<code>qspi</code> scopes) plus the
+<code>flash_din_tests</code> unit tests. Independent-pin plurality (the original Stage
+B/C design, <code>tests/multi_mem_cosim/</code>) is unaffected — a deselected flash on
+its own pins was always ignored by the design; the gate only changes the
+now-shared case.</p>
+</blockquote>
 <h2 id="context-12"><a class="header" href="#context-12">Context</a></h2>
 <p>Jacquard's cosim mode runs reactive peripheral models alongside the
 GPU-simulated design: SPI flash serves firmware, UART decodes serial

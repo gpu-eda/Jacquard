@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/sim/cosim/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="jacquard" data-themes="" data-resource-suffix="" data-rustdoc-version="1.96.1 (31fca3adb 2026-06-26)" data-channel="1.96.1" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">jacquard/sim/cosim/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="comment">// SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/sim/cosim/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="jacquard" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">jacquard/sim/cosim/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="comment">// SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.
 <a href=#2 id=2 data-nosnippet>2</a>// SPDX-License-Identifier: Apache-2.0
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="doccomment">//! Backend-agnostic co-simulation engine: the `CosimBackend` trait, the public
 <a href=#4 id=4 data-nosnippet>4</a>//! `CosimOpts`/`CosimResult` API, the generic `run_cosim_generic&lt;B&gt;` driver, the
@@ -4534,767 +4534,865 @@
 <a href=#4534 id=4534 data-nosnippet>4534</a>    prev_d_out: UnsafeCell&lt;u8&gt;,
 <a href=#4535 id=4535 data-nosnippet>4535</a>}
 <a href=#4536 id=4536 data-nosnippet>4536</a>
-<a href=#4537 id=4537 data-nosnippet>4537</a><span class="kw">struct </span>CpuBackend {
-<a href=#4538 id=4538 data-nosnippet>4538</a>    <span class="doccomment">/// Full design state `[input_state | output_state]`, `2 × state_size` words.
-<a href=#4539 id=4539 data-nosnippet>4539</a>    </span>state: UnsafeCell&lt;Vec&lt;u32&gt;&gt;,
-<a href=#4540 id=4540 data-nosnippet>4540</a>    <span class="doccomment">/// SRAM backing store, sized `max(1)` like Metal (a SRAM-less design has
-<a href=#4541 id=4541 data-nosnippet>4541</a>    /// `sram_storage_size == 0`); `sram()` returns the `[..sram_len]` view.
-<a href=#4542 id=4542 data-nosnippet>4542</a>    </span>sram: UnsafeCell&lt;Vec&lt;u32&gt;&gt;,
-<a href=#4543 id=4543 data-nosnippet>4543</a>    <span class="doccomment">/// SRAM X-mask shadow (xprop); sized like `sram` when xprop is on, else 1.
-<a href=#4544 id=4544 data-nosnippet>4544</a>    </span>sram_xmask: UnsafeCell&lt;Vec&lt;u32&gt;&gt;,
-<a href=#4545 id=4545 data-nosnippet>4545</a>    <span class="doccomment">/// Per-edge schedule: one `Vec&lt;BitOp&gt;` per scheduler edge.
-<a href=#4546 id=4546 data-nosnippet>4546</a>    </span>schedule: Vec&lt;Vec&lt;BitOp&gt;&gt;,
-<a href=#4547 id=4547 data-nosnippet>4547</a>    edges_per_period: usize,
-<a href=#4548 id=4548 data-nosnippet>4548</a>    gcd_ps: u64,
-<a href=#4549 id=4549 data-nosnippet>4549</a>    <span class="doccomment">/// Words per state slot (`effective_state_size()`).
-<a href=#4550 id=4550 data-nosnippet>4550</a>    </span>state_size: usize,
-<a href=#4551 id=4551 data-nosnippet>4551</a>    <span class="doccomment">/// True SRAM word count (`sram_storage_size`); `sram()` view length.
-<a href=#4552 id=4552 data-nosnippet>4552</a>    </span>sram_len: usize,
-<a href=#4553 id=4553 data-nosnippet>4553</a>    num_blocks: usize,
-<a href=#4554 id=4554 data-nosnippet>4554</a>    num_major_stages: usize,
-<a href=#4555 id=4555 data-nosnippet>4555</a>    xprop_enabled: bool,
-<a href=#4556 id=4556 data-nosnippet>4556</a>    <span class="doccomment">/// X-mask word offset within a slot (`reg_io_state_size` when xprop on,
-<a href=#4557 id=4557 data-nosnippet>4557</a>    /// else 0). Mirrors the GPU `state_prep` `xmask_state_offset` sentinel.
-<a href=#4558 id=4558 data-nosnippet>4558</a>    </span>xmask_state_offset: usize,
-<a href=#4559 id=4559 data-nosnippet>4559</a>    <span class="doccomment">/// Reg/IO words per slot (`reg_io_state_size`); the X-mask lane width.
-<a href=#4560 id=4560 data-nosnippet>4560</a>    </span>reg_io_state_size: usize,
-<a href=#4561 id=4561 data-nosnippet>4561</a>    <span class="doccomment">/// Flash reset line (logic fixtures have no flash; carried for the contract).
-<a href=#4562 id=4562 data-nosnippet>4562</a>    </span>flash_in_reset: bool,
-<a href=#4563 id=4563 data-nosnippet>4563</a>    <span class="doccomment">/// Block program, copied from `script` so the backend owns its storage
-<a href=#4564 id=4564 data-nosnippet>4564</a>    /// (no lifetime entanglement with `LoadedDesign`).
-<a href=#4565 id=4565 data-nosnippet>4565</a>    </span>blocks_start: Vec&lt;usize&gt;,
-<a href=#4566 id=4566 data-nosnippet>4566</a>    blocks_data: Vec&lt;u32&gt;,
-<a href=#4567 id=4567 data-nosnippet>4567</a>    <span class="doccomment">/// Per-edge `[input | output]` snapshots for the most recent `run_edges`,
-<a href=#4568 id=4568 data-nosnippet>4568</a>    /// one slot per edge in the batch (N=1 per edge). `None` until enabled.
-<a href=#4569 id=4569 data-nosnippet>4569</a>    </span>vcd_ring: UnsafeCell&lt;<span class="prelude-ty">Option</span>&lt;Vec&lt;Vec&lt;u32&gt;&gt;&gt;&gt;,
-<a href=#4570 id=4570 data-nosnippet>4570</a>    enable_vcd: bool,
-<a href=#4571 id=4571 data-nosnippet>4571</a>    <span class="doccomment">/// Per-channel UART-TX decoder config (`tx_out_pos`, `cycles_per_bit`),
-<a href=#4572 id=4572 data-nosnippet>4572</a>    /// derived in `new` exactly as `MetalBackend::build_io_buffers` builds
-<a href=#4573 id=4573 data-nosnippet>4573</a>    /// `UartParams`. Length `n_uarts`; empty for designs with no UART.
-<a href=#4574 id=4574 data-nosnippet>4574</a>    </span>uart_configs: Vec&lt;CpuUartConfig&gt;,
-<a href=#4575 id=4575 data-nosnippet>4575</a>    <span class="doccomment">/// Per-channel UART-TX decoder FSM state, persistent across edges/batches
-<a href=#4576 id=4576 data-nosnippet>4576</a>    /// (mirrors the GPU `uart_state` buffer). Stepped per edge in `run_edges`.
-<a href=#4577 id=4577 data-nosnippet>4577</a>    </span>uart_states: UnsafeCell&lt;Vec&lt;CpuUartDecoderState&gt;&gt;,
-<a href=#4578 id=4578 data-nosnippet>4578</a>    <span class="doccomment">/// Completed `(channel_idx, byte)` pairs awaiting drain (mirrors the GPU
-<a href=#4579 id=4579 data-nosnippet>4579</a>    /// `UartChannel` ring; `drain_uart_tx` empties it). Interior-mutable so the
-<a href=#4580 id=4580 data-nosnippet>4580</a>    /// per-edge FSM in `run_edges(&amp;self)` can push.
-<a href=#4581 id=4581 data-nosnippet>4581</a>    </span>uart_decoded: UnsafeCell&lt;Vec&lt;(usize, u8)&gt;&gt;,
-<a href=#4582 id=4582 data-nosnippet>4582</a>    <span class="doccomment">/// Per-bus APB3 pin positions (Phase 1 step 5c), resolved in `new` via the
-<a href=#4583 id=4583 data-nosnippet>4583</a>    /// shared `build_bus_trace`. Index == GPU `bus_id` (packed into beat flags).
-<a href=#4584 id=4584 data-nosnippet>4584</a>    /// Empty for designs with no `bus_traces`.
-<a href=#4585 id=4585 data-nosnippet>4585</a>    </span>bus_positions: Vec&lt;BusTracePositions&gt;,
-<a href=#4586 id=4586 data-nosnippet>4586</a>    <span class="doccomment">/// Per-bus gate bits from the previous edge (rising-edge detection); mirrors
-<a href=#4587 id=4587 data-nosnippet>4587</a>    /// the GPU `BusTraceChannel.prev_gate`. Bit `b` == bus `b`'s gate last edge.
-<a href=#4588 id=4588 data-nosnippet>4588</a>    </span>bus_prev_gate: UnsafeCell&lt;u32&gt;,
-<a href=#4589 id=4589 data-nosnippet>4589</a>    <span class="doccomment">/// Monotonic edge counter stamped into each beat's `tick`; mirrors the GPU
-<a href=#4590 id=4590 data-nosnippet>4590</a>    /// `BusTraceChannel.current_tick`, incremented once per edge from 0.
-<a href=#4591 id=4591 data-nosnippet>4591</a>    </span>bus_current_tick: UnsafeCell&lt;u32&gt;,
-<a href=#4592 id=4592 data-nosnippet>4592</a>    <span class="doccomment">/// Captured raw beats awaiting drain (mirrors the GPU `BusTraceEntry` ring;
-<a href=#4593 id=4593 data-nosnippet>4593</a>    /// `drain_bus_beats` empties it). Interior-mutable for the per-edge FSM.
-<a href=#4594 id=4594 data-nosnippet>4594</a>    </span>bus_beats: UnsafeCell&lt;Vec&lt;<span class="kw">crate</span>::sim::models::bus_trace::RawBeat&gt;&gt;,
-<a href=#4595 id=4595 data-nosnippet>4595</a>    <span class="comment">// ── QSPI-memory CPU oracle (Stage A: plural) ────────────────────────────
-<a href=#4596 id=4596 data-nosnippet>4596</a>    </span><span class="doccomment">/// One `CppSpiFlash` oracle per configured QSPI memory
-<a href=#4597 id=4597 data-nosnippet>4597</a>    /// (`config.effective_qspi_memory()`), each stepped per edge in `run_edges`
-<a href=#4598 id=4598 data-nosnippet>4598</a>    /// with the GPU's dual-step + delayed-CSN convention so instance 0's `d_i`
-<a href=#4599 id=4599 data-nosnippet>4599</a>    /// matches `gpu_flash_model_step` byte-for-byte. Empty when no memory is
-<a href=#4600 id=4600 data-nosnippet>4600</a>    /// configured; length 1 preserves the single-flash behaviour byte-for-byte.
-<a href=#4601 id=4601 data-nosnippet>4601</a>    </span>flashes: Vec&lt;CpuFlashInstance&gt;,
-<a href=#4602 id=4602 data-nosnippet>4602</a>}
-<a href=#4603 id=4603 data-nosnippet>4603</a>
-<a href=#4604 id=4604 data-nosnippet>4604</a><span class="kw">impl </span>CpuBackend {
-<a href=#4605 id=4605 data-nosnippet>4605</a>    <span class="attr">#[inline]
-<a href=#4606 id=4606 data-nosnippet>4606</a>    </span><span class="kw">fn </span>state_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u32] {
-<a href=#4607 id=4607 data-nosnippet>4607</a>        <span class="comment">// SAFETY: cosim dispatch is sequential; no other live borrow exists.
-<a href=#4608 id=4608 data-nosnippet>4608</a>        </span><span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span><span class="self">self</span>.state.get() }
-<a href=#4609 id=4609 data-nosnippet>4609</a>    }
-<a href=#4610 id=4610 data-nosnippet>4610</a>    <span class="attr">#[inline]
-<a href=#4611 id=4611 data-nosnippet>4611</a>    #[allow(clippy::mut_from_ref)]
-<a href=#4612 id=4612 data-nosnippet>4612</a>    </span><span class="kw">fn </span>state_inner_mut(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>Vec&lt;u32&gt; {
-<a href=#4613 id=4613 data-nosnippet>4613</a>        <span class="comment">// SAFETY: only called from `run_edges`/`state_mut`, never concurrently.
-<a href=#4614 id=4614 data-nosnippet>4614</a>        </span><span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.state.get() }
-<a href=#4615 id=4615 data-nosnippet>4615</a>    }
-<a href=#4616 id=4616 data-nosnippet>4616</a>}
-<a href=#4617 id=4617 data-nosnippet>4617</a>
-<a href=#4618 id=4618 data-nosnippet>4618</a><span class="kw">impl </span>CosimBackend <span class="kw">for </span>CpuBackend {
-<a href=#4619 id=4619 data-nosnippet>4619</a>    <span class="kw">fn </span>new(
-<a href=#4620 id=4620 data-nosnippet>4620</a>        aig: <span class="kw-2">&amp;</span>AIG,
-<a href=#4621 id=4621 data-nosnippet>4621</a>        netlistdb: <span class="kw-2">&amp;</span>NetlistDB,
-<a href=#4622 id=4622 data-nosnippet>4622</a>        script: <span class="kw-2">&amp;</span>FlattenedScriptV1,
-<a href=#4623 id=4623 data-nosnippet>4623</a>        config: <span class="kw-2">&amp;</span>TestbenchConfig,
-<a href=#4624 id=4624 data-nosnippet>4624</a>        gpio_map: <span class="kw-2">&amp;</span>GpioMapping,
-<a href=#4625 id=4625 data-nosnippet>4625</a>        uart_configs: <span class="kw-2">&amp;</span>[(String, usize, usize, u32)],
-<a href=#4626 id=4626 data-nosnippet>4626</a>        sched_ticks_per_sys_clk_cycle: u64,
-<a href=#4627 id=4627 data-nosnippet>4627</a>        state_size: usize,
-<a href=#4628 id=4628 data-nosnippet>4628</a>        num_blocks: usize,
-<a href=#4629 id=4629 data-nosnippet>4629</a>        num_major_stages: usize,
-<a href=#4630 id=4630 data-nosnippet>4630</a>        _arrival_state_offset: u32,
-<a href=#4631 id=4631 data-nosnippet>4631</a>        _timing_constraints: <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span>&lt;Vec&lt;u32&gt;&gt;,
-<a href=#4632 id=4632 data-nosnippet>4632</a>    ) -&gt; (<span class="self">Self</span>, Vec&lt;BusTraceLane&gt;) {
-<a href=#4633 id=4633 data-nosnippet>4633</a>        <span class="comment">// Phase 1 scope guards (plan Risks): the CPU stepper has no arrival
-<a href=#4634 id=4634 data-nosnippet>4634</a>        // readback, and `simulate_block_v1` carries no SRAM X-mask, so SRAM
-<a href=#4635 id=4635 data-nosnippet>4635</a>        // under xprop would read as always-known.
-<a href=#4636 id=4636 data-nosnippet>4636</a>        </span><span class="macro">assert!</span>(
-<a href=#4637 id=4637 data-nosnippet>4637</a>            !script.timing_arrivals_enabled,
-<a href=#4638 id=4638 data-nosnippet>4638</a>            <span class="string">"CpuBackend: timed cosim not supported (Phase 1) — arrival readback \
-<a href=#4639 id=4639 data-nosnippet>4639</a>             rides the GPU ring; use the Metal backend for --timing-vcd cosim."
-<a href=#4640 id=4640 data-nosnippet>4640</a>        </span>);
-<a href=#4641 id=4641 data-nosnippet>4641</a>        <span class="macro">assert!</span>(
-<a href=#4642 id=4642 data-nosnippet>4642</a>            !(script.xprop_enabled &amp;&amp; script.sram_storage_size &gt; <span class="number">0</span>),
-<a href=#4643 id=4643 data-nosnippet>4643</a>            <span class="string">"CpuBackend: --xprop with SRAM not supported (Phase 1) — \
-<a href=#4644 id=4644 data-nosnippet>4644</a>             cpu_reference::simulate_block_v1 has no SRAM X-mask, so SRAM cells \
-<a href=#4645 id=4645 data-nosnippet>4645</a>             would read as always-known; use the Metal backend."
-<a href=#4646 id=4646 data-nosnippet>4646</a>        </span>);
-<a href=#4647 id=4647 data-nosnippet>4647</a>
-<a href=#4648 id=4648 data-nosnippet>4648</a>        <span class="comment">// Design state: [input | output], zeroed, with the xprop X-mask seed
-<a href=#4649 id=4649 data-nosnippet>4649</a>        // mirroring MetalBackend::build_state_buffers (both slots seeded so
-<a href=#4650 id=4650 data-nosnippet>4650</a>        // edge-0 state_prep's output→input copy doesn't wipe the seed).
-<a href=#4651 id=4651 data-nosnippet>4651</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>state = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">2 </span>* state_size];
-<a href=#4652 id=4652 data-nosnippet>4652</a>        <span class="kw">if </span>script.xprop_enabled {
-<a href=#4653 id=4653 data-nosnippet>4653</a>            <span class="kw">let </span>rio = script.reg_io_state_size <span class="kw">as </span>usize;
-<a href=#4654 id=4654 data-nosnippet>4654</a>            <span class="kw">let </span>xmask = <span class="kw">crate</span>::sim::vcd_io::xprop_xmask_template_cosim(script);
-<a href=#4655 id=4655 data-nosnippet>4655</a>            state[rio..<span class="number">2 </span>* rio].copy_from_slice(<span class="kw-2">&amp;</span>xmask);
-<a href=#4656 id=4656 data-nosnippet>4656</a>            state[state_size + rio..state_size + <span class="number">2 </span>* rio].copy_from_slice(<span class="kw-2">&amp;</span>xmask);
-<a href=#4657 id=4657 data-nosnippet>4657</a>            <span class="macro">clilog::info!</span>(
-<a href=#4658 id=4658 data-nosnippet>4658</a>                <span class="string">"cosim X-propagation enabled (CpuBackend): {} reg/io words, \
-<a href=#4659 id=4659 data-nosnippet>4659</a>                 X-mask seeded (both slots) for uninitialised state"</span>,
-<a href=#4660 id=4660 data-nosnippet>4660</a>                rio
-<a href=#4661 id=4661 data-nosnippet>4661</a>            );
-<a href=#4662 id=4662 data-nosnippet>4662</a>        }
-<a href=#4663 id=4663 data-nosnippet>4663</a>
-<a href=#4664 id=4664 data-nosnippet>4664</a>        <span class="comment">// SRAM backing store (sized max(1) like Metal; sliced to the real len).
-<a href=#4665 id=4665 data-nosnippet>4665</a>        </span><span class="kw">let </span>sram_alloc_len = (script.sram_storage_size <span class="kw">as </span>usize).max(<span class="number">1</span>);
-<a href=#4666 id=4666 data-nosnippet>4666</a>        <span class="kw">let </span><span class="kw-2">mut </span>sram = <span class="macro">vec!</span>[<span class="number">0u32</span>; sram_alloc_len];
-<a href=#4667 id=4667 data-nosnippet>4667</a>
-<a href=#4668 id=4668 data-nosnippet>4668</a>        <span class="comment">// SRAM X-mask shadow (all-X when xprop, sized 1 dummy otherwise). The
-<a href=#4669 id=4669 data-nosnippet>4669</a>        // (xprop &amp;&amp; sram&gt;0) assert above means xprop with real SRAM never
-<a href=#4670 id=4670 data-nosnippet>4670</a>        // reaches here; this stays for layout parity.
-<a href=#4671 id=4671 data-nosnippet>4671</a>        </span><span class="kw">let </span>sram_xmask_len = <span class="kw">if </span>script.xprop_enabled {
-<a href=#4672 id=4672 data-nosnippet>4672</a>            (script.sram_storage_size <span class="kw">as </span>usize).max(<span class="number">1</span>)
-<a href=#4673 id=4673 data-nosnippet>4673</a>        } <span class="kw">else </span>{
-<a href=#4674 id=4674 data-nosnippet>4674</a>            <span class="number">1
-<a href=#4675 id=4675 data-nosnippet>4675</a>        </span>};
-<a href=#4676 id=4676 data-nosnippet>4676</a>        <span class="kw">let </span><span class="kw-2">mut </span>sram_xmask = <span class="macro">vec!</span>[
-<a href=#4677 id=4677 data-nosnippet>4677</a>            <span class="kw">if </span>script.xprop_enabled {
-<a href=#4678 id=4678 data-nosnippet>4678</a>                <span class="number">0xFFFF_FFFFu32
-<a href=#4679 id=4679 data-nosnippet>4679</a>            </span>} <span class="kw">else </span>{
-<a href=#4680 id=4680 data-nosnippet>4680</a>                <span class="number">0u32
-<a href=#4681 id=4681 data-nosnippet>4681</a>            </span>};
-<a href=#4682 id=4682 data-nosnippet>4682</a>            sram_xmask_len
-<a href=#4683 id=4683 data-nosnippet>4683</a>        ];
-<a href=#4684 id=4684 data-nosnippet>4684</a>
-<a href=#4685 id=4685 data-nosnippet>4685</a>        <span class="comment">// SRAM preload (issue #80) — same path as build_state_buffers. The
-<a href=#4686 id=4686 data-nosnippet>4686</a>        // logic fixtures declare no `sram_init`, so this is untaken; wired for
-<a href=#4687 id=4687 data-nosnippet>4687</a>        // correctness.
-<a href=#4688 id=4688 data-nosnippet>4688</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sram_init) = config.sram_init.as_ref() {
-<a href=#4689 id=4689 data-nosnippet>4689</a>            <span class="kw">let </span>elf_path = std::path::Path::new(<span class="kw-2">&amp;</span>sram_init.elf_path);
-<a href=#4690 id=4690 data-nosnippet>4690</a>            <span class="kw">let </span>chunks = <span class="kw">crate</span>::sim::sram_preload::parse_elf_chunks(elf_path)
-<a href=#4691 id=4691 data-nosnippet>4691</a>                .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"sram_init: {e}"</span>));
-<a href=#4692 id=4692 data-nosnippet>4692</a>            <span class="kw">let </span>(cellid, storage_offset) =
-<a href=#4693 id=4693 data-nosnippet>4693</a>                <span class="kw">crate</span>::sim::sram_preload::resolve_single_sram(<span class="kw-2">&amp;</span>script.sram_cell_storage_offsets)
-<a href=#4694 id=4694 data-nosnippet>4694</a>                    .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"sram_init: {e}"</span>));
-<a href=#4695 id=4695 data-nosnippet>4695</a>            <span class="kw">let </span>total_bytes: usize = chunks.iter().map(|c| c.bytes.len()).sum();
-<a href=#4696 id=4696 data-nosnippet>4696</a>            <span class="kw">let </span><span class="kw-2">mut </span>xmask_slice = <span class="kw">if </span>script.xprop_enabled {
-<a href=#4697 id=4697 data-nosnippet>4697</a>                <span class="prelude-val">Some</span>(sram_xmask.as_mut_slice())
-<a href=#4698 id=4698 data-nosnippet>4698</a>            } <span class="kw">else </span>{
-<a href=#4699 id=4699 data-nosnippet>4699</a>                <span class="prelude-val">None
-<a href=#4700 id=4700 data-nosnippet>4700</a>            </span>};
-<a href=#4701 id=4701 data-nosnippet>4701</a>            <span class="kw">crate</span>::sim::sram_preload::apply_chunks(
-<a href=#4702 id=4702 data-nosnippet>4702</a>                <span class="kw-2">&amp;mut </span>sram,
-<a href=#4703 id=4703 data-nosnippet>4703</a>                storage_offset,
-<a href=#4704 id=4704 data-nosnippet>4704</a>                <span class="kw-2">&amp;</span>chunks,
-<a href=#4705 id=4705 data-nosnippet>4705</a>                xmask_slice.as_deref_mut(),
-<a href=#4706 id=4706 data-nosnippet>4706</a>            )
-<a href=#4707 id=4707 data-nosnippet>4707</a>            .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"sram_init: {e}"</span>));
-<a href=#4708 id=4708 data-nosnippet>4708</a>            <span class="macro">clilog::info!</span>(
-<a href=#4709 id=4709 data-nosnippet>4709</a>                <span class="string">"SRAM preload (CpuBackend): {} bytes from {} → cell {} at storage offset {}"</span>,
-<a href=#4710 id=4710 data-nosnippet>4710</a>                total_bytes,
-<a href=#4711 id=4711 data-nosnippet>4711</a>                elf_path.display(),
-<a href=#4712 id=4712 data-nosnippet>4712</a>                cellid,
-<a href=#4713 id=4713 data-nosnippet>4713</a>                storage_offset
-<a href=#4714 id=4714 data-nosnippet>4714</a>            );
-<a href=#4715 id=4715 data-nosnippet>4715</a>        }
-<a href=#4716 id=4716 data-nosnippet>4716</a>
-<a href=#4717 id=4717 data-nosnippet>4717</a>        <span class="comment">// Per-channel UART-TX decoder config + FSM state (Phase 1 step 5b).
-<a href=#4718 id=4718 data-nosnippet>4718</a>        // Built EXACTLY as MetalBackend::build_io_buffers builds UartParams:
-<a href=#4719 id=4719 data-nosnippet>4719</a>        //   tx_out_pos   = gpio_map.output_bits[tx_gpio] (or 0 if absent)
-<a href=#4720 id=4720 data-nosnippet>4720</a>        //   cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle (edges, not
-<a href=#4721 id=4721 data-nosnippet>4721</a>        //                    clock cycles — the decoder counts scheduler edges)
-<a href=#4722 id=4722 data-nosnippet>4722</a>        // The uart_configs tuple is (name, tx_gpio, _, cpb).
-<a href=#4723 id=4723 data-nosnippet>4723</a>        </span><span class="kw">let </span>cpu_uart_configs: Vec&lt;CpuUartConfig&gt; = uart_configs
-<a href=#4724 id=4724 data-nosnippet>4724</a>            .iter()
-<a href=#4725 id=4725 data-nosnippet>4725</a>            .map(|(<span class="kw">_</span>, tx_gpio, <span class="kw">_</span>, cpb)| CpuUartConfig {
-<a href=#4726 id=4726 data-nosnippet>4726</a>                tx_out_pos: gpio_map.output_bits.get(tx_gpio).copied().unwrap_or(<span class="number">0</span>),
-<a href=#4727 id=4727 data-nosnippet>4727</a>                cycles_per_bit: cpb * sched_ticks_per_sys_clk_cycle <span class="kw">as </span>u32,
-<a href=#4728 id=4728 data-nosnippet>4728</a>            })
-<a href=#4729 id=4729 data-nosnippet>4729</a>            .collect();
-<a href=#4730 id=4730 data-nosnippet>4730</a>        <span class="kw">let </span>cpu_uart_states: Vec&lt;CpuUartDecoderState&gt; = (<span class="number">0</span>..uart_configs.len())
-<a href=#4731 id=4731 data-nosnippet>4731</a>            .map(|<span class="kw">_</span>| CpuUartDecoderState::new())
-<a href=#4732 id=4732 data-nosnippet>4732</a>            .collect();
-<a href=#4733 id=4733 data-nosnippet>4733</a>
-<a href=#4734 id=4734 data-nosnippet>4734</a>        <span class="comment">// Per-bus APB3 pin positions + CPU decoder lanes (Phase 1 step 5c),
-<a href=#4735 id=4735 data-nosnippet>4735</a>        // built EXACTLY as MetalBackend's build_bus_trace_params (which packs
-<a href=#4736 id=4736 data-nosnippet>4736</a>        // the same positions into the GPU struct) via the shared builder.
-<a href=#4737 id=4737 data-nosnippet>4737</a>        </span><span class="kw">let </span>(bus_positions, bus_lanes) =
-<a href=#4738 id=4738 data-nosnippet>4738</a>            build_bus_trace(aig, netlistdb, script, config.effective_bus_traces());
-<a href=#4739 id=4739 data-nosnippet>4739</a>
-<a href=#4740 id=4740 data-nosnippet>4740</a>        <span class="comment">// QSPI-memory CPU oracle (Stage A: plural). Build one CppSpiFlash per
-<a href=#4741 id=4741 data-nosnippet>4741</a>        // configured memory + resolve each one's GPIO positions exactly as
-<a href=#4742 id=4742 data-nosnippet>4742</a>        // MetalBackend::build_flash_buffers does for the single instance. Each
-<a href=#4743 id=4743 data-nosnippet>4743</a>        // instance's MISO (d_i) starts 0x0F (idle high) — matching the GPU
-<a href=#4744 id=4744 data-nosnippet>4744</a>        // FlashState init and the patched CppSpiFlash p_d_i default — so
-<a href=#4745 id=4745 data-nosnippet>4745</a>        // instance 0 stays byte-identical to the single-flash GPU path through
-<a href=#4746 id=4746 data-nosnippet>4746</a>        // reset and the command/address phases. Instances &gt;0 are independent
-<a href=#4747 id=4747 data-nosnippet>4747</a>        // oracles with their own backing buffers and pins.
-<a href=#4748 id=4748 data-nosnippet>4748</a>        </span><span class="kw">let </span>flashes: Vec&lt;CpuFlashInstance&gt; = config
-<a href=#4749 id=4749 data-nosnippet>4749</a>            .effective_qspi_memory()
-<a href=#4750 id=4750 data-nosnippet>4750</a>            .iter()
-<a href=#4751 id=4751 data-nosnippet>4751</a>            .enumerate()
-<a href=#4752 id=4752 data-nosnippet>4752</a>            .map(|(idx, flash_cfg)| {
-<a href=#4753 id=4753 data-nosnippet>4753</a>                <span class="kw">let </span><span class="kw-2">mut </span>fl = CppSpiFlash::new(flash_cfg.backing_size_bytes());
-<a href=#4754 id=4754 data-nosnippet>4754</a>                <span class="comment">// RAM (QSPI PSRAM) mode: enable the writable store + enter-QPI /
-<a href=#4755 id=4755 data-nosnippet>4755</a>                // quad-write commands so the CPU oracle matches the GPU kernel.
-<a href=#4756 id=4756 data-nosnippet>4756</a>                // Zero-fills the store (before any firmware overlay below).
-<a href=#4757 id=4757 data-nosnippet>4757</a>                </span><span class="kw">if </span>flash_cfg.writable {
-<a href=#4758 id=4758 data-nosnippet>4758</a>                    fl.set_ram_mode(
-<a href=#4759 id=4759 data-nosnippet>4759</a>                        <span class="bool-val">true</span>,
-<a href=#4760 id=4760 data-nosnippet>4760</a>                        flash_cfg.enter_qpi_cmd,
-<a href=#4761 id=4761 data-nosnippet>4761</a>                        flash_cfg.quad_write_cmd,
-<a href=#4762 id=4762 data-nosnippet>4762</a>                        flash_cfg.read_dummy_cycles.unwrap_or(<span class="number">6</span>),
-<a href=#4763 id=4763 data-nosnippet>4763</a>                    );
-<a href=#4764 id=4764 data-nosnippet>4764</a>                }
-<a href=#4765 id=4765 data-nosnippet>4765</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>fw) = flash_cfg.firmware {
-<a href=#4766 id=4766 data-nosnippet>4766</a>                    <span class="kw">let </span>firmware_path = std::path::Path::new(fw);
-<a href=#4767 id=4767 data-nosnippet>4767</a>                    <span class="kw">match </span>fl.load_firmware(firmware_path, flash_cfg.firmware_offset) {
-<a href=#4768 id=4768 data-nosnippet>4768</a>                        <span class="prelude-val">Ok</span>(size) =&gt; <span class="macro">clilog::info!</span>(
-<a href=#4769 id=4769 data-nosnippet>4769</a>                            <span class="string">"CpuBackend qspi_memory[{}]: loaded {} bytes firmware at offset 0x{:X}"</span>,
-<a href=#4770 id=4770 data-nosnippet>4770</a>                            idx,
-<a href=#4771 id=4771 data-nosnippet>4771</a>                            size,
-<a href=#4772 id=4772 data-nosnippet>4772</a>                            flash_cfg.firmware_offset
-<a href=#4773 id=4773 data-nosnippet>4773</a>                        ),
-<a href=#4774 id=4774 data-nosnippet>4774</a>                        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#4775 id=4775 data-nosnippet>4775</a>                            <span class="macro">panic!</span>(<span class="string">"CpuBackend qspi_memory[{idx}]: failed to load firmware: {e}"</span>)
-<a href=#4776 id=4776 data-nosnippet>4776</a>                        }
-<a href=#4777 id=4777 data-nosnippet>4777</a>                    }
-<a href=#4778 id=4778 data-nosnippet>4778</a>                }
-<a href=#4779 id=4779 data-nosnippet>4779</a>                <span class="kw">let </span>clk_out_pos = gpio_map
-<a href=#4780 id=4780 data-nosnippet>4780</a>                    .output_bits
-<a href=#4781 id=4781 data-nosnippet>4781</a>                    .get(<span class="kw-2">&amp;</span>flash_cfg.clk_gpio)
-<a href=#4782 id=4782 data-nosnippet>4782</a>                    .copied()
-<a href=#4783 id=4783 data-nosnippet>4783</a>                    .unwrap_or(<span class="number">0</span>);
-<a href=#4784 id=4784 data-nosnippet>4784</a>                <span class="kw">let </span>csn_out_pos = gpio_map
-<a href=#4785 id=4785 data-nosnippet>4785</a>                    .output_bits
-<a href=#4786 id=4786 data-nosnippet>4786</a>                    .get(<span class="kw-2">&amp;</span>flash_cfg.csn_gpio)
-<a href=#4787 id=4787 data-nosnippet>4787</a>                    .copied()
-<a href=#4788 id=4788 data-nosnippet>4788</a>                    .unwrap_or(<span class="number">0</span>);
-<a href=#4789 id=4789 data-nosnippet>4789</a>                <span class="kw">let </span><span class="kw-2">mut </span>d_out_pos = [<span class="number">0xFFFFFFFFu32</span>; <span class="number">4</span>];
-<a href=#4790 id=4790 data-nosnippet>4790</a>                <span class="kw">let </span><span class="kw-2">mut </span>d_in_pos = [<span class="number">0xFFFFFFFFu32</span>; <span class="number">4</span>];
-<a href=#4791 id=4791 data-nosnippet>4791</a>                <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">4 </span>{
-<a href=#4792 id=4792 data-nosnippet>4792</a>                    d_out_pos[i] = gpio_map
-<a href=#4793 id=4793 data-nosnippet>4793</a>                        .output_bits
-<a href=#4794 id=4794 data-nosnippet>4794</a>                        .get(<span class="kw-2">&amp;</span>(flash_cfg.d0_gpio + i))
-<a href=#4795 id=4795 data-nosnippet>4795</a>                        .copied()
-<a href=#4796 id=4796 data-nosnippet>4796</a>                        .unwrap_or(<span class="number">0xFFFFFFFF</span>);
-<a href=#4797 id=4797 data-nosnippet>4797</a>                    d_in_pos[i] = gpio_map
-<a href=#4798 id=4798 data-nosnippet>4798</a>                        .input_bits
-<a href=#4799 id=4799 data-nosnippet>4799</a>                        .get(<span class="kw-2">&amp;</span>(flash_cfg.d0_gpio + i))
-<a href=#4800 id=4800 data-nosnippet>4800</a>                        .copied()
-<a href=#4801 id=4801 data-nosnippet>4801</a>                        .unwrap_or(<span class="number">0xFFFFFFFF</span>);
-<a href=#4802 id=4802 data-nosnippet>4802</a>                }
-<a href=#4803 id=4803 data-nosnippet>4803</a>                CpuFlashInstance {
-<a href=#4804 id=4804 data-nosnippet>4804</a>                    model: UnsafeCell::new(fl),
-<a href=#4805 id=4805 data-nosnippet>4805</a>                    clk_out_pos,
-<a href=#4806 id=4806 data-nosnippet>4806</a>                    csn_out_pos,
-<a href=#4807 id=4807 data-nosnippet>4807</a>                    d_out_pos,
-<a href=#4808 id=4808 data-nosnippet>4808</a>                    d_in_pos,
-<a href=#4809 id=4809 data-nosnippet>4809</a>                    <span class="comment">// Idle MISO high (mirror GPU FlashState.d_i / patched CppSpiFlash).
-<a href=#4810 id=4810 data-nosnippet>4810</a>                    </span>d_i: UnsafeCell::new(<span class="number">0x0F</span>),
-<a href=#4811 id=4811 data-nosnippet>4811</a>                    <span class="comment">// CSN starts high (deselected); d_out starts low (mirror FlashState).
-<a href=#4812 id=4812 data-nosnippet>4812</a>                    </span>prev_csn: UnsafeCell::new(<span class="number">1</span>),
-<a href=#4813 id=4813 data-nosnippet>4813</a>                    prev_d_out: UnsafeCell::new(<span class="number">0</span>),
-<a href=#4814 id=4814 data-nosnippet>4814</a>                }
-<a href=#4815 id=4815 data-nosnippet>4815</a>            })
-<a href=#4816 id=4816 data-nosnippet>4816</a>            .collect();
-<a href=#4817 id=4817 data-nosnippet>4817</a>
-<a href=#4818 id=4818 data-nosnippet>4818</a>        <span class="kw">let </span>backend = CpuBackend {
-<a href=#4819 id=4819 data-nosnippet>4819</a>            state: UnsafeCell::new(state),
-<a href=#4820 id=4820 data-nosnippet>4820</a>            sram: UnsafeCell::new(sram),
-<a href=#4821 id=4821 data-nosnippet>4821</a>            sram_xmask: UnsafeCell::new(sram_xmask),
-<a href=#4822 id=4822 data-nosnippet>4822</a>            schedule: Vec::new(),
-<a href=#4823 id=4823 data-nosnippet>4823</a>            edges_per_period: <span class="number">0</span>,
-<a href=#4824 id=4824 data-nosnippet>4824</a>            gcd_ps: <span class="number">0</span>,
-<a href=#4825 id=4825 data-nosnippet>4825</a>            state_size,
-<a href=#4826 id=4826 data-nosnippet>4826</a>            sram_len: script.sram_storage_size <span class="kw">as </span>usize,
-<a href=#4827 id=4827 data-nosnippet>4827</a>            num_blocks,
-<a href=#4828 id=4828 data-nosnippet>4828</a>            num_major_stages,
-<a href=#4829 id=4829 data-nosnippet>4829</a>            xprop_enabled: script.xprop_enabled,
-<a href=#4830 id=4830 data-nosnippet>4830</a>            xmask_state_offset: <span class="number">0</span>,
-<a href=#4831 id=4831 data-nosnippet>4831</a>            reg_io_state_size: script.reg_io_state_size <span class="kw">as </span>usize,
-<a href=#4832 id=4832 data-nosnippet>4832</a>            flash_in_reset: <span class="bool-val">false</span>,
-<a href=#4833 id=4833 data-nosnippet>4833</a>            blocks_start: script.blocks_start.iter().copied().collect(),
-<a href=#4834 id=4834 data-nosnippet>4834</a>            blocks_data: script.blocks_data.iter().copied().collect(),
-<a href=#4835 id=4835 data-nosnippet>4835</a>            vcd_ring: UnsafeCell::new(<span class="prelude-val">None</span>),
-<a href=#4836 id=4836 data-nosnippet>4836</a>            enable_vcd: <span class="bool-val">false</span>,
-<a href=#4837 id=4837 data-nosnippet>4837</a>            uart_configs: cpu_uart_configs,
-<a href=#4838 id=4838 data-nosnippet>4838</a>            uart_states: UnsafeCell::new(cpu_uart_states),
-<a href=#4839 id=4839 data-nosnippet>4839</a>            uart_decoded: UnsafeCell::new(Vec::new()),
-<a href=#4840 id=4840 data-nosnippet>4840</a>            bus_positions,
-<a href=#4841 id=4841 data-nosnippet>4841</a>            bus_prev_gate: UnsafeCell::new(<span class="number">0</span>),
-<a href=#4842 id=4842 data-nosnippet>4842</a>            bus_current_tick: UnsafeCell::new(<span class="number">0</span>),
-<a href=#4843 id=4843 data-nosnippet>4843</a>            bus_beats: UnsafeCell::new(Vec::new()),
-<a href=#4844 id=4844 data-nosnippet>4844</a>            flashes,
-<a href=#4845 id=4845 data-nosnippet>4845</a>        };
-<a href=#4846 id=4846 data-nosnippet>4846</a>        (backend, bus_lanes)
-<a href=#4847 id=4847 data-nosnippet>4847</a>    }
-<a href=#4848 id=4848 data-nosnippet>4848</a>
-<a href=#4849 id=4849 data-nosnippet>4849</a>    <span class="kw">fn </span>init_schedule(
-<a href=#4850 id=4850 data-nosnippet>4850</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#4851 id=4851 data-nosnippet>4851</a>        per_edge_ops: Vec&lt;Vec&lt;BitOp&gt;&gt;,
-<a href=#4852 id=4852 data-nosnippet>4852</a>        _state_size: u32,
-<a href=#4853 id=4853 data-nosnippet>4853</a>        xmask_state_offset: u32,
-<a href=#4854 id=4854 data-nosnippet>4854</a>        gcd_ps: u64,
-<a href=#4855 id=4855 data-nosnippet>4855</a>    ) {
-<a href=#4856 id=4856 data-nosnippet>4856</a>        <span class="self">self</span>.edges_per_period = per_edge_ops.len();
-<a href=#4857 id=4857 data-nosnippet>4857</a>        <span class="self">self</span>.schedule = per_edge_ops;
-<a href=#4858 id=4858 data-nosnippet>4858</a>        <span class="self">self</span>.gcd_ps = gcd_ps;
-<a href=#4859 id=4859 data-nosnippet>4859</a>        <span class="self">self</span>.xmask_state_offset = xmask_state_offset <span class="kw">as </span>usize;
-<a href=#4860 id=4860 data-nosnippet>4860</a>    }
-<a href=#4861 id=4861 data-nosnippet>4861</a>
-<a href=#4862 id=4862 data-nosnippet>4862</a>    <span class="attr">#[inline]
-<a href=#4863 id=4863 data-nosnippet>4863</a>    </span><span class="kw">fn </span>edge_ops_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, edge_idx: usize) -&gt; <span class="kw-2">&amp;mut </span>[BitOp] {
-<a href=#4864 id=4864 data-nosnippet>4864</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>.schedule[edge_idx]
-<a href=#4865 id=4865 data-nosnippet>4865</a>    }
-<a href=#4866 id=4866 data-nosnippet>4866</a>    <span class="attr">#[inline]
-<a href=#4867 id=4867 data-nosnippet>4867</a>    </span><span class="kw">fn </span>edge_ops(<span class="kw-2">&amp;</span><span class="self">self</span>, edge_idx: usize) -&gt; <span class="kw-2">&amp;</span>[BitOp] {
-<a href=#4868 id=4868 data-nosnippet>4868</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.schedule[edge_idx]
-<a href=#4869 id=4869 data-nosnippet>4869</a>    }
-<a href=#4870 id=4870 data-nosnippet>4870</a>    <span class="attr">#[inline]
-<a href=#4871 id=4871 data-nosnippet>4871</a>    </span><span class="kw">fn </span>edges_per_period(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-<a href=#4872 id=4872 data-nosnippet>4872</a>        <span class="self">self</span>.edges_per_period
-<a href=#4873 id=4873 data-nosnippet>4873</a>    }
-<a href=#4874 id=4874 data-nosnippet>4874</a>    <span class="attr">#[inline]
-<a href=#4875 id=4875 data-nosnippet>4875</a>    </span><span class="kw">fn </span>gcd_ps(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
-<a href=#4876 id=4876 data-nosnippet>4876</a>        <span class="self">self</span>.gcd_ps
-<a href=#4877 id=4877 data-nosnippet>4877</a>    }
-<a href=#4878 id=4878 data-nosnippet>4878</a>
-<a href=#4879 id=4879 data-nosnippet>4879</a>    <span class="kw">fn </span>state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u32] {
-<a href=#4880 id=4880 data-nosnippet>4880</a>        <span class="self">self</span>.state_ref()
-<a href=#4881 id=4881 data-nosnippet>4881</a>    }
-<a href=#4882 id=4882 data-nosnippet>4882</a>    <span class="kw">fn </span>state_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[u32] {
-<a href=#4883 id=4883 data-nosnippet>4883</a>        <span class="self">self</span>.state.get_mut()
-<a href=#4884 id=4884 data-nosnippet>4884</a>    }
-<a href=#4885 id=4885 data-nosnippet>4885</a>    <span class="kw">fn </span>sram(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u32] {
-<a href=#4886 id=4886 data-nosnippet>4886</a>        <span class="comment">// SAFETY: sequential dispatch — no concurrent borrow.
-<a href=#4887 id=4887 data-nosnippet>4887</a>        </span><span class="kw">let </span>sram: <span class="kw-2">&amp;</span>Vec&lt;u32&gt; = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span><span class="self">self</span>.sram.get() };
-<a href=#4888 id=4888 data-nosnippet>4888</a>        <span class="kw-2">&amp;</span>sram[..<span class="self">self</span>.sram_len]
-<a href=#4889 id=4889 data-nosnippet>4889</a>    }
-<a href=#4890 id=4890 data-nosnippet>4890</a>
-<a href=#4891 id=4891 data-nosnippet>4891</a>    <span class="kw">fn </span>flash_set_in_reset(<span class="kw-2">&amp;mut </span><span class="self">self</span>, in_reset: bool) {
-<a href=#4892 id=4892 data-nosnippet>4892</a>        <span class="self">self</span>.flash_in_reset = in_reset;
-<a href=#4893 id=4893 data-nosnippet>4893</a>    }
-<a href=#4894 id=4894 data-nosnippet>4894</a>
-<a href=#4895 id=4895 data-nosnippet>4895</a>    <span class="kw">fn </span>enable_vcd_ring(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#4896 id=4896 data-nosnippet>4896</a>        <span class="self">self</span>.enable_vcd = <span class="bool-val">true</span>;
-<a href=#4897 id=4897 data-nosnippet>4897</a>        <span class="comment">// Lazily allocate on first run_edges; N=1 → one slot per edge.
-<a href=#4898 id=4898 data-nosnippet>4898</a>        </span><span class="kw-2">*</span><span class="self">self</span>.vcd_ring.get_mut() = <span class="prelude-val">Some</span>(Vec::new());
-<a href=#4899 id=4899 data-nosnippet>4899</a>    }
-<a href=#4900 id=4900 data-nosnippet>4900</a>
-<a href=#4901 id=4901 data-nosnippet>4901</a>    <span class="kw">fn </span>vcd_snapshot(<span class="kw-2">&amp;</span><span class="self">self</span>, edge_in_batch: usize) -&gt; <span class="kw-2">&amp;</span>[u32] {
-<a href=#4902 id=4902 data-nosnippet>4902</a>        <span class="comment">// SAFETY: sequential dispatch; the ring is populated by run_edges.
-<a href=#4903 id=4903 data-nosnippet>4903</a>        </span><span class="kw">let </span>ring = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span><span class="self">self</span>.vcd_ring.get() };
-<a href=#4904 id=4904 data-nosnippet>4904</a>        <span class="kw-2">&amp;</span>ring
-<a href=#4905 id=4905 data-nosnippet>4905</a>            .as_ref()
-<a href=#4906 id=4906 data-nosnippet>4906</a>            .expect(<span class="string">"vcd_snapshot called without enable_vcd_ring"</span>)[edge_in_batch]
-<a href=#4907 id=4907 data-nosnippet>4907</a>    }
-<a href=#4908 id=4908 data-nosnippet>4908</a>
-<a href=#4909 id=4909 data-nosnippet>4909</a>    <span class="kw">fn </span>flash_d_i(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
-<a href=#4910 id=4910 data-nosnippet>4910</a>        <span class="comment">// Current MISO nibble from the primary (instance 0) CppSpiFlash oracle;
-<a href=#4911 id=4911 data-nosnippet>4911</a>        // 0x0F idle when no memory is configured. Single-instance diagnostic
-<a href=#4912 id=4912 data-nosnippet>4912</a>        // used by `--check-with-cpu` (which requires N&lt;=1).
-<a href=#4913 id=4913 data-nosnippet>4913</a>        // SAFETY: sequential dispatch — no concurrent borrow of the cell.
-<a href=#4914 id=4914 data-nosnippet>4914</a>        </span><span class="self">self</span>.flashes
-<a href=#4915 id=4915 data-nosnippet>4915</a>            .first()
-<a href=#4916 id=4916 data-nosnippet>4916</a>            .map(|f| <span class="kw">unsafe </span>{ <span class="kw-2">*</span>f.d_i.get() })
-<a href=#4917 id=4917 data-nosnippet>4917</a>            .unwrap_or(<span class="number">0x0F</span>)
+<a href=#4537 id=4537 data-nosnippet>4537</a><span class="doccomment">/// Inject one QSPI instance's MISO nibble into its `d_in` bit positions —
+<a href=#4538 id=4538 data-nosnippet>4538</a>/// but only when the instance is **selected** (`csn` low). A deselected
+<a href=#4539 id=4539 data-nosnippet>4539</a>/// instance (csn high) presents high-Z and must not drive: otherwise, on a
+<a href=#4540 id=4540 data-nosnippet>4540</a>/// shared SIO bus where instances share `d_in_pos`, a deselected memory
+<a href=#4541 id=4541 data-nosnippet>4541</a>/// clobbers the selected driver's data (the raw per-instance loop is
+<a href=#4542 id=4542 data-nosnippet>4542</a>/// last-writer-wins). `xmask_off == 0` means xprop is disabled.
+<a href=#4543 id=4543 data-nosnippet>4543</a>///
+<a href=#4544 id=4544 data-nosnippet>4544</a>/// This is the CS gate mirrored by `gpu_apply_flash_din` (Metal / CUDA / HIP),
+<a href=#4545 id=4545 data-nosnippet>4545</a>/// which skips a flash whose `FlashState.prev_csn` is high. Kept as a free fn
+<a href=#4546 id=4546 data-nosnippet>4546</a>/// so the shared-bus arbitration is unit-testable without a GPU or a netlist.
+<a href=#4547 id=4547 data-nosnippet>4547</a>///
+<a href=#4548 id=4548 data-nosnippet>4548</a>/// `csn` is the **delayed** (`prev_csn`) chip-select, not the live output-slot
+<a href=#4549 id=4549 data-nosnippet>4549</a>/// value: `d_i` was produced by the setup-delay dual-step using that same
+<a href=#4550 id=4550 data-nosnippet>4550</a>/// `prev_csn`, so gating injection on it keeps the driven value and the
+<a href=#4551 id=4551 data-nosnippet>4551</a>/// selection decision in phase. Gating on live `csn` would skew them by one
+<a href=#4552 id=4552 data-nosnippet>4552</a>/// edge — the very skew the delay model exists to avoid.
+<a href=#4553 id=4553 data-nosnippet>4553</a></span><span class="kw">fn </span>apply_flash_din_gated(
+<a href=#4554 id=4554 data-nosnippet>4554</a>    state: <span class="kw-2">&amp;mut </span>[u32],
+<a href=#4555 id=4555 data-nosnippet>4555</a>    xmask_off: usize,
+<a href=#4556 id=4556 data-nosnippet>4556</a>    d_i: u8,
+<a href=#4557 id=4557 data-nosnippet>4557</a>    csn: u32,
+<a href=#4558 id=4558 data-nosnippet>4558</a>    d_in_pos: <span class="kw-2">&amp;</span>[u32; <span class="number">4</span>],
+<a href=#4559 id=4559 data-nosnippet>4559</a>) {
+<a href=#4560 id=4560 data-nosnippet>4560</a>    <span class="kw">if </span>csn != <span class="number">0 </span>{
+<a href=#4561 id=4561 data-nosnippet>4561</a>        <span class="kw">return</span>; <span class="comment">// deselected → high-Z, don't drive the (possibly shared) line
+<a href=#4562 id=4562 data-nosnippet>4562</a>    </span>}
+<a href=#4563 id=4563 data-nosnippet>4563</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">4usize </span>{
+<a href=#4564 id=4564 data-nosnippet>4564</a>        <span class="kw">let </span>pos = d_in_pos[i];
+<a href=#4565 id=4565 data-nosnippet>4565</a>        <span class="kw">if </span>pos == <span class="number">0xFFFFFFFF </span>{
+<a href=#4566 id=4566 data-nosnippet>4566</a>            <span class="kw">continue</span>;
+<a href=#4567 id=4567 data-nosnippet>4567</a>        }
+<a href=#4568 id=4568 data-nosnippet>4568</a>        <span class="kw">let </span>word_idx = (pos &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize;
+<a href=#4569 id=4569 data-nosnippet>4569</a>        <span class="kw">let </span>bit_mask = <span class="number">1u32 </span>&lt;&lt; (pos &amp; <span class="number">31</span>);
+<a href=#4570 id=4570 data-nosnippet>4570</a>        <span class="kw">if </span>(d_i &gt;&gt; i) &amp; <span class="number">1 </span>!= <span class="number">0 </span>{
+<a href=#4571 id=4571 data-nosnippet>4571</a>            state[word_idx] |= bit_mask;
+<a href=#4572 id=4572 data-nosnippet>4572</a>        } <span class="kw">else </span>{
+<a href=#4573 id=4573 data-nosnippet>4573</a>            state[word_idx] &amp;= !bit_mask;
+<a href=#4574 id=4574 data-nosnippet>4574</a>        }
+<a href=#4575 id=4575 data-nosnippet>4575</a>        <span class="comment">// Driven ⇒ known: clear the X-mask so a shared MISO bit isn't X-seeded.
+<a href=#4576 id=4576 data-nosnippet>4576</a>        </span><span class="kw">if </span>xmask_off != <span class="number">0 </span>{
+<a href=#4577 id=4577 data-nosnippet>4577</a>            state[xmask_off + word_idx] &amp;= !bit_mask;
+<a href=#4578 id=4578 data-nosnippet>4578</a>        }
+<a href=#4579 id=4579 data-nosnippet>4579</a>    }
+<a href=#4580 id=4580 data-nosnippet>4580</a>}
+<a href=#4581 id=4581 data-nosnippet>4581</a>
+<a href=#4582 id=4582 data-nosnippet>4582</a><span class="kw">struct </span>CpuBackend {
+<a href=#4583 id=4583 data-nosnippet>4583</a>    <span class="doccomment">/// Full design state `[input_state | output_state]`, `2 × state_size` words.
+<a href=#4584 id=4584 data-nosnippet>4584</a>    </span>state: UnsafeCell&lt;Vec&lt;u32&gt;&gt;,
+<a href=#4585 id=4585 data-nosnippet>4585</a>    <span class="doccomment">/// SRAM backing store, sized `max(1)` like Metal (a SRAM-less design has
+<a href=#4586 id=4586 data-nosnippet>4586</a>    /// `sram_storage_size == 0`); `sram()` returns the `[..sram_len]` view.
+<a href=#4587 id=4587 data-nosnippet>4587</a>    </span>sram: UnsafeCell&lt;Vec&lt;u32&gt;&gt;,
+<a href=#4588 id=4588 data-nosnippet>4588</a>    <span class="doccomment">/// SRAM X-mask shadow (xprop); sized like `sram` when xprop is on, else 1.
+<a href=#4589 id=4589 data-nosnippet>4589</a>    </span>sram_xmask: UnsafeCell&lt;Vec&lt;u32&gt;&gt;,
+<a href=#4590 id=4590 data-nosnippet>4590</a>    <span class="doccomment">/// Per-edge schedule: one `Vec&lt;BitOp&gt;` per scheduler edge.
+<a href=#4591 id=4591 data-nosnippet>4591</a>    </span>schedule: Vec&lt;Vec&lt;BitOp&gt;&gt;,
+<a href=#4592 id=4592 data-nosnippet>4592</a>    edges_per_period: usize,
+<a href=#4593 id=4593 data-nosnippet>4593</a>    gcd_ps: u64,
+<a href=#4594 id=4594 data-nosnippet>4594</a>    <span class="doccomment">/// Words per state slot (`effective_state_size()`).
+<a href=#4595 id=4595 data-nosnippet>4595</a>    </span>state_size: usize,
+<a href=#4596 id=4596 data-nosnippet>4596</a>    <span class="doccomment">/// True SRAM word count (`sram_storage_size`); `sram()` view length.
+<a href=#4597 id=4597 data-nosnippet>4597</a>    </span>sram_len: usize,
+<a href=#4598 id=4598 data-nosnippet>4598</a>    num_blocks: usize,
+<a href=#4599 id=4599 data-nosnippet>4599</a>    num_major_stages: usize,
+<a href=#4600 id=4600 data-nosnippet>4600</a>    xprop_enabled: bool,
+<a href=#4601 id=4601 data-nosnippet>4601</a>    <span class="doccomment">/// X-mask word offset within a slot (`reg_io_state_size` when xprop on,
+<a href=#4602 id=4602 data-nosnippet>4602</a>    /// else 0). Mirrors the GPU `state_prep` `xmask_state_offset` sentinel.
+<a href=#4603 id=4603 data-nosnippet>4603</a>    </span>xmask_state_offset: usize,
+<a href=#4604 id=4604 data-nosnippet>4604</a>    <span class="doccomment">/// Reg/IO words per slot (`reg_io_state_size`); the X-mask lane width.
+<a href=#4605 id=4605 data-nosnippet>4605</a>    </span>reg_io_state_size: usize,
+<a href=#4606 id=4606 data-nosnippet>4606</a>    <span class="doccomment">/// Flash reset line (logic fixtures have no flash; carried for the contract).
+<a href=#4607 id=4607 data-nosnippet>4607</a>    </span>flash_in_reset: bool,
+<a href=#4608 id=4608 data-nosnippet>4608</a>    <span class="doccomment">/// Block program, copied from `script` so the backend owns its storage
+<a href=#4609 id=4609 data-nosnippet>4609</a>    /// (no lifetime entanglement with `LoadedDesign`).
+<a href=#4610 id=4610 data-nosnippet>4610</a>    </span>blocks_start: Vec&lt;usize&gt;,
+<a href=#4611 id=4611 data-nosnippet>4611</a>    blocks_data: Vec&lt;u32&gt;,
+<a href=#4612 id=4612 data-nosnippet>4612</a>    <span class="doccomment">/// Per-edge `[input | output]` snapshots for the most recent `run_edges`,
+<a href=#4613 id=4613 data-nosnippet>4613</a>    /// one slot per edge in the batch (N=1 per edge). `None` until enabled.
+<a href=#4614 id=4614 data-nosnippet>4614</a>    </span>vcd_ring: UnsafeCell&lt;<span class="prelude-ty">Option</span>&lt;Vec&lt;Vec&lt;u32&gt;&gt;&gt;&gt;,
+<a href=#4615 id=4615 data-nosnippet>4615</a>    enable_vcd: bool,
+<a href=#4616 id=4616 data-nosnippet>4616</a>    <span class="doccomment">/// Per-channel UART-TX decoder config (`tx_out_pos`, `cycles_per_bit`),
+<a href=#4617 id=4617 data-nosnippet>4617</a>    /// derived in `new` exactly as `MetalBackend::build_io_buffers` builds
+<a href=#4618 id=4618 data-nosnippet>4618</a>    /// `UartParams`. Length `n_uarts`; empty for designs with no UART.
+<a href=#4619 id=4619 data-nosnippet>4619</a>    </span>uart_configs: Vec&lt;CpuUartConfig&gt;,
+<a href=#4620 id=4620 data-nosnippet>4620</a>    <span class="doccomment">/// Per-channel UART-TX decoder FSM state, persistent across edges/batches
+<a href=#4621 id=4621 data-nosnippet>4621</a>    /// (mirrors the GPU `uart_state` buffer). Stepped per edge in `run_edges`.
+<a href=#4622 id=4622 data-nosnippet>4622</a>    </span>uart_states: UnsafeCell&lt;Vec&lt;CpuUartDecoderState&gt;&gt;,
+<a href=#4623 id=4623 data-nosnippet>4623</a>    <span class="doccomment">/// Completed `(channel_idx, byte)` pairs awaiting drain (mirrors the GPU
+<a href=#4624 id=4624 data-nosnippet>4624</a>    /// `UartChannel` ring; `drain_uart_tx` empties it). Interior-mutable so the
+<a href=#4625 id=4625 data-nosnippet>4625</a>    /// per-edge FSM in `run_edges(&amp;self)` can push.
+<a href=#4626 id=4626 data-nosnippet>4626</a>    </span>uart_decoded: UnsafeCell&lt;Vec&lt;(usize, u8)&gt;&gt;,
+<a href=#4627 id=4627 data-nosnippet>4627</a>    <span class="doccomment">/// Per-bus APB3 pin positions (Phase 1 step 5c), resolved in `new` via the
+<a href=#4628 id=4628 data-nosnippet>4628</a>    /// shared `build_bus_trace`. Index == GPU `bus_id` (packed into beat flags).
+<a href=#4629 id=4629 data-nosnippet>4629</a>    /// Empty for designs with no `bus_traces`.
+<a href=#4630 id=4630 data-nosnippet>4630</a>    </span>bus_positions: Vec&lt;BusTracePositions&gt;,
+<a href=#4631 id=4631 data-nosnippet>4631</a>    <span class="doccomment">/// Per-bus gate bits from the previous edge (rising-edge detection); mirrors
+<a href=#4632 id=4632 data-nosnippet>4632</a>    /// the GPU `BusTraceChannel.prev_gate`. Bit `b` == bus `b`'s gate last edge.
+<a href=#4633 id=4633 data-nosnippet>4633</a>    </span>bus_prev_gate: UnsafeCell&lt;u32&gt;,
+<a href=#4634 id=4634 data-nosnippet>4634</a>    <span class="doccomment">/// Monotonic edge counter stamped into each beat's `tick`; mirrors the GPU
+<a href=#4635 id=4635 data-nosnippet>4635</a>    /// `BusTraceChannel.current_tick`, incremented once per edge from 0.
+<a href=#4636 id=4636 data-nosnippet>4636</a>    </span>bus_current_tick: UnsafeCell&lt;u32&gt;,
+<a href=#4637 id=4637 data-nosnippet>4637</a>    <span class="doccomment">/// Captured raw beats awaiting drain (mirrors the GPU `BusTraceEntry` ring;
+<a href=#4638 id=4638 data-nosnippet>4638</a>    /// `drain_bus_beats` empties it). Interior-mutable for the per-edge FSM.
+<a href=#4639 id=4639 data-nosnippet>4639</a>    </span>bus_beats: UnsafeCell&lt;Vec&lt;<span class="kw">crate</span>::sim::models::bus_trace::RawBeat&gt;&gt;,
+<a href=#4640 id=4640 data-nosnippet>4640</a>    <span class="comment">// ── QSPI-memory CPU oracle (Stage A: plural) ────────────────────────────
+<a href=#4641 id=4641 data-nosnippet>4641</a>    </span><span class="doccomment">/// One `CppSpiFlash` oracle per configured QSPI memory
+<a href=#4642 id=4642 data-nosnippet>4642</a>    /// (`config.effective_qspi_memory()`), each stepped per edge in `run_edges`
+<a href=#4643 id=4643 data-nosnippet>4643</a>    /// with the GPU's dual-step + delayed-CSN convention so instance 0's `d_i`
+<a href=#4644 id=4644 data-nosnippet>4644</a>    /// matches `gpu_flash_model_step` byte-for-byte. Empty when no memory is
+<a href=#4645 id=4645 data-nosnippet>4645</a>    /// configured; length 1 preserves the single-flash behaviour byte-for-byte.
+<a href=#4646 id=4646 data-nosnippet>4646</a>    </span>flashes: Vec&lt;CpuFlashInstance&gt;,
+<a href=#4647 id=4647 data-nosnippet>4647</a>}
+<a href=#4648 id=4648 data-nosnippet>4648</a>
+<a href=#4649 id=4649 data-nosnippet>4649</a><span class="kw">impl </span>CpuBackend {
+<a href=#4650 id=4650 data-nosnippet>4650</a>    <span class="attr">#[inline]
+<a href=#4651 id=4651 data-nosnippet>4651</a>    </span><span class="kw">fn </span>state_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u32] {
+<a href=#4652 id=4652 data-nosnippet>4652</a>        <span class="comment">// SAFETY: cosim dispatch is sequential; no other live borrow exists.
+<a href=#4653 id=4653 data-nosnippet>4653</a>        </span><span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span><span class="self">self</span>.state.get() }
+<a href=#4654 id=4654 data-nosnippet>4654</a>    }
+<a href=#4655 id=4655 data-nosnippet>4655</a>    <span class="attr">#[inline]
+<a href=#4656 id=4656 data-nosnippet>4656</a>    #[allow(clippy::mut_from_ref)]
+<a href=#4657 id=4657 data-nosnippet>4657</a>    </span><span class="kw">fn </span>state_inner_mut(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>Vec&lt;u32&gt; {
+<a href=#4658 id=4658 data-nosnippet>4658</a>        <span class="comment">// SAFETY: only called from `run_edges`/`state_mut`, never concurrently.
+<a href=#4659 id=4659 data-nosnippet>4659</a>        </span><span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.state.get() }
+<a href=#4660 id=4660 data-nosnippet>4660</a>    }
+<a href=#4661 id=4661 data-nosnippet>4661</a>}
+<a href=#4662 id=4662 data-nosnippet>4662</a>
+<a href=#4663 id=4663 data-nosnippet>4663</a><span class="kw">impl </span>CosimBackend <span class="kw">for </span>CpuBackend {
+<a href=#4664 id=4664 data-nosnippet>4664</a>    <span class="kw">fn </span>new(
+<a href=#4665 id=4665 data-nosnippet>4665</a>        aig: <span class="kw-2">&amp;</span>AIG,
+<a href=#4666 id=4666 data-nosnippet>4666</a>        netlistdb: <span class="kw-2">&amp;</span>NetlistDB,
+<a href=#4667 id=4667 data-nosnippet>4667</a>        script: <span class="kw-2">&amp;</span>FlattenedScriptV1,
+<a href=#4668 id=4668 data-nosnippet>4668</a>        config: <span class="kw-2">&amp;</span>TestbenchConfig,
+<a href=#4669 id=4669 data-nosnippet>4669</a>        gpio_map: <span class="kw-2">&amp;</span>GpioMapping,
+<a href=#4670 id=4670 data-nosnippet>4670</a>        uart_configs: <span class="kw-2">&amp;</span>[(String, usize, usize, u32)],
+<a href=#4671 id=4671 data-nosnippet>4671</a>        sched_ticks_per_sys_clk_cycle: u64,
+<a href=#4672 id=4672 data-nosnippet>4672</a>        state_size: usize,
+<a href=#4673 id=4673 data-nosnippet>4673</a>        num_blocks: usize,
+<a href=#4674 id=4674 data-nosnippet>4674</a>        num_major_stages: usize,
+<a href=#4675 id=4675 data-nosnippet>4675</a>        _arrival_state_offset: u32,
+<a href=#4676 id=4676 data-nosnippet>4676</a>        _timing_constraints: <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span>&lt;Vec&lt;u32&gt;&gt;,
+<a href=#4677 id=4677 data-nosnippet>4677</a>    ) -&gt; (<span class="self">Self</span>, Vec&lt;BusTraceLane&gt;) {
+<a href=#4678 id=4678 data-nosnippet>4678</a>        <span class="comment">// Phase 1 scope guards (plan Risks): the CPU stepper has no arrival
+<a href=#4679 id=4679 data-nosnippet>4679</a>        // readback, and `simulate_block_v1` carries no SRAM X-mask, so SRAM
+<a href=#4680 id=4680 data-nosnippet>4680</a>        // under xprop would read as always-known.
+<a href=#4681 id=4681 data-nosnippet>4681</a>        </span><span class="macro">assert!</span>(
+<a href=#4682 id=4682 data-nosnippet>4682</a>            !script.timing_arrivals_enabled,
+<a href=#4683 id=4683 data-nosnippet>4683</a>            <span class="string">"CpuBackend: timed cosim not supported (Phase 1) — arrival readback \
+<a href=#4684 id=4684 data-nosnippet>4684</a>             rides the GPU ring; use the Metal backend for --timing-vcd cosim."
+<a href=#4685 id=4685 data-nosnippet>4685</a>        </span>);
+<a href=#4686 id=4686 data-nosnippet>4686</a>        <span class="macro">assert!</span>(
+<a href=#4687 id=4687 data-nosnippet>4687</a>            !(script.xprop_enabled &amp;&amp; script.sram_storage_size &gt; <span class="number">0</span>),
+<a href=#4688 id=4688 data-nosnippet>4688</a>            <span class="string">"CpuBackend: --xprop with SRAM not supported (Phase 1) — \
+<a href=#4689 id=4689 data-nosnippet>4689</a>             cpu_reference::simulate_block_v1 has no SRAM X-mask, so SRAM cells \
+<a href=#4690 id=4690 data-nosnippet>4690</a>             would read as always-known; use the Metal backend."
+<a href=#4691 id=4691 data-nosnippet>4691</a>        </span>);
+<a href=#4692 id=4692 data-nosnippet>4692</a>
+<a href=#4693 id=4693 data-nosnippet>4693</a>        <span class="comment">// Design state: [input | output], zeroed, with the xprop X-mask seed
+<a href=#4694 id=4694 data-nosnippet>4694</a>        // mirroring MetalBackend::build_state_buffers (both slots seeded so
+<a href=#4695 id=4695 data-nosnippet>4695</a>        // edge-0 state_prep's output→input copy doesn't wipe the seed).
+<a href=#4696 id=4696 data-nosnippet>4696</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>state = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">2 </span>* state_size];
+<a href=#4697 id=4697 data-nosnippet>4697</a>        <span class="kw">if </span>script.xprop_enabled {
+<a href=#4698 id=4698 data-nosnippet>4698</a>            <span class="kw">let </span>rio = script.reg_io_state_size <span class="kw">as </span>usize;
+<a href=#4699 id=4699 data-nosnippet>4699</a>            <span class="kw">let </span>xmask = <span class="kw">crate</span>::sim::vcd_io::xprop_xmask_template_cosim(script);
+<a href=#4700 id=4700 data-nosnippet>4700</a>            state[rio..<span class="number">2 </span>* rio].copy_from_slice(<span class="kw-2">&amp;</span>xmask);
+<a href=#4701 id=4701 data-nosnippet>4701</a>            state[state_size + rio..state_size + <span class="number">2 </span>* rio].copy_from_slice(<span class="kw-2">&amp;</span>xmask);
+<a href=#4702 id=4702 data-nosnippet>4702</a>            <span class="macro">clilog::info!</span>(
+<a href=#4703 id=4703 data-nosnippet>4703</a>                <span class="string">"cosim X-propagation enabled (CpuBackend): {} reg/io words, \
+<a href=#4704 id=4704 data-nosnippet>4704</a>                 X-mask seeded (both slots) for uninitialised state"</span>,
+<a href=#4705 id=4705 data-nosnippet>4705</a>                rio
+<a href=#4706 id=4706 data-nosnippet>4706</a>            );
+<a href=#4707 id=4707 data-nosnippet>4707</a>        }
+<a href=#4708 id=4708 data-nosnippet>4708</a>
+<a href=#4709 id=4709 data-nosnippet>4709</a>        <span class="comment">// SRAM backing store (sized max(1) like Metal; sliced to the real len).
+<a href=#4710 id=4710 data-nosnippet>4710</a>        </span><span class="kw">let </span>sram_alloc_len = (script.sram_storage_size <span class="kw">as </span>usize).max(<span class="number">1</span>);
+<a href=#4711 id=4711 data-nosnippet>4711</a>        <span class="kw">let </span><span class="kw-2">mut </span>sram = <span class="macro">vec!</span>[<span class="number">0u32</span>; sram_alloc_len];
+<a href=#4712 id=4712 data-nosnippet>4712</a>
+<a href=#4713 id=4713 data-nosnippet>4713</a>        <span class="comment">// SRAM X-mask shadow (all-X when xprop, sized 1 dummy otherwise). The
+<a href=#4714 id=4714 data-nosnippet>4714</a>        // (xprop &amp;&amp; sram&gt;0) assert above means xprop with real SRAM never
+<a href=#4715 id=4715 data-nosnippet>4715</a>        // reaches here; this stays for layout parity.
+<a href=#4716 id=4716 data-nosnippet>4716</a>        </span><span class="kw">let </span>sram_xmask_len = <span class="kw">if </span>script.xprop_enabled {
+<a href=#4717 id=4717 data-nosnippet>4717</a>            (script.sram_storage_size <span class="kw">as </span>usize).max(<span class="number">1</span>)
+<a href=#4718 id=4718 data-nosnippet>4718</a>        } <span class="kw">else </span>{
+<a href=#4719 id=4719 data-nosnippet>4719</a>            <span class="number">1
+<a href=#4720 id=4720 data-nosnippet>4720</a>        </span>};
+<a href=#4721 id=4721 data-nosnippet>4721</a>        <span class="kw">let </span><span class="kw-2">mut </span>sram_xmask = <span class="macro">vec!</span>[
+<a href=#4722 id=4722 data-nosnippet>4722</a>            <span class="kw">if </span>script.xprop_enabled {
+<a href=#4723 id=4723 data-nosnippet>4723</a>                <span class="number">0xFFFF_FFFFu32
+<a href=#4724 id=4724 data-nosnippet>4724</a>            </span>} <span class="kw">else </span>{
+<a href=#4725 id=4725 data-nosnippet>4725</a>                <span class="number">0u32
+<a href=#4726 id=4726 data-nosnippet>4726</a>            </span>};
+<a href=#4727 id=4727 data-nosnippet>4727</a>            sram_xmask_len
+<a href=#4728 id=4728 data-nosnippet>4728</a>        ];
+<a href=#4729 id=4729 data-nosnippet>4729</a>
+<a href=#4730 id=4730 data-nosnippet>4730</a>        <span class="comment">// SRAM preload (issue #80) — same path as build_state_buffers. The
+<a href=#4731 id=4731 data-nosnippet>4731</a>        // logic fixtures declare no `sram_init`, so this is untaken; wired for
+<a href=#4732 id=4732 data-nosnippet>4732</a>        // correctness.
+<a href=#4733 id=4733 data-nosnippet>4733</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sram_init) = config.sram_init.as_ref() {
+<a href=#4734 id=4734 data-nosnippet>4734</a>            <span class="kw">let </span>elf_path = std::path::Path::new(<span class="kw-2">&amp;</span>sram_init.elf_path);
+<a href=#4735 id=4735 data-nosnippet>4735</a>            <span class="kw">let </span>chunks = <span class="kw">crate</span>::sim::sram_preload::parse_elf_chunks(elf_path)
+<a href=#4736 id=4736 data-nosnippet>4736</a>                .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"sram_init: {e}"</span>));
+<a href=#4737 id=4737 data-nosnippet>4737</a>            <span class="kw">let </span>(cellid, storage_offset) =
+<a href=#4738 id=4738 data-nosnippet>4738</a>                <span class="kw">crate</span>::sim::sram_preload::resolve_single_sram(<span class="kw-2">&amp;</span>script.sram_cell_storage_offsets)
+<a href=#4739 id=4739 data-nosnippet>4739</a>                    .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"sram_init: {e}"</span>));
+<a href=#4740 id=4740 data-nosnippet>4740</a>            <span class="kw">let </span>total_bytes: usize = chunks.iter().map(|c| c.bytes.len()).sum();
+<a href=#4741 id=4741 data-nosnippet>4741</a>            <span class="kw">let </span><span class="kw-2">mut </span>xmask_slice = <span class="kw">if </span>script.xprop_enabled {
+<a href=#4742 id=4742 data-nosnippet>4742</a>                <span class="prelude-val">Some</span>(sram_xmask.as_mut_slice())
+<a href=#4743 id=4743 data-nosnippet>4743</a>            } <span class="kw">else </span>{
+<a href=#4744 id=4744 data-nosnippet>4744</a>                <span class="prelude-val">None
+<a href=#4745 id=4745 data-nosnippet>4745</a>            </span>};
+<a href=#4746 id=4746 data-nosnippet>4746</a>            <span class="kw">crate</span>::sim::sram_preload::apply_chunks(
+<a href=#4747 id=4747 data-nosnippet>4747</a>                <span class="kw-2">&amp;mut </span>sram,
+<a href=#4748 id=4748 data-nosnippet>4748</a>                storage_offset,
+<a href=#4749 id=4749 data-nosnippet>4749</a>                <span class="kw-2">&amp;</span>chunks,
+<a href=#4750 id=4750 data-nosnippet>4750</a>                xmask_slice.as_deref_mut(),
+<a href=#4751 id=4751 data-nosnippet>4751</a>            )
+<a href=#4752 id=4752 data-nosnippet>4752</a>            .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"sram_init: {e}"</span>));
+<a href=#4753 id=4753 data-nosnippet>4753</a>            <span class="macro">clilog::info!</span>(
+<a href=#4754 id=4754 data-nosnippet>4754</a>                <span class="string">"SRAM preload (CpuBackend): {} bytes from {} → cell {} at storage offset {}"</span>,
+<a href=#4755 id=4755 data-nosnippet>4755</a>                total_bytes,
+<a href=#4756 id=4756 data-nosnippet>4756</a>                elf_path.display(),
+<a href=#4757 id=4757 data-nosnippet>4757</a>                cellid,
+<a href=#4758 id=4758 data-nosnippet>4758</a>                storage_offset
+<a href=#4759 id=4759 data-nosnippet>4759</a>            );
+<a href=#4760 id=4760 data-nosnippet>4760</a>        }
+<a href=#4761 id=4761 data-nosnippet>4761</a>
+<a href=#4762 id=4762 data-nosnippet>4762</a>        <span class="comment">// Per-channel UART-TX decoder config + FSM state (Phase 1 step 5b).
+<a href=#4763 id=4763 data-nosnippet>4763</a>        // Built EXACTLY as MetalBackend::build_io_buffers builds UartParams:
+<a href=#4764 id=4764 data-nosnippet>4764</a>        //   tx_out_pos   = gpio_map.output_bits[tx_gpio] (or 0 if absent)
+<a href=#4765 id=4765 data-nosnippet>4765</a>        //   cycles_per_bit = cpb * sched_ticks_per_sys_clk_cycle (edges, not
+<a href=#4766 id=4766 data-nosnippet>4766</a>        //                    clock cycles — the decoder counts scheduler edges)
+<a href=#4767 id=4767 data-nosnippet>4767</a>        // The uart_configs tuple is (name, tx_gpio, _, cpb).
+<a href=#4768 id=4768 data-nosnippet>4768</a>        </span><span class="kw">let </span>cpu_uart_configs: Vec&lt;CpuUartConfig&gt; = uart_configs
+<a href=#4769 id=4769 data-nosnippet>4769</a>            .iter()
+<a href=#4770 id=4770 data-nosnippet>4770</a>            .map(|(<span class="kw">_</span>, tx_gpio, <span class="kw">_</span>, cpb)| CpuUartConfig {
+<a href=#4771 id=4771 data-nosnippet>4771</a>                tx_out_pos: gpio_map.output_bits.get(tx_gpio).copied().unwrap_or(<span class="number">0</span>),
+<a href=#4772 id=4772 data-nosnippet>4772</a>                cycles_per_bit: cpb * sched_ticks_per_sys_clk_cycle <span class="kw">as </span>u32,
+<a href=#4773 id=4773 data-nosnippet>4773</a>            })
+<a href=#4774 id=4774 data-nosnippet>4774</a>            .collect();
+<a href=#4775 id=4775 data-nosnippet>4775</a>        <span class="kw">let </span>cpu_uart_states: Vec&lt;CpuUartDecoderState&gt; = (<span class="number">0</span>..uart_configs.len())
+<a href=#4776 id=4776 data-nosnippet>4776</a>            .map(|<span class="kw">_</span>| CpuUartDecoderState::new())
+<a href=#4777 id=4777 data-nosnippet>4777</a>            .collect();
+<a href=#4778 id=4778 data-nosnippet>4778</a>
+<a href=#4779 id=4779 data-nosnippet>4779</a>        <span class="comment">// Per-bus APB3 pin positions + CPU decoder lanes (Phase 1 step 5c),
+<a href=#4780 id=4780 data-nosnippet>4780</a>        // built EXACTLY as MetalBackend's build_bus_trace_params (which packs
+<a href=#4781 id=4781 data-nosnippet>4781</a>        // the same positions into the GPU struct) via the shared builder.
+<a href=#4782 id=4782 data-nosnippet>4782</a>        </span><span class="kw">let </span>(bus_positions, bus_lanes) =
+<a href=#4783 id=4783 data-nosnippet>4783</a>            build_bus_trace(aig, netlistdb, script, config.effective_bus_traces());
+<a href=#4784 id=4784 data-nosnippet>4784</a>
+<a href=#4785 id=4785 data-nosnippet>4785</a>        <span class="comment">// QSPI-memory CPU oracle (Stage A: plural). Build one CppSpiFlash per
+<a href=#4786 id=4786 data-nosnippet>4786</a>        // configured memory + resolve each one's GPIO positions exactly as
+<a href=#4787 id=4787 data-nosnippet>4787</a>        // MetalBackend::build_flash_buffers does for the single instance. Each
+<a href=#4788 id=4788 data-nosnippet>4788</a>        // instance's MISO (d_i) starts 0x0F (idle high) — matching the GPU
+<a href=#4789 id=4789 data-nosnippet>4789</a>        // FlashState init and the patched CppSpiFlash p_d_i default — so
+<a href=#4790 id=4790 data-nosnippet>4790</a>        // instance 0 stays byte-identical to the single-flash GPU path through
+<a href=#4791 id=4791 data-nosnippet>4791</a>        // reset and the command/address phases. Instances &gt;0 are independent
+<a href=#4792 id=4792 data-nosnippet>4792</a>        // oracles with their own backing buffers and pins.
+<a href=#4793 id=4793 data-nosnippet>4793</a>        </span><span class="kw">let </span>flashes: Vec&lt;CpuFlashInstance&gt; = config
+<a href=#4794 id=4794 data-nosnippet>4794</a>            .effective_qspi_memory()
+<a href=#4795 id=4795 data-nosnippet>4795</a>            .iter()
+<a href=#4796 id=4796 data-nosnippet>4796</a>            .enumerate()
+<a href=#4797 id=4797 data-nosnippet>4797</a>            .map(|(idx, flash_cfg)| {
+<a href=#4798 id=4798 data-nosnippet>4798</a>                <span class="kw">let </span><span class="kw-2">mut </span>fl = CppSpiFlash::new(flash_cfg.backing_size_bytes());
+<a href=#4799 id=4799 data-nosnippet>4799</a>                <span class="comment">// RAM (QSPI PSRAM) mode: enable the writable store + enter-QPI /
+<a href=#4800 id=4800 data-nosnippet>4800</a>                // quad-write commands so the CPU oracle matches the GPU kernel.
+<a href=#4801 id=4801 data-nosnippet>4801</a>                // Zero-fills the store (before any firmware overlay below).
+<a href=#4802 id=4802 data-nosnippet>4802</a>                </span><span class="kw">if </span>flash_cfg.writable {
+<a href=#4803 id=4803 data-nosnippet>4803</a>                    fl.set_ram_mode(
+<a href=#4804 id=4804 data-nosnippet>4804</a>                        <span class="bool-val">true</span>,
+<a href=#4805 id=4805 data-nosnippet>4805</a>                        flash_cfg.enter_qpi_cmd,
+<a href=#4806 id=4806 data-nosnippet>4806</a>                        flash_cfg.quad_write_cmd,
+<a href=#4807 id=4807 data-nosnippet>4807</a>                        flash_cfg.read_dummy_cycles.unwrap_or(<span class="number">6</span>),
+<a href=#4808 id=4808 data-nosnippet>4808</a>                    );
+<a href=#4809 id=4809 data-nosnippet>4809</a>                }
+<a href=#4810 id=4810 data-nosnippet>4810</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>fw) = flash_cfg.firmware {
+<a href=#4811 id=4811 data-nosnippet>4811</a>                    <span class="kw">let </span>firmware_path = std::path::Path::new(fw);
+<a href=#4812 id=4812 data-nosnippet>4812</a>                    <span class="kw">match </span>fl.load_firmware(firmware_path, flash_cfg.firmware_offset) {
+<a href=#4813 id=4813 data-nosnippet>4813</a>                        <span class="prelude-val">Ok</span>(size) =&gt; <span class="macro">clilog::info!</span>(
+<a href=#4814 id=4814 data-nosnippet>4814</a>                            <span class="string">"CpuBackend qspi_memory[{}]: loaded {} bytes firmware at offset 0x{:X}"</span>,
+<a href=#4815 id=4815 data-nosnippet>4815</a>                            idx,
+<a href=#4816 id=4816 data-nosnippet>4816</a>                            size,
+<a href=#4817 id=4817 data-nosnippet>4817</a>                            flash_cfg.firmware_offset
+<a href=#4818 id=4818 data-nosnippet>4818</a>                        ),
+<a href=#4819 id=4819 data-nosnippet>4819</a>                        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#4820 id=4820 data-nosnippet>4820</a>                            <span class="macro">panic!</span>(<span class="string">"CpuBackend qspi_memory[{idx}]: failed to load firmware: {e}"</span>)
+<a href=#4821 id=4821 data-nosnippet>4821</a>                        }
+<a href=#4822 id=4822 data-nosnippet>4822</a>                    }
+<a href=#4823 id=4823 data-nosnippet>4823</a>                }
+<a href=#4824 id=4824 data-nosnippet>4824</a>                <span class="kw">let </span>clk_out_pos = gpio_map
+<a href=#4825 id=4825 data-nosnippet>4825</a>                    .output_bits
+<a href=#4826 id=4826 data-nosnippet>4826</a>                    .get(<span class="kw-2">&amp;</span>flash_cfg.clk_gpio)
+<a href=#4827 id=4827 data-nosnippet>4827</a>                    .copied()
+<a href=#4828 id=4828 data-nosnippet>4828</a>                    .unwrap_or(<span class="number">0</span>);
+<a href=#4829 id=4829 data-nosnippet>4829</a>                <span class="kw">let </span>csn_out_pos = gpio_map
+<a href=#4830 id=4830 data-nosnippet>4830</a>                    .output_bits
+<a href=#4831 id=4831 data-nosnippet>4831</a>                    .get(<span class="kw-2">&amp;</span>flash_cfg.csn_gpio)
+<a href=#4832 id=4832 data-nosnippet>4832</a>                    .copied()
+<a href=#4833 id=4833 data-nosnippet>4833</a>                    .unwrap_or(<span class="number">0</span>);
+<a href=#4834 id=4834 data-nosnippet>4834</a>                <span class="kw">let </span><span class="kw-2">mut </span>d_out_pos = [<span class="number">0xFFFFFFFFu32</span>; <span class="number">4</span>];
+<a href=#4835 id=4835 data-nosnippet>4835</a>                <span class="kw">let </span><span class="kw-2">mut </span>d_in_pos = [<span class="number">0xFFFFFFFFu32</span>; <span class="number">4</span>];
+<a href=#4836 id=4836 data-nosnippet>4836</a>                <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">4 </span>{
+<a href=#4837 id=4837 data-nosnippet>4837</a>                    d_out_pos[i] = gpio_map
+<a href=#4838 id=4838 data-nosnippet>4838</a>                        .output_bits
+<a href=#4839 id=4839 data-nosnippet>4839</a>                        .get(<span class="kw-2">&amp;</span>(flash_cfg.d0_gpio + i))
+<a href=#4840 id=4840 data-nosnippet>4840</a>                        .copied()
+<a href=#4841 id=4841 data-nosnippet>4841</a>                        .unwrap_or(<span class="number">0xFFFFFFFF</span>);
+<a href=#4842 id=4842 data-nosnippet>4842</a>                    d_in_pos[i] = gpio_map
+<a href=#4843 id=4843 data-nosnippet>4843</a>                        .input_bits
+<a href=#4844 id=4844 data-nosnippet>4844</a>                        .get(<span class="kw-2">&amp;</span>(flash_cfg.d0_gpio + i))
+<a href=#4845 id=4845 data-nosnippet>4845</a>                        .copied()
+<a href=#4846 id=4846 data-nosnippet>4846</a>                        .unwrap_or(<span class="number">0xFFFFFFFF</span>);
+<a href=#4847 id=4847 data-nosnippet>4847</a>                }
+<a href=#4848 id=4848 data-nosnippet>4848</a>                CpuFlashInstance {
+<a href=#4849 id=4849 data-nosnippet>4849</a>                    model: UnsafeCell::new(fl),
+<a href=#4850 id=4850 data-nosnippet>4850</a>                    clk_out_pos,
+<a href=#4851 id=4851 data-nosnippet>4851</a>                    csn_out_pos,
+<a href=#4852 id=4852 data-nosnippet>4852</a>                    d_out_pos,
+<a href=#4853 id=4853 data-nosnippet>4853</a>                    d_in_pos,
+<a href=#4854 id=4854 data-nosnippet>4854</a>                    <span class="comment">// Idle MISO high (mirror GPU FlashState.d_i / patched CppSpiFlash).
+<a href=#4855 id=4855 data-nosnippet>4855</a>                    </span>d_i: UnsafeCell::new(<span class="number">0x0F</span>),
+<a href=#4856 id=4856 data-nosnippet>4856</a>                    <span class="comment">// CSN starts high (deselected); d_out starts low (mirror FlashState).
+<a href=#4857 id=4857 data-nosnippet>4857</a>                    </span>prev_csn: UnsafeCell::new(<span class="number">1</span>),
+<a href=#4858 id=4858 data-nosnippet>4858</a>                    prev_d_out: UnsafeCell::new(<span class="number">0</span>),
+<a href=#4859 id=4859 data-nosnippet>4859</a>                }
+<a href=#4860 id=4860 data-nosnippet>4860</a>            })
+<a href=#4861 id=4861 data-nosnippet>4861</a>            .collect();
+<a href=#4862 id=4862 data-nosnippet>4862</a>
+<a href=#4863 id=4863 data-nosnippet>4863</a>        <span class="kw">let </span>backend = CpuBackend {
+<a href=#4864 id=4864 data-nosnippet>4864</a>            state: UnsafeCell::new(state),
+<a href=#4865 id=4865 data-nosnippet>4865</a>            sram: UnsafeCell::new(sram),
+<a href=#4866 id=4866 data-nosnippet>4866</a>            sram_xmask: UnsafeCell::new(sram_xmask),
+<a href=#4867 id=4867 data-nosnippet>4867</a>            schedule: Vec::new(),
+<a href=#4868 id=4868 data-nosnippet>4868</a>            edges_per_period: <span class="number">0</span>,
+<a href=#4869 id=4869 data-nosnippet>4869</a>            gcd_ps: <span class="number">0</span>,
+<a href=#4870 id=4870 data-nosnippet>4870</a>            state_size,
+<a href=#4871 id=4871 data-nosnippet>4871</a>            sram_len: script.sram_storage_size <span class="kw">as </span>usize,
+<a href=#4872 id=4872 data-nosnippet>4872</a>            num_blocks,
+<a href=#4873 id=4873 data-nosnippet>4873</a>            num_major_stages,
+<a href=#4874 id=4874 data-nosnippet>4874</a>            xprop_enabled: script.xprop_enabled,
+<a href=#4875 id=4875 data-nosnippet>4875</a>            xmask_state_offset: <span class="number">0</span>,
+<a href=#4876 id=4876 data-nosnippet>4876</a>            reg_io_state_size: script.reg_io_state_size <span class="kw">as </span>usize,
+<a href=#4877 id=4877 data-nosnippet>4877</a>            flash_in_reset: <span class="bool-val">false</span>,
+<a href=#4878 id=4878 data-nosnippet>4878</a>            blocks_start: script.blocks_start.iter().copied().collect(),
+<a href=#4879 id=4879 data-nosnippet>4879</a>            blocks_data: script.blocks_data.iter().copied().collect(),
+<a href=#4880 id=4880 data-nosnippet>4880</a>            vcd_ring: UnsafeCell::new(<span class="prelude-val">None</span>),
+<a href=#4881 id=4881 data-nosnippet>4881</a>            enable_vcd: <span class="bool-val">false</span>,
+<a href=#4882 id=4882 data-nosnippet>4882</a>            uart_configs: cpu_uart_configs,
+<a href=#4883 id=4883 data-nosnippet>4883</a>            uart_states: UnsafeCell::new(cpu_uart_states),
+<a href=#4884 id=4884 data-nosnippet>4884</a>            uart_decoded: UnsafeCell::new(Vec::new()),
+<a href=#4885 id=4885 data-nosnippet>4885</a>            bus_positions,
+<a href=#4886 id=4886 data-nosnippet>4886</a>            bus_prev_gate: UnsafeCell::new(<span class="number">0</span>),
+<a href=#4887 id=4887 data-nosnippet>4887</a>            bus_current_tick: UnsafeCell::new(<span class="number">0</span>),
+<a href=#4888 id=4888 data-nosnippet>4888</a>            bus_beats: UnsafeCell::new(Vec::new()),
+<a href=#4889 id=4889 data-nosnippet>4889</a>            flashes,
+<a href=#4890 id=4890 data-nosnippet>4890</a>        };
+<a href=#4891 id=4891 data-nosnippet>4891</a>        (backend, bus_lanes)
+<a href=#4892 id=4892 data-nosnippet>4892</a>    }
+<a href=#4893 id=4893 data-nosnippet>4893</a>
+<a href=#4894 id=4894 data-nosnippet>4894</a>    <span class="kw">fn </span>init_schedule(
+<a href=#4895 id=4895 data-nosnippet>4895</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#4896 id=4896 data-nosnippet>4896</a>        per_edge_ops: Vec&lt;Vec&lt;BitOp&gt;&gt;,
+<a href=#4897 id=4897 data-nosnippet>4897</a>        _state_size: u32,
+<a href=#4898 id=4898 data-nosnippet>4898</a>        xmask_state_offset: u32,
+<a href=#4899 id=4899 data-nosnippet>4899</a>        gcd_ps: u64,
+<a href=#4900 id=4900 data-nosnippet>4900</a>    ) {
+<a href=#4901 id=4901 data-nosnippet>4901</a>        <span class="self">self</span>.edges_per_period = per_edge_ops.len();
+<a href=#4902 id=4902 data-nosnippet>4902</a>        <span class="self">self</span>.schedule = per_edge_ops;
+<a href=#4903 id=4903 data-nosnippet>4903</a>        <span class="self">self</span>.gcd_ps = gcd_ps;
+<a href=#4904 id=4904 data-nosnippet>4904</a>        <span class="self">self</span>.xmask_state_offset = xmask_state_offset <span class="kw">as </span>usize;
+<a href=#4905 id=4905 data-nosnippet>4905</a>    }
+<a href=#4906 id=4906 data-nosnippet>4906</a>
+<a href=#4907 id=4907 data-nosnippet>4907</a>    <span class="attr">#[inline]
+<a href=#4908 id=4908 data-nosnippet>4908</a>    </span><span class="kw">fn </span>edge_ops_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, edge_idx: usize) -&gt; <span class="kw-2">&amp;mut </span>[BitOp] {
+<a href=#4909 id=4909 data-nosnippet>4909</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>.schedule[edge_idx]
+<a href=#4910 id=4910 data-nosnippet>4910</a>    }
+<a href=#4911 id=4911 data-nosnippet>4911</a>    <span class="attr">#[inline]
+<a href=#4912 id=4912 data-nosnippet>4912</a>    </span><span class="kw">fn </span>edge_ops(<span class="kw-2">&amp;</span><span class="self">self</span>, edge_idx: usize) -&gt; <span class="kw-2">&amp;</span>[BitOp] {
+<a href=#4913 id=4913 data-nosnippet>4913</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.schedule[edge_idx]
+<a href=#4914 id=4914 data-nosnippet>4914</a>    }
+<a href=#4915 id=4915 data-nosnippet>4915</a>    <span class="attr">#[inline]
+<a href=#4916 id=4916 data-nosnippet>4916</a>    </span><span class="kw">fn </span>edges_per_period(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#4917 id=4917 data-nosnippet>4917</a>        <span class="self">self</span>.edges_per_period
 <a href=#4918 id=4918 data-nosnippet>4918</a>    }
-<a href=#4919 id=4919 data-nosnippet>4919</a>
-<a href=#4920 id=4920 data-nosnippet>4920</a>    <span class="kw">fn </span>flash_debug_snapshot(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; FlashDebug {
-<a href=#4921 id=4921 data-nosnippet>4921</a>        <span class="comment">// CPU flash oracle: report the primary instance's live MISO + reset
-<a href=#4922 id=4922 data-nosnippet>4922</a>        // flag; the remaining FSM internals live inside CppSpiFlash (not
-<a href=#4923 id=4923 data-nosnippet>4923</a>        // mirrored here).
-<a href=#4924 id=4924 data-nosnippet>4924</a>        </span>FlashDebug {
-<a href=#4925 id=4925 data-nosnippet>4925</a>            d_i: <span class="self">self
-<a href=#4926 id=4926 data-nosnippet>4926</a>                </span>.flashes
-<a href=#4927 id=4927 data-nosnippet>4927</a>                .first()
-<a href=#4928 id=4928 data-nosnippet>4928</a>                .map(|f| <span class="kw">unsafe </span>{ <span class="kw-2">*</span>f.d_i.get() })
-<a href=#4929 id=4929 data-nosnippet>4929</a>                .unwrap_or(<span class="number">0x0F</span>),
-<a href=#4930 id=4930 data-nosnippet>4930</a>            data_width: <span class="number">0</span>,
-<a href=#4931 id=4931 data-nosnippet>4931</a>            prev_csn: <span class="number">0</span>,
-<a href=#4932 id=4932 data-nosnippet>4932</a>            in_reset: <span class="self">self</span>.flash_in_reset <span class="kw">as </span>u32,
-<a href=#4933 id=4933 data-nosnippet>4933</a>            bit_count: <span class="number">0</span>,
-<a href=#4934 id=4934 data-nosnippet>4934</a>            byte_count: <span class="number">0</span>,
-<a href=#4935 id=4935 data-nosnippet>4935</a>            addr: <span class="number">0</span>,
-<a href=#4936 id=4936 data-nosnippet>4936</a>            curr_byte: <span class="number">0</span>,
-<a href=#4937 id=4937 data-nosnippet>4937</a>            command: <span class="number">0</span>,
-<a href=#4938 id=4938 data-nosnippet>4938</a>            out_buffer: <span class="number">0</span>,
-<a href=#4939 id=4939 data-nosnippet>4939</a>            prev_clk: <span class="number">0</span>,
-<a href=#4940 id=4940 data-nosnippet>4940</a>            prev_d_out: <span class="number">0</span>,
-<a href=#4941 id=4941 data-nosnippet>4941</a>            last_error_cmd: <span class="number">0</span>,
-<a href=#4942 id=4942 data-nosnippet>4942</a>            model_prev_csn: <span class="number">0</span>,
-<a href=#4943 id=4943 data-nosnippet>4943</a>        }
+<a href=#4919 id=4919 data-nosnippet>4919</a>    <span class="attr">#[inline]
+<a href=#4920 id=4920 data-nosnippet>4920</a>    </span><span class="kw">fn </span>gcd_ps(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#4921 id=4921 data-nosnippet>4921</a>        <span class="self">self</span>.gcd_ps
+<a href=#4922 id=4922 data-nosnippet>4922</a>    }
+<a href=#4923 id=4923 data-nosnippet>4923</a>
+<a href=#4924 id=4924 data-nosnippet>4924</a>    <span class="kw">fn </span>state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u32] {
+<a href=#4925 id=4925 data-nosnippet>4925</a>        <span class="self">self</span>.state_ref()
+<a href=#4926 id=4926 data-nosnippet>4926</a>    }
+<a href=#4927 id=4927 data-nosnippet>4927</a>    <span class="kw">fn </span>state_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[u32] {
+<a href=#4928 id=4928 data-nosnippet>4928</a>        <span class="self">self</span>.state.get_mut()
+<a href=#4929 id=4929 data-nosnippet>4929</a>    }
+<a href=#4930 id=4930 data-nosnippet>4930</a>    <span class="kw">fn </span>sram(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u32] {
+<a href=#4931 id=4931 data-nosnippet>4931</a>        <span class="comment">// SAFETY: sequential dispatch — no concurrent borrow.
+<a href=#4932 id=4932 data-nosnippet>4932</a>        </span><span class="kw">let </span>sram: <span class="kw-2">&amp;</span>Vec&lt;u32&gt; = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span><span class="self">self</span>.sram.get() };
+<a href=#4933 id=4933 data-nosnippet>4933</a>        <span class="kw-2">&amp;</span>sram[..<span class="self">self</span>.sram_len]
+<a href=#4934 id=4934 data-nosnippet>4934</a>    }
+<a href=#4935 id=4935 data-nosnippet>4935</a>
+<a href=#4936 id=4936 data-nosnippet>4936</a>    <span class="kw">fn </span>flash_set_in_reset(<span class="kw-2">&amp;mut </span><span class="self">self</span>, in_reset: bool) {
+<a href=#4937 id=4937 data-nosnippet>4937</a>        <span class="self">self</span>.flash_in_reset = in_reset;
+<a href=#4938 id=4938 data-nosnippet>4938</a>    }
+<a href=#4939 id=4939 data-nosnippet>4939</a>
+<a href=#4940 id=4940 data-nosnippet>4940</a>    <span class="kw">fn </span>enable_vcd_ring(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#4941 id=4941 data-nosnippet>4941</a>        <span class="self">self</span>.enable_vcd = <span class="bool-val">true</span>;
+<a href=#4942 id=4942 data-nosnippet>4942</a>        <span class="comment">// Lazily allocate on first run_edges; N=1 → one slot per edge.
+<a href=#4943 id=4943 data-nosnippet>4943</a>        </span><span class="kw-2">*</span><span class="self">self</span>.vcd_ring.get_mut() = <span class="prelude-val">Some</span>(Vec::new());
 <a href=#4944 id=4944 data-nosnippet>4944</a>    }
 <a href=#4945 id=4945 data-nosnippet>4945</a>
-<a href=#4946 id=4946 data-nosnippet>4946</a>    <span class="kw">fn </span>drain_uart_tx(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Vec&lt;(usize, u8)&gt; {
-<a href=#4947 id=4947 data-nosnippet>4947</a>        <span class="comment">// Drain semantics (called once per batch by run_cosim_generic, which
-<a href=#4948 id=4948 data-nosnippet>4948</a>        // stamps each byte with the batch `tick` + maps idx→name): return the
-<a href=#4949 id=4949 data-nosnippet>4949</a>        // bytes the per-edge FSM accumulated this batch, then clear.
-<a href=#4950 id=4950 data-nosnippet>4950</a>        </span>std::mem::take(<span class="self">self</span>.uart_decoded.get_mut())
-<a href=#4951 id=4951 data-nosnippet>4951</a>    }
-<a href=#4952 id=4952 data-nosnippet>4952</a>
-<a href=#4953 id=4953 data-nosnippet>4953</a>    <span class="kw">fn </span>drain_bus_beats(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw">crate</span>::sim::models::bus_trace::RawBeat&gt; {
-<a href=#4954 id=4954 data-nosnippet>4954</a>        <span class="comment">// Return the beats the per-edge FSM accumulated this batch, then clear
-<a href=#4955 id=4955 data-nosnippet>4955</a>        // (mirrors the GPU ring drain in MetalBackend::drain_bus_beats; here the
-<a href=#4956 id=4956 data-nosnippet>4956</a>        // beats are already in RawBeat form, captured in run_edges).
-<a href=#4957 id=4957 data-nosnippet>4957</a>        </span>std::mem::take(<span class="self">self</span>.bus_beats.get_mut())
-<a href=#4958 id=4958 data-nosnippet>4958</a>    }
-<a href=#4959 id=4959 data-nosnippet>4959</a>
-<a href=#4960 id=4960 data-nosnippet>4960</a>    <span class="kw">fn </span>run_edges(<span class="kw-2">&amp;</span><span class="self">self</span>, batch: usize, schedule_offset: usize) -&gt; u64 {
-<a href=#4961 id=4961 data-nosnippet>4961</a>        <span class="kw">let </span>state_size = <span class="self">self</span>.state_size;
-<a href=#4962 id=4962 data-nosnippet>4962</a>        <span class="kw">let </span>state = <span class="self">self</span>.state_inner_mut();
-<a href=#4963 id=4963 data-nosnippet>4963</a>        <span class="comment">// SAFETY: sequential dispatch — sram/sram_xmask/vcd_ring are only
-<a href=#4964 id=4964 data-nosnippet>4964</a>        // touched here and in &amp;mut-self methods, never concurrently.
-<a href=#4965 id=4965 data-nosnippet>4965</a>        </span><span class="kw">let </span>sram = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.sram.get() };
-<a href=#4966 id=4966 data-nosnippet>4966</a>        <span class="kw">let </span>sram_xmask = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.sram_xmask.get() };
-<a href=#4967 id=4967 data-nosnippet>4967</a>        <span class="kw">let </span>ring = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.vcd_ring.get() };
-<a href=#4968 id=4968 data-nosnippet>4968</a>        <span class="comment">// UART-TX decoder state + accumulator (Phase 1 step 5b). The FSM state
-<a href=#4969 id=4969 data-nosnippet>4969</a>        // persists across edges/batches (mirrors the GPU `uart_state` buffer);
-<a href=#4970 id=4970 data-nosnippet>4970</a>        // completed bytes accumulate until `drain_uart_tx`.
-<a href=#4971 id=4971 data-nosnippet>4971</a>        </span><span class="kw">let </span>uart_states = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.uart_states.get() };
-<a href=#4972 id=4972 data-nosnippet>4972</a>        <span class="kw">let </span>uart_decoded = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.uart_decoded.get() };
-<a href=#4973 id=4973 data-nosnippet>4973</a>        <span class="comment">// Bus-trace FSM state + accumulator (Phase 1 step 5c). `prev_gate` /
-<a href=#4974 id=4974 data-nosnippet>4974</a>        // `current_tick` persist across edges/batches (mirror the GPU
-<a href=#4975 id=4975 data-nosnippet>4975</a>        // `BusTraceChannel` header); beats accumulate until `drain_bus_beats`.
-<a href=#4976 id=4976 data-nosnippet>4976</a>        </span><span class="kw">let </span>bus_prev_gate = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.bus_prev_gate.get() };
-<a href=#4977 id=4977 data-nosnippet>4977</a>        <span class="kw">let </span>bus_current_tick = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.bus_current_tick.get() };
-<a href=#4978 id=4978 data-nosnippet>4978</a>        <span class="kw">let </span>bus_beats = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.bus_beats.get() };
-<a href=#4979 id=4979 data-nosnippet>4979</a>
-<a href=#4980 id=4980 data-nosnippet>4980</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(r) = ring.as_mut() {
-<a href=#4981 id=4981 data-nosnippet>4981</a>            r.clear();
-<a href=#4982 id=4982 data-nosnippet>4982</a>        }
-<a href=#4983 id=4983 data-nosnippet>4983</a>
-<a href=#4984 id=4984 data-nosnippet>4984</a>        <span class="kw">let </span>xmask_off = <span class="self">self</span>.xmask_state_offset;
-<a href=#4985 id=4985 data-nosnippet>4985</a>        <span class="kw">let </span>rio = <span class="self">self</span>.reg_io_state_size;
-<a href=#4986 id=4986 data-nosnippet>4986</a>
-<a href=#4987 id=4987 data-nosnippet>4987</a>        <span class="kw">for </span>e <span class="kw">in </span><span class="number">0</span>..batch {
-<a href=#4988 id=4988 data-nosnippet>4988</a>            <span class="kw">let </span>sched_idx = (schedule_offset + e) % <span class="self">self</span>.edges_per_period;
-<a href=#4989 id=4989 data-nosnippet>4989</a>
-<a href=#4990 id=4990 data-nosnippet>4990</a>            <span class="comment">// ── CPU state_prep (mirrors kernel_v1.metal `state_prep`) ──────
-<a href=#4991 id=4991 data-nosnippet>4991</a>            // Step 1: copy output slot → input slot.
-<a href=#4992 id=4992 data-nosnippet>4992</a>            </span>state.copy_within(state_size..<span class="number">2 </span>* state_size, <span class="number">0</span>);
-<a href=#4993 id=4993 data-nosnippet>4993</a>            <span class="comment">// Step 2: apply this edge's BitOps to the input slot; driving a
-<a href=#4994 id=4994 data-nosnippet>4994</a>            // bit clears its X-mask (xmask_off != 0 ⇒ xprop on).
-<a href=#4995 id=4995 data-nosnippet>4995</a>            </span><span class="kw">for </span>op <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.schedule[sched_idx] {
-<a href=#4996 id=4996 data-nosnippet>4996</a>                <span class="kw">let </span>word_idx = (op.position &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize;
-<a href=#4997 id=4997 data-nosnippet>4997</a>                <span class="kw">let </span>bit_mask = <span class="number">1u32 </span>&lt;&lt; (op.position &amp; <span class="number">31</span>);
-<a href=#4998 id=4998 data-nosnippet>4998</a>                <span class="kw">if </span>op.value != <span class="number">0 </span>{
-<a href=#4999 id=4999 data-nosnippet>4999</a>                    state[word_idx] |= bit_mask;
-<a href=#5000 id=5000 data-nosnippet>5000</a>                } <span class="kw">else </span>{
-<a href=#5001 id=5001 data-nosnippet>5001</a>                    state[word_idx] &amp;= !bit_mask;
-<a href=#5002 id=5002 data-nosnippet>5002</a>                }
-<a href=#5003 id=5003 data-nosnippet>5003</a>                <span class="kw">if </span>xmask_off != <span class="number">0 </span>{
-<a href=#5004 id=5004 data-nosnippet>5004</a>                    state[xmask_off + word_idx] &amp;= !bit_mask;
-<a href=#5005 id=5005 data-nosnippet>5005</a>                }
-<a href=#5006 id=5006 data-nosnippet>5006</a>            }
-<a href=#5007 id=5007 data-nosnippet>5007</a>            <span class="comment">// ── CPU apply_flash_din (mirror gpu_apply_flash_din, shader:904) ─
-<a href=#5008 id=5008 data-nosnippet>5008</a>            // Inject each memory's current MISO nibble into ITS input-state
-<a href=#5009 id=5009 data-nosnippet>5009</a>            // d_in bits BEFORE simulate, clearing their X-mask (driven ⇒ known,
-<a href=#5010 id=5010 data-nosnippet>5010</a>            // #95 ph3). Every QSPI instance drives its own lanes independently.
-<a href=#5011 id=5011 data-nosnippet>5011</a>            </span><span class="kw">for </span>inst <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.flashes {
-<a href=#5012 id=5012 data-nosnippet>5012</a>                <span class="comment">// SAFETY: sequential dispatch — no concurrent borrow.
-<a href=#5013 id=5013 data-nosnippet>5013</a>                </span><span class="kw">let </span>d_i = <span class="kw">unsafe </span>{ <span class="kw-2">*</span>inst.d_i.get() };
-<a href=#5014 id=5014 data-nosnippet>5014</a>                <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">4usize </span>{
-<a href=#5015 id=5015 data-nosnippet>5015</a>                    <span class="kw">let </span>pos = inst.d_in_pos[i];
-<a href=#5016 id=5016 data-nosnippet>5016</a>                    <span class="kw">if </span>pos == <span class="number">0xFFFFFFFF </span>{
-<a href=#5017 id=5017 data-nosnippet>5017</a>                        <span class="kw">continue</span>;
-<a href=#5018 id=5018 data-nosnippet>5018</a>                    }
-<a href=#5019 id=5019 data-nosnippet>5019</a>                    <span class="kw">let </span>word_idx = (pos &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize;
-<a href=#5020 id=5020 data-nosnippet>5020</a>                    <span class="kw">let </span>bit_mask = <span class="number">1u32 </span>&lt;&lt; (pos &amp; <span class="number">31</span>);
-<a href=#5021 id=5021 data-nosnippet>5021</a>                    <span class="kw">if </span>(d_i &gt;&gt; i) &amp; <span class="number">1 </span>!= <span class="number">0 </span>{
-<a href=#5022 id=5022 data-nosnippet>5022</a>                        state[word_idx] |= bit_mask;
-<a href=#5023 id=5023 data-nosnippet>5023</a>                    } <span class="kw">else </span>{
-<a href=#5024 id=5024 data-nosnippet>5024</a>                        state[word_idx] &amp;= !bit_mask;
-<a href=#5025 id=5025 data-nosnippet>5025</a>                    }
-<a href=#5026 id=5026 data-nosnippet>5026</a>                    <span class="kw">if </span>xmask_off != <span class="number">0 </span>{
-<a href=#5027 id=5027 data-nosnippet>5027</a>                        state[xmask_off + word_idx] &amp;= !bit_mask;
-<a href=#5028 id=5028 data-nosnippet>5028</a>                    }
-<a href=#5029 id=5029 data-nosnippet>5029</a>                }
-<a href=#5030 id=5030 data-nosnippet>5030</a>            }
+<a href=#4946 id=4946 data-nosnippet>4946</a>    <span class="kw">fn </span>vcd_snapshot(<span class="kw-2">&amp;</span><span class="self">self</span>, edge_in_batch: usize) -&gt; <span class="kw-2">&amp;</span>[u32] {
+<a href=#4947 id=4947 data-nosnippet>4947</a>        <span class="comment">// SAFETY: sequential dispatch; the ring is populated by run_edges.
+<a href=#4948 id=4948 data-nosnippet>4948</a>        </span><span class="kw">let </span>ring = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span><span class="self">self</span>.vcd_ring.get() };
+<a href=#4949 id=4949 data-nosnippet>4949</a>        <span class="kw-2">&amp;</span>ring
+<a href=#4950 id=4950 data-nosnippet>4950</a>            .as_ref()
+<a href=#4951 id=4951 data-nosnippet>4951</a>            .expect(<span class="string">"vcd_snapshot called without enable_vcd_ring"</span>)[edge_in_batch]
+<a href=#4952 id=4952 data-nosnippet>4952</a>    }
+<a href=#4953 id=4953 data-nosnippet>4953</a>
+<a href=#4954 id=4954 data-nosnippet>4954</a>    <span class="kw">fn </span>flash_d_i(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
+<a href=#4955 id=4955 data-nosnippet>4955</a>        <span class="comment">// Current MISO nibble from the primary (instance 0) CppSpiFlash oracle;
+<a href=#4956 id=4956 data-nosnippet>4956</a>        // 0x0F idle when no memory is configured. Single-instance diagnostic
+<a href=#4957 id=4957 data-nosnippet>4957</a>        // used by `--check-with-cpu` (which requires N&lt;=1).
+<a href=#4958 id=4958 data-nosnippet>4958</a>        // SAFETY: sequential dispatch — no concurrent borrow of the cell.
+<a href=#4959 id=4959 data-nosnippet>4959</a>        </span><span class="self">self</span>.flashes
+<a href=#4960 id=4960 data-nosnippet>4960</a>            .first()
+<a href=#4961 id=4961 data-nosnippet>4961</a>            .map(|f| <span class="kw">unsafe </span>{ <span class="kw-2">*</span>f.d_i.get() })
+<a href=#4962 id=4962 data-nosnippet>4962</a>            .unwrap_or(<span class="number">0x0F</span>)
+<a href=#4963 id=4963 data-nosnippet>4963</a>    }
+<a href=#4964 id=4964 data-nosnippet>4964</a>
+<a href=#4965 id=4965 data-nosnippet>4965</a>    <span class="kw">fn </span>flash_debug_snapshot(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; FlashDebug {
+<a href=#4966 id=4966 data-nosnippet>4966</a>        <span class="comment">// CPU flash oracle: report the primary instance's live MISO + reset
+<a href=#4967 id=4967 data-nosnippet>4967</a>        // flag; the remaining FSM internals live inside CppSpiFlash (not
+<a href=#4968 id=4968 data-nosnippet>4968</a>        // mirrored here).
+<a href=#4969 id=4969 data-nosnippet>4969</a>        </span>FlashDebug {
+<a href=#4970 id=4970 data-nosnippet>4970</a>            d_i: <span class="self">self
+<a href=#4971 id=4971 data-nosnippet>4971</a>                </span>.flashes
+<a href=#4972 id=4972 data-nosnippet>4972</a>                .first()
+<a href=#4973 id=4973 data-nosnippet>4973</a>                .map(|f| <span class="kw">unsafe </span>{ <span class="kw-2">*</span>f.d_i.get() })
+<a href=#4974 id=4974 data-nosnippet>4974</a>                .unwrap_or(<span class="number">0x0F</span>),
+<a href=#4975 id=4975 data-nosnippet>4975</a>            data_width: <span class="number">0</span>,
+<a href=#4976 id=4976 data-nosnippet>4976</a>            prev_csn: <span class="number">0</span>,
+<a href=#4977 id=4977 data-nosnippet>4977</a>            in_reset: <span class="self">self</span>.flash_in_reset <span class="kw">as </span>u32,
+<a href=#4978 id=4978 data-nosnippet>4978</a>            bit_count: <span class="number">0</span>,
+<a href=#4979 id=4979 data-nosnippet>4979</a>            byte_count: <span class="number">0</span>,
+<a href=#4980 id=4980 data-nosnippet>4980</a>            addr: <span class="number">0</span>,
+<a href=#4981 id=4981 data-nosnippet>4981</a>            curr_byte: <span class="number">0</span>,
+<a href=#4982 id=4982 data-nosnippet>4982</a>            command: <span class="number">0</span>,
+<a href=#4983 id=4983 data-nosnippet>4983</a>            out_buffer: <span class="number">0</span>,
+<a href=#4984 id=4984 data-nosnippet>4984</a>            prev_clk: <span class="number">0</span>,
+<a href=#4985 id=4985 data-nosnippet>4985</a>            prev_d_out: <span class="number">0</span>,
+<a href=#4986 id=4986 data-nosnippet>4986</a>            last_error_cmd: <span class="number">0</span>,
+<a href=#4987 id=4987 data-nosnippet>4987</a>            model_prev_csn: <span class="number">0</span>,
+<a href=#4988 id=4988 data-nosnippet>4988</a>        }
+<a href=#4989 id=4989 data-nosnippet>4989</a>    }
+<a href=#4990 id=4990 data-nosnippet>4990</a>
+<a href=#4991 id=4991 data-nosnippet>4991</a>    <span class="kw">fn </span>drain_uart_tx(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Vec&lt;(usize, u8)&gt; {
+<a href=#4992 id=4992 data-nosnippet>4992</a>        <span class="comment">// Drain semantics (called once per batch by run_cosim_generic, which
+<a href=#4993 id=4993 data-nosnippet>4993</a>        // stamps each byte with the batch `tick` + maps idx→name): return the
+<a href=#4994 id=4994 data-nosnippet>4994</a>        // bytes the per-edge FSM accumulated this batch, then clear.
+<a href=#4995 id=4995 data-nosnippet>4995</a>        </span>std::mem::take(<span class="self">self</span>.uart_decoded.get_mut())
+<a href=#4996 id=4996 data-nosnippet>4996</a>    }
+<a href=#4997 id=4997 data-nosnippet>4997</a>
+<a href=#4998 id=4998 data-nosnippet>4998</a>    <span class="kw">fn </span>drain_bus_beats(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw">crate</span>::sim::models::bus_trace::RawBeat&gt; {
+<a href=#4999 id=4999 data-nosnippet>4999</a>        <span class="comment">// Return the beats the per-edge FSM accumulated this batch, then clear
+<a href=#5000 id=5000 data-nosnippet>5000</a>        // (mirrors the GPU ring drain in MetalBackend::drain_bus_beats; here the
+<a href=#5001 id=5001 data-nosnippet>5001</a>        // beats are already in RawBeat form, captured in run_edges).
+<a href=#5002 id=5002 data-nosnippet>5002</a>        </span>std::mem::take(<span class="self">self</span>.bus_beats.get_mut())
+<a href=#5003 id=5003 data-nosnippet>5003</a>    }
+<a href=#5004 id=5004 data-nosnippet>5004</a>
+<a href=#5005 id=5005 data-nosnippet>5005</a>    <span class="kw">fn </span>run_edges(<span class="kw-2">&amp;</span><span class="self">self</span>, batch: usize, schedule_offset: usize) -&gt; u64 {
+<a href=#5006 id=5006 data-nosnippet>5006</a>        <span class="kw">let </span>state_size = <span class="self">self</span>.state_size;
+<a href=#5007 id=5007 data-nosnippet>5007</a>        <span class="kw">let </span>state = <span class="self">self</span>.state_inner_mut();
+<a href=#5008 id=5008 data-nosnippet>5008</a>        <span class="comment">// SAFETY: sequential dispatch — sram/sram_xmask/vcd_ring are only
+<a href=#5009 id=5009 data-nosnippet>5009</a>        // touched here and in &amp;mut-self methods, never concurrently.
+<a href=#5010 id=5010 data-nosnippet>5010</a>        </span><span class="kw">let </span>sram = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.sram.get() };
+<a href=#5011 id=5011 data-nosnippet>5011</a>        <span class="kw">let </span>sram_xmask = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.sram_xmask.get() };
+<a href=#5012 id=5012 data-nosnippet>5012</a>        <span class="kw">let </span>ring = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.vcd_ring.get() };
+<a href=#5013 id=5013 data-nosnippet>5013</a>        <span class="comment">// UART-TX decoder state + accumulator (Phase 1 step 5b). The FSM state
+<a href=#5014 id=5014 data-nosnippet>5014</a>        // persists across edges/batches (mirrors the GPU `uart_state` buffer);
+<a href=#5015 id=5015 data-nosnippet>5015</a>        // completed bytes accumulate until `drain_uart_tx`.
+<a href=#5016 id=5016 data-nosnippet>5016</a>        </span><span class="kw">let </span>uart_states = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.uart_states.get() };
+<a href=#5017 id=5017 data-nosnippet>5017</a>        <span class="kw">let </span>uart_decoded = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.uart_decoded.get() };
+<a href=#5018 id=5018 data-nosnippet>5018</a>        <span class="comment">// Bus-trace FSM state + accumulator (Phase 1 step 5c). `prev_gate` /
+<a href=#5019 id=5019 data-nosnippet>5019</a>        // `current_tick` persist across edges/batches (mirror the GPU
+<a href=#5020 id=5020 data-nosnippet>5020</a>        // `BusTraceChannel` header); beats accumulate until `drain_bus_beats`.
+<a href=#5021 id=5021 data-nosnippet>5021</a>        </span><span class="kw">let </span>bus_prev_gate = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.bus_prev_gate.get() };
+<a href=#5022 id=5022 data-nosnippet>5022</a>        <span class="kw">let </span>bus_current_tick = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.bus_current_tick.get() };
+<a href=#5023 id=5023 data-nosnippet>5023</a>        <span class="kw">let </span>bus_beats = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.bus_beats.get() };
+<a href=#5024 id=5024 data-nosnippet>5024</a>
+<a href=#5025 id=5025 data-nosnippet>5025</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(r) = ring.as_mut() {
+<a href=#5026 id=5026 data-nosnippet>5026</a>            r.clear();
+<a href=#5027 id=5027 data-nosnippet>5027</a>        }
+<a href=#5028 id=5028 data-nosnippet>5028</a>
+<a href=#5029 id=5029 data-nosnippet>5029</a>        <span class="kw">let </span>xmask_off = <span class="self">self</span>.xmask_state_offset;
+<a href=#5030 id=5030 data-nosnippet>5030</a>        <span class="kw">let </span>rio = <span class="self">self</span>.reg_io_state_size;
 <a href=#5031 id=5031 data-nosnippet>5031</a>
-<a href=#5032 id=5032 data-nosnippet>5032</a>            <span class="comment">// ── Simulate every partition for this edge ─────────────────────
-<a href=#5033 id=5033 data-nosnippet>5033</a>            </span><span class="kw">for </span>stage_i <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.num_major_stages {
-<a href=#5034 id=5034 data-nosnippet>5034</a>                <span class="kw">for </span>block_i <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.num_blocks {
-<a href=#5035 id=5035 data-nosnippet>5035</a>                    <span class="kw">let </span>start = <span class="self">self</span>.blocks_start[stage_i * <span class="self">self</span>.num_blocks + block_i];
-<a href=#5036 id=5036 data-nosnippet>5036</a>                    <span class="kw">let </span>end = <span class="self">self</span>.blocks_start[stage_i * <span class="self">self</span>.num_blocks + block_i + <span class="number">1</span>];
-<a href=#5037 id=5037 data-nosnippet>5037</a>                    <span class="kw">if </span>start == end {
-<a href=#5038 id=5038 data-nosnippet>5038</a>                        <span class="kw">continue</span>;
-<a href=#5039 id=5039 data-nosnippet>5039</a>                    }
-<a href=#5040 id=5040 data-nosnippet>5040</a>                    <span class="kw">let </span>script_slice = <span class="kw-2">&amp;</span><span class="self">self</span>.blocks_data[start..end];
-<a href=#5041 id=5041 data-nosnippet>5041</a>                    <span class="kw">let </span>(input_half, output_half) = state.split_at_mut(state_size);
-<a href=#5042 id=5042 data-nosnippet>5042</a>                    <span class="kw">if </span><span class="self">self</span>.xprop_enabled {
-<a href=#5043 id=5043 data-nosnippet>5043</a>                        <span class="comment">// Value + X-mask lanes are packed in the same slot at
-<a href=#5044 id=5044 data-nosnippet>5044</a>                        // [0..rio] and [xmask_off..xmask_off+rio]. The xprop
-<a href=#5045 id=5045 data-nosnippet>5045</a>                        // executor takes them as separate slices (it indexes
-<a href=#5046 id=5046 data-nosnippet>5046</a>                        // xmasks from 0, not from xmask_off).
-<a href=#5047 id=5047 data-nosnippet>5047</a>                        </span><span class="kw">let </span>(in_val, in_x) = input_half.split_at(xmask_off);
-<a href=#5048 id=5048 data-nosnippet>5048</a>                        <span class="kw">let </span>(out_val, out_x) = output_half.split_at_mut(xmask_off);
-<a href=#5049 id=5049 data-nosnippet>5049</a>                        <span class="kw">crate</span>::sim::cpu_reference::simulate_block_v1_xprop(
-<a href=#5050 id=5050 data-nosnippet>5050</a>                            script_slice,
-<a href=#5051 id=5051 data-nosnippet>5051</a>                            in_val,
-<a href=#5052 id=5052 data-nosnippet>5052</a>                            out_val,
-<a href=#5053 id=5053 data-nosnippet>5053</a>                            <span class="kw-2">&amp;</span>in_x[..rio],
-<a href=#5054 id=5054 data-nosnippet>5054</a>                            <span class="kw-2">&amp;mut </span>out_x[..rio],
-<a href=#5055 id=5055 data-nosnippet>5055</a>                            sram,
-<a href=#5056 id=5056 data-nosnippet>5056</a>                            sram_xmask,
-<a href=#5057 id=5057 data-nosnippet>5057</a>                            <span class="bool-val">false</span>,
-<a href=#5058 id=5058 data-nosnippet>5058</a>                        );
-<a href=#5059 id=5059 data-nosnippet>5059</a>                    } <span class="kw">else </span>{
-<a href=#5060 id=5060 data-nosnippet>5060</a>                        <span class="kw">crate</span>::sim::cpu_reference::simulate_block_v1(
-<a href=#5061 id=5061 data-nosnippet>5061</a>                            script_slice,
-<a href=#5062 id=5062 data-nosnippet>5062</a>                            input_half,
-<a href=#5063 id=5063 data-nosnippet>5063</a>                            output_half,
-<a href=#5064 id=5064 data-nosnippet>5064</a>                            sram,
-<a href=#5065 id=5065 data-nosnippet>5065</a>                            <span class="bool-val">false</span>,
-<a href=#5066 id=5066 data-nosnippet>5066</a>                        );
-<a href=#5067 id=5067 data-nosnippet>5067</a>                    }
-<a href=#5068 id=5068 data-nosnippet>5068</a>                }
-<a href=#5069 id=5069 data-nosnippet>5069</a>            }
-<a href=#5070 id=5070 data-nosnippet>5070</a>
-<a href=#5071 id=5071 data-nosnippet>5071</a>            <span class="comment">// ── CPU flash_model_step (mirror gpu_flash_model_step, shader:943) ─
-<a href=#5072 id=5072 data-nosnippet>5072</a>            // For EACH memory: read its clk/csn/d_out from the OUTPUT slot, then
-<a href=#5073 id=5073 data-nosnippet>5073</a>            // dual-step ITS CppSpiFlash with delayed CSN (setup-delay model) to
-<a href=#5074 id=5074 data-nosnippet>5074</a>            // compute the next MISO d_i. Runs after simulate (output fresh) on
-<a href=#5075 id=5075 data-nosnippet>5075</a>            // every edge, mirroring the Metal `encode_flash_model_step` cadence
-<a href=#5076 id=5076 data-nosnippet>5076</a>            // (before io_step / UART). Each instance keeps its own delayed
-<a href=#5077 id=5077 data-nosnippet>5077</a>            // csn/d_out so the memories advance fully independently.
-<a href=#5078 id=5078 data-nosnippet>5078</a>            </span><span class="kw">for </span>inst <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.flashes {
-<a href=#5079 id=5079 data-nosnippet>5079</a>                <span class="kw">let </span>read_out = |pos: u32| -&gt; u32 {
-<a href=#5080 id=5080 data-nosnippet>5080</a>                    <span class="kw">if </span>pos == <span class="number">0xFFFFFFFF </span>{
-<a href=#5081 id=5081 data-nosnippet>5081</a>                        <span class="number">0
-<a href=#5082 id=5082 data-nosnippet>5082</a>                    </span>} <span class="kw">else </span>{
-<a href=#5083 id=5083 data-nosnippet>5083</a>                        (state[state_size + (pos &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize] &gt;&gt; (pos &amp; <span class="number">31</span>)) &amp; <span class="number">1
-<a href=#5084 id=5084 data-nosnippet>5084</a>                    </span>}
-<a href=#5085 id=5085 data-nosnippet>5085</a>                };
-<a href=#5086 id=5086 data-nosnippet>5086</a>                <span class="kw">let </span>clk = read_out(inst.clk_out_pos);
-<a href=#5087 id=5087 data-nosnippet>5087</a>                <span class="kw">let </span>csn = read_out(inst.csn_out_pos);
-<a href=#5088 id=5088 data-nosnippet>5088</a>                <span class="kw">let </span><span class="kw-2">mut </span>d_out = <span class="number">0u8</span>;
-<a href=#5089 id=5089 data-nosnippet>5089</a>                <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">4usize </span>{
-<a href=#5090 id=5090 data-nosnippet>5090</a>                    d_out |= (read_out(inst.d_out_pos[i]) <span class="kw">as </span>u8) &lt;&lt; i;
-<a href=#5091 id=5091 data-nosnippet>5091</a>                }
-<a href=#5092 id=5092 data-nosnippet>5092</a>                <span class="comment">// SAFETY: sequential dispatch — these cells are only touched here.
-<a href=#5093 id=5093 data-nosnippet>5093</a>                </span><span class="kw">let </span>d_i_cell = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>inst.d_i.get() };
-<a href=#5094 id=5094 data-nosnippet>5094</a>                <span class="kw">let </span>prev_csn = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>inst.prev_csn.get() };
-<a href=#5095 id=5095 data-nosnippet>5095</a>                <span class="kw">let </span>prev_d_out = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>inst.prev_d_out.get() };
-<a href=#5096 id=5096 data-nosnippet>5096</a>                <span class="kw">if </span><span class="self">self</span>.flash_in_reset {
-<a href=#5097 id=5097 data-nosnippet>5097</a>                    <span class="comment">// Reset branch (shader:974): force MISO high, update the
-<a href=#5098 id=5098 data-nosnippet>5098</a>                    // delayed values, do NOT step the model.
-<a href=#5099 id=5099 data-nosnippet>5099</a>                    </span><span class="kw-2">*</span>d_i_cell = <span class="number">0x0F</span>;
-<a href=#5100 id=5100 data-nosnippet>5100</a>                    <span class="kw-2">*</span>prev_csn = csn;
-<a href=#5101 id=5101 data-nosnippet>5101</a>                    <span class="kw-2">*</span>prev_d_out = d_out;
-<a href=#5102 id=5102 data-nosnippet>5102</a>                } <span class="kw">else </span>{
-<a href=#5103 id=5103 data-nosnippet>5103</a>                    <span class="kw">let </span>fl = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>inst.model.get() };
-<a href=#5104 id=5104 data-nosnippet>5104</a>                    <span class="comment">// Dual-step with delayed CSN (matches the GPU setup-delay
-<a href=#5105 id=5105 data-nosnippet>5105</a>                    // model): step 1 = delayed csn + delayed d_out, step 2 =
-<a href=#5106 id=5106 data-nosnippet>5106</a>                    // delayed csn + current d_out. CppSpiFlash::step does one
-<a href=#5107 id=5107 data-nosnippet>5107</a>                    // eval()+commit() (CXXRTL agent.step semantics).
-<a href=#5108 id=5108 data-nosnippet>5108</a>                    </span><span class="kw">let </span>pcsn = <span class="kw-2">*</span>prev_csn != <span class="number">0</span>;
-<a href=#5109 id=5109 data-nosnippet>5109</a>                    fl.step(clk != <span class="number">0</span>, pcsn, <span class="kw-2">*</span>prev_d_out);
-<a href=#5110 id=5110 data-nosnippet>5110</a>                    <span class="kw">let </span>d_i = fl.step(clk != <span class="number">0</span>, pcsn, d_out);
-<a href=#5111 id=5111 data-nosnippet>5111</a>                    <span class="kw-2">*</span>d_i_cell = d_i;
-<a href=#5112 id=5112 data-nosnippet>5112</a>                    <span class="kw-2">*</span>prev_csn = csn; <span class="comment">// current output csn → next edge's delayed csn
-<a href=#5113 id=5113 data-nosnippet>5113</a>                    </span><span class="kw-2">*</span>prev_d_out = d_out;
-<a href=#5114 id=5114 data-nosnippet>5114</a>                }
-<a href=#5115 id=5115 data-nosnippet>5115</a>            }
-<a href=#5116 id=5116 data-nosnippet>5116</a>
-<a href=#5117 id=5117 data-nosnippet>5117</a>            <span class="comment">// ── UART-TX decoder (ported from gpu_io_step, kernel_v1.metal ──
-<a href=#5118 id=5118 data-nosnippet>5118</a>            // 1189-1249). Runs AFTER `simulate` — same point the Metal
-<a href=#5119 id=5119 data-nosnippet>5119</a>            // `encode_io_step` runs, with the output slot fresh — on EVERY
-<a href=#5120 id=5120 data-nosnippet>5120</a>            // edge from tick 0 (including reset edges), `current_cycle` += 1
-<a href=#5121 id=5121 data-nosnippet>5121</a>            // per edge, matching the GPU. READ_OUT_BIT reads the OUTPUT slot:
-<a href=#5122 id=5122 data-nosnippet>5122</a>            // states[state_size + (pos&gt;&gt;5)] &gt;&gt; (pos&amp;31) &amp; 1; pos==u32::MAX → 0.
-<a href=#5123 id=5123 data-nosnippet>5123</a>            </span><span class="kw">for </span>(ui, cfg) <span class="kw">in </span><span class="self">self</span>.uart_configs.iter().enumerate() {
-<a href=#5124 id=5124 data-nosnippet>5124</a>                <span class="kw">let </span>cycles_per_bit = cfg.cycles_per_bit;
-<a href=#5125 id=5125 data-nosnippet>5125</a>                <span class="kw">let </span>tx = <span class="kw">if </span>cfg.tx_out_pos != u32::MAX {
-<a href=#5126 id=5126 data-nosnippet>5126</a>                    (state[state_size + (cfg.tx_out_pos &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize] &gt;&gt; (cfg.tx_out_pos &amp; <span class="number">31</span>))
-<a href=#5127 id=5127 data-nosnippet>5127</a>                        &amp; <span class="number">1
-<a href=#5128 id=5128 data-nosnippet>5128</a>                </span>} <span class="kw">else </span>{
-<a href=#5129 id=5129 data-nosnippet>5129</a>                    <span class="number">0
-<a href=#5130 id=5130 data-nosnippet>5130</a>                </span>};
-<a href=#5131 id=5131 data-nosnippet>5131</a>
-<a href=#5132 id=5132 data-nosnippet>5132</a>                <span class="kw">let </span>us = <span class="kw-2">&amp;mut </span>uart_states[ui];
-<a href=#5133 id=5133 data-nosnippet>5133</a>                <span class="kw">let </span>cycle = us.current_cycle;
-<a href=#5134 id=5134 data-nosnippet>5134</a>                <span class="kw">let </span><span class="kw-2">mut </span>st = us.state;
-<a href=#5135 id=5135 data-nosnippet>5135</a>                <span class="kw">let </span>last_tx = us.last_tx;
-<a href=#5136 id=5136 data-nosnippet>5136</a>                <span class="kw">let </span><span class="kw-2">mut </span>start_cycle = us.start_cycle;
-<a href=#5137 id=5137 data-nosnippet>5137</a>                <span class="kw">let </span><span class="kw-2">mut </span>bits_received = us.bits_received;
-<a href=#5138 id=5138 data-nosnippet>5138</a>                <span class="kw">let </span><span class="kw-2">mut </span>value = us.value;
-<a href=#5139 id=5139 data-nosnippet>5139</a>
-<a href=#5140 id=5140 data-nosnippet>5140</a>                <span class="kw">if </span>st == <span class="number">0 </span>{
-<a href=#5141 id=5141 data-nosnippet>5141</a>                    <span class="kw">if </span>last_tx == <span class="number">1 </span>&amp;&amp; tx == <span class="number">0 </span>{
-<a href=#5142 id=5142 data-nosnippet>5142</a>                        st = <span class="number">1</span>;
-<a href=#5143 id=5143 data-nosnippet>5143</a>                        start_cycle = cycle;
-<a href=#5144 id=5144 data-nosnippet>5144</a>                    }
-<a href=#5145 id=5145 data-nosnippet>5145</a>                } <span class="kw">else if </span>st == <span class="number">1 </span>{
-<a href=#5146 id=5146 data-nosnippet>5146</a>                    <span class="kw">if </span>cycle &gt;= start_cycle + cycles_per_bit / <span class="number">2 </span>{
-<a href=#5147 id=5147 data-nosnippet>5147</a>                        <span class="kw">if </span>tx == <span class="number">0 </span>{
-<a href=#5148 id=5148 data-nosnippet>5148</a>                            st = <span class="number">2</span>;
-<a href=#5149 id=5149 data-nosnippet>5149</a>                            start_cycle += cycles_per_bit;
-<a href=#5150 id=5150 data-nosnippet>5150</a>                            bits_received = <span class="number">0</span>;
-<a href=#5151 id=5151 data-nosnippet>5151</a>                            value = <span class="number">0</span>;
-<a href=#5152 id=5152 data-nosnippet>5152</a>                        } <span class="kw">else </span>{
-<a href=#5153 id=5153 data-nosnippet>5153</a>                            st = <span class="number">0</span>;
-<a href=#5154 id=5154 data-nosnippet>5154</a>                        }
-<a href=#5155 id=5155 data-nosnippet>5155</a>                    }
-<a href=#5156 id=5156 data-nosnippet>5156</a>                } <span class="kw">else if </span>st == <span class="number">2 </span>{
-<a href=#5157 id=5157 data-nosnippet>5157</a>                    <span class="kw">let </span>bit_center =
-<a href=#5158 id=5158 data-nosnippet>5158</a>                        start_cycle + bits_received * cycles_per_bit + cycles_per_bit / <span class="number">2</span>;
-<a href=#5159 id=5159 data-nosnippet>5159</a>                    <span class="kw">if </span>cycle &gt;= bit_center {
-<a href=#5160 id=5160 data-nosnippet>5160</a>                        value |= tx &lt;&lt; bits_received;
-<a href=#5161 id=5161 data-nosnippet>5161</a>                        <span class="kw">if </span>bits_received &gt;= <span class="number">7 </span>{
-<a href=#5162 id=5162 data-nosnippet>5162</a>                            st = <span class="number">3</span>;
-<a href=#5163 id=5163 data-nosnippet>5163</a>                            start_cycle += <span class="number">8 </span>* cycles_per_bit;
-<a href=#5164 id=5164 data-nosnippet>5164</a>                        } <span class="kw">else </span>{
-<a href=#5165 id=5165 data-nosnippet>5165</a>                            bits_received += <span class="number">1</span>;
-<a href=#5166 id=5166 data-nosnippet>5166</a>                        }
-<a href=#5167 id=5167 data-nosnippet>5167</a>                    }
-<a href=#5168 id=5168 data-nosnippet>5168</a>                } <span class="kw">else if </span>st == <span class="number">3 </span>{
-<a href=#5169 id=5169 data-nosnippet>5169</a>                    <span class="kw">if </span>cycle &gt;= start_cycle + cycles_per_bit / <span class="number">2 </span>{
-<a href=#5170 id=5170 data-nosnippet>5170</a>                        <span class="kw">if </span>tx == <span class="number">1 </span>{
-<a href=#5171 id=5171 data-nosnippet>5171</a>                            uart_decoded.push((ui, (value &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8));
-<a href=#5172 id=5172 data-nosnippet>5172</a>                        }
-<a href=#5173 id=5173 data-nosnippet>5173</a>                        st = <span class="number">0</span>;
-<a href=#5174 id=5174 data-nosnippet>5174</a>                    }
-<a href=#5175 id=5175 data-nosnippet>5175</a>                }
-<a href=#5176 id=5176 data-nosnippet>5176</a>
-<a href=#5177 id=5177 data-nosnippet>5177</a>                us.state = st;
-<a href=#5178 id=5178 data-nosnippet>5178</a>                us.last_tx = tx;
-<a href=#5179 id=5179 data-nosnippet>5179</a>                us.start_cycle = start_cycle;
-<a href=#5180 id=5180 data-nosnippet>5180</a>                us.bits_received = bits_received;
-<a href=#5181 id=5181 data-nosnippet>5181</a>                us.value = value;
-<a href=#5182 id=5182 data-nosnippet>5182</a>                us.current_cycle = cycle + <span class="number">1</span>;
-<a href=#5183 id=5183 data-nosnippet>5183</a>            }
-<a href=#5184 id=5184 data-nosnippet>5184</a>
-<a href=#5185 id=5185 data-nosnippet>5185</a>            <span class="comment">// ── Bus transaction trace (APB3, ported from gpu_io_step,
-<a href=#5186 id=5186 data-nosnippet>5186</a>            // kernel_v1.metal:1305-1352). Runs AFTER `simulate`, same point as
-<a href=#5187 id=5187 data-nosnippet>5187</a>            // the GPU block, reading the OUTPUT slot. Per bus: gate = sel &amp; en &amp;
-<a href=#5188 id=5188 data-nosnippet>5188</a>            // rdy (rdy=1 when pready absent); on a rising edge of the gate emit
-<a href=#5189 id=5189 data-nosnippet>5189</a>            // one RawBeat stamped with `current_tick`. `prev_gate` /
-<a href=#5190 id=5190 data-nosnippet>5190</a>            // `current_tick` persist; `current_tick` += 1 once per edge from 0,
-<a href=#5191 id=5191 data-nosnippet>5191</a>            // regardless of whether any bus fired. READ_OUT_BIT reads the OUTPUT
-<a href=#5192 id=5192 data-nosnippet>5192</a>            // slot; pos==u32::MAX → 0 (sentinel short-circuit).
-<a href=#5193 id=5193 data-nosnippet>5193</a>            </span><span class="kw">if </span>!<span class="self">self</span>.bus_positions.is_empty() {
-<a href=#5194 id=5194 data-nosnippet>5194</a>                <span class="kw">let </span>btick = <span class="kw-2">*</span>bus_current_tick;
-<a href=#5195 id=5195 data-nosnippet>5195</a>                <span class="kw">let </span>prev = <span class="kw-2">*</span>bus_prev_gate;
-<a href=#5196 id=5196 data-nosnippet>5196</a>                <span class="kw">let </span><span class="kw-2">mut </span>new_gate = <span class="number">0u32</span>;
-<a href=#5197 id=5197 data-nosnippet>5197</a>                <span class="kw">let </span>read_out = |pos: u32| -&gt; u32 {
-<a href=#5198 id=5198 data-nosnippet>5198</a>                    <span class="kw">if </span>pos != u32::MAX {
-<a href=#5199 id=5199 data-nosnippet>5199</a>                        (state[state_size + (pos &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize] &gt;&gt; (pos &amp; <span class="number">31</span>)) &amp; <span class="number">1
-<a href=#5200 id=5200 data-nosnippet>5200</a>                    </span>} <span class="kw">else </span>{
-<a href=#5201 id=5201 data-nosnippet>5201</a>                        <span class="number">0
-<a href=#5202 id=5202 data-nosnippet>5202</a>                    </span>}
-<a href=#5203 id=5203 data-nosnippet>5203</a>                };
-<a href=#5204 id=5204 data-nosnippet>5204</a>                <span class="kw">for </span>(b, bp) <span class="kw">in </span><span class="self">self</span>.bus_positions.iter().enumerate() {
-<a href=#5205 id=5205 data-nosnippet>5205</a>                    <span class="kw">let </span>gate = <span class="kw">if </span>bp.protocol_apb3 {
-<a href=#5206 id=5206 data-nosnippet>5206</a>                        <span class="kw">let </span>sel = read_out(bp.sel_pos);
-<a href=#5207 id=5207 data-nosnippet>5207</a>                        <span class="kw">let </span>en = read_out(bp.enable_pos);
-<a href=#5208 id=5208 data-nosnippet>5208</a>                        <span class="kw">let </span>rdy = <span class="kw">if </span>bp.ready_pos == <span class="number">0xFFFFFFFF </span>{
-<a href=#5209 id=5209 data-nosnippet>5209</a>                            <span class="number">1
-<a href=#5210 id=5210 data-nosnippet>5210</a>                        </span>} <span class="kw">else </span>{
-<a href=#5211 id=5211 data-nosnippet>5211</a>                            read_out(bp.ready_pos)
-<a href=#5212 id=5212 data-nosnippet>5212</a>                        };
-<a href=#5213 id=5213 data-nosnippet>5213</a>                        sel &amp; en &amp; rdy
-<a href=#5214 id=5214 data-nosnippet>5214</a>                    } <span class="kw">else </span>{
-<a href=#5215 id=5215 data-nosnippet>5215</a>                        <span class="number">0
-<a href=#5216 id=5216 data-nosnippet>5216</a>                    </span>};
-<a href=#5217 id=5217 data-nosnippet>5217</a>                    new_gate |= gate &lt;&lt; b;
-<a href=#5218 id=5218 data-nosnippet>5218</a>
-<a href=#5219 id=5219 data-nosnippet>5219</a>                    <span class="kw">let </span>rising = gate != <span class="number">0 </span>&amp;&amp; ((prev &gt;&gt; b) &amp; <span class="number">1</span>) == <span class="number">0</span>;
-<a href=#5220 id=5220 data-nosnippet>5220</a>                    <span class="kw">if </span>rising {
-<a href=#5221 id=5221 data-nosnippet>5221</a>                        <span class="kw">let </span>write = read_out(bp.write_pos);
-<a href=#5222 id=5222 data-nosnippet>5222</a>                        <span class="kw">let </span>err = read_out(bp.resp_pos);
-<a href=#5223 id=5223 data-nosnippet>5223</a>                        <span class="kw">let </span><span class="kw-2">mut </span>addr = <span class="number">0u32</span>;
-<a href=#5224 id=5224 data-nosnippet>5224</a>                        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..bp.addr_bits.min(BUS_TRACE_MAX_ADR_BITS) {
-<a href=#5225 id=5225 data-nosnippet>5225</a>                            addr |= read_out(bp.addr_pos[i]) &lt;&lt; i;
-<a href=#5226 id=5226 data-nosnippet>5226</a>                        }
-<a href=#5227 id=5227 data-nosnippet>5227</a>                        <span class="kw">let </span><span class="kw-2">mut </span>wdata = <span class="number">0u32</span>;
-<a href=#5228 id=5228 data-nosnippet>5228</a>                        <span class="kw">let </span><span class="kw-2">mut </span>rdata = <span class="number">0u32</span>;
-<a href=#5229 id=5229 data-nosnippet>5229</a>                        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..bp.data_bits.min(BUS_TRACE_MAX_DAT_BITS) {
-<a href=#5230 id=5230 data-nosnippet>5230</a>                            wdata |= read_out(bp.wdata_pos[i]) &lt;&lt; i;
-<a href=#5231 id=5231 data-nosnippet>5231</a>                            rdata |= read_out(bp.rdata_pos[i]) &lt;&lt; i;
-<a href=#5232 id=5232 data-nosnippet>5232</a>                        }
-<a href=#5233 id=5233 data-nosnippet>5233</a>                        <span class="comment">// Pack the same flags the GPU writes, then unpack into a
-<a href=#5234 id=5234 data-nosnippet>5234</a>                        // RawBeat identically to MetalBackend::drain_bus_beats.
-<a href=#5235 id=5235 data-nosnippet>5235</a>                        </span><span class="kw">let </span>flags = (write &amp; <span class="number">1</span>) | ((err &amp; <span class="number">1</span>) &lt;&lt; <span class="number">1</span>) | ((b <span class="kw">as </span>u32) &lt;&lt; <span class="number">8</span>);
-<a href=#5236 id=5236 data-nosnippet>5236</a>                        bus_beats.push(<span class="kw">crate</span>::sim::models::bus_trace::RawBeat {
-<a href=#5237 id=5237 data-nosnippet>5237</a>                            tick: btick <span class="kw">as </span>u64,
-<a href=#5238 id=5238 data-nosnippet>5238</a>                            bus_id: (flags &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFF</span>,
-<a href=#5239 id=5239 data-nosnippet>5239</a>                            write: (flags &amp; <span class="number">1</span>) != <span class="number">0</span>,
-<a href=#5240 id=5240 data-nosnippet>5240</a>                            err: (flags &gt;&gt; <span class="number">1</span>) &amp; <span class="number">1 </span>!= <span class="number">0</span>,
-<a href=#5241 id=5241 data-nosnippet>5241</a>                            addr: addr <span class="kw">as </span>u64,
-<a href=#5242 id=5242 data-nosnippet>5242</a>                            wdata: wdata <span class="kw">as </span>u64,
-<a href=#5243 id=5243 data-nosnippet>5243</a>                            rdata: rdata <span class="kw">as </span>u64,
-<a href=#5244 id=5244 data-nosnippet>5244</a>                        });
-<a href=#5245 id=5245 data-nosnippet>5245</a>                    }
-<a href=#5246 id=5246 data-nosnippet>5246</a>                }
-<a href=#5247 id=5247 data-nosnippet>5247</a>                <span class="kw-2">*</span>bus_prev_gate = new_gate;
-<a href=#5248 id=5248 data-nosnippet>5248</a>                <span class="kw-2">*</span>bus_current_tick = btick + <span class="number">1</span>;
-<a href=#5249 id=5249 data-nosnippet>5249</a>            }
-<a href=#5250 id=5250 data-nosnippet>5250</a>
-<a href=#5251 id=5251 data-nosnippet>5251</a>            <span class="comment">// ── VCD snapshot: full [input | output] slot for this edge ─────
-<a href=#5252 id=5252 data-nosnippet>5252</a>            </span><span class="kw">if </span><span class="self">self</span>.enable_vcd {
-<a href=#5253 id=5253 data-nosnippet>5253</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(r) = ring.as_mut() {
-<a href=#5254 id=5254 data-nosnippet>5254</a>                    r.push(state.clone());
-<a href=#5255 id=5255 data-nosnippet>5255</a>                }
-<a href=#5256 id=5256 data-nosnippet>5256</a>            }
-<a href=#5257 id=5257 data-nosnippet>5257</a>        }
-<a href=#5258 id=5258 data-nosnippet>5258</a>
-<a href=#5259 id=5259 data-nosnippet>5259</a>        <span class="comment">// CpuBackend runs synchronously; the token is unused (wait is a no-op).
-<a href=#5260 id=5260 data-nosnippet>5260</a>        </span><span class="number">0
-<a href=#5261 id=5261 data-nosnippet>5261</a>    </span>}
-<a href=#5262 id=5262 data-nosnippet>5262</a>
-<a href=#5263 id=5263 data-nosnippet>5263</a>    <span class="kw">fn </span>wait(<span class="kw-2">&amp;</span><span class="self">self</span>, _token: u64) {
-<a href=#5264 id=5264 data-nosnippet>5264</a>        <span class="comment">// Synchronous CPU backend — run_edges already completed.
-<a href=#5265 id=5265 data-nosnippet>5265</a>    </span>}
-<a href=#5266 id=5266 data-nosnippet>5266</a>
-<a href=#5267 id=5267 data-nosnippet>5267</a>    <span class="kw">fn </span>backend_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#5268 id=5268 data-nosnippet>5268</a>        <span class="string">"cpu"
-<a href=#5269 id=5269 data-nosnippet>5269</a>    </span>}
-<a href=#5270 id=5270 data-nosnippet>5270</a>    <span class="comment">// last_batch_gpu_seconds: default None — the CPU reference backend has no
-<a href=#5271 id=5271 data-nosnippet>5271</a>    // GPU clock; the perf report's gpu_* fields stay 0 / gpu_exec_recorded=false.
-<a href=#5272 id=5272 data-nosnippet>5272</a></span>}
-<a href=#5273 id=5273 data-nosnippet>5273</a>
-<a href=#5274 id=5274 data-nosnippet>5274</a><span class="doccomment">/// Public CPU-backend cosim entry point (Phase 1 step 5a). Drives the same
-<a href=#5275 id=5275 data-nosnippet>5275</a>/// agnostic `run_cosim_generic&lt;B&gt;` orchestration as the Metal shim, with the
-<a href=#5276 id=5276 data-nosnippet>5276</a>/// CPU reference backend. Available with no GPU feature; the cosim oracle.
-<a href=#5277 id=5277 data-nosnippet>5277</a></span><span class="kw">pub fn </span>run_cosim_cpu(
-<a href=#5278 id=5278 data-nosnippet>5278</a>    design: <span class="kw-2">&amp;mut </span>LoadedDesign,
-<a href=#5279 id=5279 data-nosnippet>5279</a>    config: <span class="kw-2">&amp;</span>TestbenchConfig,
-<a href=#5280 id=5280 data-nosnippet>5280</a>    opts: <span class="kw-2">&amp;</span>CosimOpts,
-<a href=#5281 id=5281 data-nosnippet>5281</a>    timing_constraints: <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span>&lt;Vec&lt;u32&gt;&gt;,
-<a href=#5282 id=5282 data-nosnippet>5282</a>) -&gt; CosimResult {
-<a href=#5283 id=5283 data-nosnippet>5283</a>    run_cosim_generic::&lt;CpuBackend&gt;(design, config, opts, timing_constraints)
-<a href=#5284 id=5284 data-nosnippet>5284</a>}
-<a href=#5285 id=5285 data-nosnippet>5285</a>
-<a href=#5286 id=5286 data-nosnippet>5286</a><span class="attr">#[cfg(feature = <span class="string">"metal"</span>)]
-<a href=#5287 id=5287 data-nosnippet>5287</a></span><span class="kw">mod </span>metal;
-<a href=#5288 id=5288 data-nosnippet>5288</a><span class="attr">#[cfg(feature = <span class="string">"metal"</span>)]
-<a href=#5289 id=5289 data-nosnippet>5289</a></span><span class="kw">pub use </span>metal::run_cosim;
-<a href=#5290 id=5290 data-nosnippet>5290</a>
-<a href=#5291 id=5291 data-nosnippet>5291</a><span class="attr">#[cfg(feature = <span class="string">"cuda"</span>)]
-<a href=#5292 id=5292 data-nosnippet>5292</a></span><span class="kw">mod </span>cuda;
-<a href=#5293 id=5293 data-nosnippet>5293</a><span class="attr">#[cfg(feature = <span class="string">"cuda"</span>)]
-<a href=#5294 id=5294 data-nosnippet>5294</a></span><span class="kw">pub use </span>cuda::run_cosim_cuda;
+<a href=#5032 id=5032 data-nosnippet>5032</a>        <span class="kw">for </span>e <span class="kw">in </span><span class="number">0</span>..batch {
+<a href=#5033 id=5033 data-nosnippet>5033</a>            <span class="kw">let </span>sched_idx = (schedule_offset + e) % <span class="self">self</span>.edges_per_period;
+<a href=#5034 id=5034 data-nosnippet>5034</a>
+<a href=#5035 id=5035 data-nosnippet>5035</a>            <span class="comment">// ── CPU state_prep (mirrors kernel_v1.metal `state_prep`) ──────
+<a href=#5036 id=5036 data-nosnippet>5036</a>            // Step 1: copy output slot → input slot.
+<a href=#5037 id=5037 data-nosnippet>5037</a>            </span>state.copy_within(state_size..<span class="number">2 </span>* state_size, <span class="number">0</span>);
+<a href=#5038 id=5038 data-nosnippet>5038</a>            <span class="comment">// Step 2: apply this edge's BitOps to the input slot; driving a
+<a href=#5039 id=5039 data-nosnippet>5039</a>            // bit clears its X-mask (xmask_off != 0 ⇒ xprop on).
+<a href=#5040 id=5040 data-nosnippet>5040</a>            </span><span class="kw">for </span>op <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.schedule[sched_idx] {
+<a href=#5041 id=5041 data-nosnippet>5041</a>                <span class="kw">let </span>word_idx = (op.position &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize;
+<a href=#5042 id=5042 data-nosnippet>5042</a>                <span class="kw">let </span>bit_mask = <span class="number">1u32 </span>&lt;&lt; (op.position &amp; <span class="number">31</span>);
+<a href=#5043 id=5043 data-nosnippet>5043</a>                <span class="kw">if </span>op.value != <span class="number">0 </span>{
+<a href=#5044 id=5044 data-nosnippet>5044</a>                    state[word_idx] |= bit_mask;
+<a href=#5045 id=5045 data-nosnippet>5045</a>                } <span class="kw">else </span>{
+<a href=#5046 id=5046 data-nosnippet>5046</a>                    state[word_idx] &amp;= !bit_mask;
+<a href=#5047 id=5047 data-nosnippet>5047</a>                }
+<a href=#5048 id=5048 data-nosnippet>5048</a>                <span class="kw">if </span>xmask_off != <span class="number">0 </span>{
+<a href=#5049 id=5049 data-nosnippet>5049</a>                    state[xmask_off + word_idx] &amp;= !bit_mask;
+<a href=#5050 id=5050 data-nosnippet>5050</a>                }
+<a href=#5051 id=5051 data-nosnippet>5051</a>            }
+<a href=#5052 id=5052 data-nosnippet>5052</a>            <span class="comment">// ── CPU apply_flash_din (mirror gpu_apply_flash_din, shader:904) ─
+<a href=#5053 id=5053 data-nosnippet>5053</a>            // Inject each memory's current MISO nibble into ITS input-state
+<a href=#5054 id=5054 data-nosnippet>5054</a>            // d_in bits BEFORE simulate, clearing their X-mask (driven ⇒ known,
+<a href=#5055 id=5055 data-nosnippet>5055</a>            // #95 ph3). Gated on selection (prev_csn low) so a deselected memory
+<a href=#5056 id=5056 data-nosnippet>5056</a>            // presents high-Z and can't clobber a shared SIO bus — see
+<a href=#5057 id=5057 data-nosnippet>5057</a>            // `apply_flash_din_gated`.
+<a href=#5058 id=5058 data-nosnippet>5058</a>            </span><span class="kw">for </span>inst <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.flashes {
+<a href=#5059 id=5059 data-nosnippet>5059</a>                <span class="comment">// SAFETY: sequential dispatch — no concurrent borrow.
+<a href=#5060 id=5060 data-nosnippet>5060</a>                </span><span class="kw">let </span>d_i = <span class="kw">unsafe </span>{ <span class="kw-2">*</span>inst.d_i.get() };
+<a href=#5061 id=5061 data-nosnippet>5061</a>                <span class="kw">let </span>csn = <span class="kw">unsafe </span>{ <span class="kw-2">*</span>inst.prev_csn.get() };
+<a href=#5062 id=5062 data-nosnippet>5062</a>                apply_flash_din_gated(state, xmask_off, d_i, csn, <span class="kw-2">&amp;</span>inst.d_in_pos);
+<a href=#5063 id=5063 data-nosnippet>5063</a>            }
+<a href=#5064 id=5064 data-nosnippet>5064</a>
+<a href=#5065 id=5065 data-nosnippet>5065</a>            <span class="comment">// ── Simulate every partition for this edge ─────────────────────
+<a href=#5066 id=5066 data-nosnippet>5066</a>            </span><span class="kw">for </span>stage_i <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.num_major_stages {
+<a href=#5067 id=5067 data-nosnippet>5067</a>                <span class="kw">for </span>block_i <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.num_blocks {
+<a href=#5068 id=5068 data-nosnippet>5068</a>                    <span class="kw">let </span>start = <span class="self">self</span>.blocks_start[stage_i * <span class="self">self</span>.num_blocks + block_i];
+<a href=#5069 id=5069 data-nosnippet>5069</a>                    <span class="kw">let </span>end = <span class="self">self</span>.blocks_start[stage_i * <span class="self">self</span>.num_blocks + block_i + <span class="number">1</span>];
+<a href=#5070 id=5070 data-nosnippet>5070</a>                    <span class="kw">if </span>start == end {
+<a href=#5071 id=5071 data-nosnippet>5071</a>                        <span class="kw">continue</span>;
+<a href=#5072 id=5072 data-nosnippet>5072</a>                    }
+<a href=#5073 id=5073 data-nosnippet>5073</a>                    <span class="kw">let </span>script_slice = <span class="kw-2">&amp;</span><span class="self">self</span>.blocks_data[start..end];
+<a href=#5074 id=5074 data-nosnippet>5074</a>                    <span class="kw">let </span>(input_half, output_half) = state.split_at_mut(state_size);
+<a href=#5075 id=5075 data-nosnippet>5075</a>                    <span class="kw">if </span><span class="self">self</span>.xprop_enabled {
+<a href=#5076 id=5076 data-nosnippet>5076</a>                        <span class="comment">// Value + X-mask lanes are packed in the same slot at
+<a href=#5077 id=5077 data-nosnippet>5077</a>                        // [0..rio] and [xmask_off..xmask_off+rio]. The xprop
+<a href=#5078 id=5078 data-nosnippet>5078</a>                        // executor takes them as separate slices (it indexes
+<a href=#5079 id=5079 data-nosnippet>5079</a>                        // xmasks from 0, not from xmask_off).
+<a href=#5080 id=5080 data-nosnippet>5080</a>                        </span><span class="kw">let </span>(in_val, in_x) = input_half.split_at(xmask_off);
+<a href=#5081 id=5081 data-nosnippet>5081</a>                        <span class="kw">let </span>(out_val, out_x) = output_half.split_at_mut(xmask_off);
+<a href=#5082 id=5082 data-nosnippet>5082</a>                        <span class="kw">crate</span>::sim::cpu_reference::simulate_block_v1_xprop(
+<a href=#5083 id=5083 data-nosnippet>5083</a>                            script_slice,
+<a href=#5084 id=5084 data-nosnippet>5084</a>                            in_val,
+<a href=#5085 id=5085 data-nosnippet>5085</a>                            out_val,
+<a href=#5086 id=5086 data-nosnippet>5086</a>                            <span class="kw-2">&amp;</span>in_x[..rio],
+<a href=#5087 id=5087 data-nosnippet>5087</a>                            <span class="kw-2">&amp;mut </span>out_x[..rio],
+<a href=#5088 id=5088 data-nosnippet>5088</a>                            sram,
+<a href=#5089 id=5089 data-nosnippet>5089</a>                            sram_xmask,
+<a href=#5090 id=5090 data-nosnippet>5090</a>                            <span class="bool-val">false</span>,
+<a href=#5091 id=5091 data-nosnippet>5091</a>                        );
+<a href=#5092 id=5092 data-nosnippet>5092</a>                    } <span class="kw">else </span>{
+<a href=#5093 id=5093 data-nosnippet>5093</a>                        <span class="kw">crate</span>::sim::cpu_reference::simulate_block_v1(
+<a href=#5094 id=5094 data-nosnippet>5094</a>                            script_slice,
+<a href=#5095 id=5095 data-nosnippet>5095</a>                            input_half,
+<a href=#5096 id=5096 data-nosnippet>5096</a>                            output_half,
+<a href=#5097 id=5097 data-nosnippet>5097</a>                            sram,
+<a href=#5098 id=5098 data-nosnippet>5098</a>                            <span class="bool-val">false</span>,
+<a href=#5099 id=5099 data-nosnippet>5099</a>                        );
+<a href=#5100 id=5100 data-nosnippet>5100</a>                    }
+<a href=#5101 id=5101 data-nosnippet>5101</a>                }
+<a href=#5102 id=5102 data-nosnippet>5102</a>            }
+<a href=#5103 id=5103 data-nosnippet>5103</a>
+<a href=#5104 id=5104 data-nosnippet>5104</a>            <span class="comment">// ── CPU flash_model_step (mirror gpu_flash_model_step, shader:943) ─
+<a href=#5105 id=5105 data-nosnippet>5105</a>            // For EACH memory: read its clk/csn/d_out from the OUTPUT slot, then
+<a href=#5106 id=5106 data-nosnippet>5106</a>            // dual-step ITS CppSpiFlash with delayed CSN (setup-delay model) to
+<a href=#5107 id=5107 data-nosnippet>5107</a>            // compute the next MISO d_i. Runs after simulate (output fresh) on
+<a href=#5108 id=5108 data-nosnippet>5108</a>            // every edge, mirroring the Metal `encode_flash_model_step` cadence
+<a href=#5109 id=5109 data-nosnippet>5109</a>            // (before io_step / UART). Each instance keeps its own delayed
+<a href=#5110 id=5110 data-nosnippet>5110</a>            // csn/d_out so the memories advance fully independently.
+<a href=#5111 id=5111 data-nosnippet>5111</a>            </span><span class="kw">for </span>inst <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.flashes {
+<a href=#5112 id=5112 data-nosnippet>5112</a>                <span class="kw">let </span>read_out = |pos: u32| -&gt; u32 {
+<a href=#5113 id=5113 data-nosnippet>5113</a>                    <span class="kw">if </span>pos == <span class="number">0xFFFFFFFF </span>{
+<a href=#5114 id=5114 data-nosnippet>5114</a>                        <span class="number">0
+<a href=#5115 id=5115 data-nosnippet>5115</a>                    </span>} <span class="kw">else </span>{
+<a href=#5116 id=5116 data-nosnippet>5116</a>                        (state[state_size + (pos &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize] &gt;&gt; (pos &amp; <span class="number">31</span>)) &amp; <span class="number">1
+<a href=#5117 id=5117 data-nosnippet>5117</a>                    </span>}
+<a href=#5118 id=5118 data-nosnippet>5118</a>                };
+<a href=#5119 id=5119 data-nosnippet>5119</a>                <span class="kw">let </span>clk = read_out(inst.clk_out_pos);
+<a href=#5120 id=5120 data-nosnippet>5120</a>                <span class="kw">let </span>csn = read_out(inst.csn_out_pos);
+<a href=#5121 id=5121 data-nosnippet>5121</a>                <span class="kw">let </span><span class="kw-2">mut </span>d_out = <span class="number">0u8</span>;
+<a href=#5122 id=5122 data-nosnippet>5122</a>                <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">4usize </span>{
+<a href=#5123 id=5123 data-nosnippet>5123</a>                    d_out |= (read_out(inst.d_out_pos[i]) <span class="kw">as </span>u8) &lt;&lt; i;
+<a href=#5124 id=5124 data-nosnippet>5124</a>                }
+<a href=#5125 id=5125 data-nosnippet>5125</a>                <span class="comment">// SAFETY: sequential dispatch — these cells are only touched here.
+<a href=#5126 id=5126 data-nosnippet>5126</a>                </span><span class="kw">let </span>d_i_cell = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>inst.d_i.get() };
+<a href=#5127 id=5127 data-nosnippet>5127</a>                <span class="kw">let </span>prev_csn = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>inst.prev_csn.get() };
+<a href=#5128 id=5128 data-nosnippet>5128</a>                <span class="kw">let </span>prev_d_out = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>inst.prev_d_out.get() };
+<a href=#5129 id=5129 data-nosnippet>5129</a>                <span class="kw">if </span><span class="self">self</span>.flash_in_reset {
+<a href=#5130 id=5130 data-nosnippet>5130</a>                    <span class="comment">// Reset branch (shader:974): force MISO high, update the
+<a href=#5131 id=5131 data-nosnippet>5131</a>                    // delayed values, do NOT step the model.
+<a href=#5132 id=5132 data-nosnippet>5132</a>                    </span><span class="kw-2">*</span>d_i_cell = <span class="number">0x0F</span>;
+<a href=#5133 id=5133 data-nosnippet>5133</a>                    <span class="kw-2">*</span>prev_csn = csn;
+<a href=#5134 id=5134 data-nosnippet>5134</a>                    <span class="kw-2">*</span>prev_d_out = d_out;
+<a href=#5135 id=5135 data-nosnippet>5135</a>                } <span class="kw">else </span>{
+<a href=#5136 id=5136 data-nosnippet>5136</a>                    <span class="kw">let </span>fl = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>inst.model.get() };
+<a href=#5137 id=5137 data-nosnippet>5137</a>                    <span class="comment">// Dual-step with delayed CSN (matches the GPU setup-delay
+<a href=#5138 id=5138 data-nosnippet>5138</a>                    // model): step 1 = delayed csn + delayed d_out, step 2 =
+<a href=#5139 id=5139 data-nosnippet>5139</a>                    // delayed csn + current d_out. CppSpiFlash::step does one
+<a href=#5140 id=5140 data-nosnippet>5140</a>                    // eval()+commit() (CXXRTL agent.step semantics).
+<a href=#5141 id=5141 data-nosnippet>5141</a>                    </span><span class="kw">let </span>pcsn = <span class="kw-2">*</span>prev_csn != <span class="number">0</span>;
+<a href=#5142 id=5142 data-nosnippet>5142</a>                    fl.step(clk != <span class="number">0</span>, pcsn, <span class="kw-2">*</span>prev_d_out);
+<a href=#5143 id=5143 data-nosnippet>5143</a>                    <span class="kw">let </span>d_i = fl.step(clk != <span class="number">0</span>, pcsn, d_out);
+<a href=#5144 id=5144 data-nosnippet>5144</a>                    <span class="kw-2">*</span>d_i_cell = d_i;
+<a href=#5145 id=5145 data-nosnippet>5145</a>                    <span class="kw-2">*</span>prev_csn = csn; <span class="comment">// current output csn → next edge's delayed csn
+<a href=#5146 id=5146 data-nosnippet>5146</a>                    </span><span class="kw-2">*</span>prev_d_out = d_out;
+<a href=#5147 id=5147 data-nosnippet>5147</a>                }
+<a href=#5148 id=5148 data-nosnippet>5148</a>            }
+<a href=#5149 id=5149 data-nosnippet>5149</a>
+<a href=#5150 id=5150 data-nosnippet>5150</a>            <span class="comment">// ── UART-TX decoder (ported from gpu_io_step, kernel_v1.metal ──
+<a href=#5151 id=5151 data-nosnippet>5151</a>            // 1189-1249). Runs AFTER `simulate` — same point the Metal
+<a href=#5152 id=5152 data-nosnippet>5152</a>            // `encode_io_step` runs, with the output slot fresh — on EVERY
+<a href=#5153 id=5153 data-nosnippet>5153</a>            // edge from tick 0 (including reset edges), `current_cycle` += 1
+<a href=#5154 id=5154 data-nosnippet>5154</a>            // per edge, matching the GPU. READ_OUT_BIT reads the OUTPUT slot:
+<a href=#5155 id=5155 data-nosnippet>5155</a>            // states[state_size + (pos&gt;&gt;5)] &gt;&gt; (pos&amp;31) &amp; 1; pos==u32::MAX → 0.
+<a href=#5156 id=5156 data-nosnippet>5156</a>            </span><span class="kw">for </span>(ui, cfg) <span class="kw">in </span><span class="self">self</span>.uart_configs.iter().enumerate() {
+<a href=#5157 id=5157 data-nosnippet>5157</a>                <span class="kw">let </span>cycles_per_bit = cfg.cycles_per_bit;
+<a href=#5158 id=5158 data-nosnippet>5158</a>                <span class="kw">let </span>tx = <span class="kw">if </span>cfg.tx_out_pos != u32::MAX {
+<a href=#5159 id=5159 data-nosnippet>5159</a>                    (state[state_size + (cfg.tx_out_pos &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize] &gt;&gt; (cfg.tx_out_pos &amp; <span class="number">31</span>))
+<a href=#5160 id=5160 data-nosnippet>5160</a>                        &amp; <span class="number">1
+<a href=#5161 id=5161 data-nosnippet>5161</a>                </span>} <span class="kw">else </span>{
+<a href=#5162 id=5162 data-nosnippet>5162</a>                    <span class="number">0
+<a href=#5163 id=5163 data-nosnippet>5163</a>                </span>};
+<a href=#5164 id=5164 data-nosnippet>5164</a>
+<a href=#5165 id=5165 data-nosnippet>5165</a>                <span class="kw">let </span>us = <span class="kw-2">&amp;mut </span>uart_states[ui];
+<a href=#5166 id=5166 data-nosnippet>5166</a>                <span class="kw">let </span>cycle = us.current_cycle;
+<a href=#5167 id=5167 data-nosnippet>5167</a>                <span class="kw">let </span><span class="kw-2">mut </span>st = us.state;
+<a href=#5168 id=5168 data-nosnippet>5168</a>                <span class="kw">let </span>last_tx = us.last_tx;
+<a href=#5169 id=5169 data-nosnippet>5169</a>                <span class="kw">let </span><span class="kw-2">mut </span>start_cycle = us.start_cycle;
+<a href=#5170 id=5170 data-nosnippet>5170</a>                <span class="kw">let </span><span class="kw-2">mut </span>bits_received = us.bits_received;
+<a href=#5171 id=5171 data-nosnippet>5171</a>                <span class="kw">let </span><span class="kw-2">mut </span>value = us.value;
+<a href=#5172 id=5172 data-nosnippet>5172</a>
+<a href=#5173 id=5173 data-nosnippet>5173</a>                <span class="kw">if </span>st == <span class="number">0 </span>{
+<a href=#5174 id=5174 data-nosnippet>5174</a>                    <span class="kw">if </span>last_tx == <span class="number">1 </span>&amp;&amp; tx == <span class="number">0 </span>{
+<a href=#5175 id=5175 data-nosnippet>5175</a>                        st = <span class="number">1</span>;
+<a href=#5176 id=5176 data-nosnippet>5176</a>                        start_cycle = cycle;
+<a href=#5177 id=5177 data-nosnippet>5177</a>                    }
+<a href=#5178 id=5178 data-nosnippet>5178</a>                } <span class="kw">else if </span>st == <span class="number">1 </span>{
+<a href=#5179 id=5179 data-nosnippet>5179</a>                    <span class="kw">if </span>cycle &gt;= start_cycle + cycles_per_bit / <span class="number">2 </span>{
+<a href=#5180 id=5180 data-nosnippet>5180</a>                        <span class="kw">if </span>tx == <span class="number">0 </span>{
+<a href=#5181 id=5181 data-nosnippet>5181</a>                            st = <span class="number">2</span>;
+<a href=#5182 id=5182 data-nosnippet>5182</a>                            start_cycle += cycles_per_bit;
+<a href=#5183 id=5183 data-nosnippet>5183</a>                            bits_received = <span class="number">0</span>;
+<a href=#5184 id=5184 data-nosnippet>5184</a>                            value = <span class="number">0</span>;
+<a href=#5185 id=5185 data-nosnippet>5185</a>                        } <span class="kw">else </span>{
+<a href=#5186 id=5186 data-nosnippet>5186</a>                            st = <span class="number">0</span>;
+<a href=#5187 id=5187 data-nosnippet>5187</a>                        }
+<a href=#5188 id=5188 data-nosnippet>5188</a>                    }
+<a href=#5189 id=5189 data-nosnippet>5189</a>                } <span class="kw">else if </span>st == <span class="number">2 </span>{
+<a href=#5190 id=5190 data-nosnippet>5190</a>                    <span class="kw">let </span>bit_center =
+<a href=#5191 id=5191 data-nosnippet>5191</a>                        start_cycle + bits_received * cycles_per_bit + cycles_per_bit / <span class="number">2</span>;
+<a href=#5192 id=5192 data-nosnippet>5192</a>                    <span class="kw">if </span>cycle &gt;= bit_center {
+<a href=#5193 id=5193 data-nosnippet>5193</a>                        value |= tx &lt;&lt; bits_received;
+<a href=#5194 id=5194 data-nosnippet>5194</a>                        <span class="kw">if </span>bits_received &gt;= <span class="number">7 </span>{
+<a href=#5195 id=5195 data-nosnippet>5195</a>                            st = <span class="number">3</span>;
+<a href=#5196 id=5196 data-nosnippet>5196</a>                            start_cycle += <span class="number">8 </span>* cycles_per_bit;
+<a href=#5197 id=5197 data-nosnippet>5197</a>                        } <span class="kw">else </span>{
+<a href=#5198 id=5198 data-nosnippet>5198</a>                            bits_received += <span class="number">1</span>;
+<a href=#5199 id=5199 data-nosnippet>5199</a>                        }
+<a href=#5200 id=5200 data-nosnippet>5200</a>                    }
+<a href=#5201 id=5201 data-nosnippet>5201</a>                } <span class="kw">else if </span>st == <span class="number">3 </span>{
+<a href=#5202 id=5202 data-nosnippet>5202</a>                    <span class="kw">if </span>cycle &gt;= start_cycle + cycles_per_bit / <span class="number">2 </span>{
+<a href=#5203 id=5203 data-nosnippet>5203</a>                        <span class="kw">if </span>tx == <span class="number">1 </span>{
+<a href=#5204 id=5204 data-nosnippet>5204</a>                            uart_decoded.push((ui, (value &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8));
+<a href=#5205 id=5205 data-nosnippet>5205</a>                        }
+<a href=#5206 id=5206 data-nosnippet>5206</a>                        st = <span class="number">0</span>;
+<a href=#5207 id=5207 data-nosnippet>5207</a>                    }
+<a href=#5208 id=5208 data-nosnippet>5208</a>                }
+<a href=#5209 id=5209 data-nosnippet>5209</a>
+<a href=#5210 id=5210 data-nosnippet>5210</a>                us.state = st;
+<a href=#5211 id=5211 data-nosnippet>5211</a>                us.last_tx = tx;
+<a href=#5212 id=5212 data-nosnippet>5212</a>                us.start_cycle = start_cycle;
+<a href=#5213 id=5213 data-nosnippet>5213</a>                us.bits_received = bits_received;
+<a href=#5214 id=5214 data-nosnippet>5214</a>                us.value = value;
+<a href=#5215 id=5215 data-nosnippet>5215</a>                us.current_cycle = cycle + <span class="number">1</span>;
+<a href=#5216 id=5216 data-nosnippet>5216</a>            }
+<a href=#5217 id=5217 data-nosnippet>5217</a>
+<a href=#5218 id=5218 data-nosnippet>5218</a>            <span class="comment">// ── Bus transaction trace (APB3, ported from gpu_io_step,
+<a href=#5219 id=5219 data-nosnippet>5219</a>            // kernel_v1.metal:1305-1352). Runs AFTER `simulate`, same point as
+<a href=#5220 id=5220 data-nosnippet>5220</a>            // the GPU block, reading the OUTPUT slot. Per bus: gate = sel &amp; en &amp;
+<a href=#5221 id=5221 data-nosnippet>5221</a>            // rdy (rdy=1 when pready absent); on a rising edge of the gate emit
+<a href=#5222 id=5222 data-nosnippet>5222</a>            // one RawBeat stamped with `current_tick`. `prev_gate` /
+<a href=#5223 id=5223 data-nosnippet>5223</a>            // `current_tick` persist; `current_tick` += 1 once per edge from 0,
+<a href=#5224 id=5224 data-nosnippet>5224</a>            // regardless of whether any bus fired. READ_OUT_BIT reads the OUTPUT
+<a href=#5225 id=5225 data-nosnippet>5225</a>            // slot; pos==u32::MAX → 0 (sentinel short-circuit).
+<a href=#5226 id=5226 data-nosnippet>5226</a>            </span><span class="kw">if </span>!<span class="self">self</span>.bus_positions.is_empty() {
+<a href=#5227 id=5227 data-nosnippet>5227</a>                <span class="kw">let </span>btick = <span class="kw-2">*</span>bus_current_tick;
+<a href=#5228 id=5228 data-nosnippet>5228</a>                <span class="kw">let </span>prev = <span class="kw-2">*</span>bus_prev_gate;
+<a href=#5229 id=5229 data-nosnippet>5229</a>                <span class="kw">let </span><span class="kw-2">mut </span>new_gate = <span class="number">0u32</span>;
+<a href=#5230 id=5230 data-nosnippet>5230</a>                <span class="kw">let </span>read_out = |pos: u32| -&gt; u32 {
+<a href=#5231 id=5231 data-nosnippet>5231</a>                    <span class="kw">if </span>pos != u32::MAX {
+<a href=#5232 id=5232 data-nosnippet>5232</a>                        (state[state_size + (pos &gt;&gt; <span class="number">5</span>) <span class="kw">as </span>usize] &gt;&gt; (pos &amp; <span class="number">31</span>)) &amp; <span class="number">1
+<a href=#5233 id=5233 data-nosnippet>5233</a>                    </span>} <span class="kw">else </span>{
+<a href=#5234 id=5234 data-nosnippet>5234</a>                        <span class="number">0
+<a href=#5235 id=5235 data-nosnippet>5235</a>                    </span>}
+<a href=#5236 id=5236 data-nosnippet>5236</a>                };
+<a href=#5237 id=5237 data-nosnippet>5237</a>                <span class="kw">for </span>(b, bp) <span class="kw">in </span><span class="self">self</span>.bus_positions.iter().enumerate() {
+<a href=#5238 id=5238 data-nosnippet>5238</a>                    <span class="kw">let </span>gate = <span class="kw">if </span>bp.protocol_apb3 {
+<a href=#5239 id=5239 data-nosnippet>5239</a>                        <span class="kw">let </span>sel = read_out(bp.sel_pos);
+<a href=#5240 id=5240 data-nosnippet>5240</a>                        <span class="kw">let </span>en = read_out(bp.enable_pos);
+<a href=#5241 id=5241 data-nosnippet>5241</a>                        <span class="kw">let </span>rdy = <span class="kw">if </span>bp.ready_pos == <span class="number">0xFFFFFFFF </span>{
+<a href=#5242 id=5242 data-nosnippet>5242</a>                            <span class="number">1
+<a href=#5243 id=5243 data-nosnippet>5243</a>                        </span>} <span class="kw">else </span>{
+<a href=#5244 id=5244 data-nosnippet>5244</a>                            read_out(bp.ready_pos)
+<a href=#5245 id=5245 data-nosnippet>5245</a>                        };
+<a href=#5246 id=5246 data-nosnippet>5246</a>                        sel &amp; en &amp; rdy
+<a href=#5247 id=5247 data-nosnippet>5247</a>                    } <span class="kw">else </span>{
+<a href=#5248 id=5248 data-nosnippet>5248</a>                        <span class="number">0
+<a href=#5249 id=5249 data-nosnippet>5249</a>                    </span>};
+<a href=#5250 id=5250 data-nosnippet>5250</a>                    new_gate |= gate &lt;&lt; b;
+<a href=#5251 id=5251 data-nosnippet>5251</a>
+<a href=#5252 id=5252 data-nosnippet>5252</a>                    <span class="kw">let </span>rising = gate != <span class="number">0 </span>&amp;&amp; ((prev &gt;&gt; b) &amp; <span class="number">1</span>) == <span class="number">0</span>;
+<a href=#5253 id=5253 data-nosnippet>5253</a>                    <span class="kw">if </span>rising {
+<a href=#5254 id=5254 data-nosnippet>5254</a>                        <span class="kw">let </span>write = read_out(bp.write_pos);
+<a href=#5255 id=5255 data-nosnippet>5255</a>                        <span class="kw">let </span>err = read_out(bp.resp_pos);
+<a href=#5256 id=5256 data-nosnippet>5256</a>                        <span class="kw">let </span><span class="kw-2">mut </span>addr = <span class="number">0u32</span>;
+<a href=#5257 id=5257 data-nosnippet>5257</a>                        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..bp.addr_bits.min(BUS_TRACE_MAX_ADR_BITS) {
+<a href=#5258 id=5258 data-nosnippet>5258</a>                            addr |= read_out(bp.addr_pos[i]) &lt;&lt; i;
+<a href=#5259 id=5259 data-nosnippet>5259</a>                        }
+<a href=#5260 id=5260 data-nosnippet>5260</a>                        <span class="kw">let </span><span class="kw-2">mut </span>wdata = <span class="number">0u32</span>;
+<a href=#5261 id=5261 data-nosnippet>5261</a>                        <span class="kw">let </span><span class="kw-2">mut </span>rdata = <span class="number">0u32</span>;
+<a href=#5262 id=5262 data-nosnippet>5262</a>                        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..bp.data_bits.min(BUS_TRACE_MAX_DAT_BITS) {
+<a href=#5263 id=5263 data-nosnippet>5263</a>                            wdata |= read_out(bp.wdata_pos[i]) &lt;&lt; i;
+<a href=#5264 id=5264 data-nosnippet>5264</a>                            rdata |= read_out(bp.rdata_pos[i]) &lt;&lt; i;
+<a href=#5265 id=5265 data-nosnippet>5265</a>                        }
+<a href=#5266 id=5266 data-nosnippet>5266</a>                        <span class="comment">// Pack the same flags the GPU writes, then unpack into a
+<a href=#5267 id=5267 data-nosnippet>5267</a>                        // RawBeat identically to MetalBackend::drain_bus_beats.
+<a href=#5268 id=5268 data-nosnippet>5268</a>                        </span><span class="kw">let </span>flags = (write &amp; <span class="number">1</span>) | ((err &amp; <span class="number">1</span>) &lt;&lt; <span class="number">1</span>) | ((b <span class="kw">as </span>u32) &lt;&lt; <span class="number">8</span>);
+<a href=#5269 id=5269 data-nosnippet>5269</a>                        bus_beats.push(<span class="kw">crate</span>::sim::models::bus_trace::RawBeat {
+<a href=#5270 id=5270 data-nosnippet>5270</a>                            tick: btick <span class="kw">as </span>u64,
+<a href=#5271 id=5271 data-nosnippet>5271</a>                            bus_id: (flags &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFF</span>,
+<a href=#5272 id=5272 data-nosnippet>5272</a>                            write: (flags &amp; <span class="number">1</span>) != <span class="number">0</span>,
+<a href=#5273 id=5273 data-nosnippet>5273</a>                            err: (flags &gt;&gt; <span class="number">1</span>) &amp; <span class="number">1 </span>!= <span class="number">0</span>,
+<a href=#5274 id=5274 data-nosnippet>5274</a>                            addr: addr <span class="kw">as </span>u64,
+<a href=#5275 id=5275 data-nosnippet>5275</a>                            wdata: wdata <span class="kw">as </span>u64,
+<a href=#5276 id=5276 data-nosnippet>5276</a>                            rdata: rdata <span class="kw">as </span>u64,
+<a href=#5277 id=5277 data-nosnippet>5277</a>                        });
+<a href=#5278 id=5278 data-nosnippet>5278</a>                    }
+<a href=#5279 id=5279 data-nosnippet>5279</a>                }
+<a href=#5280 id=5280 data-nosnippet>5280</a>                <span class="kw-2">*</span>bus_prev_gate = new_gate;
+<a href=#5281 id=5281 data-nosnippet>5281</a>                <span class="kw-2">*</span>bus_current_tick = btick + <span class="number">1</span>;
+<a href=#5282 id=5282 data-nosnippet>5282</a>            }
+<a href=#5283 id=5283 data-nosnippet>5283</a>
+<a href=#5284 id=5284 data-nosnippet>5284</a>            <span class="comment">// ── VCD snapshot: full [input | output] slot for this edge ─────
+<a href=#5285 id=5285 data-nosnippet>5285</a>            </span><span class="kw">if </span><span class="self">self</span>.enable_vcd {
+<a href=#5286 id=5286 data-nosnippet>5286</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(r) = ring.as_mut() {
+<a href=#5287 id=5287 data-nosnippet>5287</a>                    r.push(state.clone());
+<a href=#5288 id=5288 data-nosnippet>5288</a>                }
+<a href=#5289 id=5289 data-nosnippet>5289</a>            }
+<a href=#5290 id=5290 data-nosnippet>5290</a>        }
+<a href=#5291 id=5291 data-nosnippet>5291</a>
+<a href=#5292 id=5292 data-nosnippet>5292</a>        <span class="comment">// CpuBackend runs synchronously; the token is unused (wait is a no-op).
+<a href=#5293 id=5293 data-nosnippet>5293</a>        </span><span class="number">0
+<a href=#5294 id=5294 data-nosnippet>5294</a>    </span>}
 <a href=#5295 id=5295 data-nosnippet>5295</a>
-<a href=#5296 id=5296 data-nosnippet>5296</a><span class="attr">#[cfg(feature = <span class="string">"hip"</span>)]
-<a href=#5297 id=5297 data-nosnippet>5297</a></span><span class="kw">mod </span>hip;
-<a href=#5298 id=5298 data-nosnippet>5298</a><span class="attr">#[cfg(feature = <span class="string">"hip"</span>)]
-<a href=#5299 id=5299 data-nosnippet>5299</a></span><span class="kw">pub use </span>hip::run_cosim_hip;
+<a href=#5296 id=5296 data-nosnippet>5296</a>    <span class="kw">fn </span>wait(<span class="kw-2">&amp;</span><span class="self">self</span>, _token: u64) {
+<a href=#5297 id=5297 data-nosnippet>5297</a>        <span class="comment">// Synchronous CPU backend — run_edges already completed.
+<a href=#5298 id=5298 data-nosnippet>5298</a>    </span>}
+<a href=#5299 id=5299 data-nosnippet>5299</a>
+<a href=#5300 id=5300 data-nosnippet>5300</a>    <span class="kw">fn </span>backend_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#5301 id=5301 data-nosnippet>5301</a>        <span class="string">"cpu"
+<a href=#5302 id=5302 data-nosnippet>5302</a>    </span>}
+<a href=#5303 id=5303 data-nosnippet>5303</a>    <span class="comment">// last_batch_gpu_seconds: default None — the CPU reference backend has no
+<a href=#5304 id=5304 data-nosnippet>5304</a>    // GPU clock; the perf report's gpu_* fields stay 0 / gpu_exec_recorded=false.
+<a href=#5305 id=5305 data-nosnippet>5305</a></span>}
+<a href=#5306 id=5306 data-nosnippet>5306</a>
+<a href=#5307 id=5307 data-nosnippet>5307</a><span class="doccomment">/// Public CPU-backend cosim entry point (Phase 1 step 5a). Drives the same
+<a href=#5308 id=5308 data-nosnippet>5308</a>/// agnostic `run_cosim_generic&lt;B&gt;` orchestration as the Metal shim, with the
+<a href=#5309 id=5309 data-nosnippet>5309</a>/// CPU reference backend. Available with no GPU feature; the cosim oracle.
+<a href=#5310 id=5310 data-nosnippet>5310</a></span><span class="kw">pub fn </span>run_cosim_cpu(
+<a href=#5311 id=5311 data-nosnippet>5311</a>    design: <span class="kw-2">&amp;mut </span>LoadedDesign,
+<a href=#5312 id=5312 data-nosnippet>5312</a>    config: <span class="kw-2">&amp;</span>TestbenchConfig,
+<a href=#5313 id=5313 data-nosnippet>5313</a>    opts: <span class="kw-2">&amp;</span>CosimOpts,
+<a href=#5314 id=5314 data-nosnippet>5314</a>    timing_constraints: <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span>&lt;Vec&lt;u32&gt;&gt;,
+<a href=#5315 id=5315 data-nosnippet>5315</a>) -&gt; CosimResult {
+<a href=#5316 id=5316 data-nosnippet>5316</a>    run_cosim_generic::&lt;CpuBackend&gt;(design, config, opts, timing_constraints)
+<a href=#5317 id=5317 data-nosnippet>5317</a>}
+<a href=#5318 id=5318 data-nosnippet>5318</a>
+<a href=#5319 id=5319 data-nosnippet>5319</a><span class="attr">#[cfg(feature = <span class="string">"metal"</span>)]
+<a href=#5320 id=5320 data-nosnippet>5320</a></span><span class="kw">mod </span>metal;
+<a href=#5321 id=5321 data-nosnippet>5321</a><span class="attr">#[cfg(feature = <span class="string">"metal"</span>)]
+<a href=#5322 id=5322 data-nosnippet>5322</a></span><span class="kw">pub use </span>metal::run_cosim;
+<a href=#5323 id=5323 data-nosnippet>5323</a>
+<a href=#5324 id=5324 data-nosnippet>5324</a><span class="attr">#[cfg(feature = <span class="string">"cuda"</span>)]
+<a href=#5325 id=5325 data-nosnippet>5325</a></span><span class="kw">mod </span>cuda;
+<a href=#5326 id=5326 data-nosnippet>5326</a><span class="attr">#[cfg(feature = <span class="string">"cuda"</span>)]
+<a href=#5327 id=5327 data-nosnippet>5327</a></span><span class="kw">pub use </span>cuda::run_cosim_cuda;
+<a href=#5328 id=5328 data-nosnippet>5328</a>
+<a href=#5329 id=5329 data-nosnippet>5329</a><span class="attr">#[cfg(feature = <span class="string">"hip"</span>)]
+<a href=#5330 id=5330 data-nosnippet>5330</a></span><span class="kw">mod </span>hip;
+<a href=#5331 id=5331 data-nosnippet>5331</a><span class="attr">#[cfg(feature = <span class="string">"hip"</span>)]
+<a href=#5332 id=5332 data-nosnippet>5332</a></span><span class="kw">pub use </span>hip::run_cosim_hip;
+<a href=#5333 id=5333 data-nosnippet>5333</a>
+<a href=#5334 id=5334 data-nosnippet>5334</a><span class="attr">#[cfg(test)]
+<a href=#5335 id=5335 data-nosnippet>5335</a></span><span class="kw">mod </span>flash_din_tests {
+<a href=#5336 id=5336 data-nosnippet>5336</a>    <span class="kw">use </span><span class="kw">super</span>::apply_flash_din_gated;
+<a href=#5337 id=5337 data-nosnippet>5337</a>    <span class="kw">use </span><span class="kw">crate</span>::sim::models::read_bit;
+<a href=#5338 id=5338 data-nosnippet>5338</a>
+<a href=#5339 id=5339 data-nosnippet>5339</a>    <span class="attr">#[test]
+<a href=#5340 id=5340 data-nosnippet>5340</a>    </span><span class="kw">fn </span>selected_instance_drives_its_lane() {
+<a href=#5341 id=5341 data-nosnippet>5341</a>        <span class="kw">let </span><span class="kw-2">mut </span>state = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">8</span>];
+<a href=#5342 id=5342 data-nosnippet>5342</a>        <span class="comment">// Instance selected (csn=0), d_i = 0b0010 → lane 1 high. d0 at pos 33.
+<a href=#5343 id=5343 data-nosnippet>5343</a>        </span>apply_flash_din_gated(<span class="kw-2">&amp;mut </span>state, <span class="number">0</span>, <span class="number">0b0010</span>, <span class="number">0</span>, <span class="kw-2">&amp;</span>[<span class="number">33</span>, <span class="number">34</span>, <span class="number">35</span>, <span class="number">36</span>]);
+<a href=#5344 id=5344 data-nosnippet>5344</a>        <span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>state, <span class="number">34</span>), <span class="number">1</span>); <span class="comment">// lane 1 driven high
+<a href=#5345 id=5345 data-nosnippet>5345</a>        </span><span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>state, <span class="number">33</span>), <span class="number">0</span>); <span class="comment">// lane 0 low
+<a href=#5346 id=5346 data-nosnippet>5346</a>    </span>}
+<a href=#5347 id=5347 data-nosnippet>5347</a>
+<a href=#5348 id=5348 data-nosnippet>5348</a>    <span class="attr">#[test]
+<a href=#5349 id=5349 data-nosnippet>5349</a>    </span><span class="kw">fn </span>deselected_instance_does_not_drive() {
+<a href=#5350 id=5350 data-nosnippet>5350</a>        <span class="kw">let </span><span class="kw-2">mut </span>state = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">8</span>];
+<a href=#5351 id=5351 data-nosnippet>5351</a>        <span class="comment">// Pre-set the shared lane high, then a DESELECTED instance (csn=1)
+<a href=#5352 id=5352 data-nosnippet>5352</a>        // with d_i=0 must NOT pull it low.
+<a href=#5353 id=5353 data-nosnippet>5353</a>        </span>state[<span class="number">1</span>] |= <span class="number">1 </span>&lt;&lt; (<span class="number">34 </span>&amp; <span class="number">31</span>); <span class="comment">// pos 34 = word 1, bit 2
+<a href=#5354 id=5354 data-nosnippet>5354</a>        </span>apply_flash_din_gated(<span class="kw-2">&amp;mut </span>state, <span class="number">0</span>, <span class="number">0b0000</span>, <span class="number">1</span>, <span class="kw-2">&amp;</span>[<span class="number">33</span>, <span class="number">34</span>, <span class="number">35</span>, <span class="number">36</span>]);
+<a href=#5355 id=5355 data-nosnippet>5355</a>        <span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>state, <span class="number">34</span>), <span class="number">1</span>); <span class="comment">// untouched — high-Z
+<a href=#5356 id=5356 data-nosnippet>5356</a>    </span>}
+<a href=#5357 id=5357 data-nosnippet>5357</a>
+<a href=#5358 id=5358 data-nosnippet>5358</a>    <span class="attr">#[test]
+<a href=#5359 id=5359 data-nosnippet>5359</a>    </span><span class="kw">fn </span>shared_bus_selected_wins_regardless_of_order() {
+<a href=#5360 id=5360 data-nosnippet>5360</a>        <span class="comment">// Two instances share the SAME d_in positions (shared SIO bus).
+<a href=#5361 id=5361 data-nosnippet>5361</a>        // A is SELECTED with data (lane1=1); B is DESELECTED with stale idle
+<a href=#5362 id=5362 data-nosnippet>5362</a>        // (all lanes high). The historical bug was last-writer-wins, so assert
+<a href=#5363 id=5363 data-nosnippet>5363</a>        // both application orders leave the shared line reflecting A, not B.
+<a href=#5364 id=5364 data-nosnippet>5364</a>        </span><span class="kw">let </span>shared = [<span class="number">33u32</span>, <span class="number">34</span>, <span class="number">35</span>, <span class="number">36</span>];
+<a href=#5365 id=5365 data-nosnippet>5365</a>
+<a href=#5366 id=5366 data-nosnippet>5366</a>        <span class="comment">// Order 1: selected A first, then deselected B.
+<a href=#5367 id=5367 data-nosnippet>5367</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>s1 = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">8</span>];
+<a href=#5368 id=5368 data-nosnippet>5368</a>        apply_flash_din_gated(<span class="kw-2">&amp;mut </span>s1, <span class="number">0</span>, <span class="number">0b0010</span>, <span class="number">0</span>, <span class="kw-2">&amp;</span>shared); <span class="comment">// A selected
+<a href=#5369 id=5369 data-nosnippet>5369</a>        </span>apply_flash_din_gated(<span class="kw-2">&amp;mut </span>s1, <span class="number">0</span>, <span class="number">0b1111</span>, <span class="number">1</span>, <span class="kw-2">&amp;</span>shared); <span class="comment">// B deselected
+<a href=#5370 id=5370 data-nosnippet>5370</a>        </span><span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>s1, <span class="number">34</span>), <span class="number">1</span>);
+<a href=#5371 id=5371 data-nosnippet>5371</a>        <span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>s1, <span class="number">33</span>), <span class="number">0</span>);
+<a href=#5372 id=5372 data-nosnippet>5372</a>        <span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>s1, <span class="number">36</span>), <span class="number">0</span>); <span class="comment">// B's idle-high did NOT leak onto lane 3
+<a href=#5373 id=5373 data-nosnippet>5373</a>
+<a href=#5374 id=5374 data-nosnippet>5374</a>        // Order 2: deselected B first, then selected A. Same result.
+<a href=#5375 id=5375 data-nosnippet>5375</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>s2 = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">8</span>];
+<a href=#5376 id=5376 data-nosnippet>5376</a>        apply_flash_din_gated(<span class="kw-2">&amp;mut </span>s2, <span class="number">0</span>, <span class="number">0b1111</span>, <span class="number">1</span>, <span class="kw-2">&amp;</span>shared); <span class="comment">// B deselected
+<a href=#5377 id=5377 data-nosnippet>5377</a>        </span>apply_flash_din_gated(<span class="kw-2">&amp;mut </span>s2, <span class="number">0</span>, <span class="number">0b0010</span>, <span class="number">0</span>, <span class="kw-2">&amp;</span>shared); <span class="comment">// A selected
+<a href=#5378 id=5378 data-nosnippet>5378</a>        </span><span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>s2, <span class="number">34</span>), <span class="number">1</span>);
+<a href=#5379 id=5379 data-nosnippet>5379</a>        <span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>s2, <span class="number">33</span>), <span class="number">0</span>);
+<a href=#5380 id=5380 data-nosnippet>5380</a>        <span class="macro">assert_eq!</span>(read_bit(<span class="kw-2">&amp;</span>s2, <span class="number">36</span>), <span class="number">0</span>);
+<a href=#5381 id=5381 data-nosnippet>5381</a>    }
+<a href=#5382 id=5382 data-nosnippet>5382</a>
+<a href=#5383 id=5383 data-nosnippet>5383</a>    <span class="attr">#[test]
+<a href=#5384 id=5384 data-nosnippet>5384</a>    </span><span class="kw">fn </span>xmask_cleared_only_when_driven() {
+<a href=#5385 id=5385 data-nosnippet>5385</a>        <span class="comment">// xprop enabled: selected drive clears the x-mask bit; deselected leaves
+<a href=#5386 id=5386 data-nosnippet>5386</a>        // it untouched. xmask_off = 4 words in.
+<a href=#5387 id=5387 data-nosnippet>5387</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>state = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">8</span>];
+<a href=#5388 id=5388 data-nosnippet>5388</a>        state[<span class="number">4 </span>+ <span class="number">1</span>] |= <span class="number">1 </span>&lt;&lt; (<span class="number">34 </span>&amp; <span class="number">31</span>); <span class="comment">// x-mask bit set for pos 34
+<a href=#5389 id=5389 data-nosnippet>5389</a>        </span>apply_flash_din_gated(<span class="kw-2">&amp;mut </span>state, <span class="number">4</span>, <span class="number">0b0010</span>, <span class="number">0</span>, <span class="kw-2">&amp;</span>[<span class="number">33</span>, <span class="number">34</span>, <span class="number">35</span>, <span class="number">36</span>]);
+<a href=#5390 id=5390 data-nosnippet>5390</a>        <span class="macro">assert_eq!</span>((state[<span class="number">4 </span>+ <span class="number">1</span>] &gt;&gt; (<span class="number">34 </span>&amp; <span class="number">31</span>)) &amp; <span class="number">1</span>, <span class="number">0</span>); <span class="comment">// cleared (driven known)
+<a href=#5391 id=5391 data-nosnippet>5391</a>
+<a href=#5392 id=5392 data-nosnippet>5392</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>state2 = <span class="macro">vec!</span>[<span class="number">0u32</span>; <span class="number">8</span>];
+<a href=#5393 id=5393 data-nosnippet>5393</a>        state2[<span class="number">4 </span>+ <span class="number">1</span>] |= <span class="number">1 </span>&lt;&lt; (<span class="number">34 </span>&amp; <span class="number">31</span>);
+<a href=#5394 id=5394 data-nosnippet>5394</a>        apply_flash_din_gated(<span class="kw-2">&amp;mut </span>state2, <span class="number">4</span>, <span class="number">0b0010</span>, <span class="number">1</span>, <span class="kw-2">&amp;</span>[<span class="number">33</span>, <span class="number">34</span>, <span class="number">35</span>, <span class="number">36</span>]);
+<a href=#5395 id=5395 data-nosnippet>5395</a>        <span class="macro">assert_eq!</span>((state2[<span class="number">4 </span>+ <span class="number">1</span>] &gt;&gt; (<span class="number">34 </span>&amp; <span class="number">31</span>)) &amp; <span class="number">1</span>, <span class="number">1</span>); <span class="comment">// deselected → untouched
+<a href=#5396 id=5396 data-nosnippet>5396</a>    </span>}
+<a href=#5397 id=5397 data-nosnippet>5397</a>}
 </code></pre></div></section></main></body></html>
