@@ -253,8 +253,12 @@ repos) and the <code>gpu-eda/homebrew-tap-prerelease</code> repo.</p>
 <li><strong>Notes body</strong> = the CHANGELOG section for the tag's version. A prerelease
 (<code>X.Y.Z-rc.N</code>) has no dated section, so the extractor falls back to
 <code>[Unreleased]</code> — RCs ship the same curated draft you'll ship at promotion.
-So: <strong>write the notes in <code>[Unreleased]</code></strong>, including a one-sentence summary
-lead-in before <code>### Added</code> (it becomes the release intro).</li>
+So: <strong>write the notes in <code>[Unreleased]</code></strong>.</li>
+<li><strong>Lead with a user-facing overview.</strong> Before the technical <code>### Added</code> /
+<code>### Changed</code> sections, open with a short <em>"What this means for you"</em> block —
+a few benefit-framed bullets (what a user can now <em>do</em>, not just what changed).
+The technical changelog then gives the detail. This becomes the release intro
+and is the first thing a reader sees.</li>
 <li><strong>Doc links are version-pinned.</strong> The extractor rewrites <code>`docs/foo.md`</code>
 references into <code>[docs/foo.md](https://gpu-eda.github.io/Jacquard/&lt;tag&gt;/foo.html)</code>
 — the mdBook page frozen for <em>this</em> release. So keep CHANGELOG doc references
