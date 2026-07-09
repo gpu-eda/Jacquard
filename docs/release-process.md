@@ -92,6 +92,26 @@ placeholder the job overwrites. Requires the one-time org setup:
 `secrets.HOMEBREW_TAP_TOKEN` (a token with `contents: write` on both tap
 repos) and the `gpu-eda/homebrew-tap-prerelease` repo.
 
+## Release notes & versioned docs (automated)
+
+Release notes come from the CHANGELOG, and doc links are pinned to the release
+— both automatic in `release.yml`:
+
+- **Notes body** = the CHANGELOG section for the tag's version. A prerelease
+  (`X.Y.Z-rc.N`) has no dated section, so the extractor falls back to
+  `[Unreleased]` — RCs ship the same curated draft you'll ship at promotion.
+  So: **write the notes in `[Unreleased]`**, including a one-sentence summary
+  lead-in before `### Added` (it becomes the release intro).
+- **Doc links are version-pinned.** The extractor rewrites `` `docs/foo.md` ``
+  references into `[docs/foo.md](https://gpu-eda.github.io/Jacquard/<tag>/foo.html)`
+  — the mdBook page frozen for *this* release. So keep CHANGELOG doc references
+  as repo-relative `` `docs/foo.md` `` (clean in-repo); the workflow does the
+  URL rewrite.
+- **Versioned docs deploy.** The `docs-version` job publishes the book to
+  gh-pages `/(tag)/` on every release tag (`keep_files: true`), while the
+  `main` push keeps deploying "latest" to the site root. Version subdirs
+  accumulate side by side; the pinned links above resolve to them.
+
 ## Staging validation (release candidates)
 
 Optional but recommended before a user-facing release: prove the

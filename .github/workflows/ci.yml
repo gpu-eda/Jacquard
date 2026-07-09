@@ -1700,6 +1700,10 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./book
+          # 'latest' docs stay at the site root (existing URLs unaffected).
+          # keep_files preserves the per-release /vX.Y.Z/ subdirs that
+          # release.yml publishes — a plain deploy would wipe them.
+          keep_files: true
 
   # CVC reference simulation for timing correctness validation
   cvc-reference:
