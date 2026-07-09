@@ -976,6 +976,11 @@ kernel void gpu_apply_flash_din(
 
     for (uint f = 0; f < params.n_flashes && f < MAX_QSPI_MEMS; f++) {
         constant FlashDinParams& fp = params.flashes[f];
+        // Gate on selection: a deselected instance (prev_csn high) presents
+        // high-Z and must not drive, else on a shared SIO bus (instances sharing
+        // d_in_pos) it clobbers the selected driver. Mirrors
+        // CpuBackend::apply_flash_din_gated.
+        if (flash_state[f].prev_csn != 0u) continue;
         uchar d_i = flash_state[f].d_i;
         u32 xmask_off = fp.xmask_state_offset;
 
