@@ -12,7 +12,7 @@ runnable end-to-end.
 
 The feature itself lives in Jacquard on branch `feat/cosim-signal-stream-tap`
 (`src/sim/cosim/signal_stream.rs`, config in `src/testbench.rs`, wiring in
-`src/sim/cosim/mod.rs`). PR: gpu-eda/Jacquard#182.
+`src/sim/cosim/mod.rs`). PR: gpu-eda/Jacquard#184.
 
 ## Automated unit tests (already green)
 
