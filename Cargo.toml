@@ -6,7 +6,7 @@
 # `jacquard` name, so the binary users run, the release asset, and every
 # `use jacquard::…` in the source are unchanged.
 name = "jacquard-sim"
-version = "0.3.0-rc.3"
+version = "0.3.0-rc.4"
 edition = "2021"
 description = "GPU-accelerated RTL logic simulator with vector-driven setup/hold timing analysis. Maps gate-level netlists to a virtual manycore Boolean processor and runs them on Metal / CUDA / HIP."
 repository = "https://github.com/gpu-eda/Jacquard"

@@ -1,6 +1,6 @@
 [package]
 name = "cell-decomp"
-version = "0.3.0-rc.3"
+version = "0.3.0-rc.4"
 edition = "2021"
 description = "PDK-neutral behavioral Verilog parsing and AIG decomposition primitives shared by jacquard core and the Liberty->IR converter. See docs/adr/0019-cell-model-ir.md."
 license = "Apache-2.0"
