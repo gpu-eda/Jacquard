@@ -17,6 +17,8 @@
 - [Timing Model Extensions](timing-model-extensions.md)
 - [Signal Tracing](signal-tracing.md)
 - [Bus Transaction Tracing](bus-tracing.md)
+- [Cosim Perf Report](cosim-perf-report.md)
+- [GPU Frame Capture](gpu-capture.md)
 - [Selective X-Propagation](selective-x-propagation.md)
 - [Debugging X Values](x-debugging.md)
 - [Interactive JTAG Debug](jtag-debug.md)
