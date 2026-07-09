@@ -9,12 +9,24 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
-A substantial feature release: a **behavioral-RTL on-ramp** (synthesize Verilog /
-SystemVerilog directly, no external tools), a complete **cell-model IR** that
-makes the binary self-contained for standard cells and adds SKY130 + IHP SG13G2,
-**plural QSPI memory with a writable PSRAM mode** across Metal / CUDA / HIP, and
-new **GPU frame-capture** + **device-timestamp cosim profiling**. Full detail
-below; docs links point to the version-pinned pages for this release.
+**What this means for you.** This release makes it easier to get a design onto
+the GPU and broadens what you can simulate:
+
+- **Feed it RTL, not just netlists.** `jacquard sim` / `cosim` accept behavioral
+  Verilog / SystemVerilog directly — synthesis runs transparently and cached, so
+  you no longer need to pre-synthesize a gate-level netlist to start simulating.
+- **More PDKs, less setup.** The binary is self-contained for standard cells (no
+  vendored-PDK files at simulation time); SKY130 and IHP SG13G2 are built in, and
+  proprietary libraries work from a `--cell-descriptor` with no Jacquard rebuild.
+- **Simulate SoCs with external memory.** Cosim now models multiple QSPI flash /
+  PSRAM devices — including a **writable QSPI PSRAM as a chip's main RAM** —
+  across Metal, CUDA, and HIP.
+- **See where GPU time goes.** New cosim profiling: ground-truth GPU-vs-CPU
+  per-edge timing from device timestamps (`--cosim-perf-json`), plus Xcode
+  `.gputrace` frame capture for per-dispatch analysis.
+
+Technical detail below; doc links resolve to the version-pinned pages for this
+release.
 
 ### Added
 

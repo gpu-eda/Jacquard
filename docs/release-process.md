@@ -100,8 +100,12 @@ Release notes come from the CHANGELOG, and doc links are pinned to the release
 - **Notes body** = the CHANGELOG section for the tag's version. A prerelease
   (`X.Y.Z-rc.N`) has no dated section, so the extractor falls back to
   `[Unreleased]` — RCs ship the same curated draft you'll ship at promotion.
-  So: **write the notes in `[Unreleased]`**, including a one-sentence summary
-  lead-in before `### Added` (it becomes the release intro).
+  So: **write the notes in `[Unreleased]`**.
+- **Lead with a user-facing overview.** Before the technical `### Added` /
+  `### Changed` sections, open with a short *"What this means for you"* block —
+  a few benefit-framed bullets (what a user can now *do*, not just what changed).
+  The technical changelog then gives the detail. This becomes the release intro
+  and is the first thing a reader sees.
 - **Doc links are version-pinned.** The extractor rewrites `` `docs/foo.md` ``
   references into `[docs/foo.md](https://gpu-eda.github.io/Jacquard/<tag>/foo.html)`
   — the mdBook page frozen for *this* release. So keep CHANGELOG doc references
