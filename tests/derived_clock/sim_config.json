@@ -1,0 +1,17 @@
+{
+  "netlist_path": "tests/derived_clock/div2_clock_dut_synth.gv",
+  "clock_gpio": 0,
+  "reset_gpio": 1,
+  "reset_active_high": false,
+  "reset_cycles": 4,
+  "num_cycles": 40,
+  "clock_period_ps": 15625,
+  "port_mapping": {
+    "inputs": { "0": "clk", "1": "rst_n" },
+    "outputs": {
+      "2": "clkdiv",
+      "3": "count[0]", "4": "count[1]", "5": "count[2]", "6": "count[3]",
+      "7": "count[4]", "8": "count[5]", "9": "count[6]", "10": "count[7]"
+    }
+  }
+}
