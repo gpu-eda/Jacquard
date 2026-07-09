@@ -183,7 +183,9 @@ fn driven_gpios_and_ports(config: &TestbenchConfig) -> (HashSet<usize>, HashSet<
 
     gpios.insert(config.reset_gpio);
     for clk in config.effective_clocks() {
-        gpios.insert(clk.gpio);
+        if let Some(g) = clk.gpio {
+            gpios.insert(g);
+        }
     }
     for key in config.constant_inputs.keys() {
         if let Ok(idx) = key.parse::<usize>() {
