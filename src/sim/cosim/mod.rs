@@ -2365,14 +2365,26 @@ fn run_cosim_generic<B: CosimBackend>(
         .iter()
         .enumerate()
         .filter_map(|(cfg_idx, clk_cfg)| {
+            // Derived (on-die divided) clocks (#185) match by net + need the AIG
+            // divider-cut; that half is not wired yet, so skip them here.
+            let Some(gpio) = clk_cfg.gpio else {
+                clilog::warn!(
+                    "Clock config[{}] ({:?}): derived-clock support (net={:?}) not yet \
+                     implemented; skipping",
+                    cfg_idx,
+                    clk_cfg.name,
+                    clk_cfg.net
+                );
+                return None;
+            };
             // Find the clock domain in gpio_map that matches this clock's GPIO
             let domain_idx = gpio_map
                 .clock_domains
                 .iter()
-                .position(|d| d.clock_gpio == Some(clk_cfg.gpio));
+                .position(|d| d.clock_gpio == Some(gpio));
             if let Some(di) = domain_idx {
                 Some(ClockDomainTiming {
-                    half_period_ps: clk_cfg.period_ps / 2,
+                    half_period_ps: clk_cfg.period_ps.unwrap_or(40000) / 2,
                     phase_offset_ps: clk_cfg.phase_offset_ps,
                     domain_index: di,
                 })
@@ -2380,7 +2392,7 @@ fn run_cosim_generic<B: CosimBackend>(
                 clilog::warn!(
                     "Clock config[{}] gpio={} ({:?}): no matching clock domain found, skipping",
                     cfg_idx,
-                    clk_cfg.gpio,
+                    gpio,
                     clk_cfg.name
                 );
                 None
@@ -2403,11 +2415,11 @@ fn run_cosim_generic<B: CosimBackend>(
         for (i, clk_cfg) in effective_clocks.iter().enumerate() {
             if let Some(timing) = clock_timings
                 .iter()
-                .find(|t| gpio_map.clock_domains[t.domain_index].clock_gpio == Some(clk_cfg.gpio))
+                .find(|t| gpio_map.clock_domains[t.domain_index].clock_gpio == clk_cfg.gpio)
             {
                 let domain = &gpio_map.clock_domains[timing.domain_index];
                 clilog::info!(
-                    "Clock '{}' (gpio {}, period {}ps, phase {}ps) → domain '{}' \
+                    "Clock '{}' (gpio {:?}, period {:?}ps, phase {}ps) → domain '{}' \
                      ({} posedge flags, {} negedge flags)",
                     clk_cfg.name.as_deref().unwrap_or("?"),
                     clk_cfg.gpio,
@@ -2477,7 +2489,7 @@ fn run_cosim_generic<B: CosimBackend>(
             let jitter_ps = config
                 .effective_clocks()
                 .iter()
-                .find(|c| c.gpio == domain.clock_gpio.unwrap_or(usize::MAX))
+                .find(|c| c.gpio == domain.clock_gpio)
                 .map(|c| c.jitter_ps)
                 .unwrap_or(0);
             if jitter_ps > 0 {

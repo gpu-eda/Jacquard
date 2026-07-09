@@ -206,10 +206,14 @@ pub struct PeripheralControl {
 /// independently for each domain based on their period and phase offset.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClockConfig {
-    /// GPIO index driving this clock.
-    pub gpio: usize,
-    /// Clock period in picoseconds (e.g. 40000 for 25MHz).
-    pub period_ps: u64,
+    /// GPIO index driving this clock. `None` for a derived clock (see `net`),
+    /// which is generated on-die rather than driven from a top-level pin.
+    #[serde(default)]
+    pub gpio: Option<usize>,
+    /// Clock period in picoseconds (e.g. 40000 for 25MHz). Optional for a
+    /// derived clock, where it is computed as `parent.period_ps × divide_by`.
+    #[serde(default)]
+    pub period_ps: Option<u64>,
     /// Phase offset in picoseconds from time zero (default: 0).
     #[serde(default)]
     pub phase_offset_ps: u64,
@@ -219,6 +223,30 @@ pub struct ClockConfig {
     /// [-jitter_ps, +jitter_ps]). Default 0 = no jitter. See ADR 0012.
     #[serde(default)]
     pub jitter_ps: u64,
+
+    // ── Derived (on-die divided) clock (gpu-eda/Jacquard#185) ────────────────
+    /// Internal net name of an on-die divided clock (e.g. a ÷2 toggle-DFF
+    /// divider's `Q`). When set, this is a *derived* clock: the AIG cuts the
+    /// divider out of the clock cone and the scheduler drives this net's domain
+    /// directly, as a commensurable division of `derived_from`. Mirrors STA's
+    /// `create_generated_clock`.
+    #[serde(default)]
+    pub net: Option<String>,
+    /// Name of the parent clock this derived clock divides (must match another
+    /// entry's `name`). Required iff `net` is set.
+    #[serde(default)]
+    pub derived_from: Option<String>,
+    /// Integer division ratio from the parent (e.g. 2 for ÷2). Required iff
+    /// `net` is set.
+    #[serde(default)]
+    pub divide_by: Option<u32>,
+}
+
+impl ClockConfig {
+    /// True if this is a derived (on-die divided) clock declared by net name.
+    pub fn is_derived(&self) -> bool {
+        self.net.is_some()
+    }
 }
 
 // ── Testbench configuration (loaded from JSON) ──────────────────────────────
@@ -308,11 +336,14 @@ impl TestbenchConfig {
             clocks.clone()
         } else {
             vec![ClockConfig {
-                gpio: self.clock_gpio,
-                period_ps: self.clock_period_ps.unwrap_or(40000),
+                gpio: Some(self.clock_gpio),
+                period_ps: Some(self.clock_period_ps.unwrap_or(40000)),
                 phase_offset_ps: 0,
                 name: Some("sys_clk".to_string()),
                 jitter_ps: 0,
+                net: None,
+                derived_from: None,
+                divide_by: None,
             }]
         }
     }
