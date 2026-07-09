@@ -9,6 +9,13 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+A substantial feature release: a **behavioral-RTL on-ramp** (synthesize Verilog /
+SystemVerilog directly, no external tools), a complete **cell-model IR** that
+makes the binary self-contained for standard cells and adds SKY130 + IHP SG13G2,
+**plural QSPI memory with a writable PSRAM mode** across Metal / CUDA / HIP, and
+new **GPU frame-capture** + **device-timestamp cosim profiling**. Full detail
+below; docs links point to the version-pinned pages for this release.
+
 ### Added
 
 - **Behavioral-RTL on-ramp (ADR 0021).** `jacquard sim` and `jacquard cosim`

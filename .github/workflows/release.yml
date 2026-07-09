@@ -129,6 +129,7 @@ jobs:
         id: notes
         env:
           IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           ver="${{ steps.meta.outputs.version }}"
@@ -146,6 +147,15 @@ jobs:
           if [ ! -s notes.md ] && [ "${IS_PRERELEASE}" = "true" ]; then
             echo "no [$ver] section; prerelease → using [Unreleased] draft notes" >&2
             extract "Unreleased" > notes.md || true
+          fi
+          # Version-pin doc links: rewrite `docs/foo.md` refs to the mdBook page
+          # published for THIS release (docs-version job deploys to gh-pages
+          # /<tag>/). Produces a clickable [docs/foo.md](…/<tag>/foo.html). \x60
+          # is a backtick (kept out of the raw shell to avoid interpolation).
+          if [ -s notes.md ]; then
+            sed -i -E \
+              "s#\x60docs/([A-Za-z0-9/_-]+)\.md\x60#[docs/\1.md](https://gpu-eda.github.io/Jacquard/${TAG}/\1.html)#g" \
+              notes.md
           fi
           if [ ! -s notes.md ]; then
             echo "no matching CHANGELOG section; using auto-generated notes" >&2
@@ -276,3 +286,33 @@ jobs:
           git commit -m "jacquard ${TAG#v}"
           git push
           echo "Pushed jacquard ${TAG#v} to ${tap_repo}."
+
+  # Publish a frozen copy of the docs for this release to gh-pages /<tag>/, so
+  # the release notes can link to version-pinned mdBook pages (the site root
+  # tracks main / "latest"). `keep_files: true` on both this deploy and the
+  # main-branch deploy (ci.yml) means version subdirs accumulate without
+  # wiping each other. Runs for real tags only (skips workflow_dispatch
+  # dry-runs, whose ref is a branch); independent of the binary build.
+  docs-version:
+    name: Publish versioned docs
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Install mdbook
+        run: |
+          mkdir -p ~/.cargo/bin
+          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.44/mdbook-v0.4.44-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C ~/.cargo/bin
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build mdbook
+        run: mdbook build
+      - name: Deploy versioned docs to gh-pages /<tag>/
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./book
+          destination_dir: ${{ github.ref_name }}
+          keep_files: true
