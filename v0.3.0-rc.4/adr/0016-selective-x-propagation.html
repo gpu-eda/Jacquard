@@ -1,0 +1,346 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0016 — Selective X-propagation - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="adr-0016--selective-x-propagation"><a class="header" href="#adr-0016--selective-x-propagation">ADR 0016 — Selective X-propagation</a></h1>
+<p><strong>Status:</strong> Accepted (2026-05; amended 2026-06-25). Extension to cosim
+proposed 2026-06-03 — see <a href="#amendment-2026-06-03-cosim-and-io-x-sources">Amendment</a>.</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> Stage-count correction. The body says
+"Stages 1–6 are implemented; Stage 7 (dynamic X narrowing) is a future
+enhancement." Per <code>docs/selective-x-propagation.md</code>, <strong>all seven stages
+are implemented</strong> — Stage 7 is the Criterion benchmarks
+(<code>benches/xprop.rs</code>), not dynamic narrowing. <em>Dynamic X narrowing</em>
+(periodic X-mask scan, partition-kernel hot-swap) is a separate, still
+unbuilt enhancement.</p>
+</blockquote>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Jacquard's default two-state (0/1) simulation silently resolves
+uninitialised DFF and SRAM outputs to zero. This masks
+initialisation bugs that real hardware would expose as unknown (X)
+values, and creates false mismatches when comparing against
+four-state RTL simulators.</p>
+<p>Naively upgrading the entire simulator to four-state logic would
+double storage and roughly halve throughput. In a well-designed SoC
+after reset, typically less than 5% of signals are genuinely
+X-capable.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>Implement <strong>selective X-propagation</strong> controlled by the <code>--xprop</code>
+CLI flag. Static analysis at compile time identifies X-source
+signals (uninitialised DFFs, SRAM read ports); forward-cone
+computation classifies each partition as X-capable or X-free. Only
+X-capable partitions run an X-aware kernel variant; the rest
+continue with the fast two-state path.</p>
+<p>The full seven-phase design, implementation details, and design
+rationale are in
+<a href="../selective-x-propagation.html"><code>docs/selective-x-propagation.md</code></a>.
+Stages 1–6 are implemented; Stage 7 (dynamic X narrowing) is a
+future enhancement.</p>
+<h3 id="key-design-choices-summary"><a class="header" href="#key-design-choices-summary">Key design choices (summary)</a></h3>
+<ol>
+<li><strong>Partition-level granularity</strong> — entire partition runs X-aware
+or not. ~95% of partitions are typically X-free after reset.</li>
+<li><strong>Conservative SRAM X</strong> — all reads return X until any write.
+Per-address tracking deferred.</li>
+<li><strong>No reset-aware analysis</strong> — all DFFs start as X; the fixpoint
+iteration naturally resolves reset-connected DFFs.</li>
+<li><strong>State buffer doubling</strong> — X-mask words occupy
+<code>[reg_io_state_size .. 2*reg_io_state_size)</code> when enabled.
+X-free partitions ignore the mask entirely.</li>
+<li><strong>Runtime flag, not compile-time</strong> — <code>--xprop</code> on <code>jacquard sim</code>;
+no new Cargo features needed.</li>
+</ol>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li>X-capable partitions pay ~2× storage and ALU cost; X-free
+partitions (the vast majority) pay nothing.</li>
+<li>VCD output includes <code>x</code> values when <code>--xprop</code> is enabled,
+compatible with standard four-state VCD tools.</li>
+<li>The <code>--check-with-cpu</code> reference path includes an X-aware CPU
+kernel for validation.</li>
+<li>Benchmarks (<code>benches/xprop.rs</code>) track the overhead.</li>
+</ul>
+<h2 id="amendment-2026-06-03-cosim-and-io-x-sources"><a class="header" href="#amendment-2026-06-03-cosim-and-io-x-sources">Amendment 2026-06-03: cosim and IO X-sources</a></h2>
+<p>The original decision wired <code>--xprop</code> into the <code>sim</code> (static-input)
+path only. The reactive <code>cosim</code> path is two-state, so JTAG-replay /
+peripheral runs silently zero-init uninitialised state
+(<a href="https://github.com/gpu-eda/Jacquard/issues/95">#95</a>). This amendment
+extends selective X-propagation to <code>cosim</code>.</p>
+<p>Two points the original design did not address, because the static
+<code>sim</code> path never had to:</p>
+<ol>
+<li><strong>Undriven input pads are X.</strong> In a reactive run, peripheral models
+drive only <em>some</em> input bits each edge (clock, reset, JTAG/UART
+pins, configured constants). Every primary-input bit <em>not</em> in that
+driven set is unconnected and must be <strong>X</strong>, not <code>0</code>.</li>
+<li><strong>Bidir pad reads.</strong> A <code>bi_24t</code> pad's core-read was originally
+modelled <code>Y = PAD</code> (tristate not modelled); since <code>PAD</code> is an undriven
+primary input, bidir reads fell out of rule (1) as X — safe (false-X,
+never false-0) but pessimistic for the <code>OE=1</code> loopback. The
+combinationally-correct read <code>Y = OE ? A : external</code> is now modelled as
+a mux in the AIG (<a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>,
+implemented — see the dated subsection below). (An earlier draft of this
+amendment proposed a per-edge OE→input feedback with one-edge latency —
+that was wrong; the correct read is combinational.)</li>
+</ol>
+<p>So the X-source taxonomy is now three-way: uninitialised DFF,
+uninitialised SRAM (both as before), and <strong>undriven input pads</strong> (which
+subsumes bidir reads under the current <code>Y = PAD</code> model). The first two
+are sequential power-up X; the third is the reactive IO X-source
+specific to cosim.</p>
+<p>The Metal kernel is already X-capable, so this is host-side reactive
+plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
+observe-kernel output-offset fix for the doubled layout). Phasing and
+risks are in <a href="../plans/cosim-xprop.html"><code>../plans/cosim-xprop.md</code></a>.</p>
+<h3 id="seed-template-correction-2026-06-03"><a class="header" href="#seed-template-correction-2026-06-03">Seed-template correction (2026-06-03)</a></h3>
+<p>Implementing the cosim extension surfaced a latent bug in the <strong>shipped
+<code>sim</code> path</strong> too: the power-up X-mask seed
+(<code>expand_states_for_xprop</code>) was built as "all-X, then clear every
+<code>input_map</code> position." But <code>input_map</code> contains the DFF-Q
+<em>combinational-read</em> positions, not just primary input ports — so
+uninitialised DFFs were read as known <code>0</code> and X never originated. <code>--xprop</code>
+was therefore silently two-state for <strong>any</strong> sequential design (the
+gate-level X math was unit-tested, but no end-to-end test asserted X
+surfacing from an uninitialised DFF).</p>
+<p>The seed is now built by <code>vcd_io::xprop_xmask_template</code>: <strong>all-known, set
+X only at genuine X-source positions</strong> (uninitialised DFF Q reads + SRAM
+reads), excluding primary inputs (nets present in <code>input_layout</code>) and
+constant-pinned DFFs (<code>const_zero_pos = input_layout.len()</code>). The cosim
+path additionally seeds the <em>output</em> slot's X-mask, since its per-edge
+<code>state_prep</code> copies output→input before the first <code>simulate</code>. This
+corrects design choice #3 above ("all DFFs start as X"): the <em>intent</em> was
+always X at DFF positions; the implementation had inverted it for
+DFF-feedback reads.</p>
+<h3 id="undriven-input-x-source-cosim-implemented-2026-06-03"><a class="header" href="#undriven-input-x-source-cosim-implemented-2026-06-03">Undriven input X-source (cosim, implemented 2026-06-03)</a></h3>
+<p>The "undriven input pad → X" rule from this amendment is now implemented
+for <code>cosim</code>. <code>compute_x_capable_pins(treat_inputs_as_x_sources)</code> (gated by
+<code>DesignArgs::xprop_undriven_inputs</code>, set only by the cosim path) marks
+input cones X-capable; <code>vcd_io::xprop_xmask_template_cosim</code> seeds every
+primary input as X; and the GPU kernels clear the X-mask of each bit they
+drive each edge — <code>state_prep</code> for the <code>build_edge_ops</code> driven set
+(clock/reset/constants/model pins) and <code>gpu_apply_flash_din</code> for the SPI
+MISO bits it writes directly (they bypass <code>state_prep</code>). The complement —
+genuinely undriven inputs — stays X. <code>sim</code> keeps inputs known (driven from
+the VCD) and pays no extra X-aware cost. End-to-end guards covering the
+DFF and undriven-input X-sources, in both sim and cosim, live in
+<code>tests/xprop_cosim/</code> (CI, fatal).</p>
+<h3 id="bidir-tristate-read-back-mux-implemented-2026-06-04"><a class="header" href="#bidir-tristate-read-back-mux-implemented-2026-06-04">Bidir tristate read-back mux (implemented 2026-06-04)</a></h3>
+<p>Point #2 above is now implemented (#96). <code>AIG::from_netlistdb</code>'s <code>bi_24t</code>
+branch builds <code>Y = OE ? A : external</code> combinationally in the AIG —
+<code>OR(AND(OE, A), AND(!OE, PAD))</code> via the De Morgan idiom already used by
+<code>wire_dff_reset_set_overlay</code> — instead of the conservative <code>Y = PAD</code>. The
+external arm is the same undriven PAD primary input (X under rule (1) until
+a peripheral model drives it); the <code>OE=1</code> arm reads the core's own drive
+<code>A</code>, so the loopback is <strong>X-exact</strong> (known whenever <code>A</code> is) and the
+two-state read returns <code>A</code>, not the external stim. This removes bidir reads
+from the "undriven input → X" subsumption for the <code>OE=1</code> case; they are now
+exact rather than conservatively-X. <code>in_c</code>/<code>in_s</code> stay <code>Y = PAD</code>. Without
+both <code>A</code> and <code>OE</code> pins the conservative <code>Y = PAD</code> still stands. Unit test:
+<code>aig::gf180mcu_chip_top_tests::bi_24t_models_tristate_readback</code> evaluates
+the full <code>Y</code> truth table. (#107's <code>$isunknown</code> x-assert work can now assert
+bidir read-backs go definite when <code>OE</code> is asserted.)</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../adr/0015-boomerang-execution-model.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../adr/0017-cosim-execution-model.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../adr/0015-boomerang-execution-model.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../adr/0017-cosim-execution-model.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

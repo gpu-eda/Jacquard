@@ -1,0 +1,304 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Declarative cell metadata - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="declarative-cell-metadata--tier-1--minimal-tier-2--port-mapping"><a class="header" href="#declarative-cell-metadata--tier-1--minimal-tier-2--port-mapping">Declarative cell metadata — Tier 1 + minimal Tier 2 + port mapping</a></h1>
+<p><strong>Status:</strong> Implemented — historical record. Tier 1, minimal Tier 2,
+and the port-mapping schema have all landed.
+<strong>ADRs:</strong></p>
+<ul>
+<li><a href="../adr/0010-declarative-cell-metadata.html">0010 — Declarative cell metadata for PDK enablement</a>
+(Tier 1 + minimal Tier 2)</li>
+<li><a href="../adr/0011-ram-port-mapping-schema.html">0011 — RAM port-mapping schema</a>
+(the port-mapping extension originally deferred by ADR 0010)
+<strong>Issues:</strong> <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a>,
+<a href="https://github.com/gpu-eda/Jacquard/issues/80">#80</a>.
+<strong>Driving designs:</strong> the wafer.space <code>chip_top.pnl.v</code> blocked on
+<code>gf180mcu_ocd_ip_sram__sram1024x8m8wm1</code>, then the JTAG-DM workflow
+in PR #78 surfacing the need for real RAM backing storage.</li>
+</ul>
+<h2 id="scope-as-shipped"><a class="header" href="#scope-as-shipped">Scope (as shipped)</a></h2>
+<p>Originally scoped to one slice (Tier 1 + minimal Tier 2 — opaque
+<code>kind = "ram"</code> with no port resolution). Expanded mid-flight when
+the JTAG-DM workflow (PR #78) surfaced the need for explicit-port
+RAMs with real backing storage:</p>
+<ul>
+<li><strong>Tier 1</strong>: <code>--cell-library</code> + sverilogparse-backed pin tables
+(landed 2026-05-19 in PR #65/#68).</li>
+<li><strong>Tier 2 minimal</strong>: <code>kind</code> discriminator in TOML, opaque-RAM
+mode (landed alongside Tier 1).</li>
+<li><strong>Port-mapping schema</strong> (ADR 0011, v1.1): <code>[cells.NAME.ram]</code>
+sub-table for explicit-port RAMs with backing storage. Landed
+in this PR alongside <code>SramInitConfig</code> ELF preload (closes #80).</li>
+</ul>
+<h2 id="deliverables"><a class="header" href="#deliverables">Deliverables</a></h2>
+<ol>
+<li><strong><code>--cell-library &lt;PATH&gt;</code> CLI flag</strong> on <code>jacquard sim</code>,
+<code>jacquard cosim</code>. Repeatable. Each path is parsed via
+<code>sverilogparse</code> at startup; results merged into a runtime
+<code>LeafPinProvider</code> extension.</li>
+<li><strong><code>&lt;PATH&gt;.cells.toml</code> autoload + <code>--cell-manifest &lt;PATH&gt;</code>
+override.</strong> TOML schema as in ADR 0010 § Tier 2. Required
+field <code>schema_version = "1.0"</code>. Per-cell <code>kind</code> discriminator,
+v1.0 vocabulary.</li>
+<li><strong>New code path in <code>aig.rs</code></strong>: after <code>PdkVariant::classify</code> falls
+through (no built-in match), consult manifest. For
+<code>kind = "ram"</code>, allocate <code>RAMBlock</code> in opaque mode — outputs
+routed to X-source slots, no port resolution.</li>
+<li><strong>Tests</strong>: TOML parsing unit tests; integration test exercising
+a synthetic <code>kind = "ram"</code> cell through AIG construction + sim
+(mini fixture, not the full tapeout design).</li>
+<li><strong>Doc update — <code>docs/adding-a-pdk.md</code></strong>: new section "Adding
+third-party IP via manifest", linked from existing per-PDK
+recipes.</li>
+</ol>
+<h2 id="out-of-scope-deferred"><a class="header" href="#out-of-scope-deferred">Out of scope (deferred)</a></h2>
+<ul>
+<li>Port-mapping schema (<code>[cells.NAME.ports]</code>). Future ADR.</li>
+<li>Other <code>kind</code> values beyond what the tapeout fixture exercises
+end-to-end (<code>ram</code>, plus <code>filler</code> if cheap parity demo). Adding
+other kinds is data-only and can land per-need.</li>
+<li>Migration of built-in <code>sky130.rs</code> / <code>gf180mcu.rs</code> classifiers to
+manifest data. Stays in this codebase as the fallback.</li>
+<li><code>build.rs</code> pin-table scanner removal. Stays.</li>
+</ul>
+<h2 id="phasing"><a class="header" href="#phasing">Phasing</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Phase</th><th>Output</th></tr></thead><tbody>
+<tr><td><strong>P1</strong></td><td><code>--cell-library</code> parsing + <code>LeafPinProvider</code> extension + tests. No AIG-construction changes yet — verify pin tables alone.</td></tr>
+<tr><td><strong>P2</strong></td><td>Manifest TOML parser + <code>CellManifest</code> struct + <code>schema_version</code> validation. Standalone unit tests.</td></tr>
+<tr><td><strong>P3</strong></td><td><code>aig.rs</code> integration — manifest threaded through, new fallback path for <code>kind = "ram"</code> opaque mode. Add the <code>compute_x_sources</code>-style test exercising the new path.</td></tr>
+<tr><td><strong>P4</strong></td><td>Smoke test against a representative reduced fixture; confirm <code>jacquard sim</code> clears <code>gf180mcu_ocd_ip_sram_*</code>. The full downstream-tapeout netlist is the real-world target but not in-tree.</td></tr>
+<tr><td><strong>P5</strong></td><td>Doc update (<code>adding-a-pdk.md</code>); update <code>gf180mcu-enablement.md</code> § Follow-on cleanup to mark items 1/2/3 superseded by this work.</td></tr>
+</tbody></table>
+</div>
+<p>Each phase is its own commit. No squashing until the spike feedback
+loop confirms shape.</p>
+<h2 id="open-questions-to-settle-in-code"><a class="header" href="#open-questions-to-settle-in-code">Open questions to settle in code</a></h2>
+<ul>
+<li><strong>Autoload path discovery</strong>: spec says <code>foo.v</code> → <code>foo.cells.toml</code>
+sibling. Does that handle the multi-file library case (<code>a.v</code> +
+<code>b.v</code> sharing one manifest)? Probably yes — autoload each
+sibling, merge into the single <code>CellManifest</code>. Explicit
+<code>--cell-manifest</code> flag still wins for users who want a single
+consolidated file.</li>
+<li><strong>Conflict policy</strong>: if a cell name appears both in a built-in
+classifier AND in a manifest, built-in wins (per ADR 0010
+integration ordering). Warn on conflict to surface accidental
+collisions.</li>
+<li><strong>Empty-library noise</strong>: parsing a <code>.v</code> file containing only
+<code>(* blackbox *)</code> modules with no logic should succeed without
+warnings, since that's the expected shape for IP libraries.</li>
+</ul>
+<h2 id="not-promised"><a class="header" href="#not-promised">Not promised</a></h2>
+<ul>
+<li>Memory contents simulation for <code>kind = "ram"</code> in v1.0. Documented
+in ADR 0010 § "kind = ram semantics in v1.0".</li>
+<li>Stable opaque-RAM port routing beyond "outputs are X-source
+slots". The set of outputs is what <code>sverilogparse</code> reports; if a
+cell's port list changes, the routing follows.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../plans/multi-clock-and-stimulus-architecture.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../plans/multi-peripheral-cosim.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../plans/multi-clock-and-stimulus-architecture.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../plans/multi-peripheral-cosim.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,16 @@
+[package]
+name = "build-spike"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "build-spike"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+wasmtime = "37"
+wasmtime-wasi = "37"
+
+[profile.release]
+opt-level = 2

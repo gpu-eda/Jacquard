@@ -1,0 +1,353 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0010 — Declarative cell metadata for PDK enablement - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="adr-0010--declarative-cell-metadata-for-pdk-enablement"><a class="header" href="#adr-0010--declarative-cell-metadata-for-pdk-enablement">ADR 0010 — Declarative cell metadata for PDK enablement</a></h1>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The work this ADR "deferred to a future ADR"
+(explicit RAM port mapping) was delivered as <strong><a href="0011-ram-port-mapping-schema.html">ADR 0011</a></strong>
+— schema v1.1 (<code>src/cell_library.rs</code> accepts <code>"1.0"</code> and <code>"1.1"</code>). The
+"Deferred" section below should be read as <em>delivered</em>, not open.</p>
+</blockquote>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>PDK enablement today is <em>per-PDK code + vendored Verilog</em> (see
+<code>src/sky130.rs</code>, <code>src/gf180mcu.rs</code>, <code>src/gf180mcu_pdk.rs</code>, the
+<code>build.rs</code> pin-table scanner). Adding a new cell family — third-party
+IP memories, hard macros, foundry-supplied blocks — requires
+vendoring Verilog into <code>jacquard/vendor/</code>, extending the <code>build.rs</code>
+scanner, editing prefix matchers (<code>is_&lt;pdk&gt;_cell</code>,
+<code>extract_cell_type</code>), and adding entries to hand-curated <code>matches!()</code>
+lists (<code>is_filler_cell</code>, <code>is_io_pad_cell</code>, <code>is_sequential_cell</code>,
+<code>is_multi_output_cell</code>, …). Each of those last is data masquerading
+as code; PR #64 (2026-05-18 power-pin + wired-filler shortcuts for
+wafer.space) is the most recent example of the pattern.</p>
+<p>The acute trigger is <code>gf180mcu_ocd_ip_sram__sram1024x8m8wm1</code> — Tim
+Edwards' OCD 3.3V port of the GF180MCU SRAM IP, used in a downstream
+wafer.space tapeout. The cell is third-party IP (not in Jacquard's
+<code>vendor/</code>), doesn't match <code>is_gf180mcu_cell</code>'s prefix walk
+(<code>fd_*</code> / <code>ws_*</code> only), has no pin table, and isn't filler-stubbable.
+Issue <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a> captures
+the discussion.</p>
+<p>The same pattern will repeat for every wafer.space tapeout that
+includes IP outside Jacquard's vendored library — hazard3, future
+chips. Code-gating each one through a Jacquard PR doesn't scale.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>PDK enablement gains a <strong>declarative metadata path</strong> alongside the
+existing built-in classifiers. The decision separates cleanly into
+two tiers; this ADR commits to Tier 1 + a minimal Tier 2 slice now,
+and explicitly defers the larger Tier 2 schema (port-mapping
+semantics) to a future ADR after real adoption data.</p>
+<h3 id="tier-1--runtime-cell-library---cell-library-pathv"><a class="header" href="#tier-1--runtime-cell-library---cell-library-pathv">Tier 1 — runtime cell library (<code>--cell-library &lt;PATH&gt;.v</code>)</a></h3>
+<p><code>sverilogparse</code> (already a workspace dependency) parses user-supplied
+Verilog files at startup and populates the <code>LeafPinProvider</code> for
+every <code>module … endmodule</code> block found. Handles <code>input</code> / <code>output</code> /
+<code>inout</code>. Replaces the <code>build.rs</code> scanner for newly-added cells;
+existing built-in tables stay as fallback.</p>
+<p>Flag is <strong>repeatable</strong>: <code>--cell-library a.v --cell-library b.v</code> for
+designs that pull in multiple IP libraries. Files are parsed in
+order; later files override earlier ones for collisions (with a
+warning).</p>
+<h3 id="tier-2-minimal-slice--kind-discriminator-in-toml"><a class="header" href="#tier-2-minimal-slice--kind-discriminator-in-toml">Tier 2 (minimal slice) — <code>kind</code> discriminator in TOML</a></h3>
+<p>Each cell library may be accompanied by a TOML manifest declaring
+the <em>kind</em> of each cell — the same classification today's
+<code>is_filler_cell</code> / <code>is_sequential_cell</code> / etc. encode in
+<code>matches!()</code> lists. Manifest path mirrors the library path
+(<code>foo.v</code> → <code>foo.cells.toml</code>) and is loaded automatically when
+present; an explicit <code>--cell-manifest &lt;PATH&gt;.toml</code> flag overrides
+the autoloading behaviour.</p>
+<pre><code class="language-toml">schema_version = "1.0"
+
+[cells.gf180mcu_ocd_ip_sram__sram1024x8m8wm1]
+kind = "ram"
+
+[cells.gf180mcu_fd_io__fillcap_18_h]
+kind = "filler"
+</code></pre>
+<p>Recognised <code>kind</code> values (v1.0): <code>std</code>, <code>dff</code>, <code>latch</code>,
+<code>clock_gate</code>, <code>ram</code>, <code>filler</code>, <code>endcap</code>, <code>tap</code>, <code>io_pad_input</code>,
+<code>io_pad_output</code>, <code>io_pad_bidir</code>, <code>delay</code>, <code>multi_output</code>,
+<code>tie_high</code>, <code>tie_low</code>.</p>
+<p>Schema versioning: top-level <code>schema_version</code> is mandatory. v1.x
+additive rule — new optional keys / new <code>kind</code> values are
+non-breaking; semantics of existing <code>kind</code> values must not narrow.</p>
+<h3 id="kind--ram-semantics-in-v10-opaque-ram-mode"><a class="header" href="#kind--ram-semantics-in-v10-opaque-ram-mode"><code>kind = "ram"</code> semantics in v1.0 (opaque-RAM mode)</a></h3>
+<p><code>aig.rs</code> today has two hardcoded RAM detection paths:
+<code>celltype == "$__RAMGEM_SYNC_"</code> (line 775, port_r/port_w resolution
+from Yosys <code>memlib_yosys.txt</code>) and <code>starts_with("CF_SRAM_")</code> (line
+1006, <code>.DO</code> output resolution for ChipFlow's single-port
+convention). Neither matches <code>gf180mcu_ocd_ip_sram_*</code> or arbitrary
+third-party SRAM IP.</p>
+<p>In v1.0, <code>kind = "ram"</code> allocates a <code>RAMBlock</code> slot in <strong>opaque
+mode</strong>: the cell's outputs are routed to X-source slots, no port
+resolution is attempted, no memory behaviour is modelled. This is
+sufficient for designs whose CPU executes from boot ROM / register
+file and never reads SRAM contents at the timescales Jacquard
+simulates (the heartbeat-verification use case driving this work).
+The existing <code>compute_x_sources</code> test path at <code>src/aig.rs:3247-3273</code>
+already validates the X-source convergence shape.</p>
+<p>When real memory modelling is required, future schema versions add
+explicit port mapping (<code>[cells.NAME.ports]</code> sub-tables) — the
+opaque mode stays as the documented fallback.</p>
+<h3 id="integration-ordering"><a class="header" href="#integration-ordering">Integration ordering</a></h3>
+<p><code>aig.rs</code> cell-type recognition slots the manifest path <strong>after</strong> the
+existing recognisers:</p>
+<pre><code class="language-text">1. celltype == "$__RAMGEM_SYNC_"  → RAMBlock with port_r/port_w   (unchanged)
+2. starts_with("CF_SRAM_")        → RAMBlock with .DO              (unchanged)
+3. PdkVariant::classify(celltype) → built-in classifier dispatch    (unchanged)
+4. NEW: manifest.lookup(celltype) → manifest-declared kind dispatch
+</code></pre>
+<p>The new path activates only for cells none of the existing
+recognisers match AND that have a manifest entry. All existing
+tests stay green without churn.</p>
+<h3 id="deferred-to-a-future-adr"><a class="header" href="#deferred-to-a-future-adr">Deferred to a future ADR</a></h3>
+<ul>
+<li><strong>Port-mapping schema</strong> (<code>[cells.NAME.ports]</code> sub-tables, polarity
+annotations, bus-width inference, write-enable encoding). This is
+a small behavioural description language doing more than
+classification; needs concrete adoption data before its schema is
+fixed.</li>
+<li><strong>Built-in classifier removal.</strong> <code>sky130.rs</code> /
+<code>gf180mcu.rs</code> / <code>gf180mcu_pdk.rs</code> classification tables stay as
+fallback through the entire migration. Removal happens only after
+the manifest pathway is the source of truth for at least one PDK
+in production.</li>
+<li><strong><code>build.rs</code> pin-table scanner removal.</strong> Same rule: removed LAST,
+after manifests cover the built-in PDKs.</li>
+</ul>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li>Third-party IP unblocks without Jacquard PRs. Users ship a
+<code>&lt;library&gt;.cells.toml</code> alongside their <code>&lt;library&gt;.v</code>; CI flows
+point <code>--cell-library</code> at both. The driving wafer.space tapeout's
+<code>chip_top.pnl.v</code> clears <code>gf180mcu_ocd_ip_sram__sram1024x8m8wm1</code>
+by shipping a six-line manifest entry.</li>
+<li>The "vendor + edit code + extend lists" PR workflow for new IP
+becomes "ship a manifest, no Jacquard change". <code>docs/adding-a-pdk.md</code>
+evolves to document the manifest pathway as the primary route.</li>
+<li>The opaque-RAM semantics is honest about what v1.0 delivers — no
+silent partial memory modelling. The contract is "RAMBlock
+allocated, outputs X-source, no read/write behaviour" until a
+future schema version adds explicit ports.</li>
+<li>Existing built-in PDK code stays load-bearing through the
+transition. No risk of regression in sky130 / gf180mcu test
+flows during the migration.</li>
+</ul>
+<h2 id="links"><a class="header" href="#links">Links</a></h2>
+<ul>
+<li>Issue <a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a> —
+design discussion.</li>
+<li>PR #64 (<code>9281e57</code>) — most recent per-PDK-code-as-data workaround
+this ADR resolves.</li>
+<li>ADR 0009 — OpenSTA Verilog reader input constraints
+(<code>sverilogparse</code> is already in-tree for unrelated reasons; Tier 1
+reuses that dep).</li>
+<li><code>docs/plans/declarative-cell-metadata.md</code> — implementation phasing.</li>
+<li><code>docs/plans/gf180mcu-enablement.md</code> § Follow-on cleanup items
+1, 2, 3 — superseded by this ADR.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../adr/0009-opensta-verilog-reader-inputs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../adr/0011-ram-port-mapping-schema.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../adr/0009-opensta-verilog-reader-inputs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../adr/0011-ram-port-mapping-schema.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

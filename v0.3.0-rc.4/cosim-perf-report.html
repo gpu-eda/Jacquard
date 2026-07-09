@@ -1,0 +1,286 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Cosim Perf Report - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="cosim-perf-report---cosim-perf-json"><a class="header" href="#cosim-perf-report---cosim-perf-json">Cosim Perf Report (<code>--cosim-perf-json</code>)</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p><code>jacquard cosim</code> reports a per-edge timing breakdown of the co-simulation
+loop, including <strong>ground-truth GPU-execution time from device
+timestamps</strong> — free of the instrumentation overhead that a full GPU
+trace (Metal System Trace / nsys) imposes on a workload of thousands of
+tiny dispatches per batch.</p>
+<p>The breakdown always prints in the human-readable profiling summary at
+the end of a run. Passing <code>--cosim-perf-json &lt;PATH&gt;</code> additionally writes
+a flat JSON record for CI to log and track.</p>
+<h2 id="the-measurement"><a class="header" href="#the-measurement">The measurement</a></h2>
+<p>The cosim loop batches edges into GPU command buffers (<code>BATCH_SIZE</code>
+edges each). Per batch, the CPU: builds the command buffer (<em>encode</em>),
+commits it, then waits for the GPU to finish (<em>spin</em>), then drains ring
+buffers (<em>VCD/UART</em>). The existing summary times these CPU phases with
+<code>Instant</code> deltas. This report adds the <strong>GPU-side</strong> truth:</p>
+<ul>
+<li><strong>Metal</strong>: <code>MTLCommandBuffer.GPUStartTime</code>/<code>GPUEndTime</code> — host-clock
+timestamps the driver records for free; <code>GPUEndTime − GPUStartTime</code> is
+the batch's GPU-execution wall. Read after <code>waitUntilCompleted</code> (the
+driver posts the timestamps only at full completion).</li>
+<li><strong>CUDA / HIP</strong>: <code>cudaEvent</code> / <code>hipEvent</code> elapsed time — <em>follow-up</em>
+(the trait seam exists; the impls land in a later PR validated on the
+GPU CI runner).</li>
+<li><strong>CPU backend</strong>: none — <code>gpu_*</code> fields are <code>0</code> / <code>gpu_exec_recorded: false</code>.</li>
+</ul>
+<p>The seam is one <code>CosimBackend</code> trait method,
+<code>last_batch_gpu_seconds() -&gt; Option&lt;f64&gt;</code>, called by the orchestration
+after each batch's <code>wait()</code>. The generic loop owns the CPU timing and
+report assembly; each backend supplies only its GPU clock.</p>
+<h2 id="human-summary"><a class="header" href="#human-summary">Human summary</a></h2>
+<pre><code>=== Profiling Breakdown ===
+  Batch encode + commit             7.6μs/tick   10.3%
+  GPU wait (spin)                  66.3μs/tick   89.3%
+  ...
+  TOTAL (instrumented)             74.2μs/tick  100.0%
+  GPU exec (device ts)             65.8μs/tick   88.7%  (GPU-busy share of wall)
+</code></pre>
+<p><code>GPU exec</code> is a <em>separate</em> measure from the CPU categories — it overlaps
+the <code>GPU wait (spin)</code> line (the CPU wall spent waiting <em>is</em> the GPU
+execution). Its <code>%</code> is the GPU-busy share of the instrumented wall.</p>
+<h2 id="json-schema-report-only"><a class="header" href="#json-schema-report-only">JSON schema (report-only)</a></h2>
+<pre><code class="language-json">{
+  "backend": "metal",
+  "edges": 500000,
+  "wall_seconds": 40.1,
+  "total_us_per_edge": 74.24,
+  "gpu_exec_us_per_edge": 65.85,
+  "gpu_util_pct": 88.7,
+  "gpu_exec_recorded": true,
+  "cpu_encode_us_per_edge": 7.56,
+  "gpu_wait_spin_us_per_edge": 66.31,
+  "drain_us_per_edge": 0.001,
+  "output_vcd_us_per_edge": 0.36,
+  "batches": 550,
+  "mean_batch": 909.1
+}
+</code></pre>
+<p>This is a report format, not a stable contract — it may gain fields.</p>
+<h2 id="ci"><a class="header" href="#ci">CI</a></h2>
+<p>The <code>mcu-soc-metal</code> job runs the mcu_soc cosim with <code>--cosim-perf-json</code>
+and posts the JSON to the GitHub step summary (<strong>report-only</strong> — no
+perf gate). This builds a timing history before we commit to a
+regression threshold: GPU/thermal noise on shared runners needs a
+measured noise floor first, and a premature gate would flake. Adding a
+gate (fail if <code>total_us_per_edge</code> regresses beyond a tuned threshold vs
+a committed baseline) is the natural follow-up once the history exists,
+alongside the CUDA/HIP <code>last_batch_gpu_seconds</code> impls so every tested
+architecture reports.</p>
+<h2 id="why-not-just-use-a-gpu-trace"><a class="header" href="#why-not-just-use-a-gpu-trace">Why not just use a GPU trace?</a></h2>
+<p>Metal System Trace / nsys instrument every Metal/CUDA call. For a batch
+of ~2048 tiny dispatches that overhead is large and <em>systematically
+distorts</em> the picture — it inflated an early measurement to make the GPU
+look ~88% idle when device timestamps show it ~88% <strong>busy</strong>. Command-buffer
+timestamps cost nothing and are the trustworthy signal for steady-state
+throughput; reserve full traces for one-off per-dispatch investigation
+(see <code>docs/gpu-capture.md</code>).</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="bus-tracing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="gpu-capture.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="bus-tracing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="gpu-capture.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
