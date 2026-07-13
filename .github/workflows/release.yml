@@ -150,12 +150,15 @@ jobs:
           fi
           # Version-pin doc links: rewrite `docs/foo.md` refs to the mdBook page
           # published for THIS release (docs-version job deploys to gh-pages
-          # /<tag>/). Produces a clickable [docs/foo.md](…/<tag>/foo.html). \x60
-          # is a backtick (kept out of the raw shell to avoid interpolation).
+          # /<tag>/). Produces a clickable [docs/foo.md](…/<tag>/foo.html).
+          # Portable across GNU + BSD (macOS runner) sed: no `-i` (BSD needs a
+          # suffix arg) — write to a temp file; `bt` is a literal backtick from
+          # printf, kept out of the raw shell to avoid command substitution.
           if [ -s notes.md ]; then
-            sed -i -E \
-              "s#\x60docs/([A-Za-z0-9/_-]+)\.md\x60#[docs/\1.md](https://gpu-eda.github.io/Jacquard/${TAG}/\1.html)#g" \
-              notes.md
+            bt=$(printf '\140')
+            sed -E \
+              "s#${bt}docs/([A-Za-z0-9/_-]+)\.md${bt}#[docs/\1.md](https://gpu-eda.github.io/Jacquard/${TAG}/\1.html)#g" \
+              notes.md > notes.md.tmp && mv notes.md.tmp notes.md
           fi
           if [ ! -s notes.md ]; then
             echo "no matching CHANGELOG section; using auto-generated notes" >&2
