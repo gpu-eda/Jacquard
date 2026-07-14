@@ -56,7 +56,7 @@ shape.
   while validating #185 and **not caused by it**. `multi_mem` ends at 780000 in
   the stimulus and 1540000 in the output across the same 40 edges; the stimulus
   axis is the correct one. Every fixture and golden encodes it, so fixing it
-  invalidates every committed golden. Unfiled — worth an issue. It cost real time
+  invalidates every committed golden. Filed as #195. It cost real time
   during #185 validation by making a correct ÷2 clock read as ÷4.
 - Cross-session coordination is via the GitHub issues (both instances read them),
   not handoffs. Per-project git-identity plan (deferred):
