@@ -679,6 +679,9 @@ fn cmd_sim(args: SimArgs) {
         extra_observable_signals: Vec::new(),
         corner: args.corner.clone(),
         timed: args.timed,
+        // Derived clocks are a cosim-only concept (they need the reactive
+        // scheduler); the static `sim` path never cuts a divider.
+        derived_clock_nets: Vec::new(),
     };
 
     #[allow(unused_mut)]
@@ -2048,6 +2051,9 @@ fn cmd_dump_paths(args: DumpPathsArgs) {
         extra_observable_signals: Vec::new(),
         corner: args.corner.clone(),
         timed: false,
+        // dump-paths is static timing analysis; no reactive scheduler, so no
+        // derived-clock cut.
+        derived_clock_nets: Vec::new(),
     };
 
     let mut design = setup::load_design(&design_args);
@@ -2093,6 +2099,8 @@ fn cmd_xsources(args: XsourcesArgs) {
         &args.cell_library,
         args.cell_descriptor.as_deref(),
         args.bundled_descriptor.as_deref(),
+        // xsources is a static X-source enumeration; no derived-clock cut needed.
+        &[],
     );
 
     let config: Option<TestbenchConfig> = args.config.as_ref().map(|path| {
@@ -2261,6 +2269,17 @@ fn cmd_cosim(args: CosimArgs) {
             .flat_map(jacquard::sim::models::bus_trace::observed_net_names)
             .collect();
 
+        // Derived (on-die divided) clocks (gpu-eda/Jacquard#185): collect the
+        // `net` of every `clocks[]` entry that declares one, so the AIG can cut
+        // that net's divider FF out of downstream clock cones. The scheduler
+        // then drives each as a commensurable ÷N of its parent clock.
+        let derived_clock_nets: Vec<String> = config
+            .effective_clocks()
+            .iter()
+            .filter(|c| c.is_derived())
+            .filter_map(|c| c.net.clone())
+            .collect();
+
         // ADR 0021 §1: classify the input (gate-level netlist vs behavioral
         // RTL) and, for RTL, synthesize transparently. Returns the path to load.
         let dispatch = setup::InputDispatch {
@@ -2306,6 +2325,7 @@ fn cmd_cosim(args: CosimArgs) {
             // descriptor fallback still uses `default_corner`).
             corner: None,
             timed: false,
+            derived_clock_nets,
         };
 
         let mut design = setup::load_design(&design_args);

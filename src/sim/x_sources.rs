@@ -329,7 +329,7 @@ mod tests {
 
     fn demo_manifest(with_config: bool) -> XSourceManifest {
         let (netlistdb, aig) =
-            build_netlist_and_aig(Path::new(DEMO_NETLIST), None, &[], None, None);
+            build_netlist_and_aig(Path::new(DEMO_NETLIST), None, &[], None, None, &[]);
         let config: Option<TestbenchConfig> = if with_config {
             let f = std::fs::File::open(DEMO_CONFIG).unwrap();
             Some(serde_json::from_reader(std::io::BufReader::new(f)).unwrap())
@@ -415,7 +415,7 @@ mod tests {
     fn x_source_carries_src_provenance() {
         // WS-B B3: an annotated netlist's X-source reports its RTL `src`.
         let (netlistdb, aig) =
-            build_netlist_and_aig(Path::new(ANNOTATED_NETLIST), None, &[], None, None);
+            build_netlist_and_aig(Path::new(ANNOTATED_NETLIST), None, &[], None, None, &[]);
         let m = compute_x_source_manifest(&netlistdb, &aig, None, ANNOTATED_NETLIST);
 
         let s = m

@@ -610,8 +610,9 @@ pub(crate) fn build_bus_trace(
 /// Each clock domain (identified by its netlistdb pin ID) has its own set of
 /// posedge/negedge flag bits that gate DFF writeout for that domain.
 struct ClockDomainFlags {
-    /// Netlistdb pin ID for this clock (key from `clock_pin2aigpins`).
-    #[allow(dead_code)]
+    /// Netlistdb pin ID for this clock (key from `clock_pin2aigpins`). For a
+    /// derived clock (#185) this is the divider net's driver pin, which the
+    /// scheduler resolves the domain by.
     clock_pinid: usize,
     /// Human-readable name from pin (e.g. "io$clk$i").
     name: String,
@@ -1461,6 +1462,114 @@ fn gcd(a: u64, b: u64) -> u64 {
 /// Compute LCM of two numbers.
 fn lcm(a: u64, b: u64) -> u64 {
     a / gcd(a, b) * b
+}
+
+/// Resolve a derived (on-die divided) clock config to its scheduler timing
+/// (gpu-eda/Jacquard#185).
+///
+/// The AIG cut (see `AIG::derived_clock_netids` / `trace_clock_pin`) has already
+/// minted an `InputClockFlag` on the derived net's driver pin, and
+/// `build_gpio_mapping` grouped it into a `clock_domains` entry keyed by that
+/// pinid. This resolves the config's `net` → netlistdb net → driver pin → domain
+/// index, then computes the domain's half-period as a commensurable ÷N of the
+/// parent named by `derived_from` (`derived full period = parent period ×
+/// divide_by`). Returns `None` (with a warning) if the net, its driver, the
+/// domain, or the parent can't be resolved — the derived clock is then dropped
+/// rather than aborting the whole run.
+fn derived_clock_timing(
+    effective_clocks: &[crate::testbench::ClockConfig],
+    gpio_map: &GpioMapping,
+    netlistdb: &NetlistDB,
+    cfg_idx: usize,
+    clk_cfg: &crate::testbench::ClockConfig,
+) -> Option<ClockDomainTiming> {
+    let net_name = clk_cfg.net.as_deref()?;
+    let Some(netid) = crate::sim::trace_signals::resolve_net_id(netlistdb, net_name) else {
+        clilog::warn!(
+            "Clock config[{}] ({:?}): derived net '{}' not found in netlistdb; skipping",
+            cfg_idx,
+            clk_cfg.name,
+            net_name
+        );
+        return None;
+    };
+    // The driver pin the AIG cut minted the clock flag on: the net's output
+    // (Direction::O) pin, or a primary input if the net is top-driven.
+    let driver_pin = netlistdb.net2pin.iter_set(netid).find(|&p| {
+        netlistdb.pindirect[p] == Direction::O || netlistdb.pin2cell[p] == 0
+    });
+    let Some(driver_pin) = driver_pin else {
+        clilog::warn!(
+            "Clock config[{}] ({:?}): derived net '{}' has no driver pin; skipping",
+            cfg_idx,
+            clk_cfg.name,
+            net_name
+        );
+        return None;
+    };
+    let Some(domain_index) = gpio_map
+        .clock_domains
+        .iter()
+        .position(|d| d.clock_pinid == driver_pin)
+    else {
+        clilog::warn!(
+            "Clock config[{}] ({:?}): derived net '{}' (driver pin {}) has no clock \
+             domain — the divider cut did not fire (is `net` an actual on-die \
+             clock, and does a flop use it?); skipping",
+            cfg_idx,
+            clk_cfg.name,
+            net_name,
+            driver_pin
+        );
+        return None;
+    };
+
+    // Parent clock: named by `derived_from`, must be another declared clock with
+    // a concrete period.
+    let parent_name = clk_cfg.derived_from.as_deref();
+    let parent = parent_name.and_then(|pn| {
+        effective_clocks
+            .iter()
+            .find(|c| c.name.as_deref() == Some(pn))
+    });
+    let Some(parent) = parent else {
+        clilog::warn!(
+            "Clock config[{}] ({:?}): derived_from={:?} names no declared clock; skipping",
+            cfg_idx,
+            clk_cfg.name,
+            parent_name
+        );
+        return None;
+    };
+    let Some(parent_period) = parent.period_ps else {
+        clilog::warn!(
+            "Clock config[{}] ({:?}): parent clock {:?} has no period_ps; skipping",
+            cfg_idx,
+            clk_cfg.name,
+            parent_name
+        );
+        return None;
+    };
+    let divide_by = clk_cfg.divide_by.unwrap_or(1).max(1) as u64;
+    // Derived full period = parent period × divide_by → half-period is that /2.
+    let half_period_ps = parent_period * divide_by / 2;
+    clilog::info!(
+        "Clock config[{}] ({:?}): derived net '{}' ÷{} of '{}' ({}ps) → domain {} \
+         (half-period {}ps)",
+        cfg_idx,
+        clk_cfg.name,
+        net_name,
+        divide_by,
+        parent_name.unwrap_or("?"),
+        parent_period,
+        domain_index,
+        half_period_ps
+    );
+    Some(ClockDomainTiming {
+        half_period_ps,
+        phase_offset_ps: clk_cfg.phase_offset_ps,
+        domain_index,
+    })
 }
 
 /// A clock domain's timing parameters for scheduling.
@@ -2365,15 +2474,26 @@ fn run_cosim_generic<B: CosimBackend>(
         .iter()
         .enumerate()
         .filter_map(|(cfg_idx, clk_cfg)| {
-            // Derived (on-die divided) clocks (#185) match by net + need the AIG
-            // divider-cut; that half is not wired yet, so skip them here.
+            // Derived (on-die divided) clocks (gpu-eda/Jacquard#185): the AIG has
+            // cut the divider FF out of downstream clock cones and minted an
+            // `InputClockFlag` on the derived net's driver pin, which
+            // `build_gpio_mapping` grouped into a clock domain keyed by that
+            // pinid (no GPIO, no primary-input value slot). Resolve the domain by
+            // net → driver pin, and drive it as a commensurable ÷N of its parent.
+            if clk_cfg.is_derived() {
+                return derived_clock_timing(
+                    &effective_clocks,
+                    &gpio_map,
+                    netlistdb,
+                    cfg_idx,
+                    clk_cfg,
+                );
+            }
             let Some(gpio) = clk_cfg.gpio else {
                 clilog::warn!(
-                    "Clock config[{}] ({:?}): derived-clock support (net={:?}) not yet \
-                     implemented; skipping",
+                    "Clock config[{}] ({:?}): non-derived clock has no `gpio`; skipping",
                     cfg_idx,
-                    clk_cfg.name,
-                    clk_cfg.net
+                    clk_cfg.name
                 );
                 return None;
             };
