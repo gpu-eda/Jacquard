@@ -40,6 +40,23 @@ impl StagedAIG {
         }
     }
 
+    /// Translate a staged endpoint index into the original AIG's
+    /// endpoint-group index, the mapping [`Self::get_endpoint_group`]
+    /// applies before it defers to the raw AIG.
+    ///
+    /// `None` for a staged IO pin, which fulfils no original endpoint.
+    ///
+    /// Callers that need to index an AIG-side collection (`aig.srams`,
+    /// `aig.dffs`, …) from a staged endpoint must go through this. A staged
+    /// index only coincides with the AIG's when staging is the identity
+    /// (`from_full_aig` with no level split), so arithmetic that skips the
+    /// translation appears to work until a design is split (#186).
+    pub fn to_aig_endpoint(&self, endpt_id: usize) -> Option<usize> {
+        endpt_id
+            .checked_sub(self.primary_output_pins.len())
+            .map(|i| self.endpoints[i])
+    }
+
     /// build a staged AIG that consists of all levels.
     pub fn from_full_aig(aig: &AIG) -> Self {
         StagedAIG {

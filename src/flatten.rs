@@ -1254,17 +1254,23 @@ fn build_flattened_script_v1(
                 // Map each RAMBlock endpoint in this partition to its
                 // backing-storage offset. cellid comes from indexing
                 // `aig.srams` at the endpoint's position within the
-                // SRAM range. Mirror the per-partition `cur_sram_id`
-                // walk that `init_writeout_perms` does later (see the
-                // RAMBlock arm at the `for &endpt_i in &part.endpoints`
-                // loop) — same iteration order, same offset arithmetic.
+                // SRAM range, so `endpt_i` — an index into *this stage's*
+                // endpoint space — must be translated back to the original
+                // AIG's before the subtraction. The two coincide only when
+                // staging is the identity; a level-split design otherwise
+                // indexes `aig.srams` out of range and panics (#186).
                 if flattening_parts[part_id].num_srams > 0 {
                     let part_sram_start = flattening_parts[part_id].sram_start;
                     let mut cur_sram_id: u32 = 0;
                     for &endpt_i in &init_parts[part_id].endpoints {
                         if let EndpointGroup::RAMBlock(_) = staged.get_endpoint_group(aig, endpt_i)
                         {
-                            let sram_pos = endpt_i - aig_po_len - aig_dff_len;
+                            // Never `None`: a staged IO pin resolves to
+                            // `StagedIOPin`, not `RAMBlock`.
+                            let aig_endpt = staged
+                                .to_aig_endpoint(endpt_i)
+                                .expect("RAMBlock endpoint is not a staged IO pin");
+                            let sram_pos = aig_endpt - aig_po_len - aig_dff_len;
                             let cellid = *aig.srams.get_index(sram_pos).unwrap().0;
                             let offset =
                                 part_sram_start + cur_sram_id * (1 << AIGPDK_SRAM_ADDR_WIDTH);
