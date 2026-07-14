@@ -70,6 +70,16 @@ read the wrong memory. That's fixed.
   QSPI-PSRAM mode (APS6404L-class: enter-QPI, quad-write, quad-read). This is
   what post-PnR cosim of a chip with external QSPI PSRAM as main RAM needs.
   Leave the new options unset and you get byte-for-byte the old read-only flash.
+- **Derived (on-die divided) clocks in cosim.** A `clocks[]` entry can now name
+  an internal net instead of a GPIO, declaring it a division of another clock:
+  `{ "net": "clkdiv", "derived_from": "clk", "divide_by": 2 }`. Cosim cuts the
+  divider flop out of the clock cones downstream of that net and drives the net
+  as a commensurable divided domain, the same idea as an STA
+  `create_generated_clock`. Designs whose logic runs off an on-die divider used
+  to abort in the AIG clock tracer, which rejects a multi-input sequential cell
+  on a clock path; they now simulate. The divider flop still builds as ordinary
+  logic, so the net's observable value is unchanged, and a design that declares
+  no derived clock behaves exactly as before. (#185)
 - **GPU frame capture (Metal).** `JACQUARD_GPU_CAPTURE=<path>` (with
   `METAL_CAPTURE_ENABLED=1`) wraps an `MTLCaptureManager` scope around a bounded
   window of cosim batches and writes an Xcode `.gputrace` for per-dispatch

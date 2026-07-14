@@ -34,6 +34,8 @@ __pycache__/
 !tests/derived_clock/expected/*.vcd
 *.tar.gz
 debug_trace.csv
+# Per-run CDC-jitter seed dump written next to the fixture goldens.
+run_params.json
 *_watchlist.json
 api_artifacts/
 tb_verify_sim
