@@ -128,6 +128,26 @@ if [ "$SCOPE" = all ]; then
         --config tests/multi_mem_cosim/sim_config.json --top-module multi_mem_dut \
         --output-vcd "$OUT/multi_mem.vcd" || true
     check multi_mem "$OUT/multi_mem.vcd" tests/multi_mem_cosim/expected/multi_mem_cosim.vcd
+
+    # vcd_axes: the output and stimulus VCDs are written from one run off the
+    # same edge_tick and are read together, so they must share a time axis.
+    # Both files have to come from a single invocation for the comparison to
+    # mean anything, hence its own run rather than a flag on the golden one
+    # above. The goldens pin the exact stamps but never stated the
+    # *relationship*, which is how #195 stayed latent for two months (#195).
+    run vcd_axes "$BIN" cosim tests/multi_mem_cosim/multi_mem_dut_synth.gv \
+        --config tests/multi_mem_cosim/sim_config.json --top-module multi_mem_dut \
+        --max-clock-edges 40 --output-vcd "$OUT/axes.vcd" \
+        --stimulus-vcd "$OUT/axes_stim.vcd" || true
+    total=$((total + 1))
+    if python3 tests/multi_mem_cosim/check_vcd_axes.py \
+        "$OUT/axes.vcd" "$OUT/axes_stim.vcd" >/dev/null 2>&1; then
+        pass "vcd_axes"
+    else
+        fail "vcd_axes"
+        python3 tests/multi_mem_cosim/check_vcd_axes.py \
+            "$OUT/axes.vcd" "$OUT/axes_stim.vcd" >&2 || true
+    fi
 fi
 
 # --- qspi_psram fixture (writable RAM-mode flash) — `all` + `qspi` scopes ----

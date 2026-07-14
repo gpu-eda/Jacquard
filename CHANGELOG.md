@@ -75,6 +75,20 @@ Xcode `.gputrace` capture for reading individual dispatches.
   subcommand is gone; behavioral RTL is synthesized on the fly by
   `sim`/`cosim`.
 
+### Fixed
+
+- **Cosim output-VCD timestamps were stretched by the edges-per-period factor
+  (2x for a single clock).** `--output-vcd` timed each event at
+  `edge_tick * clock_period_ps`, but `edge_tick` counts scheduler *edges*, so a
+  40-edge run of a 40000ps design ended at 1540000ps instead of 780000ps. The
+  matching `--stimulus-vcd` was always on the correct axis, so the two disagreed
+  and overlaying them in a viewer drifted them apart. Output events are now
+  stamped on the scheduler's own grid (`edge_tick * gcd_ps`), the axis the
+  stimulus already used. **If you parse absolute times out of a cosim output VCD,
+  they change with this release**; times within a run were self-consistent
+  before, so relative measurements were unaffected. The committed fixture goldens
+  are regenerated accordingly. (#195)
+
 ## [0.2.4] - 2026-06-26
 
 Documentation, tooling, and submodule-hygiene release — no change to the
