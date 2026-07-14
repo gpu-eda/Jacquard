@@ -129,6 +129,17 @@ if [ "$SCOPE" = all ]; then
         --output-vcd "$OUT/multi_mem.vcd" || true
     check multi_mem "$OUT/multi_mem.vcd" tests/multi_mem_cosim/expected/multi_mem_cosim.vcd
 
+    # multi_mem_split: the same design and the same golden, but level-split so
+    # the AIG stages. Staging renumbers the endpoint space, and the SRAM
+    # storage-offset walk used to read that staged index against the original
+    # AIG's `srams` — fine while staging was the identity, out of range (panic)
+    # or silently wrong (bad offset) once a design with SRAMs is split (#186).
+    # Splitting must not change behaviour, so this diffs the non-split golden.
+    run multi_mem_split "$BIN" cosim tests/multi_mem_cosim/multi_mem_dut_synth.gv \
+        --config tests/multi_mem_cosim/sim_config.json --top-module multi_mem_dut \
+        --level-split 10 --output-vcd "$OUT/multi_mem_split.vcd" || true
+    check multi_mem_split "$OUT/multi_mem_split.vcd" tests/multi_mem_cosim/expected/multi_mem_cosim.vcd
+
     # vcd_axes: the output and stimulus VCDs are written from one run off the
     # same edge_tick and are read together, so they must share a time axis.
     # Both files have to come from a single invocation for the comparison to
