@@ -9,78 +9,71 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
-**What this means for you.** This release makes it easier to get a design onto
-the GPU and broadens what you can simulate:
+The headline change is the RTL on-ramp. `jacquard sim` and `cosim` now take
+behavioral Verilog and SystemVerilog directly, synthesizing to gates and
+caching the result behind the scenes, so you no longer run synthesis yourself
+before simulating.
 
-- **Feed it RTL, not just netlists.** `jacquard sim` / `cosim` accept behavioral
-  Verilog / SystemVerilog directly — synthesis runs transparently and cached, so
-  you no longer need to pre-synthesize a gate-level netlist to start simulating.
-- **More PDKs, less setup.** The binary is self-contained for standard cells (no
-  vendored-PDK files at simulation time); SKY130 and IHP SG13G2 are built in, and
-  proprietary libraries work from a `--cell-descriptor` with no Jacquard rebuild.
-- **Simulate SoCs with external memory.** Cosim now models multiple QSPI flash /
-  PSRAM devices — including a **writable QSPI PSRAM as a chip's main RAM** —
-  across Metal, CUDA, and HIP.
-- **See where GPU time goes.** New cosim profiling: ground-truth GPU-vs-CPU
-  per-edge timing from device timestamps (`--cosim-perf-json`), plus Xcode
-  `.gputrace` frame capture for per-dispatch analysis.
+Standard-cell handling moved inside the binary. It carries generated cell
+descriptors now instead of reading vendored PDK files at simulation time, which
+is what lets SKY130 and IHP SG13G2 work with no setup; a proprietary library
+needs only `--cell-descriptor`, no Jacquard rebuild.
 
-Technical detail below; doc links resolve to the version-pinned pages for this
-release.
+Cosim grew in two directions. The SPI-flash peripheral takes a list of devices
+and gained a writable RAM mode, so you can model a chip whose main memory is
+external QSPI PSRAM, on Metal, CUDA, or HIP. And two new tools show what the GPU
+does during a run: a per-edge timing report built from device timestamps, and
+Xcode `.gputrace` capture for reading individual dispatches.
 
 ### Added
 
-- **Behavioral-RTL on-ramp (ADR 0021).** `jacquard sim` and `jacquard cosim`
-  now accept **behavioral Verilog / SystemVerilog directly** — synthesis is
-  transparent and cached, run through an embedded YoWASP Yosys (with the
-  `yosys-slang` SystemVerilog frontend) via Rust + `wasmtime`. Built into
-  release binaries via the `synth` feature; `--yosys-wasm <PATH>` overrides
-  the bundled wasm. See `docs/accepted-rtl.md`.
-- **Cell-model IR descriptors (ADR 0019).** Standard-cell libraries are now
-  consumed as generated JSON descriptors — pin directions, combinational AIG,
-  sequential roles, and timing — produced from Liberty by the
-  `liberty-to-cellir` converter and embedded at build time. Adds **SKY130**
-  (via a `.lib.json` reader) and **IHP SG13G2 as a new built-in PDK with zero
-  per-PDK Rust**; proprietary libraries simulate via `--cell-descriptor`
-  (no Jacquard build). The runtime binary is now **self-contained for standard
-  cells** — no vendored-PDK read at simulation time — and the `PdkVariant`
-  enum, per-PDK stdcell classifiers, and `build.rs` pin-table generation are
-  retired. See `docs/adding-a-pdk.md`.
+- **Behavioral-RTL on-ramp (ADR 0021).** `jacquard sim` and `cosim` accept
+  behavioral Verilog / SystemVerilog directly, synthesizing to gates through an
+  embedded YoWASP Yosys (the `yosys-slang` frontend) run in-process via
+  `wasmtime`. Release binaries include it under the `synth` feature;
+  `--yosys-wasm <PATH>` overrides the bundled build. See `docs/accepted-rtl.md`.
+- **Cell-model IR descriptors (ADR 0019).** Standard-cell libraries are read as
+  generated JSON descriptors (pin directions, combinational AIG, sequential
+  roles, timing), produced from Liberty by the `liberty-to-cellir` converter and
+  embedded at build time. SKY130 arrives through a `.lib.json` reader; IHP
+  SG13G2 is a new built-in PDK with no per-PDK Rust; proprietary libraries run
+  from `--cell-descriptor` with no Jacquard build. The runtime no longer reads
+  vendored PDK files at simulation time, and the `PdkVariant` enum, per-PDK
+  stdcell classifiers, and `build.rs` pin-table generation are gone. See
+  `docs/adding-a-pdk.md`.
 - **Plural QSPI memory + writable PSRAM (ADR 0013).** The SPI-flash peripheral
-  went plural: **`qspi_memory: Vec<QspiMemoryConfig>`** with N independent
-  instances (the legacy `flash` key folds into instance 0), N-instance GPU
-  kernels on **Metal + CUDA + HIP** with independent backing stores, and an
-  opt-in **writable QSPI-PSRAM (RAM) mode** (APS6404L-class: enter-QPI /
-  quad-write / quad-read). Enables post-PnR cosim of chips whose main RAM is
-  external QSPI PSRAM. Unset options ⇒ byte-identical to the read-only flash.
+  takes a list now, `qspi_memory: Vec<QspiMemoryConfig>`, with N independent
+  instances (the old `flash` key folds into instance 0), N-instance GPU kernels
+  on Metal, CUDA, and HIP with separate backing stores, and an opt-in writable
+  QSPI-PSRAM mode (APS6404L-class: enter-QPI, quad-write, quad-read). This is
+  what post-PnR cosim of a chip with external QSPI PSRAM as main RAM needs.
+  Leave the new options unset and you get byte-for-byte the old read-only flash.
 - **GPU frame capture (Metal).** `JACQUARD_GPU_CAPTURE=<path>` (with
-  `METAL_CAPTURE_ENABLED=1`) brackets an `MTLCaptureManager` scope around a
-  bounded window of cosim batches and writes an Xcode `.gputrace` for
-  per-dispatch GPU analysis. `JACQUARD_GPU_CAPTURE_SKIP` / `_BATCHES` select
-  the window. See `docs/gpu-capture.md`. (#174)
-- **Cosim perf report.** `jacquard cosim` reports a per-edge CPU/GPU timing
-  breakdown including **ground-truth GPU-execution time from device
-  timestamps** (Metal `GPUStartTime`/`GPUEndTime`) — free of the distortion a
-  full GPU trace imposes on thousands of tiny dispatches per batch.
-  `--cosim-perf-json <PATH>` emits it as JSON for CI. See
-  `docs/cosim-perf-report.md`. (#175)
-- **RTL-source provenance.** `sverilogparse` now captures `(* src *)`
-  attributes and carries them through the netlist and AIG; `jacquard xsources`
-  reports the RTL source location of each design X-source.
-- **TNS / THS timing metrics** in `--timing-summary` and `--timing-report`.
-  Alongside the existing worst-single-slack WNS/WHS, the report now carries
-  Total Negative Slack and Total Hold Slack — the sum of every negative
-  setup / hold slack across the run (`stats.total_setup_slack_ps` /
-  `stats.total_hold_slack_ps`). Additive JSON-schema change, bumped to
-  `1.2.0` (older reports still parse via `#[serde(default)]`). Salvaged from
-  the timing logic in #17. (#9)
-- **`JACQUARD_VENDOR_DIR`** environment override for the vendored-PDK root.
+  `METAL_CAPTURE_ENABLED=1`) wraps an `MTLCaptureManager` scope around a bounded
+  window of cosim batches and writes an Xcode `.gputrace` for per-dispatch
+  inspection. `JACQUARD_GPU_CAPTURE_SKIP` / `_BATCHES` pick the window. See
+  `docs/gpu-capture.md`. (#174)
+- **Cosim perf report.** `jacquard cosim` prints a per-edge CPU/GPU timing
+  breakdown, taking GPU-execution time from device timestamps (Metal
+  `GPUStartTime`/`GPUEndTime`) rather than a full GPU trace, which distorts a
+  workload of thousands of tiny dispatches per batch. `--cosim-perf-json <PATH>`
+  writes it as JSON for CI. See `docs/cosim-perf-report.md`. (#175)
+- **RTL-source provenance.** `sverilogparse` captures `(* src *)` attributes and
+  carries them through the netlist and AIG; `jacquard xsources` reports the RTL
+  source location of each X-source.
+- **TNS / THS timing metrics** in `--timing-summary` and `--timing-report`. Next
+  to the worst-single-slack WNS/WHS, the report now carries Total Negative Slack
+  and Total Hold Slack, the sum of every negative setup and hold slack across
+  the run (`stats.total_setup_slack_ps` / `stats.total_hold_slack_ps`). The JSON
+  schema takes an additive bump to `1.2.0`; older reports still parse via
+  `#[serde(default)]`. Salvaged from #17. (#9)
+- **`JACQUARD_VENDOR_DIR`** overrides the vendored-PDK root.
 
 ### Changed
 
 - **`jacquard build` folded into `sim`/`cosim`.** The standalone `build`
-  subcommand is removed; behavioral RTL is synthesized transparently by
-  `sim`/`cosim` (see the on-ramp entry above).
+  subcommand is gone; behavioral RTL is synthesized on the fly by
+  `sim`/`cosim`.
 
 ## [0.2.4] - 2026-06-26
 
