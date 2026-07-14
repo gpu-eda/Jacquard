@@ -309,7 +309,7 @@ pub fn register_trace_signals(
 /// multi-candidate interpretations (`parse_signal_name`) until one hits
 /// `netname2id`. Shared by the state-position resolvers below. Returns `None`
 /// if the name can't be parsed or matches no net.
-fn resolve_net_id(netlistdb: &NetlistDB, name: &str) -> Option<usize> {
+pub fn resolve_net_id(netlistdb: &NetlistDB, name: &str) -> Option<usize> {
     let candidates = parse_signal_name(name).ok()?;
     candidates.iter().find_map(|c| {
         let key = (c.hier.clone(), c.leaf.clone(), c.bit);

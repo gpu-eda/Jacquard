@@ -90,6 +90,13 @@ pub struct DesignArgs {
     /// descriptor even when `--liberty` is absent. When false, that path fires
     /// only if `--liberty` was passed (legacy opt-in).
     pub timed: bool,
+    /// Internal net names of config-declared *derived* (on-die divided) clocks
+    /// (gpu-eda/Jacquard#185). Populated by `cmd_cosim` from the testbench
+    /// `clocks[]` entries with a `net`. The AIG cuts each of these nets' driver
+    /// FF out of downstream clock cones (see `AIG::derived_clock_netids`); the
+    /// scheduler then drives them as commensurable ÷N domains. Empty = no
+    /// derived clocks (every non-cosim path and any cosim without them).
+    pub derived_clock_nets: Vec<String>,
 }
 
 /// Result of loading a design: everything needed for simulation.
@@ -112,6 +119,7 @@ pub fn build_netlist_and_aig(
     cell_library: &[PathBuf],
     cell_descriptor: Option<&Path>,
     bundled_descriptor: Option<&str>,
+    derived_clock_nets: &[String],
 ) -> (NetlistDB, AIG) {
     // Detect cell library
     let lib = detect_library_from_file(netlist_verilog).expect("Failed to read netlist file");
@@ -212,6 +220,7 @@ pub fn build_netlist_and_aig(
         &netlistdb,
         cell_lib_ref,
         descriptor.as_ref(),
+        derived_clock_nets,
     );
     (netlistdb, aig)
 }
@@ -385,6 +394,7 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
         &args.cell_library,
         args.cell_descriptor.as_deref(),
         args.bundled_descriptor.as_deref(),
+        &args.derived_clock_nets,
     );
 
     // Register user-supplied trace signals (--trace-signals). Must

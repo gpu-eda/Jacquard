@@ -287,6 +287,16 @@ pub struct AIG {
     /// direction. Without this, the simplified `Y = PAD` IO-pad model
     /// would leave the core's drive cone unobservable.
     pub extra_observable_names: IndexMap<usize, Vec<String>>,
+
+    /// Netlistdb net ids for config-declared *derived* (on-die divided) clocks
+    /// (gpu-eda/Jacquard#185). When `trace_clock_pin` reaches one of these nets
+    /// while walking a downstream flop's clock cone, it terminates the trace and
+    /// mints an `InputClockFlag` on the net's driver pin instead of tracing
+    /// through the on-die divider FF (which would panic as a multi-input cell on
+    /// the clock path). The scheduler then drives that domain as a commensurable
+    /// ÷N of its parent clock. Empty for every design that declares no derived
+    /// clock — behaviour is then unchanged.
+    pub derived_clock_netids: std::collections::HashSet<usize>,
 }
 
 impl Default for AIG {
@@ -313,6 +323,7 @@ impl Default for AIG {
             clock_period_ps: 1000, // Default 1ns clock period
             aigpin_cell_origins: Vec::new(),
             extra_observable_names: IndexMap::new(),
+            derived_clock_netids: std::collections::HashSet::new(),
         }
     }
 }
@@ -862,6 +873,48 @@ impl AIG {
                     }
                 }
                 if let Some(dp) = driver_pin {
+                    // Derived-clock cut (gpu-eda/Jacquard#185): if this net is a
+                    // config-declared derived (÷N) clock, terminate the trace
+                    // here and mint an `InputClockFlag` on the net's driver pin
+                    // instead of walking through the on-die divider FF (a
+                    // multi-input sequential cell on the clock path, which the
+                    // caller would otherwise reject). The divider FF still
+                    // builds as ordinary logic, so the net's observable value is
+                    // unaffected; the scheduler drives this domain as a
+                    // commensurable ÷N of its parent (`clock_pin2aigpins` is
+                    // keyed by `dp`, which the scheduler resolves from the net).
+                    if self.derived_clock_netids.contains(&netid) {
+                        let clkentry = self
+                            .clock_pin2aigpins
+                            .entry(dp)
+                            .or_insert((usize::MAX, usize::MAX));
+                        let clksignal = match is_negedge {
+                            false => clkentry.0,
+                            true => clkentry.1,
+                        };
+                        let mut result = if clksignal != usize::MAX {
+                            clksignal << 1
+                        } else {
+                            let aigpin = self
+                                .add_aigpin(DriverType::InputClockFlag(dp, is_negedge as u8));
+                            let clkentry = self.clock_pin2aigpins.get_mut(&dp).unwrap();
+                            match is_negedge {
+                                false => clkentry.0 = aigpin,
+                                true => clkentry.1 = aigpin,
+                            };
+                            aigpin << 1
+                        };
+                        // Process any pending CKLNQD enables (mirrors the
+                        // undriven-net / primary-input clock-source tails).
+                        while let Some((en_pin, _)) = cklnqd_stack.pop() {
+                            if !ignore_cklnqd {
+                                let en_iv = self.pin2aigpin_iv[en_pin];
+                                assert_ne!(en_iv, usize::MAX, "clken not built");
+                                result = self.add_and_gate(result, en_iv);
+                            }
+                        }
+                        return Ok(result);
+                    }
                     current_pinid = dp;
                     continue;
                 }
@@ -2487,7 +2540,7 @@ impl AIG {
 
     /// Build an AIG from a netlistdb, using explicit PDK behavioral models for decomposition.
     pub fn from_netlistdb_with_pdk(netlistdb: &NetlistDB, pdk_models: &PdkModels) -> AIG {
-        Self::from_netlistdb_impl(netlistdb, Some(pdk_models), None, None, None)
+        Self::from_netlistdb_impl(netlistdb, Some(pdk_models), None, None, None, &[])
     }
 
     /// Build an AIG from a netlistdb, with a runtime cell library
@@ -2516,7 +2569,7 @@ impl AIG {
                 .ok()
                 .flatten()
                 .or_else(crate::bundled_descriptors::default_fallback);
-        Self::from_netlistdb_with_cells_and_descriptor(netlistdb, cell_library, auto.as_ref())
+        Self::from_netlistdb_with_cells_and_descriptor(netlistdb, cell_library, auto.as_ref(), &[])
     }
 
     /// As [`Self::from_netlistdb_with_cells`], but also accepts an optional
@@ -2528,6 +2581,9 @@ impl AIG {
         netlistdb: &NetlistDB,
         cell_library: Option<&crate::cell_library::RuntimeCellLibrary>,
         cell_descriptor: Option<&cell_model_ir::CellModelIr>,
+        // Net names of config-declared derived (÷N) clocks to cut from the
+        // clock cone (gpu-eda/Jacquard#185). `&[]` = no derived clocks.
+        derived_clock_nets: &[String],
     ) -> AIG {
         // ADR 0019 C3.3d: standard-cell combinational (C3.3c), sequential
         // (C3.3d steps 1-2) and timing all come from the embedded cell-model-IR
@@ -2542,7 +2598,14 @@ impl AIG {
         // for them (proven by the gate — the goldens hold with no PDK models
         // loaded). The `from_netlistdb_with_pdk` API keeps working for callers
         // that pass explicit models.
-        Self::from_netlistdb_impl(netlistdb, None, None, cell_library, cell_descriptor)
+        Self::from_netlistdb_impl(
+            netlistdb,
+            None,
+            None,
+            cell_library,
+            cell_descriptor,
+            derived_clock_nets,
+        )
     }
 
     /// Build an AIG from a netlistdb.
@@ -2562,6 +2625,7 @@ impl AIG {
         gf180_pdk: Option<&Gf180PdkModels>,
         cell_library: Option<&crate::cell_library::RuntimeCellLibrary>,
         cell_descriptor: Option<&cell_model_ir::CellModelIr>,
+        derived_clock_nets: &[String],
     ) -> AIG {
         let mut aig = AIG {
             num_aigpins: 0,
@@ -2570,6 +2634,28 @@ impl AIG {
             aigpin_cell_origins: vec![Vec::new()], // Tie0 has no cell origin
             ..Default::default()
         };
+
+        // Resolve config-declared derived-clock net names → netlistdb net ids
+        // BEFORE the clock-trace loop, so `trace_clock_pin` can cut the divider
+        // FF out of any downstream clock cone (gpu-eda/Jacquard#185). Names are
+        // resolved with the same multi-candidate matcher used by
+        // `--trace-signals`; an unresolved name warns but does not abort (a
+        // design that then still hits the divider FF panics as before, pointing
+        // at a mis-typed `net`).
+        for name in derived_clock_nets {
+            match crate::sim::trace_signals::resolve_net_id(netlistdb, name) {
+                Some(netid) => {
+                    aig.derived_clock_netids.insert(netid);
+                    clilog::info!("derived clock net '{}' → netid {}", name, netid);
+                }
+                None => {
+                    clilog::warn!(
+                        "derived clock net '{}' not found in netlistdb; not cutting",
+                        name
+                    );
+                }
+            }
+        }
 
         clilog::info!(
             "Starting clock tracing for {} cells...",
