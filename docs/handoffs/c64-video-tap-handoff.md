@@ -15,13 +15,22 @@ not against the C64 itself, so expect the C64 to surface its own issues.
 
 ## What landed
 
-- **#185 derived (÷N) clock — PR #193**, branch `feat/derived-clock-divider`
-  (rebased on main). A `clocks[]` entry names an internal net instead of a GPIO
+All three PRs stack on `fix/cosim-vcd-time-axis` (#196), which lands first:
+`main → #196 → {#194, #193}`. #196 and #194 are v0.3.0 blockers.
+
+- **#195 output-VCD time axis — PR #196**, branch `fix/cosim-vcd-time-axis`.
+  Output-VCD stamps ran at `edge_tick * clock_period_ps` where `edge_tick`
+  counts scheduler *edges*, stretching the axis 2x against the stimulus VCD's
+  (correct) `edge_tick * gcd_ps`. Latent since 2026-04-29. All VCD goldens
+  regenerated; `check_vcd_axes.py` now asserts the two axes agree.
+- **#185 derived (÷N) clock — PR #193**, branch `feat/derived-clock-divider`,
+  on #196. A `clocks[]` entry names an internal net instead of a GPIO
   (`{ net, derived_from, divide_by }`); the AIG cuts the divider flop out of
   downstream clock cones and the scheduler drives the net as a commensurable ÷N
-  domain. 14/14 goldens on CpuBackend and Metal. Fixture: `tests/derived_clock/`.
-- **#186 SRAM offset panic — PR #194**, branch `feat/sram-macro-offset`, stacked
-  on #193. **The issue's diagnosis was wrong**: this is not about
+  domain. 15/15 goldens on CpuBackend and Metal. Fixture: `tests/derived_clock/`.
+- **#186 SRAM offset panic — PR #194**, branch `feat/sram-macro-offset`, on #196
+  (independent of #185: it touches `flatten.rs`/`staging.rs`, which #185 never
+  does). **The issue's diagnosis was wrong**: this is not about
   cell-library-declared SRAM macros. It's staging. `flatten` read a staged
   endpoint index against the original AIG's endpoint accounting, which only
   coincide when staging is the identity. Any design with SRAMs that level-splits
@@ -56,7 +65,7 @@ shape.
   while validating #185 and **not caused by it**. `multi_mem` ends at 780000 in
   the stimulus and 1540000 in the output across the same 40 edges; the stimulus
   axis is the correct one. Every fixture and golden encodes it, so fixing it
-  invalidates every committed golden. Filed as #195. It cost real time
+  invalidates every committed golden. Fixed in #196. It cost real time
   during #185 validation by making a correct ÷2 clock read as ÷4.
 - Cross-session coordination is via the GitHub issues (both instances read them),
   not handoffs. Per-project git-identity plan (deferred):
