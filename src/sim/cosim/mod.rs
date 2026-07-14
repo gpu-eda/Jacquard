@@ -1551,8 +1551,13 @@ fn derived_clock_timing(
         return None;
     };
     let divide_by = clk_cfg.divide_by.unwrap_or(1).max(1) as u64;
-    // Derived full period = parent period × divide_by → half-period is that /2.
-    let half_period_ps = parent_period * divide_by / 2;
+    // Half-period = parent's *scheduled* half-period × divide_by. Computing it
+    // from the parent's half-period (`parent_period / 2`, exactly as the
+    // non-derived branch derives its own) rather than from the full parent
+    // period keeps the two domains commensurable by construction even when the
+    // parent period is odd (e.g. 15625ps → parent half 7812ps, derived ÷2 half
+    // 15624ps): the scheduler's gcd/lcm interleave then stays bounded.
+    let half_period_ps = (parent_period / 2) * divide_by;
     clilog::info!(
         "Clock config[{}] ({:?}): derived net '{}' ÷{} of '{}' ({}ps) → domain {} \
          (half-period {}ps)",
