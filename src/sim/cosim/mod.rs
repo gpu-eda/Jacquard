@@ -3471,8 +3471,14 @@ fn run_cosim_generic<B: CosimBackend>(
                 // Output VCD
                 let t_timing = std::time::Instant::now();
                 if let Some((ref mut writer, ref mapping, ref mut prev_values)) = output_vcd_state {
-                    let half_period = clock_period_ps / 2;
-                    let base_timestamp = edge_tick as u64 * clock_period_ps + half_period;
+                    // The scheduler edge's own time, the same axis the stimulus
+                    // VCD is written on (`edge_tick * gcd_ps`) — the two are
+                    // read together, so they have to agree. `gcd_ps` is
+                    // time-per-*edge*; multiplying by a full clock period here
+                    // stretched the axis by the edges-per-period factor, and
+                    // `clock_period_ps` is meaningless for a multi-clock design
+                    // anyway (#195).
+                    let base_timestamp = edge_tick as u64 * backend.gcd_ps();
 
                     // ADR 0012: apply jitter displacement to base timestamp.
                     // Draw from each domain's PRNG at every tick to keep
