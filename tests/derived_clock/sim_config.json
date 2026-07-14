@@ -6,6 +6,10 @@
   "reset_cycles": 4,
   "num_cycles": 40,
   "clock_period_ps": 15625,
+  "clocks": [
+    { "gpio": 0, "period_ps": 15625, "name": "clk" },
+    { "net": "clkdiv", "derived_from": "clk", "divide_by": 2, "name": "clkdiv" }
+  ],
   "port_mapping": {
     "inputs": { "0": "clk", "1": "rst_n" },
     "outputs": {

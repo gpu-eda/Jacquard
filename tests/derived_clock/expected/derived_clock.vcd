@@ -1,0 +1,77 @@
+$timescale 1 ps $end
+$scope module top $end
+$var wire 1 ! clkdiv $end
+$var wire 1 " count[7] $end
+$var wire 1 # count[6] $end
+$var wire 1 $ count[5] $end
+$var wire 1 % count[4] $end
+$var wire 1 & count[3] $end
+$var wire 1 ' count[2] $end
+$var wire 1 ( count[1] $end
+$var wire 1 ) count[0] $end
+$upscope $end
+$enddefinitions $end
+$dumpvars
+#7812
+0!
+0"
+0#
+0$
+0%
+0&
+0'
+0(
+0)
+#164062
+1!
+#179687
+1)
+#195312
+0!
+#226562
+1!
+#242187
+1(
+0)
+#257812
+0!
+#289062
+1!
+#304687
+1)
+#320312
+0!
+#351562
+1!
+#367187
+1'
+0(
+0)
+#382812
+0!
+#414062
+1!
+#429687
+1)
+#445312
+0!
+#476562
+1!
+#492187
+1(
+0)
+#507812
+0!
+#539062
+1!
+#554687
+1)
+#570312
+0!
+#601562
+1!
+#617187
+1&
+0'
+0(
+0)

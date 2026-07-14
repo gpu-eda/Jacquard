@@ -159,6 +159,25 @@ if [ "$SCOPE" = all ]; then
         python3 tests/multi_mem_cosim/check_vcd_axes.py \
             "$OUT/axes.vcd" "$OUT/axes_stim.vcd" >&2 || true
     fi
+
+    # derived_clock: an on-die ÷2 toggle-FF divider (clkdiv = clk ÷ 2) driving a
+    # counter clocked by the DERIVED clock (gpu-eda/Jacquard#185). The config
+    # declares clkdiv as a derived clock; the AIG cuts the divider FF out of the
+    # counter's clock cone and the scheduler drives it as a commensurable ÷2
+    # domain. Without derived-clock support the clock tracer panics. Tiny AIGPDK
+    # netlist; golden captured on CpuBackend, byte-identical across backends.
+    run derived_clock "$BIN" cosim tests/derived_clock/div2_clock_dut_synth.gv \
+        --config tests/derived_clock/sim_config.json --top-module div2_clock_dut \
+        --max-clock-edges 40 --output-vcd "$OUT/derived_clock.vcd" || true
+    check derived_clock "$OUT/derived_clock.vcd" tests/derived_clock/expected/derived_clock.vcd
+    # Content assertion (counter advances +1 per clkdiv rising edge = half rate),
+    # independent of the byte-diff.
+    total=$((total + 1))
+    if python3 tests/derived_clock/check.py "$OUT/derived_clock.vcd" >/dev/null 2>&1; then
+        pass "derived_clock_content"
+    else
+        fail "derived_clock_content"
+    fi
 fi
 
 # --- qspi_psram fixture (writable RAM-mode flash) — `all` + `qspi` scopes ----
