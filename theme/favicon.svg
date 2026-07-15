@@ -2,22 +2,40 @@
   <title id="t">Jacquard</title>
   <!-- The unit cell of the full mark (docs/assets/jacquard-logo.svg): one warp,
        one weft, one gate. A hop, a tap, and an AND — the whole grammar at 16px.
-       Inks sit mid-range so the mark holds on a light or a dark tab strip. -->
+
+       A favicon sits on browser chrome, which follows the OS theme, so it takes
+       the same two palettes as the logo rather than one mid-tone compromise:
+       fixed inks left the warp at 3.2:1 on a light strip and the gate at 3.0:1
+       on a dark one — worst-case on both, and the gate is the whole point of the
+       mark. Browsers without prefers-color-scheme for SVG icons get the light
+       rules, which are legible on either. -->
+  <style>
+    .warp { stroke: #7191CE; }
+    .warp-fill { fill: #7191CE; }
+    .weft { stroke: #3A559A; }
+    .gate { stroke: #9C2A1E; }
+    @media (prefers-color-scheme: dark) {
+      .warp { stroke: #6076B4; }
+      .warp-fill { fill: #6076B4; }
+      .weft { stroke: #93A9E4; }
+      .gate { stroke: #EE7359; }
+    }
+  </style>
 
   <!-- warp + its tap + the junction -->
-  <g stroke="#7191CE" stroke-width="3.4" stroke-linecap="round" fill="none">
+  <g class="warp" stroke-width="3.4" stroke-linecap="round" fill="none">
     <line x1="14" y1="4" x2="14" y2="44"/>
     <path d="M14 28 H22"/>
   </g>
-  <circle cx="14" cy="28" r="3" fill="#7191CE"/>
+  <circle class="warp-fill" cx="14" cy="28" r="3"/>
 
   <!-- weft: in over the hop, and out of the gate -->
-  <g stroke="#5A79C0" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <g class="weft" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M4 20 H9 A5 5 0 0 1 19 20 H22"/>
     <path d="M38 24 H44"/>
   </g>
 
   <!-- the gate -->
-  <path d="M22 16 L30 16 A8 8 0 0 1 30 32 L22 32 Z"
-        stroke="#C0392B" stroke-width="3.4" stroke-linejoin="round" fill="none"/>
+  <path class="gate" d="M22 16 L30 16 A8 8 0 0 1 30 32 L22 32 Z"
+        stroke-width="3.4" stroke-linejoin="round" fill="none"/>
 </svg>
