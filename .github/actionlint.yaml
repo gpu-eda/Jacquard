@@ -13,3 +13,12 @@ self-hosted-runner:
     - cuda
     - blackwell
     - sm_120
+    # Self-hosted AMD ROCm runner (gfx1036 — RDNA2 integrated GPU), registered
+    # at org level. Targeted as `runs-on: [self-hosted, amd, rocm]`. Until now
+    # nothing referenced it: `HIP Tests (NVIDIA backend)` builds against
+    # hip-runtime-nvidia and runs on tesla4-runner, so HIP had never executed on
+    # AMD hardware — the open "HIP CI on the AMD runner" item in
+    # docs/release-process.md.
+    - amd
+    - rocm
+    - gfx1036

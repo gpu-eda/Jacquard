@@ -176,12 +176,26 @@ These items are tracked in [`docs/plans/post-phase-0-roadmap.md`](plans/post-pha
 - [x] WS-RH.1 (OpenSTA detection + version check) shipped.
 - [x] Metal CI on `macos-runner-1` green (re-enabled in commit `12e98df`,
       2026-05-12).
-- [ ] **CUDA CI** on `nvidia-runner-1` green on main. Currently
-      disabled in `.github/workflows/ci.yml` (`if: ${{ false }}`,
-      ~line 268). Re-enable when hardware lands.
-- [ ] **HIP CI** on the AMD runner green on main. Currently disabled
-      in `.github/workflows/ci.yml` (`if: ${{ false }}`, ~line 357).
-      Re-enable when the AMD runner is online.
+- [x] **CUDA CI** green on main. Runs as the required `CUDA Tests` job on
+      the ephemeral `tesla4-runner`, plus `CUDA Blackwell Tests` (sm_120) on
+      the self-hosted Blackwell runner. (This item used to say the job was
+      disabled via `if: ${{ false }}` and named a `nvidia-runner-1` host;
+      both went stale — no `if: ${{ false }}` remains in `ci.yml`.)
+- [ ] **HIP CI on AMD hardware** green on main. Still open, and *not*
+      satisfied by the passing `HIP Tests (NVIDIA backend)` job: that one
+      builds against `hip-runtime-nvidia` and runs on `tesla4-runner`, so it
+      exercises HIP-over-CUDA, never ROCm.
+      The blocker named here ("re-enable when the AMD runner is online") is
+      **gone** — an AMD ROCm runner is registered at org level and idle
+      (labels `self-hosted, amd, rocm, gfx1036`). A probe on 2026-07-15
+      confirmed it is ready: ROCm 7.2.4, `hipcc` (HIP 7.2.53211),
+      `hipconfig --platform` = `amd`, Rust 1.96.1 preinstalled, and a
+      trivial HIP kernel compiles and runs correctly on the GPU with **no**
+      `HSA_OVERRIDE_GFX_VERSION` needed. Note the device reports **`gfx1030`**
+      (`gfx_target_version 100306`) despite the runner's `gfx1036` label.
+      What remains is the job itself: `hip-build` deliberately targets the
+      NVIDIA platform, so an AMD/ROCm build variant is needed before the
+      cosim goldens can gate on it.
 - [ ] **Prebuilt CUDA/HIP binaries** (ADR 0018 Phase 4), when produced, must
       build with `JACQUARD_CUDA_ARCH=all-major` so the kernel ships portable
       SASS for every major arch (`sm_50`…`sm_120` on CUDA ≥ 12.8, Blackwell
