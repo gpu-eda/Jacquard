@@ -340,11 +340,13 @@ ROCm, not a ROCm quirk.**
 1. ~~Compile-only test.~~ **Done — see above.** It answered a bigger question
    than it asked. Fix the `types.hpp` CUDA-header leak in vendored `ulib`, then
    re-run; only then is "does it build for laptop archs" a meaningful question.
-2. ~~Run the goldens on our own AMD runner.~~ **Done — 13/14.** What remains is
-   the `multi_mem_split` GPU memory fault: a real out-of-bounds access on the
-   level-split path that only a bounds-checking runtime traps. Fix that before
-   laptops; it is a correctness bug on hardware we already claim to support.
-   Everything else is byte-identical to the CPU/Metal goldens.
+2. ~~Run the goldens on our own AMD runner.~~ **Done — 13/14.** The one failure
+   is now **#203**: `cosim_simulate_stage` faults on stage 1 when the AIG
+   level-splits. Traced with `AMD_SERIALIZE_KERNEL=3` to the exact kernel and
+   dispatch; bisected to splits that produce 2 stages (5, 10 fault; 20, 30, 40
+   are single-stage and pass). A real out-of-bounds access on hardware we
+   already claim to support — CUDA and Metal don't trap it. Fix that before
+   laptops. Everything else is byte-identical to the CPU/Metal goldens.
 3. **Then find real silicon.** Compiling is necessary, not sufficient. The
    cross-backend goldens make the check a byte-diff, not a judgement call. This
    is the step that needs a Strix/Phoenix laptop; no runner we have can stand in
