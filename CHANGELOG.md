@@ -9,6 +9,8 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-15
+
 The headline change is the RTL on-ramp. `jacquard sim` and `cosim` now take
 behavioral Verilog and SystemVerilog directly, synthesizing to gates and
 caching the result behind the scenes, so you no longer run synthesis yourself
@@ -503,7 +505,8 @@ runners land (ADR 0018).
   CUDA / HIP detect violations on the GPU but don't currently route
   them; the JSON / text outputs only fire on Metal today.
 
-[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/gpu-eda/Jacquard/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gpu-eda/Jacquard/compare/v0.2.4...v0.3.0
 [0.2.4]: https://github.com/gpu-eda/Jacquard/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/gpu-eda/Jacquard/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/gpu-eda/Jacquard/compare/v0.2.1...v0.2.2
