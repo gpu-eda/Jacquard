@@ -1,0 +1,454 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0021 — Behavioral RTL support via an embedded synthesis front-end (Proposed) - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="adr-0021--behavioral-rtl-support-via-an-embedded-synthesis-front-end"><a class="header" href="#adr-0021--behavioral-rtl-support-via-an-embedded-synthesis-front-end">ADR 0021 — Behavioral RTL support via an embedded synthesis front-end</a></h1>
+<p><strong>Status:</strong> Proposed</p>
+<blockquote>
+<p><strong>Revised 2026-07-03 (pre-ratification, still Proposed):</strong> the entry point
+moved from a standalone <strong><code>jacquard build</code></strong> command to <strong>folding synthesis
+into <code>sim</code>/<code>cosim</code></strong> — RTL is simulated with one command, no separate build
+step. The embedded-Yosys/<code>wasmtime</code> engine (Decision §2) is unchanged; only
+the <em>surface</em> changed. The original <code>build</code>-command shape is preserved in
+"Alternatives considered" for the audit trail. Rationale below.</p>
+</blockquote>
+<p><strong>Relates to:</strong> <a href="0014-aig-as-simulation-ir.html">ADR 0014</a> (AIG / emulator model —
+why synthesis is a front-end at all), the Python-engine work
+(<a href="https://github.com/gpu-eda/Jacquard/issues/161">#161</a>, ADR 0020 pending) that
+hosts this, <a href="0018-distribution-and-installation.html">ADR 0018</a> (distribution),
+<a href="../synthesis-flow.html"><code>docs/synthesis-flow.md</code></a> (the manual flow this wraps),
+<a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a> (implementation tracking).</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Jacquard is described as a "GPU-accelerated <strong>RTL</strong> simulator", and behavioral
+RTL <em>is</em> the intended design input. But it is an <strong>emulator</strong> (GEM =
+GPU-Emulator-inspired; <a href="0014-aig-as-simulation-ir.html">ADR 0014</a>): it maps a
+<em>synthesized</em> and-inverter graph onto a virtual manycore, exactly as an
+FPGA-based emulator runs a synthesized bitstream, not behavioral source. So the
+input to <code>jacquard sim</code> / <code>cosim</code> is a <strong>gate-level netlist</strong> —
+structural Verilog mapped to <code>aigpdk</code> / SKY130 / GF180MCU cells — and the parser
+(<code>sverilogparse</code>) is structural-only.</p>
+<p>Behavioral RTL reaches that point through <strong>synthesis</strong>, which today is a
+<strong>manual, external step</strong>: the user runs Yosys (<code>memory_libmap</code> → <code>aigpdk.lib</code>
+logic synthesis) or a commercial tool per <code>docs/synthesis-flow.md</code>. This is a
+genuine capability — RTL designs run fine — but it is a <strong>UX cliff</strong>:</p>
+<ul>
+<li>Newcomers can't tell what the tool accepts. (Repeated external feedback: "it
+wasn't clear what your netlist input language support was.")</li>
+<li>"Bring RTL, then run this Yosys script, then point <code>sim</code> at the output" is a
+multi-tool ceremony before the first waveform.</li>
+</ul>
+<p>Two forces shape the fix:</p>
+<ol>
+<li><strong>Synthesis quality drives Jacquard's speed.</strong> <code>synthesis-flow.md</code> is
+explicit: the AIG the GPU emulates is only as good as the mapping, and a
+commercial synthesizer (DC) yields better QoR than Yosys. So synthesis is a
+real <em>quality knob</em>, not pure friction — we must not hide it in a way that
+silently caps performance.</li>
+<li><strong>A synthesizer is embeddable now, cheaply.</strong> <a href="https://yowasp.org">YoWASP</a>
+ships Yosys as WebAssembly wheels (<code>yowasp-yosys</code>) — no system Yosys, no C++
+vendoring, cross-platform. It is <strong>already in this workspace's <code>uv.lock</code></strong>
+(transitively via <code>amaranth[builtin-yosys]</code> in the mcu_soc design).</li>
+</ol>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>Add an <strong>embedded synthesis front-end</strong> so behavioral RTL is a first-class
+input, while keeping the emulator's synthesized-netlist core unchanged:</p>
+<ol>
+<li>
+<p><strong><code>sim</code> / <code>cosim</code> accept behavioral RTL directly</strong> — synthesis is a
+<em>transparent, cached pre-processor</em> inside those commands, not a separate
+user step. There is <strong>no <code>jacquard build</code> command</strong>. On the input path, the
+command classifies what it was handed and dispatches three ways:</p>
+<div class="table-wrapper"><table><thead><tr><th>Input</th><th>Structural parse (<code>sverilogparse</code>)</th><th>Cell family</th><th>Action</th></tr></thead><tbody>
+<tr><td>Gate-level, <strong>built-in</strong> PDK</td><td>parses</td><td>matches an <code>is_*_stdcell</code> family</td><td><strong>simulate directly</strong> — the embedded descriptor supplies logic + timing (corner via <code>--corner</code>, ADR 0019)</td></tr>
+<tr><td>Gate-level, <strong>unknown</strong> PDK</td><td>parses</td><td>matches nothing</td><td><strong>error, actionable</strong>: "gate-level netlist with unrecognized cells — pass <code>--cell-descriptor &lt;path&gt;</code>" (ADR 0019 D8). <em>Not synthesized</em> — it is already a netlist.</td></tr>
+<tr><td><strong>Behavioral</strong> RTL</td><td>fails (<code>always</code>/<code>if</code>/<code>case</code>/operators are not structural)</td><td>n/a</td><td><strong>synthesize</strong> → aigpdk → simulate, via the embedded Yosys (Decision §2), caching the result</td></tr>
+</tbody></table>
+</div>
+<p>The command <strong>prints what it decided</strong> (e.g. <code>design.v: behavioral RTL → synthesized [YoWASP Yosys, functional QoR] → &lt;cache&gt;</code>), so synthesis is
+never silent (honouring force #1 below). <code>--rtl</code> / <code>--netlist</code> override the
+auto-detection; a syntax error in a netlist that falls through to the synth
+path surfaces <strong>both</strong> the structural and the Yosys diagnostics. The
+gate-level artefact is dumpable for inspection/fixtures via <code>--emit-synth &lt;path&gt;</code>. RTL in, waveform out, one command — driving the <em>existing</em>
+<code>docs/synthesis-flow.md</code> scripts (<code>memlib_yosys.txt</code> → <code>aigpdk.lib</code>).</p>
+</li>
+<li>
+<p><strong>Yosys as WebAssembly, executed in-process from Rust</strong> — not a vendored
+native build, and <em>not</em> via the Python <code>yowasp-yosys</code> wrapper. YoWASP ships
+Yosys as a single self-contained <code>yosys.wasm</code> (abc is compiled <strong>in-tree</strong>
+into that module and called <strong>in-process</strong> — WASI has no <code>exec</code>), and the
+<code>yowasp-runtime</code> that runs it is a thin harness over
+<a href="https://wasmtime.dev"><code>wasmtime</code></a>, which has a first-class Rust crate. So
+the synthesis engine is a <strong>Rust component (<code>src/synth.rs</code>) embedded in the
+<code>jacquard</code> binary</strong> that embeds <code>wasmtime</code>, loads the (bundled or
+fetch-on-first-use) <code>yosys.wasm</code>, preopens the design + <code>aigpdk</code> library
+files + a temp dir under WASI, and runs the existing synthesis script —
+caching the compiled module <em>and</em> the synthesized netlist to disk (by
+content hash) exactly as <code>yowasp-runtime</code> does. It is invoked <em>transparently</em>
+by <code>sim</code>/<code>cosim</code> on the behavioral-input path (Decision §1), behind the
+opt-in <strong><code>synth</code> feature</strong> (<code>wasmtime</code>+cranelift are heavy to compile). <strong>No
+Python interpreter and no external toolchain:</strong> <code>jacquard sim design.v …</code> is
+RTL-to-waves from the single <code>jacquard</code> binary. This <strong>decouples the on-ramp
+from the Python-engine packaging decision</strong> (ADR 0020 / #161) — it needs
+neither PyO3 nor a subprocess-bundled wheel.</p>
+</li>
+<li>
+<p><strong>Two synthesis tracks, kept explicit</strong> (honouring force #1):</p>
+<ul>
+<li><strong>On-ramp:</strong> YoWASP Yosys — easy, functional; the default when <code>sim</code>/<code>cosim</code>
+are handed behavioral RTL.</li>
+<li><strong>Performance:</strong> bring-your-own DC (or native Yosys) → <code>gatelevel.gv</code> →
+<code>jacquard sim</code> directly (the "gate-level, built-in PDK" row above).
+Documented as the path to peak GPU speed.</li>
+</ul>
+</li>
+<li>
+<p><strong>The emulator core does not change.</strong> Synthesis is a transparent
+<em>pre-processor</em> inside <code>sim</code>/<code>cosim</code> that produces the same structural
+netlist users synthesize by hand today; the AIG/boomerang pipeline (ADR
+0014/0015) and the structural <code>sverilogparse</code> input are untouched — the
+behavioral path simply feeds them a just-synthesized netlist instead of a
+hand-written one. Behavioral elaboration stays Yosys's job — we do not
+reimplement an RTL front-end.</p>
+</li>
+</ol>
+<p>Implementation phasing lives in <strong><a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a></strong>.</p>
+<h3 id="phase-2--rtl-source-provenance-roadmap-not-this-decisions-gate"><a class="header" href="#phase-2--rtl-source-provenance-roadmap-not-this-decisions-gate">Phase 2 — RTL-source provenance (roadmap, not this decision's gate)</a></h3>
+<blockquote>
+<p><strong>Landed (2026-07).</strong> RTL in → source-annotated waves out. The on-ramp maps via
+<strong><code>abc_new</code></strong> (abc9/aiger2 XAIGER path) so Yosys <code>(* src *)</code> origins survive
+std-cell mapping, and the WS-B ingestion (<code>sverilogparse</code> → <code>netlistdb.cell_src</code>
+→ <code>AIG::aigpin_src_locations</code>) surfaces them in <code>xsources</code> + <code>--trace-signals</code>.
+Two facts below were corrected in flight: (1) the fork wasm builds via the
+<strong><code>develop-0.64</code> Makefile recipe (wasi-sdk 27 + yosys-slang whole-archive)</strong>, NOT
+CMake/wasi-sdk-33 — the patched yosys fork is Makefile-only and CMake dropped
+<code>read_slang</code>. (2) The in-process <code>&amp;origins</code> risk flagged below is <strong>resolved</strong> —
+origins survive the in-process WASI <code>abc_new</code> round-trip (100% <code>\src</code> on comb +
+sequential). The provenance wasm is built + released by the
+<strong><code>gpu-eda/yowasp-yosys</code></strong> fork's own CI; <code>jacquard</code> fetches the pinned release
+(A2). aigpdk-specific mapping needs <code>read_liberty -lib</code> + <code>hierarchy -purge_lib</code>
+before <code>abc_new</code> and a single mapping pass. Details:
+<a href="../plans/rtl-source-provenance.html"><code>docs/plans/rtl-source-provenance.md</code></a>.</p>
+</blockquote>
+<p>A patched toolchain carrying the <a href="https://github.com/robtaylor/origin-shell">origin-shell</a>
+<code>\src</code> pass-through — berkeley-abc <strong>#487</strong> (<code>vOrigins</code>/<code>&amp;origins</code>) +
+<code>robtaylor/yosys@src-retention-y-ext</code> — keeps RTL source locations alive through
+std-cell mapping. Jacquard could then thread <code>\src</code> through <code>netlistdb</code>/AIG so
+GPU-sim results <strong>speak RTL</strong> — <code>--trace-signals</code>, timing violations, and
+X-debugging reporting source lines instead of flattened gate names.</p>
+<p>The tractable route is <strong>building our own <code>yosys.wasm</code> from source</strong> rather than
+depending on the stock upstream wheel. YoWASP's build (<code>build.sh</code>: <strong>CMake +
+wasi-sdk 33</strong> via <code>wasi-sdk-p1.cmake</code>, zlib/libffi/readline/editline/tcl disabled;
+recon'd 2026-07-04 — supersedes an earlier "wasi-sdk 27 / Makefile <code>CONFIG=wasi</code>"
+description) compiles abc <strong>in-tree from yosys's own bundled <code>abc/</code> submodule</strong> —
+verified against the shipped <code>yosys.wasm</code>, which embeds the abc engine (the build
+path <code>…/yosys-src/abc/src/base/abci/…</code> and the full set of <code>&amp;</code>-prefixed GIA
+commands are present in the module). So a provenance build is mechanical: <strong>fork
+<a href="https://codeberg.org/YoWASP/yosys">YoWASP/yosys</a></strong> (now on
+Codeberg; the old GitHub repo was archived read-only 2026-03-11), repoint
+<code>yosys-src</code> → <code>robtaylor/yosys@src-retention-y-ext</code> and yosys's bundled <code>abc</code>
+submodule → <code>robtaylor/abc@origin-tracking-clean</code> (#487), and rerun <code>build.sh</code>.
+Provenance then ships <strong>self-contained in one <code>.wasm</code></strong> — not blocked on upstream
+YoWASP adopting the patches, only on the patches themselves (abc#487 in review).</p>
+<p><strong>Key open risk to spike before committing to WASM provenance:</strong> origin-shell
+validated <code>\src</code> retention through <strong>external</strong> abc (<code>ABCEXTERNAL</code>, temp <code>.aig</code>
+round-trips). The WASM build calls abc <strong>in-process</strong>, a different integration
+surface — the <code>&amp;origins</code> data must survive the in-process call path, not a
+temp-file hand-off. This is unproven and is the first Phase-2 task. A large build
+effort overall; tracked as Phase 2 in #162, out of scope for ratifying the
+on-ramp.</p>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li><strong>RTL becomes a first-class, single-command input</strong> — the onboarding cliff is
+removed, and "what does it accept?" has a clean answer: <em>your RTL</em> (or a
+pre-synthesized netlist).</li>
+<li><strong>The accepted-RTL surface is defined and documented, not implicit.</strong> Because
+synthesis is delegated to Yosys, the accepted behavioral subset <em>is</em> the
+embedded YoWASP Yosys frontend — and that frontend includes <strong>yosys-slang</strong>
+(<code>read_slang</code>), a near-complete SystemVerilog-2017 elaborator, <strong>verified
+present in the pinned <code>yowasp-yosys 0.64.0.0.post1131</code> wasm</strong> (<code>read_slang</code> +
+495 <code>slang</code> symbols). So SystemVerilog <em>language</em> coverage is strong
+(packages, interfaces, advanced generate, structs/enums, most of SV), not the
+narrow built-in-<code>read_verilog</code> subset. The remaining bound is <strong>concurrent-SVA
+synthesis</strong> — turning SVA into synthesizable checkers is a separate Yosys
+formal capability, still partial (#106/#107), independent of slang's parsing.
+On top of the frontend sit the project's techmaps (assertions → <code>GEM_ASSERT</code>,
+<code>$display</code> → <code>GEM_DISPLAY</code>, memories → <code>RAMGEM</code>), minus dropped testbench-only
+constructs. This gets a dedicated <code>docs/accepted-rtl.md</code>, whose authoritative
+form is an <strong>empirical coverage table</strong> driven through
+<a href="https://github.com/SymbiFlow/sv-tests">sv-tests</a> (follow-up) rather than a
+hand-claimed feature list — hand-claims about a delegated frontend would
+violate the "verify, don't assert" bar.</li>
+<li><strong>A QoR ceiling on the easy path.</strong> YoWASP Yosys is functional-grade; peak GPU
+performance still wants DC. The auto-synth path <em>prints its QoR tier</em> and the
+docs must state this, so the on-ramp isn't mistaken for the performance path.</li>
+<li><strong>A Rust <code>wasmtime</code> dependency + a <code>yosys.wasm</code> asset</strong> — no new Python
+dependency. The <code>synth</code> feature is opt-in <em>at compile time</em> (heavy cranelift
+build), but because behavioral input is now a <code>sim</code>/<code>cosim</code> capability rather
+than a separate command, <strong>released binaries must be built <code>--features synth</code></strong>
+— otherwise <code>sim design.v</code> on RTL fails with a build-without-synth message.
+A pre-synthesized netlist still simulates with the feature off. The ~39 MB
+wasm is either bundled into the binary or fetched to a cache on first use
+(open sub-decision, #162). <strong>Resolved (2026-07, Phase 2): fetch-on-first-use.</strong>
+<code>locate_yosys_wasm</code> (<code>src/synth.rs</code>) resolves <code>--yosys-wasm</code> → <code>JACQUARD_YOSYS_WASM</code>
+→ a pinned provenance wheel downloaded (sha256-verified, cached) from a
+<code>gpu-eda/yowasp-yosys</code> release. Provenance forces this: the abc_new origins flow
+needs the fork wasm, so a bundled/stock wasm won't do (see Phase 2 below).</li>
+<li><strong>Decouples the on-ramp from ADR 0020 / #161:</strong> because synthesis runs Yosys
+from Rust via <code>wasmtime</code>, it needs neither the PyO3 binding nor a
+subprocess-bundled Python wheel. The Python-engine packaging call can be made
+independently; the RTL on-ramp no longer waits on it.</li>
+<li><strong>Timing stays descriptor-aligned, not <code>.lib</code>-coupled.</strong> The on-ramp does not
+reintroduce a <code>--liberty</code> runtime path: for built-in PDKs, logic <em>and</em> timing
+come from the embedded cell-model descriptor (ADR 0019 D5), corner-selected
+via <code>--corner</code>. <code>--liberty</code> / <code>--cell-descriptor</code> remain for user/custom PDKs.</li>
+<li><strong>Provenance (Phase 2)</strong> is a large, dependency-gated follow-on, not promised
+by this ADR.</li>
+</ul>
+<h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives considered</a></h2>
+<ul>
+<li><strong>Keep synthesis external (status quo), document better.</strong> The honest interim
+and still the <em>performance</em> path — but rejected as the end state: it leaves the
+onboarding cliff that prompted this.</li>
+<li><strong>Vendor/embed native Yosys (C++).</strong> Heavy build + distribution burden across
+macOS/Linux/arch. YoWASP's WASM wheels are the lightweight embed that makes
+this decision cheap.</li>
+<li><strong>Python-hosted front-end via the <code>yowasp-yosys</code> wrapper</strong> (the original shape
+of this ADR). Rejected once inspection showed the wrapper is a ~1 KB shim and
+<code>yowasp-runtime</code> a ~100-line harness over <code>wasmtime</code>: hosting <code>build</code> in Python
+would force the user to have Python + pip + the wheel present (reintroducing an
+install dependency) and couple the on-ramp to the unresolved #161 packaging
+decision — all to avoid porting a small WASI harness the Rust <code>wasmtime</code> crate
+supports directly. <code>scripts/local_synth.py</code> (which drives
+<code>yowasp_yosys.run_yosys</code> for the sky130 flow) remains a useful reference for the
+synthesis-script <em>content</em>, even though the runtime is now Rust.</li>
+<li><strong>A Nix environment instead of (or alongside) YoWASP.</strong> origin-shell is itself
+a Nix flake pinning patched yosys + abc + librelane. A Nix devshell is a viable
+alternative back-end for <code>jacquard build</code>: <strong>native</strong> binaries (better QoR and
+wall-clock than WASM), fully reproducible, and it carries the same patches with
+far less build engineering than a bespoke WASM toolchain — at the cost of
+requiring Nix on the user's machine. The two are complementary — YoWASP:
+zero-install, cross-platform, <code>pip</code>-native, with a WASM speed/QoR ceiling; Nix:
+native performance + reproducibility for users already in a Nix flow, and the
+natural vehicle for the Phase-2 patched (<code>\src</code>) toolchain before/without a
+WASM build. <code>jacquard build</code> should abstract the synthesis back-end so it can
+dispatch to whichever (YoWASP wheel, Nix devshell, or a plain system Yosys/DC)
+is present.</li>
+<li><strong>A standalone <code>jacquard build &lt;design.v&gt;</code> command</strong> producing <code>gatelevel.gv</code>
+as an explicit user step (the original shape of this ADR; implemented on the
+first cut of PR #167). Revised away before ratification: it reinstated the very
+multi-command ceremony ("build, then point <code>sim</code> at the output") the ADR set
+out to remove, and the artefact boundary it justified turned out unneeded — the
+committed <code>*_synth.gv</code> test fixtures are each written <strong>once</strong> by the test that
+introduces them and never regenerated, so no standing "rebuild the fixtures"
+workflow depends on a <code>build</code> command; <code>--emit-synth</code> covers one-off fixture
+authoring. Folding synthesis into <code>sim</code>/<code>cosim</code> (Decision §1) keeps the
+one-command promise while the same <code>src/synth.rs</code> engine still backs it.</li>
+<li><strong>Elaborate behavioral RTL directly inside Jacquard</strong> (no synthesis). Rejected:
+it contradicts the emulator model (ADR 0014) and would reimplement a Verilog
+front-end Yosys already provides — enormous scope for no architectural gain.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../adr/0020-python-engine-binary-wheel.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../plans/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../adr/0020-python-engine-binary-wheel.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../plans/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
