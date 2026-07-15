@@ -70,18 +70,18 @@ jobs:
           HIP_LAUNCH_BLOCKING: "1"
         run: |
           export PATH=/opt/rocm/bin:$PATH
+          # Full log to stdout AND to a file for the artifact — no truncation:
+          # the interesting line is not reliably near the end.
           # shellcheck disable=SC2086
           ./target/release/jacquard $FIXTURE_ARGS \
-            --output-vcd "${RUNNER_TEMP}/split.vcd" > "${RUNNER_TEMP}/trace.log" 2>&1 || true
-          echo "::group::last 40 lines before the fault"
-          tail -40 "${RUNNER_TEMP}/trace.log"
+            --output-vcd "${RUNNER_TEMP}/split.vcd" 2>&1 \
+            | tee "${RUNNER_TEMP}/trace.log" || true
+          echo "::group::kernel dispatches seen (histogram)"
+          grep -oE 'ShaderName : [a-zA-Z0-9_]+' "${RUNNER_TEMP}/trace.log" \
+            | sort | uniq -c | sort -rn || echo "  (no dispatch lines captured)"
           echo "::endgroup::"
-          echo "::group::kernel dispatches seen"
-          grep -oE 'ShaderName : [a-zA-Z0-9_]+|kernel: [a-zA-Z0-9_]+' "${RUNNER_TEMP}/trace.log" \
-            | sort | uniq -c | sort -rn | head -10 || echo "  (no dispatch lines captured)"
-          echo "::endgroup::"
-          echo "::group::the fault line + surrounding context"
-          grep -n -B12 -A3 'Memory access fault' "${RUNNER_TEMP}/trace.log" | tail -25 || true
+          echo "::group::the fault, in context"
+          grep -n -B25 -A5 'Memory access fault' "${RUNNER_TEMP}/trace.log" || true
           echo "::endgroup::"
 
       # rocgdb stops at the faulting instruction and can name the kernel and,
@@ -113,12 +113,25 @@ jobs:
           # the GPU fault leaves rocgdb at an interactive prompt, which hangs the
           # job until the 45-minute timeout). </dev/null closes stdin so any
           # prompt gets EOF, and `timeout` is the backstop.
+          # Full output, untruncated, to stdout and the artifact.
           # shellcheck disable=SC2086
           timeout 600 env AMD_SERIALIZE_KERNEL=3 \
             rocgdb --batch -nx -x "${RUNNER_TEMP}/gdb.cmds" \
             --args ./target/release/jacquard $FIXTURE_ARGS \
             --output-vcd "${RUNNER_TEMP}/split_gdb.vcd" \
-            </dev/null 2>&1 | tail -45 || echo "  (rocgdb exited ${PIPESTATUS[0]})"
+            </dev/null 2>&1 | tee "${RUNNER_TEMP}/rocgdb.log"
+          echo "  (rocgdb exited ${PIPESTATUS[0]})"
+
+      - name: Upload raw logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hip-oob-trace-logs
+          path: |
+            ${{ runner.temp }}/trace.log
+            ${{ runner.temp }}/rocgdb.log
+          if-no-files-found: warn
+          retention-days: 7
 
       # Bisect the split threshold: --level-split N controls how many stages the
       # AIG is cut into. Which N first faults tells us whether it's "any staging
