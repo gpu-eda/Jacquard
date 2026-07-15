@@ -11,6 +11,26 @@
 #include <cooperative_groups.h>
 #endif
 
+// Lane mask for `__shfl_*_sync`. CUDA takes a 32-bit mask (a warp is 32 lanes).
+// HIP-on-AMD takes a **64-bit** mask, because an AMD wave can be 64 lanes, and
+// static_asserts `sizeof(mask) == 8` — passing an `unsigned` there is a hard
+// compile error:
+//
+//   amd_warp_sync_functions.h:297:62: error: static assertion failed due to
+//   requirement 'sizeof(unsigned int) == 8': The mask must be a 64-bit integer.
+//
+// Jacquard only runs on wave32 (kernel_v1.hip.cpp rejects wave64 at startup),
+// so lanes 32..63 never exist and the extra width is inert: widening a 32-bit
+// mask zero-extends, leaving those lanes unset, which is exactly right. Masks
+// here are sometimes partial (`0xffffffff >> n` for a ragged tail), so this is a
+// *type*, not a constant — the value must survive the widening.
+#if defined(__HIP_PLATFORM_AMD__)
+typedef unsigned long long lane_mask_t;
+#else
+typedef unsigned lane_mask_t;
+#endif
+#define LANE_MASK_ALL ((lane_mask_t)0xffffffffu)
+
 #include "event_buffer.h"
 
 struct alignas(8) VectorRead2 {
@@ -270,12 +290,12 @@ __device__ void simulate_block_v1(
       if(threadIdx.x < 32) {
         for(int hi = 4; hi <= 7; ++hi) {
           int hier_width = 1 << (7 - hi);
-          u32 hier_input_a = __shfl_down_sync(0xffffffff, tmp_cur_hi, hier_width);
-          u32 hier_input_b = __shfl_down_sync(0xffffffff, tmp_cur_hi, hier_width * 2);
-          u32 hier_a_x = is_x_capable ? __shfl_down_sync(0xffffffff, tmp_cur_hi_x, hier_width) : 0;
-          u32 hier_b_x = is_x_capable ? __shfl_down_sync(0xffffffff, tmp_cur_hi_x, hier_width * 2) : 0;
-          u32 arr_a_u32 = __shfl_down_sync(0xffffffff, tmp_cur_arr_u32, hier_width);
-          u32 arr_b_u32 = __shfl_down_sync(0xffffffff, tmp_cur_arr_u32, hier_width * 2);
+          u32 hier_input_a = __shfl_down_sync(LANE_MASK_ALL, tmp_cur_hi, hier_width);
+          u32 hier_input_b = __shfl_down_sync(LANE_MASK_ALL, tmp_cur_hi, hier_width * 2);
+          u32 hier_a_x = is_x_capable ? __shfl_down_sync(LANE_MASK_ALL, tmp_cur_hi_x, hier_width) : 0;
+          u32 hier_b_x = is_x_capable ? __shfl_down_sync(LANE_MASK_ALL, tmp_cur_hi_x, hier_width * 2) : 0;
+          u32 arr_a_u32 = __shfl_down_sync(LANE_MASK_ALL, tmp_cur_arr_u32, hier_width);
+          u32 arr_b_u32 = __shfl_down_sync(LANE_MASK_ALL, tmp_cur_arr_u32, hier_width * 2);
           if(threadIdx.x >= hier_width && threadIdx.x < hier_width * 2) {
             u32 a_eff = hier_input_a ^ hier_flag_xora;
             u32 b_eff = (hier_input_b ^ hier_flag_xorb) | hier_flag_orb;
@@ -291,8 +311,8 @@ __device__ void simulate_block_v1(
             tmp_cur_arr_u32 = (u32)new_arr;
           }
         }
-        u32 v1 = __shfl_down_sync(0xffffffff, tmp_cur_hi, 1);
-        u32 v1_x = is_x_capable ? __shfl_down_sync(0xffffffff, tmp_cur_hi_x, 1) : 0;
+        u32 v1 = __shfl_down_sync(LANE_MASK_ALL, tmp_cur_hi, 1);
+        u32 v1_x = is_x_capable ? __shfl_down_sync(LANE_MASK_ALL, tmp_cur_hi_x, 1) : 0;
         // hier[8..12]: bit-level operations within single u32
         // All 32 signals share one thread's arrival — arrival carries forward unchanged
         if(threadIdx.x == 0) {
@@ -417,8 +437,8 @@ __device__ void simulate_block_v1(
     if(threadIdx.x < num_srams * 4) {
       u32 addrs = sram_duplicate_t;
       u32 last_tid = 32 + threadIdx.x / 32 * 32;
-      u32 mask = (last_tid <= num_srams * 4)
-        ? 0xffffffff : (0xffffffff >> (last_tid - num_srams * 4));
+      lane_mask_t mask = (last_tid <= num_srams * 4)
+        ? LANE_MASK_ALL : (LANE_MASK_ALL >> (last_tid - num_srams * 4));
       port_w_wr_en = __shfl_down_sync(mask, sram_duplicate_t, 1);
       port_w_wr_data_iv = __shfl_down_sync(mask, sram_duplicate_t, 2);
       if(is_x_capable) {
