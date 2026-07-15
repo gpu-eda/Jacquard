@@ -1,0 +1,41 @@
+/* Documentation version picker — see theme/version-picker.js.
+   Styled from mdBook's own theme variables so it follows light/navy/coal/ayu
+   rather than pinning colours that only work on one of them. */
+
+.version-picker {
+  margin-right: 0.6rem;
+  padding: 0.15em 0.4em;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--fg);
+  background-color: var(--bg);
+  border: 1px solid var(--icons);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.version-picker:hover {
+  border-color: var(--icons-hover);
+}
+
+.version-picker:focus-visible {
+  outline: 2px solid var(--links);
+  outline-offset: 1px;
+}
+
+/* Reading a frozen snapshot rather than main. Worth a mark: someone who arrived
+   from a release note has no other cue that the page won't move again. Madder,
+   as everywhere else in this project's identity. */
+.version-picker.is-pinned {
+  border-color: #c0392b;
+  font-weight: 600;
+}
+
+/* The menu bar gets tight on a phone; the title has more claim to the space. */
+@media only screen and (max-width: 480px) {
+  .version-picker {
+    max-width: 8em;
+    font-size: 0.75rem;
+  }
+}

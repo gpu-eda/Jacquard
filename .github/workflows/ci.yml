@@ -1715,6 +1715,15 @@ jobs:
           # release.yml publishes — a plain deploy would wipe them.
           keep_files: true
 
+      # Keeps the version picker's list in step with what's published. Also here
+      # (not only in release.yml) so the list is right after any merge, and so
+      # it bootstraps without waiting for the next release.
+      - name: Refresh the docs version list
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/refresh_doc_versions.sh
+
   # CVC reference simulation for timing correctness validation
   cvc-reference:
     needs: [changes]
