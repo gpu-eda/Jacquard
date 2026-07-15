@@ -6,7 +6,7 @@
        taps in at a junction instead. Madder is reserved for the logic. -->
 
   <!-- warp: verticals, their taps into the gates, and the junctions -->
-  <g stroke="#6B84C4" stroke-width="4" stroke-linecap="round" fill="none">
+  <g stroke="#6076B4" stroke-width="4" stroke-linecap="round" fill="none">
     <line x1="24" y1="10" x2="24" y2="166"/>
     <line x1="62" y1="10" x2="62" y2="166"/>
     <line x1="100" y1="10" x2="100" y2="166"/>
@@ -14,13 +14,13 @@
     <path d="M24 66 H40"/>
     <path d="M62 142 H78"/>
   </g>
-  <g fill="#6B84C4">
+  <g fill="#6076B4">
     <circle cx="24" cy="66" r="3.4"/>
     <circle cx="62" cy="142" r="3.4"/>
   </g>
 
   <!-- weft: the horizontals, where the signal runs -->
-  <g stroke="#A8BCF2" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <g stroke="#93A9E4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M10 24 H19 A5 5 0 0 1 29 24 H57 A5 5 0 0 1 67 24 H95 A5 5 0 0 1 105 24 H108"/>
     <path d="M129 24 H133 A5 5 0 0 1 143 24 H166"/>
 
@@ -35,7 +35,7 @@
   </g>
 
   <!-- the logic: the only coloured thing, because it's the only thing that computes -->
-  <g stroke="#D2513C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <g stroke="#EE7359" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M108 17 L108 31 L122 24 Z"/>
     <circle cx="125.5" cy="24" r="3.5"/>
     <path d="M40 54 L48 54 A8 8 0 0 1 48 70 L40 70 Z"/>
