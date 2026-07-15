@@ -26,20 +26,6 @@ back-annotation, setup/hold violation detection, and the structured
 `--timing-report` — see **[Timing Simulation](https://gpu-eda.github.io/Jacquard/timing-simulation.html)**.
 [`CHANGELOG.md`](CHANGELOG.md) tracks released and unreleased changes.
 
-## Dependencies
-
-**Required for building**: the [Rust toolchain](https://rustup.rs/) (2021 edition). A GPU SDK is required only for the backend you build against.
-
-**Optional tooling** used by specific workflows:
-
-| Tool | Used for | macOS (Homebrew) | Linux (Debian/Ubuntu) |
-|---|---|---|---|
-| `flatc` | regenerating timing-IR bindings when editing `crates/timing-ir/schemas/timing_ir.fbs` | `brew install flatbuffers` | `apt install flatbuffers-compiler` |
-| `mdbook` | building docs locally | `brew install mdbook` | `cargo install mdbook` |
-| OpenSTA | building the vendored `vendor/opensta/` for use by `opensta-to-ir` and the timing-correctness CI corpus | `brew bundle --file vendor/opensta/Brewfile` then run `scripts/build-opensta.sh` | see `vendor/opensta/Dockerfile.ubuntu22.04`, then run `scripts/build-opensta.sh` |
-
-Contributors editing only Rust / C++ / kernel sources do not need `flatc` or OpenSTA; the IR bindings are checked in and the OpenSTA build is only required when running the timing-correctness regression corpus.
-
 ## Quick Start
 
 > **Just want to install Jacquard?** On macOS (Apple Silicon / Metal):
@@ -51,6 +37,10 @@ Contributors editing only Rust / C++ / kernel sources do not need `flatc` or Ope
 > See **[Installation](https://gpu-eda.github.io/Jacquard/installation.html)** for `cargo binstall`,
 > the prebuilt tarball, and the `netlist-graph` PyPI companion. The from-source
 > build below is the contributor path — and the route for Linux CUDA / HIP.
+
+Building from source needs the [Rust toolchain](https://rustup.rs/) (2021 edition)
+and the GPU SDK for the backend you're building against. Nothing else — see
+[Development](#development) for the extra tooling a few contributor workflows want.
 
 ```sh
 git clone https://github.com/gpu-eda/Jacquard.git
@@ -165,6 +155,19 @@ guide.
 Pre-synthesized benchmark designs are in `benchmarks/dataset/` (git submodule). See [benchmarks/README.md](benchmarks/README.md) for instructions.
 
 Available designs: NVDLA, Rocket, Gemmini.
+
+## Development
+
+Working on Jacquard itself is covered by the
+**[Development guide](https://gpu-eda.github.io/Jacquard/development.html)**: how
+the pipeline fits together and where each stage lives, the GPU block limits that
+shape it (and what to do when a design won't map), the optional tooling a few
+workflows need — `flatc`, `mdbook`, OpenSTA — and the ADR / plan / handoff
+conventions.
+
+For architecture in depth, see
+[Simulation Architecture](https://gpu-eda.github.io/Jacquard/simulation-architecture.html)
+and the [ADRs](https://gpu-eda.github.io/Jacquard/adr/).
 
 ## Citation
 
