@@ -47,15 +47,25 @@ jobs:
         id: filter
         with:
           # `every`: a changed file counts toward `code` only if it matches
-          # ALL patterns — i.e. it is NOT under docs/ AND NOT a markdown file.
-          # `code` is then true iff at least one such non-docs file changed.
+          # ALL patterns — i.e. it is not documentation by any of the measures
+          # below. `code` is then true iff at least one such file changed.
           # (The default `some` quantifier OR-combines patterns, so a `'**'`
           # catch-all would match every file and `code` would always be true.)
+          #
+          # This is a denylist of doc paths, not an allowlist of code paths, and
+          # deliberately so: a doc path missing here only wastes CI, whereas a
+          # code path missing from an allowlist would *silently skip the tests*.
+          # The cost is that documentation living outside docs/ has to be listed
+          # — mdBook's theme/ and book.toml are inputs to the `docs` job alone,
+          # so a change to either must not drag in the GPU builds. Add to this
+          # list when documentation grows a new home outside docs/.
           predicate-quantifier: 'every'
           filters: |
             code:
               - '!docs/**'
               - '!**/*.md'
+              - '!theme/**'
+              - '!book.toml'
 
   # Run library unit tests on Linux (no GPU required)
   test:
