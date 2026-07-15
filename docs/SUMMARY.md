@@ -78,3 +78,4 @@
   - [RTL on-ramp folded into sim/cosim](plans/rtl-onramp-sim-integration.md)
   - [RTL-source provenance](plans/rtl-source-provenance.md)
 - [Spike — OpenTimer on SKY130](spikes/opentimer-sky130.md)
+- [Spike — reaching AMD laptops](spikes/amd-laptop-backend.md)
