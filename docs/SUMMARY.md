@@ -24,6 +24,7 @@
 - [Interactive JTAG Debug](jtag-debug.md)
 - [Adding a New PDK](adding-a-pdk.md)
 - [Troubleshooting VCD](troubleshooting-vcd.md)
+- [Development](development.md)
 - [Release Process](release-process.md)
 - [Handoff Discipline](handoff-discipline.md)
 
