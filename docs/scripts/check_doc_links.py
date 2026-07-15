@@ -14,7 +14,7 @@ This script:
      drift stays visible.
 
 Exit status is non-zero iff any rendered page has a broken/404-ing link.
-Stdlib only — runs identically locally (``python3 scripts/check_doc_links.py``)
+Stdlib only — runs identically locally (``python3 docs/scripts/check_doc_links.py``)
 and in CI, independent of the mdBook binary version.
 """
 
@@ -24,8 +24,11 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-DOCS = REPO_ROOT / "docs"
+# This script lives in docs/scripts/, so the docs root is its parent — it sits
+# under the tree it checks. (Doc tooling lives beneath docs/ so that editing it
+# doesn't trip the code path-filter in ci.yml and run the GPU suite.)
+DOCS = Path(__file__).resolve().parent.parent
+REPO_ROOT = DOCS.parent
 SUMMARY = DOCS / "SUMMARY.md"
 
 # Markdown inline links: ](target). Capture the target up to ) or whitespace.
