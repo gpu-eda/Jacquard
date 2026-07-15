@@ -319,6 +319,9 @@ jobs:
           publish_dir: ./book
           destination_dir: ${{ github.ref_name }}
           keep_files: true
+          # See the matching note in ci.yml: docs/scripts/ is doc tooling that
+          # mdbook would otherwise copy into the published book.
+          exclude_assets: '.github,scripts'
 
       # Must run after the deploy above: the list is derived from the published
       # directories, so the new one has to exist first. Skips release candidates
@@ -326,4 +329,4 @@ jobs:
       - name: Refresh the docs version list
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/refresh_doc_versions.sh
+        run: bash docs/scripts/refresh_doc_versions.sh

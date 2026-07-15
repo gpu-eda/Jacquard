@@ -1696,8 +1696,8 @@ jobs:
       - name: Check for broken / 404-ing doc links
         # Validates links against the *rendered* mdBook page set (SUMMARY.md),
         # catching links to pages that exist on disk but aren't rendered (which
-        # 404 on the published site). See scripts/check_doc_links.py.
-        run: python3 scripts/check_doc_links.py
+        # 404 on the published site). See docs/scripts/check_doc_links.py.
+        run: python3 docs/scripts/check_doc_links.py
 
       - name: Prepare Pages site
         run: |
@@ -1714,6 +1714,12 @@ jobs:
           # keep_files preserves the per-release /vX.Y.Z/ subdirs that
           # release.yml publishes — a plain deploy would wipe them.
           keep_files: true
+          # docs/scripts/ is documentation *tooling*, so it lives under docs/ to
+          # stay out of the code path-filter — but mdbook copies every non-md
+          # file in src/ into the book, so drop it at the deploy rather than
+          # serving a gh-pages push script on the docs site. ('.github' is
+          # peaceiris's own default, restated because setting this replaces it.)
+          exclude_assets: '.github,scripts'
 
       # Keeps the version picker's list in step with what's published. Also here
       # (not only in release.yml) so the list is right after any merge, and so
@@ -1722,7 +1728,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/refresh_doc_versions.sh
+        run: bash docs/scripts/refresh_doc_versions.sh
 
   # CVC reference simulation for timing correctness validation
   cvc-reference:

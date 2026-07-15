@@ -121,7 +121,7 @@ Release notes come from the CHANGELOG, and doc links are pinned to the release
   without a version in the URL reads main HEAD; a pinned build is flagged in the
   control, since someone who followed a link out of a release note has no other
   cue that the page is frozen. `versions.json` is regenerated after each deploy
-  by `scripts/refresh_doc_versions.sh`, **derived from the directories actually
+  by `docs/scripts/refresh_doc_versions.sh`, **derived from the directories actually
   published** rather than accumulated — so pruning an old version directory also
   removes it from the picker, and the control can never offer a 404. Release
   candidates are deliberately excluded: their docs stay published (RC notes link
