@@ -1,0 +1,134 @@
+# Trace the multi_mem_split GPU memory fault on ROCm.
+#
+#   Memory access fault by GPU node-1 on address 0x7501bce00000.
+#   Reason: Page not present or supervisor privilege.
+#
+# multi_mem_split is multi_mem with `--level-split 10`. The non-split fixture
+# passes on the same binary and hardware; only the staged path faults. It passes
+# on CpuBackend and Metal too, byte-identical to the golden — so this is an
+# out-of-bounds access those backends tolerate and ROCm traps. ROCm is the only
+# bounds-checking oracle we have.
+#
+# Escalating: identify the faulting kernel, then the faulting instruction.
+# Every step is continue-on-error — the run is expected to crash; the point is
+# what it prints on the way down.
+#
+# Temporary — delete once the bug is found.
+name: HIP OOB trace
+
+on:
+  push:
+    branches: [spike/hip-oob-trace]
+  workflow_dispatch:
+
+jobs:
+  trace:
+    name: Trace multi_mem_split fault
+    runs-on: [self-hosted, amd, rocm]
+    timeout-minutes: 45
+    env:
+      FIXTURE_ARGS: >-
+        cosim tests/multi_mem_cosim/multi_mem_dut_synth.gv
+        --config tests/multi_mem_cosim/sim_config.json
+        --top-module multi_mem_dut --level-split 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init required submodules
+        run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+
+      - name: Build
+        run: |
+          export PATH=/opt/rocm/bin:$PATH
+          echo "CARGO_HOME=${RUNNER_TEMP}/cargo" >> "$GITHUB_ENV"
+          export CARGO_HOME="${RUNNER_TEMP}/cargo"
+          cargo build -r --features hip --bin jacquard
+
+      # Control: the non-split fixture must pass, so the fault is specific to
+      # staging and not to running on ROCm at all.
+      - name: Control — multi_mem WITHOUT --level-split
+        continue-on-error: true
+        run: |
+          export PATH=/opt/rocm/bin:$PATH
+          ./target/release/jacquard cosim \
+            tests/multi_mem_cosim/multi_mem_dut_synth.gv \
+            --config tests/multi_mem_cosim/sim_config.json \
+            --top-module multi_mem_dut \
+            --output-vcd "${RUNNER_TEMP}/nosplit.vcd" 2>&1 | tail -5
+          echo "control exit: $?"
+
+      # AMD_SERIALIZE_KERNEL=3 waits for each kernel before AND after dispatch,
+      # so the fault is attributed to the dispatch that caused it rather than
+      # surfacing asynchronously later. AMD_LOG_LEVEL=3 prints each dispatch.
+      - name: Fault — which kernel?
+        continue-on-error: true
+        env:
+          AMD_SERIALIZE_KERNEL: "3"
+          AMD_SERIALIZE_COPY: "3"
+          AMD_LOG_LEVEL: "3"
+          HIP_LAUNCH_BLOCKING: "1"
+        run: |
+          export PATH=/opt/rocm/bin:$PATH
+          # shellcheck disable=SC2086
+          ./target/release/jacquard $FIXTURE_ARGS \
+            --output-vcd "${RUNNER_TEMP}/split.vcd" > "${RUNNER_TEMP}/trace.log" 2>&1 || true
+          echo "::group::last 40 lines before the fault"
+          tail -40 "${RUNNER_TEMP}/trace.log"
+          echo "::endgroup::"
+          echo "::group::kernel dispatches seen"
+          grep -oE 'ShaderName : [a-zA-Z0-9_]+|kernel: [a-zA-Z0-9_]+' "${RUNNER_TEMP}/trace.log" \
+            | sort | uniq -c | sort -rn | head -10 || echo "  (no dispatch lines captured)"
+          echo "::endgroup::"
+          echo "::group::the fault line + surrounding context"
+          grep -n -B12 -A3 'Memory access fault' "${RUNNER_TEMP}/trace.log" | tail -25 || true
+          echo "::endgroup::"
+
+      # rocgdb stops at the faulting instruction and can name the kernel and,
+      # with -g, the source line.
+      - name: Fault — which instruction? (rocgdb)
+        continue-on-error: true
+        run: |
+          export PATH=/opt/rocm/bin:$PATH
+          if ! command -v rocgdb >/dev/null; then
+            echo "rocgdb not installed on this runner; skipping."
+            exit 0
+          fi
+          {
+            echo "set pagination off"
+            echo "set confirm off"
+            echo "run"
+            echo "echo \\n==== BACKTRACE ====\\n"
+            echo "bt"
+            echo "echo \\n==== AGENTS / DISPATCHES ====\\n"
+            echo "info agents"
+            echo "info dispatches"
+            echo "echo \\n==== THREADS ====\\n"
+            echo "info threads"
+            echo "echo \\n==== DISASSEMBLE AROUND PC ====\\n"
+            echo "x/8i \$pc"
+            echo "quit"
+          } > "${RUNNER_TEMP}/gdb.cmds"
+          # shellcheck disable=SC2086
+          AMD_SERIALIZE_KERNEL=3 rocgdb --batch -x "${RUNNER_TEMP}/gdb.cmds" \
+            --args ./target/release/jacquard $FIXTURE_ARGS \
+            --output-vcd "${RUNNER_TEMP}/split_gdb.vcd" 2>&1 | tail -45
+
+      # Bisect the split threshold: --level-split N controls how many stages the
+      # AIG is cut into. Which N first faults tells us whether it's "any staging
+      # at all" or a particular stage shape.
+      - name: Bisect — which --level-split values fault?
+        continue-on-error: true
+        run: |
+          export PATH=/opt/rocm/bin:$PATH
+          for n in 5 10 20 30 40; do
+            if timeout 120 ./target/release/jacquard cosim \
+                 tests/multi_mem_cosim/multi_mem_dut_synth.gv \
+                 --config tests/multi_mem_cosim/sim_config.json \
+                 --top-module multi_mem_dut --level-split "$n" \
+                 --output-vcd "${RUNNER_TEMP}/s${n}.vcd" >/dev/null 2>&1; then
+              echo "  --level-split ${n}: OK"
+            else
+              echo "  --level-split ${n}: FAULT/FAIL"
+            fi
+          done
