@@ -5142,6 +5142,136 @@ grep '\$var' safe_flat.vcd
 <p><strong>Document Version</strong>: 1.0
 <strong>Last Updated</strong>: 2025-01-08
 <strong>Related</strong>: simulation-architecture.md</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="development"><a class="header" href="#development">Development</a></h1>
+<p>For working on Jacquard itself. If you only want to <em>run</em> it, start at
+<a href="installation.html">Installation</a> and <a href="getting-started.html">Getting Started</a>.</p>
+<h2 id="build"><a class="header" href="#build">Build</a></h2>
+<p>You need the <a href="https://rustup.rs/">Rust toolchain</a> (2021 edition) and the GPU SDK
+for the backend you're building. Nothing else.</p>
+<pre><code class="language-sh">git submodule update --init --recursive
+</code></pre>
+<p>The GPU backend is a feature, and you pick exactly one:</p>
+<pre><code class="language-sh">cargo build -r --features metal --bin jacquard   # macOS, Apple Silicon
+cargo build -r --features cuda  --bin jacquard   # NVIDIA, CUDA toolkit
+cargo build -r --features hip   --bin jacquard   # AMD, ROCm
+</code></pre>
+<p>Two features are worth knowing about:</p>
+<ul>
+<li><strong><code>synth</code></strong> adds the embedded YoWASP Yosys engine, which is what lets
+<code>sim</code>/<code>cosim</code> take behavioral RTL instead of a gate-level netlist (see
+<a href="accepted-rtl.html">Accepted RTL Surface</a>). It costs real compile time —
+wasmtime and cranelift — so it is opt-in for local builds, and on for release
+binaries. Combine it with a backend: <code>--features metal,synth</code>.</li>
+<li><strong>No GPU feature at all</strong> still builds <code>dump-paths</code>, so timing analysis and
+netlist validation work on a machine with no GPU SDK installed.</li>
+</ul>
+<h2 id="test"><a class="header" href="#test">Test</a></h2>
+<pre><code class="language-sh">cargo test                       # library + integration tests, no GPU needed
+cargo bench --bench event_buffer # criterion micro-benchmarks, no GPU needed
+cargo bench --bench xprop
+</code></pre>
+<p>For the GPU path, two flags matter more than the test suite:</p>
+<pre><code class="language-sh">jacquard sim ... --check-with-cpu   # run a CPU baseline and compare
+jacquard sim ... --max-cycles 1000  # bound a long run while bisecting
+</code></pre>
+<p><code>--check-with-cpu</code> is the one to reach for when a kernel change produces
+plausible-looking waveforms: it is the difference between "it ran" and "it is
+right".</p>
+<p>Benchmark designs (NVDLA, Rocket, Gemmini) live in <code>benchmarks/dataset/</code>, a
+submodule. NVDLA is the smallest and the usual first thing to try.</p>
+<h2 id="where-things-live"><a class="header" href="#where-things-live">Where things live</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Path</th><th>What's in it</th></tr></thead><tbody>
+<tr><td><code>src/aig.rs</code></td><td>the and-inverter graph, and the conversion from NetlistDB into it</td></tr>
+<tr><td><code>src/staging.rs</code></td><td>splits the AIG into pipeline stages (<code>--level-split</code>)</td></tr>
+<tr><td><code>src/repcut.rs</code></td><td>hypergraph partitioning onto GPU blocks, via mt-kahypar</td></tr>
+<tr><td><code>src/pe.rs</code></td><td>maps a partition onto one block's resources; the limits below live here</td></tr>
+<tr><td><code>src/flatten.rs</code></td><td>emits <code>FlattenedScriptV1</code>, the packed instruction stream the kernel runs</td></tr>
+<tr><td><code>src/aigpdk.rs</code></td><td>the AIGPDK standard-cell interface (AND, DFF, clock gate, SRAM)</td></tr>
+<tr><td><code>src/synth.rs</code></td><td>the embedded Yosys on-ramp (ADR 0021), behind <code>synth</code></td></tr>
+<tr><td><code>csrc/kernel_v1.metal</code></td><td>the Metal kernel</td></tr>
+<tr><td><code>csrc/kernel_v1.cu</code>, <code>kernel_v1.hip.cpp</code></td><td>CUDA and HIP, sharing <code>kernel_v1_impl.cuh</code></td></tr>
+<tr><td><code>crates/</code></td><td><code>timing-ir</code>, <code>opensta-to-ir</code>, <code>cell-model-ir</code>, <code>liberty-parse</code>, <code>liberty-to-cellir</code>, <code>cell-decomp</code></td></tr>
+<tr><td><code>vendor/eda-infra-rs</code></td><td>netlistdb, sverilogparse, vcd-ng, ulib, ucc, clilog</td></tr>
+<tr><td><code>docs/scripts/</code></td><td>documentation tooling, kept under <code>docs/</code> so editing it isn't a code change</td></tr>
+</tbody></table>
+</div>
+<p>The pipeline reads left to right:</p>
+<pre><code>NetlistDB → AIG → StagedAIG → Partitions → FlattenedScript → GPU kernel
+</code></pre>
+<p><a href="simulation-architecture.html">Simulation Architecture</a> walks each stage. For
+<em>why</em> it is shaped this way, <a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a>
+explains the AIG choice and <a href="adr/0015-boomerang-execution-model.html">ADR 0015</a>
+the boomerang execution model.</p>
+<h2 id="the-constraint-that-shapes-everything"><a class="header" href="#the-constraint-that-shapes-everything">The constraint that shapes everything</a></h2>
+<p>A GPU block is a fixed budget, and <code>src/pe.rs</code> has to fit each partition inside
+it:</p>
+<ul>
+<li>at most <strong>8191 unique inputs</strong> and <strong>8191 unique outputs</strong> per partition
+(for SRAMs and DFFs, outputs count every enable and bus pin, and holes mean
+the effective capacity can be as low as 4095);</li>
+<li>at most <strong>4095 intermediate pins alive</strong> at any stage;</li>
+<li>at most <strong>64 SRAM output groups</strong> — that is 8192 / (32 × 4).</li>
+</ul>
+<p>When a design doesn't fit you get <code>single endpoint cannot map</code>. The answer is
+usually <code>--level-split</code>, which forces more stages so each one is smaller:</p>
+<pre><code class="language-sh">jacquard sim ... --level-split 30
+jacquard sim ... --level-split 20,40
+</code></pre>
+<p>This is the first thing most people hit on a large design, and it is a mapping
+limit rather than a bug.</p>
+<h2 id="optional-tooling"><a class="header" href="#optional-tooling">Optional tooling</a></h2>
+<p>Each of these is needed by one workflow and nothing else. Editing Rust, C++ or
+kernel sources needs none of them: the timing-IR bindings are checked in, and
+OpenSTA is only for the timing-correctness corpus.</p>
+<div class="table-wrapper"><table><thead><tr><th>Tool</th><th>Used for</th><th>macOS (Homebrew)</th><th>Linux (Debian/Ubuntu)</th></tr></thead><tbody>
+<tr><td><code>flatc</code></td><td>regenerating timing-IR bindings when editing <code>crates/timing-ir/schemas/timing_ir.fbs</code></td><td><code>brew install flatbuffers</code></td><td><code>apt install flatbuffers-compiler</code></td></tr>
+<tr><td><code>mdbook</code></td><td>building the docs locally</td><td><code>brew install mdbook</code></td><td><code>cargo install mdbook</code></td></tr>
+<tr><td>OpenSTA</td><td>building vendored <code>vendor/opensta/</code> for <code>opensta-to-ir</code> and the timing-correctness CI corpus</td><td><code>brew bundle --file vendor/opensta/Brewfile</code>, then <code>scripts/build-opensta.sh</code></td><td>see <code>vendor/opensta/Dockerfile.ubuntu22.04</code>, then <code>scripts/build-opensta.sh</code></td></tr>
+</tbody></table>
+</div>
+<p>Python tooling (PDK fetchers, harness utilities) belongs in the workspace's <code>uv</code>
+dev group rather than an ad-hoc pip install: add it under <code>[dependency-groups]</code>
+in the root <code>pyproject.toml</code>, <code>uv sync --group dev</code>, and run it with <code>uv run</code>.</p>
+<h2 id="debugging"><a class="header" href="#debugging">Debugging</a></h2>
+<p>Jacquard's own tools, each with a page:</p>
+<ul>
+<li><a href="signal-tracing.html">Signal Tracing</a> — surface internal nets in the output VCD.
+<code>netlist-graph</code> finds the names to trace: <code>uv run netlist-graph drivers &lt;netlist&gt; &lt;signal&gt;</code>.</li>
+<li><a href="x-debugging.html">Debugging X Values</a> — find <em>why</em> a signal went <code>x</code>, statically,
+instead of trace-guess-rerun.</li>
+<li><a href="bus-tracing.html">Bus Transaction Tracing</a> — decode on-chip bus transfers rather
+than reading raw wires.</li>
+<li><a href="timing-violations.html">Timing Violations</a> — GPU-side setup/hold checks.</li>
+<li><a href="cosim-perf-report.html">Cosim Perf Report</a> and <a href="gpu-capture.html">GPU Frame Capture</a>
+— where the time actually goes in a cosim run.</li>
+</ul>
+<h2 id="docs"><a class="header" href="#docs">Docs</a></h2>
+<p>The docs are an mdBook, sourced from <code>docs/</code>:</p>
+<pre><code class="language-sh">mdbook serve   # http://localhost:3000
+</code></pre>
+<p><code>SUMMARY.md</code> is the table of contents, and a page missing from it isn't rendered
+at all — which is why <code>docs/scripts/check_doc_links.py</code> validates links against
+the <em>rendered</em> page set rather than against files on disk. Run it before pushing
+docs; CI does too.</p>
+<p>The published site keeps main's docs at the root and a frozen copy of each
+release under <code>/vX.Y.Z/</code>, with a picker to move between them. Release notes link
+to the pinned copy, so a link in an old release keeps meaning what it meant. See
+<a href="release-process.html">Release Process</a>.</p>
+<h2 id="conventions"><a class="header" href="#conventions">Conventions</a></h2>
+<ul>
+<li><strong><a href="adr/README.html">ADRs</a></strong> record decisions worth understanding later, and are
+append-only: when reality moves past one, amend it rather than rewriting it.
+An ADR's status is a claim about the code, so check it against the code.</li>
+<li><strong><a href="plans/README.html">Plans</a></strong> hold work in progress; deferred work gets a plan
+and an issue rather than being lost.</li>
+<li><strong><a href="handoff-discipline.html">Handoffs</a></strong> are working memory, not history. One per
+active thread, folded into the ADRs or plans and deleted when resolved.</li>
+<li><strong><a href="release-process.html">Release Process</a></strong> covers cutting a release, the RC-first
+flow, and what's automated.</li>
+</ul>
+<p>The through-line: a sentence that says how the tool behaves is a verifiable
+claim. That applies to docs, <code>--help</code> text, and ADR status alike — check it
+against the code before writing it.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="release-process"><a class="header" href="#release-process">Release Process</a></h1>
 <p>Lightweight by design. Jacquard is a single-binary Rust project with
 <code>vendor/</code> submodules; releases are git tags + a CHANGELOG entry. No
