@@ -35,9 +35,14 @@ jobs:
       - name: Init required submodules
         run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
 
+      # The image ships Rust at /opt/cargo, but it isn't writable by the runner
+      # user — cargo then dies with "failed to create directory
+      # /opt/cargo/registry/cache: Permission denied". Point CARGO_HOME at the
+      # workspace instead.
       - name: Toolchain
         run: |
           export PATH=/opt/rocm/bin:$PATH
+          echo "CARGO_HOME=${RUNNER_TEMP}/cargo" >> "$GITHUB_ENV"
           hipcc --version | head -3
           hipconfig --platform
           cargo --version
@@ -52,7 +57,9 @@ jobs:
         run: |
           export PATH=/opt/rocm/bin:$PATH
           echo "::notice::UCC_HIP_TARGETS=$UCC_HIP_TARGETS"
-          cargo build -r --features hip --bin jacquard 2>&1 | tail -25
+          # No pipe here: `cargo ... | tail` masks cargo's exit status behind
+          # tail's, so a failed build reports success.
+          cargo build -r --features hip --bin jacquard
 
       - name: Which archs actually landed in the binary?
         continue-on-error: true
