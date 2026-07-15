@@ -58,13 +58,19 @@ jobs:
         # quick-install strategies makes a missing/misnamed asset a hard
         # failure instead of a silent source build — which is the whole point.
         #
+        # The *package* is `jacquard-sim` (renamed 2026-07-07 in 3b3938f3); the
+        # binary it installs is still `jacquard`. `--manifest-path` resolves the
+        # name against the checked-out manifest, so this must be the package
+        # name, not the binary name — `jacquard` gives "Failed to load jacquard
+        # from Cargo.toml: Not found".
+        #
         # GITHUB_TOKEN authenticates binstall's GitHub API calls (release
         # lookup): unauthenticated is 60 req/hr/IP and 403s under load, which
         # then times out the fetcher and aborts.
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          cargo binstall jacquard \
+          cargo binstall jacquard-sim \
             --manifest-path Cargo.toml \
             --no-confirm \
             --strategies crate-meta-data \
