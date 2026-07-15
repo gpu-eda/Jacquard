@@ -1,0 +1,353 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Signal Tracing - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="in-design-signal-tracing---trace-signals"><a class="header" href="#in-design-signal-tracing---trace-signals">In-Design Signal Tracing (<code>--trace-signals</code>)</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>By default a Jacquard output VCD contains only top-level IO.
+<code>--trace-signals &lt;FILE&gt;</code> surfaces <strong>user-selected internal nets</strong> in that
+VCD alongside the top-level ports — so you can watch a DFF's Q, a
+controller state bit, or an SRAM port wire without re-synthesizing or
+exposing it as a port.</p>
+<p>It is available on both <code>jacquard sim</code> and <code>jacquard cosim</code>, and is
+observe-only: traced nets are read out each tick, never driven.</p>
+<p>Each name in the file is resolved against the netlist, registered as a
+primary output <strong>before partitioning</strong> (so it gets a state-buffer slot),
+and emitted on the same path as the top-level IO. It works uniformly for
+sequential (DFF Q) and combinational nets — anything that has a name in
+the netlist database.</p>
+<p>This is the <strong>raw-wire</strong> counterpart to
+<a href="bus-tracing.html">bus transaction tracing</a>: <code>--trace-signals</code> gives you
+per-cycle waveforms of individual nets; bus tracing gives you decoded
+transaction records. Use this when you want a waveform; use bus tracing
+when you want <code>READ 0x40 =&gt; 0x1</code>.</p>
+<h2 id="file-format"><a class="header" href="#file-format">File format</a></h2>
+<p>One hierarchical signal name per line:</p>
+<pre><code class="language-text"># JTAG debug-module state (comments and blank lines are ignored)
+chip_core.dm.haltreq_q[0]
+chip_core.dm.haltreq_q[1]
+
+# Yosys-internal nets — same syntax works
+chip_core.sram_u._00147_
+
+# A whole bus, one bit per line
+data0_obs[0]
+data0_obs[1]
+</code></pre>
+<ul>
+<li>Blank lines and lines whose first non-whitespace character is <code>#</code> are
+skipped.</li>
+<li>Hierarchy uses <code>.</code> as the separator; a trailing <code>[N]</code> selects a bus
+bit.</li>
+<li>A leading backslash (Verilog escaped-identifier syntax) is stripped.</li>
+</ul>
+<p>A real example ships in <code>tests/jtag_minimal/trace_signals.txt</code>.</p>
+<h2 id="name-resolution"><a class="header" href="#name-resolution">Name resolution</a></h2>
+<p>Post-synthesis net names are ambiguous — Yosys may flatten a hierarchy
+into one escaped identifier (<code>\soc.sram.read_port__data</code>), expand a bus
+into per-bit scalars (<code>soc.bus__addr[3]</code>), or preserve real structural
+hierarchy. Rather than guess, the resolver tries multiple candidate
+interpretations of each name and takes the first that matches the netlist
+database, so the <strong>same syntax works across all three conventions</strong>.</p>
+<ul>
+<li>
+<p><strong>Unresolved names warn, they don't abort.</strong> A bad name logs a warning
+and is skipped; the rest of the list still registers. A trailing
+summary line reports how many signals registered vs. were dropped, so a
+mistyped list surfaces clearly at startup:</p>
+<pre><code>--trace-signals: registered 34 signal(s), dropped 2 (file: trace.txt)
+</code></pre>
+</li>
+<li>
+<p>Names that resolve to a <strong>constant</strong> (tied 0/1) are skipped — there's
+nothing to observe at runtime.</p>
+</li>
+</ul>
+<h2 id="where-the-output-lands"><a class="header" href="#where-the-output-lands">Where the output lands</a></h2>
+<p>Traced nets appear in whichever VCD the run already emits:</p>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Flag</th><th>Traced nets appear in</th></tr></thead><tbody>
+<tr><td><code>jacquard sim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the output VCD</td></tr>
+<tr><td><code>jacquard cosim</code></td><td><code>--trace-signals &lt;FILE&gt;</code></td><td>the <code>--output-vcd</code> output <strong>only</strong></td></tr>
+</tbody></table>
+</div>
+<p>They show up as ordinary VCD wires next to the top-level IO, named by the
+string you put in the trace file.</p>
+<blockquote>
+<p><strong>cosim:</strong> traced nets land in <code>--output-vcd</code> <strong>only</strong>. The
+<code>--stimulus-vcd</code> carries primary inputs and does <em>not</em> include them, so
+if you trace a net and look in the stimulus VCD you'll see nothing.
+<code>--output-vcd</code> does <strong>not</strong> require timing data — see
+<a href="#pre-pnr-functional-runs">Pre-PnR functional runs</a>.</p>
+</blockquote>
+<h3 id="pre-pnr-functional-runs"><a class="header" href="#pre-pnr-functional-runs">Pre-PnR functional runs</a></h3>
+<p><code>--output-vcd</code> is the functional output path too — it does <strong>not</strong> require
+<code>--timing-ir</code>/SDF. Run a synthesized (pre-PnR) netlist through <code>cosim</code>
+with <code>--output-vcd out.vcd</code> and you get chip outputs and traced nets per
+cycle, with transitions at clock edges (no arrival-time offsets). This is
+the right mode for functional / 4-state X-pessimism debugging, where
+there is no timing data to supply yet. Adding <code>--timing-ir</code> later only
+adds arrival-time offsets to the same VCD.</p>
+<h3 id="top-level-inout-bidir-pads"><a class="header" href="#top-level-inout-bidir-pads">Top-level inout (bidir) pads</a></h3>
+<p>A top-level <code>inout</code> pad is split into two observables in the output VCD:
+<code>&lt;pad&gt;__out</code> (the value the core drives) and <code>&lt;pad&gt;__oe</code> (the pad's
+output-enable). The raw <code>&lt;pad&gt;</code> net reads the pad's <strong>input</strong> side, so on
+an output-only or undriven cycle it can look flat — watch <code>&lt;pad&gt;__out</code> /
+<code>&lt;pad&gt;__oe</code> to see what the design is driving. Example:
+<code>bidir_PAD[12]__out</code>, <code>bidir_PAD[12]__oe</code>. These appear automatically;
+you don't need to list them in the trace file.</p>
+<h2 id="finding-signal-names"><a class="header" href="#finding-signal-names">Finding signal names</a></h2>
+<p>Use the <code>netlist-graph</code> tool (see the project README) to discover the
+exact post-synthesis names:</p>
+<pre><code class="language-bash"># Search for nets matching a pattern
+uv run netlist-graph search &lt;netlist.v&gt; "haltreq"
+
+# Trace what drives / loads a signal (to find nearby observable nets)
+uv run netlist-graph drivers &lt;netlist.v&gt; "soc.cpu.state" -d 5
+uv run netlist-graph loads   &lt;netlist.v&gt; "soc.cpu.ack"   -d 5
+
+# Emit a ready-to-use trace file
+uv run netlist-graph watchlist &lt;netlist.v&gt; out.json signal1 signal2 ...
+</code></pre>
+<h2 id="sram-observability-workflow"><a class="header" href="#sram-observability-workflow">SRAM observability workflow</a></h2>
+<p>The recommended way to observe SRAM port activity is wire-level tracing
+rather than the env-var-gated <code>JACQUARD_SRAM_DUMP</code>. <code>netlist-graph</code> can
+discover the port wires and emit a trace file directly:</p>
+<pre><code class="language-bash"># 1. Discover SRAM port wire names from the netlist
+uv run netlist-graph sram-ports design.v --cell-type SRAM -o sram_trace.txt
+
+# 2. Surface them in the VCD with full per-tick accuracy
+jacquard cosim design.v --config sim.json \
+    --trace-signals sram_trace.txt --output-vcd out.vcd
+
+# 3. Post-process the VCD to reconstruct bus values
+</code></pre>
+<h2 id="example"><a class="header" href="#example">Example</a></h2>
+<p><code>tests/jtag_minimal/</code> uses <code>--trace-signals</code> to surface the debug
+module's observable outputs (<code>dmactive_obs</code>, <code>haltreq_obs</code>,
+<code>data0_obs[0..31]</code>) so the test's pass criterion can check that the magic
+value <code>0xCAFEBABE</code> lands in <code>data0_obs</code>:</p>
+<pre><code class="language-bash">jacquard cosim tests/jtag_minimal/data/top.pnl.v \
+    --config tests/jtag_minimal/sim_config.json \
+    --trace-signals tests/jtag_minimal/trace_signals.txt \
+    --jtag-replay tests/jtag_minimal/data/bitbang.rec \
+    --output-vcd out.vcd
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Symptom</th><th>Cause / fix</th></tr></thead><tbody>
+<tr><td><code>not found in netlistdb (tried N candidate(s))</code></td><td>The name doesn't exist post-synthesis under any candidate spelling. Find the real name with <code>netlist-graph search</code>; the net may have been renamed or optimized away.</td></tr>
+<tr><td>Signal registered but flat in the VCD</td><td>It may resolve to a constant after optimization (the startup log notes constants are skipped), or the cone was stripped. Confirm it's a live net with <code>netlist-graph drivers</code>.</td></tr>
+<tr><td>Nothing appears in the VCD</td><td>For cosim, traced nets only land in <code>--output-vcd</code> (not <code>--stimulus-vcd</code>) — make sure you passed it. Also check the startup summary reports a non-zero registered count.</td></tr>
+</tbody></table>
+</div>
+<h2 id="implementation-notes"><a class="header" href="#implementation-notes">Implementation notes</a></h2>
+<p>Registration happens at AIG construction, before partitioning, which is
+why the list must be supplied via the CLI flag (not a runtime env var).
+The mechanism lives in <code>src/sim/trace_signals.rs</code>; emission piggybacks on
+<code>emit_extra_observables</code> in <code>src/sim/vcd_io.rs</code>. The same multi-candidate
+resolver backs bus-trace pin binding (see
+<a href="bus-tracing.html">bus tracing</a> and ADR 0013).</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="timing-model-extensions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="bus-tracing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="timing-model-extensions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="bus-tracing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

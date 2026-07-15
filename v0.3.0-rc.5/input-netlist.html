@@ -1,0 +1,321 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Input: Netlist Language &amp; RTL - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="input-netlist-language--rtl"><a class="header" href="#input-netlist-language--rtl">Input: netlist language &amp; RTL</a></h1>
+<h2 id="what-jacquard-reads"><a class="header" href="#what-jacquard-reads">What Jacquard reads</a></h2>
+<p>Jacquard is a gate-level <strong>emulator</strong> — it maps a <em>synthesized</em> and-inverter
+graph onto a virtual manycore GPU processor (see
+<a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a>). So the direct input to
+<code>jacquard sim</code> / <code>cosim</code> is a <strong>gate-level Verilog netlist</strong>: structural
+Verilog whose leaf cells are <code>aigpdk</code>, SKY130, or GF180MCU standard cells.</p>
+<p><strong>Behavioral RTL is the intended design input — via a synthesis step.</strong> You
+bring your RTL, synthesize it to a gate-level netlist (memory mapping +
+logic synthesis to <code>aigpdk.lib</code> cells), and Jacquard emulates the result at
+5–40×. Synthesis is currently a <strong>separate, documented step</strong> — see
+<a href="synthesis-flow.html">Synthesis Flow</a> — because synthesis <em>quality</em> directly sets
+Jacquard's performance, so it's a deliberate knob (open-source Yosys works;
+a commercial tool like DC gives better QoR).</p>
+<blockquote>
+<p><strong>Roadmap:</strong> an integrated <code>jacquard build design.v</code> on-ramp (Yosys via
+YoWASP, no manual synthesis) is planned — see
+<a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> and
+<a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a>. Until then, synthesize
+first, then <code>sim</code>.</p>
+</blockquote>
+<p>Behavioral constructs (<code>always</code>, <code>if</code>/<code>case</code>, <code>reg</code>, parameters, <code>generate</code>,
+<code>function</code>/<code>task</code>, <code>#delay</code>) are <strong>not read by Jacquard directly</strong> — the
+synthesizer elaborates them away. If you feed raw behavioral RTL to <code>sim</code>, it
+will fail to parse; run it through synthesis first.</p>
+<h2 id="supported-netlist-syntax"><a class="header" href="#supported-netlist-syntax">Supported netlist syntax</a></h2>
+<p>The netlist parser (<code>sverilogparse</code>, consumed by <code>netlistdb</code>) accepts the
+structural subset a synthesizer emits:</p>
+<p><strong>Structure</strong></p>
+<ul>
+<li>Multiple <code>module … endmodule</code> per file; <code>//</code> and <code>/* */</code> comments; <code>(* … *)</code>
+attributes (parsed and ignored).</li>
+<li>Both port-list styles: non-ANSI (<code>module m(a, b);</code> with body <code>input</code>/<code>output</code>
+decls) and ANSI (<code>module m(input [7:0] a, output b);</code>). A <code>wire</code>/<code>reg</code>
+net-type keyword in an ANSI header is accepted and ignored.</li>
+</ul>
+<p><strong>Declarations</strong></p>
+<ul>
+<li><code>input</code> / <code>output</code> / <code>inout</code> / <code>wire</code>, scalar or bus (<code>[hi:lo]</code>), with
+comma-separated names (<code>wire a, b, c;</code>).</li>
+</ul>
+<p><strong>Cell instantiations</strong></p>
+<ul>
+<li><code>CELL_TYPE inst (.pin(expr), …);</code> — <strong>named-port connections only</strong>. An empty
+<code>.pin()</code> (unconnected) is accepted and dropped.</li>
+</ul>
+<p><strong>Assigns</strong></p>
+<ul>
+<li><code>assign lhs = rhs;</code>, both sides full wire expressions.</li>
+</ul>
+<p><strong>Wire expressions</strong> (in assigns, port connections, and <code>.name(expr)</code> hookups)</p>
+<div class="table-wrapper"><table><thead><tr><th>Form</th><th>Example</th></tr></thead><tbody>
+<tr><td>Identifier (scalar or whole bus)</td><td><code>w</code></td></tr>
+<tr><td>Bit-select</td><td><code>w[3]</code></td></tr>
+<tr><td>Part-select / slice (<code>[hi:lo]</code> or <code>[lo:hi]</code>)</td><td><code>w[7:0]</code></td></tr>
+<tr><td>Concatenation</td><td><code>{a, b[3:1], 4'b0101}</code></td></tr>
+<tr><td>Sized literal (x/z allowed for bin/oct/hex)</td><td><code>4'b01xz</code>, <code>8'hFF</code>, <code>10'd42</code></td></tr>
+<tr><td>Unary NOT</td><td><code>~w</code></td></tr>
+<tr><td>Parenthesised grouping</td><td><code>(w)</code></td></tr>
+</tbody></table>
+</div>
+<p><strong>Identifiers</strong> — standard (<code>[A-Za-z_][A-Za-z0-9_$]*</code>) and escaped
+(<code>\name-until-whitespace </code>).</p>
+<h2 id="not-supported-in-the-netlist"><a class="header" href="#not-supported-in-the-netlist">Not supported in the netlist</a></h2>
+<p>Beyond the behavioral constructs above (which belong in <em>pre</em>-synthesis RTL),
+the parser does <strong>not</strong> accept:</p>
+<ul>
+<li><strong>Positional port connections</strong> — <code>CELL inst(a, b, c)</code>; use <code>.pin(expr)</code>.</li>
+<li><strong>Parameters</strong> — <code>parameter</code> / <code>localparam</code>, or <code>#(…)</code> overrides on instances.</li>
+<li><strong>Preprocessor</strong> — <code>`define</code> / <code>`ifdef</code> (no preprocessor).</li>
+<li><strong>Net types</strong> beyond <code>input</code>/<code>output</code>/<code>inout</code>/<code>wire</code> — no <code>supply0/1</code>, <code>tri</code>,
+<code>wand</code>/<code>wor</code>, <code>trireg</code>.</li>
+<li><strong>Multi-dimensional / memory arrays</strong> — one <code>[hi:lo]</code> range per declaration.</li>
+<li><strong>Bare unsized decimal literals</strong> — write <code>1'b1</code>, not <code>1</code>.</li>
+<li><strong>Replication</strong> — <code>{4{a}}</code>.</li>
+<li><strong><code>~</code> inside a concatenation</strong> — <code>{~a, b}</code> (use an explicit inverter cell).</li>
+<li><strong>Operators</strong> — <code>&amp;</code>, <code>|</code>, <code>?:</code>, arithmetic; and base-10 literals with x/z
+(<code>8'dx</code>).</li>
+</ul>
+<h2 id="design-level-constraints-netlistdb"><a class="header" href="#design-level-constraints-netlistdb">Design-level constraints (<code>netlistdb</code>)</a></h2>
+<ul>
+<li><strong>Single top module</strong> — auto-detected as the module no other instantiates; pass
+<code>--top-module &lt;name&gt;</code> if ambiguous. Cyclic instantiation is rejected.</li>
+<li><strong>Hierarchy is flattened</strong> — multi-level module hierarchy is supported and
+flattened at load.</li>
+<li><strong>Leaf-cell pin directions come from the cell library</strong> (<code>aigpdk</code> / SKY130 /
+GF180MCU); an unknown cell's pins default to <code>Unknown</code> with a warning.</li>
+<li><strong><code>inout</code> on the design boundary</strong> is parsed but modelled as <code>Unknown</code>
+(not fully supported); prefer split <code>input</code>/<code>output</code> where possible.</li>
+<li><strong>Edge-triggered flops only</strong> — a raw <code>LATCH</code> cell is rejected (async
+set/reset is fine). Clock gating uses <code>CKLNQD</code>; latch/register-file memory maps
+to RAM through the memory-synthesis step (see <a href="synthesis-flow.html">Synthesis Flow</a>).</li>
+</ul>
+<h2 id="systemverilog--assertions-sva"><a class="header" href="#systemverilog--assertions-sva">SystemVerilog &amp; assertions (SVA)</a></h2>
+<ul>
+<li><strong>Immediate assertions</strong> are already lowered through synthesis today, as
+<code>GEM_ASSERT</code> cells (see the assertion handling in <code>src/aigpdk.rs</code>).</li>
+<li><strong>Broader SVA</strong> (SystemVerilog Assertions) is <strong>planned</strong> — see
+<a href="interop.html">Testbench Interop § Roadmap</a>. The concrete near-term slice is the
+<strong>X-barrier <code>$isunknown</code> assertion</strong> work: a spec-file-driven <code>!$isunknown</code>
+check against the X-mask (<a href="https://github.com/gpu-eda/Jacquard/issues/106">#106</a>)
+and lowering an <code>$isunknown</code> SVA subset from RTL to that spec
+(<a href="https://github.com/gpu-eda/Jacquard/issues/107">#107</a>), building on selective
+X-propagation (<a href="adr/0016-selective-x-propagation.html">ADR 0016</a>).</li>
+</ul>
+<h2 id="see-also"><a class="header" href="#see-also">See also</a></h2>
+<ul>
+<li><a href="synthesis-flow.html">Synthesis Flow</a> — RTL → gate-level netlist (the step above).</li>
+<li><a href="interop.html">Testbench Interop</a> — UVM / cocotb / SVA, and record-and-replay.</li>
+<li><a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a> — why the input is a synthesized AIG.</li>
+<li><a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> — the planned integrated RTL on-ramp.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="getting-started.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="accepted-rtl.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="getting-started.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="accepted-rtl.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

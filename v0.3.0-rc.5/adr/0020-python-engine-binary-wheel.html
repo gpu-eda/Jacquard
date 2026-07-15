@@ -1,0 +1,362 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0020 — Python engine as a bundled binary wheel (Draft — deferred) - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="adr-0020--python-engine-as-a-bundled-binary-wheel"><a class="header" href="#adr-0020--python-engine-as-a-bundled-binary-wheel">ADR 0020 — Python engine as a bundled binary wheel</a></h1>
+<p><strong>Status:</strong> Draft — decision deferred (2026-07-01). Not ratified; not scheduled.</p>
+<blockquote>
+<p><strong>Direction note (2026-07-01).</strong> This ADR drafts a <em>subprocess-bundled binary
+wheel</em> (embed the CLI, keep PR #53's subprocess API). On review, a <strong>native
+PyO3 binding</strong> is the preferred long-term direction — an in-process engine is
+a materially better "first-class" Python surface than shelling out to a
+bundled binary, and if we're going to invest in per-platform wheels
+(cibuildwheel + dylib repair) either way, doing it once for a PyO3 extension
+avoids building the subprocess-wheel machinery only to replace it. We are
+<strong>not doing this now</strong>; the decision (subprocess-wheel-first vs. straight to
+PyO3) is deferred and tracked in <a href="https://github.com/gpu-eda/Jacquard/issues/161">#161</a>. The
+subprocess-wheel design below is preserved as the worked alternative and as
+the analysis of the shared hard part (per-platform wheels + vendoring the
+<code>libc++</code>/<code>libomp</code> runtime tail), which a PyO3 binding faces too.</p>
+</blockquote>
+<p><strong>Relates to:</strong> <a href="0018-distribution-and-installation.html">ADR 0018</a> (distribution
+model — this extends it with a Python channel), PR #53 (the subprocess API this
+would adopt), <a href="../plans/python-engine-binary-wheel.html"><code>docs/plans/python-engine-binary-wheel.md</code></a>
+(implementation phases + tracking).</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Jacquard ships as a Rust CLI (<code>jacquard sim</code> / <code>cosim</code> / <code>map</code>). Batch
+automation, regression sweeps, and result analysis are naturally Python work,
+and PR #53 drafted a Python API for exactly that: <code>JacquardConfig</code>, <code>sim()</code> /
+<code>map()</code>, <code>SimResult</code> / <code>DesignStats</code>, and a <code>run_regression()</code> harness.</p>
+<p>PR #53 as drafted is a <strong>pure-Python subprocess wrapper</strong>: a <code>hatchling</code>
+noarch wheel with <code>dependencies = []</code> that locates a <em>separately installed</em>
+<code>jacquard</code> binary (<code>JACQUARD_BIN</code> env → <code>PATH</code> → <code>shutil.which</code>) and shells out
+via <code>subprocess.run</code>. That means a user must install two things from two
+channels — the binary (<code>brew</code> / <code>cargo binstall</code>, per ADR 0018) <strong>and</strong> the
+Python package — and keep their versions in step by hand.</p>
+<p>We want a <strong>first-class</strong> Python engine: <code>pip install jacquard</code> yields a
+working simulator with no separate binary step. That is a distribution
+decision PR #53 does not make, and it is the subject of this ADR.</p>
+<p>Two forces shape it:</p>
+<ol>
+<li><strong>The binary is self-contained <em>except</em> for a runtime-library tail.</strong> The
+<code>sim</code> Metal kernel is embedded via <code>include_bytes!</code> (ADR 0018 / v0.2.1), so
+the relocated binary needs no sidecar <code>.metallib</code>. But it links Homebrew
+LLVM's <code>libc++</code> and <code>libomp</code> (via mt-kahypar/OpenMP), so a bare binary
+fails to launch without LLVM present — the same defect that broke the
+v0.2.1 install channels and is worked around today by the Homebrew formula's
+<code>depends_on "llvm"</code>. A wheel has no <code>depends_on</code>; those dylibs must travel
+<strong>inside</strong> the wheel.</li>
+<li><strong>The GPU backend is a per-platform build.</strong> <code>metal</code> (macOS/arm64) is the
+shipping backend; <code>cuda</code>/<code>hip</code> are Linux and heavy. A universal wheel is not
+possible; wheels are per-platform, and the backend matrix must be phased.</li>
+</ol>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>Ship the Python engine as a <strong>binary wheel that embeds the compiled <code>jacquard</code>
+binary and its runtime libraries</strong>, built with <strong>cibuildwheel</strong>, published to
+PyPI. Keep PR #53's subprocess API and config/result model unchanged — the
+wheel changes <em>packaging</em>, not the Python surface.</p>
+<p>Concretely:</p>
+<ol>
+<li>
+<p><strong>Adopt PR #53's API</strong> (<code>config</code>, <code>runner</code>, <code>result</code>, <code>regression</code>,
+<code>errors</code>) as the package's Python layer, moved into the uv workspace
+(<code>python/jacquard/</code>, a 5th workspace member alongside <code>netlist_graph</code>,
+<code>chipflow_harness</code>, <code>mcu_soc</code>, root).</p>
+</li>
+<li>
+<p><strong>Embed the binary.</strong> The wheel carries the release binary at
+<code>jacquard/_bin/jacquard</code> (per-platform). <code>runner.find_jacquard_binary()</code>
+grows a step <strong>0</strong>: prefer the packaged <code>_bin/jacquard</code>, then fall back to
+its existing env → <code>PATH</code> → <code>which</code> chain (so a dev pointing <code>JACQUARD_BIN</code>
+at a local build still wins, and a source checkout with no embedded binary
+still works).</p>
+</li>
+<li>
+<p><strong>Vendor the runtime tail into the wheel.</strong> cibuildwheel's repair step
+(<code>delocate</code> on macOS, <code>auditwheel</code> on Linux) copies <code>libc++</code>/<code>libomp</code> (and
+any other non-system dylib the binary links) into the wheel and rewrites the
+install names, so <code>pip install</code> needs no Homebrew LLVM. This is the crux and
+the main risk; the plan spikes it first.</p>
+</li>
+<li>
+<p><strong>Phase the platform matrix</strong> (<code>docs/plans/...</code>):</p>
+<ul>
+<li><strong>P1 — macOS/arm64 + Metal.</strong> The shipping backend; validates the whole
+embed-plus-delocate story on the platform we already release for.</li>
+<li><strong>P2 — Linux/x86_64 CPU fallback.</strong> The cosim CPU backend (ADR 0017) with
+no GPU runtime, so <code>pip install</code> works in plain CI containers.</li>
+<li><strong>P3 — CUDA / HIP.</strong> Gated on ADR 0018 Phase 4 (prebuilt GPU binaries) and
+on the wheel-size / CUDA-runtime questions below; may ship as separate
+extras (<code>jacquard[cuda]</code>) or a manylinux variant rather than the default
+wheel.</li>
+</ul>
+</li>
+<li>
+<p><strong>Publish via the established OIDC path.</strong> Mirror
+<code>publish-netlist-graph.yml</code> (trusted publishing, no stored token; TestPyPI
+dry-run on <code>workflow_dispatch</code>, real PyPI on tag). cibuildwheel replaces the
+single <code>uv build</code> with a per-platform build matrix.</p>
+</li>
+<li>
+<p><strong>Version with the binary, not independently.</strong> The wheel embeds a specific
+<code>jacquard</code> build, so its version tracks the binary release (extend
+<code>scripts/bump_version.py</code>), unlike <code>netlist-graph</code> which versions
+independently. A wheel's embedded binary and its Python API are one artifact.</p>
+</li>
+</ol>
+<h3 id="why-subprocess-not-native-pyo3-bindings"><a class="header" href="#why-subprocess-not-native-pyo3-bindings">Why subprocess, not native (PyO3) bindings</a></h3>
+<p>A native PyO3/maturin binding would give in-process state access (drive the
+sim, peek signals without a subprocess) — a deeper "engine." We defer it:</p>
+<ul>
+<li>It multiplies the build matrix by the GPU-feature axis <em>inside</em> the extension
+module, where the runtime-library and feature-gating problems are far harder
+than embedding an already-built binary.</li>
+<li>PR #53's subprocess API is backend-agnostic: it works for <code>metal</code>/<code>cuda</code>/<code>hip</code>
+unchanged, because the binary owns the backend. A binding does not.</li>
+<li>The subprocess wheel delivers the user-visible win (<code>pip install</code> → working
+simulator) now; PyO3 is a strictly larger follow-on that a later ADR can take
+up if in-process access becomes a real requirement.</li>
+</ul>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li><strong><code>pip install jacquard</code> is self-contained</strong> on supported platforms — the
+headline win. The two-channel version-skew problem goes away.</li>
+<li><strong>cibuildwheel + delocate/auditwheel become release-critical infrastructure.</strong>
+A new failure surface (dylib repair) that the plan de-risks with a P1 spike
+and a post-build "install into a clean venv and run <code>sim</code>" smoke gate,
+mirroring the existing relocated-tarball user-acceptance gate.</li>
+<li><strong>Wheels are large</strong> (embedded binary + vendored dylibs; CUDA especially).
+Acceptable for Metal/CPU; a gating question for P3.</li>
+<li><strong>The PyPI name <code>jacquard</code> must be secured</strong> (see open questions). Until
+then, TestPyPI validates the pipeline.</li>
+<li><strong><code>netlist-graph</code> stays a separate, independently-versioned noarch package.</strong>
+This ADR is only about the simulator engine wheel.</li>
+</ul>
+<h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives considered</a></h2>
+<ul>
+<li><strong>Ship PR #53 as-is (pure-Python noarch + separate binary).</strong> Simplest, no
+cibuildwheel, and a fine <em>interim</em> — but it is not the first-class,
+single-command install the goal calls for; it defers the real distribution
+decision rather than making it. Rejected as the end state; effectively
+subsumed as pre-P1 (the API lands first, the embed follows).</li>
+<li><strong>Native PyO3/maturin bindings.</strong> Highest ceiling, deferred — see above.</li>
+<li><strong>Document-and-require the LLVM runtime</strong> (as the raw tarball does) instead of
+vendoring dylibs. Pushes the v0.2.1-class failure onto every <code>pip</code> user;
+rejected — self-containment is the entire point.</li>
+</ul>
+<h2 id="open-questions-tracked-in-the-plan"><a class="header" href="#open-questions-tracked-in-the-plan">Open questions (tracked in the plan)</a></h2>
+<ul>
+<li><strong>PyPI name.</strong> Is <code>jacquard</code> available/securable? If not, <code>jacquard-eda</code> or
+<code>gpu-eda-jacquard</code>, aliasing the import name. Blocks nothing until publish.</li>
+<li><strong>CUDA/HIP wheel viability.</strong> Size and CUDA-runtime bundling may make P3 an
+extras/manylinux special case rather than a default wheel — decide in P3 with
+data, and <code>log</code>/document any platform the wheel silently omits.</li>
+<li><strong>delocate coverage of <code>libomp</code>.</strong> OpenMP runtime vendoring has known
+sharp edges (duplicate-runtime aborts if a user's other packages also load
+libomp); the P1 spike must confirm a clean load in a mixed environment.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../adr/0019-cell-model-ir.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../adr/0021-behavioral-rtl-support.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../adr/0019-cell-model-ir.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../adr/0021-behavioral-rtl-support.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

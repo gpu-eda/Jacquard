@@ -1,0 +1,335 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Installation - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<p>Jacquard is three tools; install only what your task needs:</p>
+<div class="table-wrapper"><table><thead><tr><th>Tool</th><th>What it's for</th><th>Install</th></tr></thead><tbody>
+<tr><td><strong><code>jacquard</code></strong></td><td>the simulator (<code>sim</code> / <code>cosim</code>)</td><td>Homebrew · <code>cargo binstall</code> · prebuilt release · from source</td></tr>
+<tr><td><strong><code>opensta-to-ir</code></strong></td><td>SDF → timing-IR (only for the timing / post-PnR path)</td><td>ships <strong>with <code>jacquard</code></strong> (same release / Homebrew formula)</td></tr>
+<tr><td><strong><code>netlist-graph</code></strong></td><td>post-synthesis signal-name discovery (companion to the <a href="signal-tracing.html">tracing docs</a>)</td><td>PyPI (<code>uvx</code> / <code>pip</code>)</td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Availability.</strong> The prebuilt-binary, Homebrew, and PyPI channels go
+live with the <strong>first tagged release (<code>v0.1.0</code>)</strong>. Until then, build the
+simulator <a href="#from-source-any-backend">from source</a> and run <code>netlist-graph</code>
+from the repo with <code>uv run</code>. The design behind this layout is
+<a href="adr/0018-distribution-and-installation.html">ADR 0018</a>.</p>
+</blockquote>
+<h2 id="the-simulator-jacquard--opensta-to-ir"><a class="header" href="#the-simulator-jacquard--opensta-to-ir">The simulator (<code>jacquard</code> + <code>opensta-to-ir</code>)</a></h2>
+<h3 id="homebrew--macos--apple-silicon-metal"><a class="header" href="#homebrew--macos--apple-silicon-metal">Homebrew — macOS / Apple Silicon (Metal)</a></h3>
+<pre><code class="language-sh">brew install gpu-eda/tap/jacquard      # installs jacquard + opensta-to-ir
+</code></pre>
+<p>The cleanest path on a Mac. Requires an Apple Silicon machine with a
+Metal GPU. The Homebrew formula is built with <code>--features synth</code>, so
+behavioral RTL input works out of the box — see <a href="accepted-rtl.html">Accepted RTL surface</a>.</p>
+<p>To try a <strong>release candidate</strong> before it ships, install from the prerelease
+tap instead (it tracks the latest <code>-rc</code> tag):</p>
+<pre><code class="language-sh">brew install gpu-eda/tap-prerelease/jacquard
+</code></pre>
+<h3 id="cargo-binstall--prebuilt-binary-no-toolchain-build"><a class="header" href="#cargo-binstall--prebuilt-binary-no-toolchain-build">cargo binstall — prebuilt binary, no toolchain build</a></h3>
+<pre><code class="language-sh">brew install llvm     # runtime dependency — see note below
+cargo binstall --git https://github.com/gpu-eda/Jacquard jacquard-sim \
+  --disable-strategies compile,quick-install
+</code></pre>
+<p>Installs the <code>jacquard</code> binary (+ <code>timing_analysis</code>) on <strong>macOS/Metal</strong>. The
+crate is the <strong><code>jacquard-sim</code></strong> package (the binary it installs is still
+<code>jacquard</code>); the <code>--git</code> form is required because it's <strong>not on crates.io</strong>
+(its dependencies are a vendored fork carrying in-flight patches), so binstall
+reads the <code>[package.metadata.binstall]</code> pkg-url straight from the repo.</p>
+<blockquote>
+<p><strong>Why <code>jacquard-sim</code>, not <code>jacquard</code>.</strong> The package is named <code>jacquard-sim</code>
+because the crate name <code>jacquard</code> is taken on crates.io by an <strong>unrelated</strong>
+project (an AT-Protocol client library) — so <code>cargo install jacquard</code> would
+build <em>that</em>, not this. Naming our package <code>jacquard-sim</code> makes resolution
+unambiguous. <code>--disable-strategies compile,quick-install</code> is kept as
+belt-and-suspenders: it turns a missing prebuilt binary into a clean hard
+error rather than any source-build fallback. (<code>validate-install.yml</code> uses the
+same guard.)
+Linux is <strong>not</strong> binstall-able: there are two GPU backends (CUDA, HIP) for
+one target triple, so it can't be auto-selected — use the release tarball
+for your backend, a container, or build from source.</p>
+</blockquote>
+<p>Release binaries are built with <code>--features synth</code> and support behavioral RTL
+input directly.</p>
+<blockquote>
+<p><strong>Runtime dependency — Homebrew LLVM.</strong> The prebuilt macOS binary links
+Homebrew LLVM's <code>libc++</code> and <code>libomp</code> (the build uses LLVM clang for
+OpenMP, via the mt-kahypar partitioner), so it needs <code>brew install llvm</code>
+to run. The <strong>Homebrew</strong> install handles this automatically
+(<code>depends_on "llvm"</code>); <strong>binstall</strong> and the <strong>raw tarball</strong> do not, so
+install LLVM first.</p>
+</blockquote>
+<h3 id="prebuilt-release-tarball"><a class="header" href="#prebuilt-release-tarball">Prebuilt release tarball</a></h3>
+<p>Download <code>jacquard-&lt;version&gt;-&lt;target&gt;.tar.gz</code> from the
+<a href="https://github.com/gpu-eda/Jacquard/releases">releases page</a>, extract,
+and put <code>jacquard</code>, <code>timing_analysis</code>, and <code>opensta-to-ir</code> on your <code>PATH</code>.
+The GPU kernel is embedded, but the binary still needs Homebrew LLVM at
+runtime (<code>brew install llvm</code>) — see the note above.</p>
+<h3 id="from-source-any-backend"><a class="header" href="#from-source-any-backend">From source (any backend)</a></h3>
+<p>The portable path, and the only one for <strong>Linux CUDA / HIP</strong> today.
+Needs the <a href="https://rustup.rs/">Rust toolchain</a> and the GPU SDK for your
+backend.</p>
+<pre><code class="language-sh">git clone https://github.com/gpu-eda/Jacquard.git
+cd Jacquard
+git submodule update --init --recursive
+
+cargo build -r --features metal --bin jacquard         # macOS / Apple Silicon
+cargo build -r --features cuda  --bin jacquard         # NVIDIA (CUDA toolkit)
+cargo build -r --features hip   --bin jacquard         # AMD (ROCm)
+</code></pre>
+<p>The binary lands at <code>target/release/jacquard</code>. See the README's
+<em>Dependencies</em> table for optional tooling (<code>flatc</code>, <code>mdbook</code>, OpenSTA).</p>
+<p><strong>Behavioral RTL on-ramp</strong> (<code>jacquard sim design.v …</code>) requires the <code>synth</code>
+feature (embedded YoWASP Yosys engine). Add it to your build:</p>
+<pre><code class="language-sh">cargo build -r --features metal,synth --bin jacquard   # macOS + RTL synthesis
+cargo build -r --features cuda,synth  --bin jacquard   # NVIDIA + RTL synthesis
+cargo build -r --features hip,synth   --bin jacquard   # AMD + RTL synthesis
+</code></pre>
+<p>A binary built without <code>synth</code> still simulates pre-synthesized gate-level
+netlists; it gives an actionable error if handed behavioral RTL.</p>
+<p><strong>Providing <code>yosys.wasm</code> for RTL synthesis</strong> — the synth engine needs the
+YoWASP Yosys wasm module. Discovery order:</p>
+<ol>
+<li><strong><code>--yosys-wasm &lt;path&gt;</code></strong> flag on <code>sim</code>/<code>cosim</code> (overrides the rest).</li>
+<li><strong><code>JACQUARD_YOSYS_WASM=/path/to/yosys.wasm</code></strong> environment variable.</li>
+<li><strong>Installed <code>yowasp-yosys</code></strong> Python package, found automatically:
+<pre><code class="language-sh">pip install yowasp-yosys
+</code></pre>
+</li>
+<li>Fetch-from-release is a planned follow-up (not yet implemented).</li>
+</ol>
+<p>Prebuilt and Homebrew binaries include the <code>synth</code> feature; the wasm is still
+found via the flag, env var, or installed Python package until auto-fetch ships.</p>
+<h2 id="the-signal-analysis-companion-netlist-graph"><a class="header" href="#the-signal-analysis-companion-netlist-graph">The signal-analysis companion (<code>netlist-graph</code>)</a></h2>
+<p>Pure Python — install from PyPI, no GPU or Rust needed:</p>
+<pre><code class="language-sh">uvx netlist-graph search design.gv psel     # one-off, no install
+pip install netlist-graph                    # or install it
+</code></pre>
+<p>From a Jacquard checkout you can also run it without installing:
+<code>uv run netlist-graph …</code> (it's a workspace member). See
+<a href="signal-tracing.html">signal tracing</a> for what it's used for.</p>
+<h2 id="the-timing-path-opensta-to-ir--a-pdk"><a class="header" href="#the-timing-path-opensta-to-ir--a-pdk">The timing path (<code>opensta-to-ir</code> + a PDK)</a></h2>
+<p>For post-PnR timing simulation you also need PDK Liberty files, fetched
+with <a href="https://github.com/fossi-foundation/ciel">volare/ciel</a> (pinned in
+the root <code>pyproject.toml</code>). <code>opensta-to-ir</code> converts SDF to the Jacquard
+timing IR (<code>.jtir</code>) that <code>jacquard sim --timing-ir</code> / <code>cosim --timing-ir</code>
+consume. Pure functional (pre-PnR) runs need none of this — see
+<a href="signal-tracing.html#pre-pnr-functional-runs">signal tracing § pre-PnR functional runs</a>.</p>
+<h2 id="verify"><a class="header" href="#verify">Verify</a></h2>
+<pre><code class="language-sh">jacquard --version
+# A quick self-contained cosim (from a Jacquard checkout):
+jacquard cosim tests/apb_trace/apb_trace_synth.gv \
+    --config tests/apb_trace/sim_config.json \
+    --top-module apb_trace --max-clock-edges 200 \
+    --bus-trace-csv /tmp/apb.csv
+</code></pre>
+<p>Then head to <a href="getting-started.html">Getting Started</a> to run bundled designs,
+<a href="accepted-rtl.html">Accepted RTL surface</a> to simulate your own behavioral RTL,
+or <a href="synthesis-flow.html">Synthesis Flow</a> to prepare a high-QoR gate-level netlist.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="project-scope.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="getting-started.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="project-scope.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="getting-started.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

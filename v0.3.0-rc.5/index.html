@@ -1,0 +1,361 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Introduction - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="jacquard-documentation"><a class="header" href="#jacquard-documentation">Jacquard Documentation</a></h1>
+<p>Welcome to the documentation for Jacquard, a GPU-accelerated RTL logic simulator.</p>
+<p>Use the sidebar to navigate between topics, or start with the <a href="getting-started.html">Getting Started</a> guide — it runs four bundled designs in a few seconds with no synthesis. To prepare and run your own RTL, see the <a href="synthesis-flow.html">Synthesis Flow</a>; for UVM/cocotb/SVA questions, <a href="interop.html">Testbench Interop</a>.</p>
+<h2 id="documents"><a class="header" href="#documents">Documents</a></h2>
+<h3 id="project-scope--planning"><a class="header" href="#project-scope--planning">Project Scope &amp; Planning</a></h3>
+<p>Start here if you're considering a feature contribution or want to understand Jacquard's overall direction.</p>
+<ul>
+<li><strong><a href="project-scope.html">Project Scope &amp; Guarantees</a></strong>: Top-level contract — what Jacquard is for, what it isn't, licensing and architecture constraints, stability tiers.</li>
+<li><strong><a href="why-jacquard.html">Why Jacquard</a></strong>: Honest positioning vs. STA tools and event-driven simulators; what's unique, what isn't, and what output interface would let users extract the value.</li>
+<li><strong><a href="timing-correctness.html">Timing Correctness</a></strong>: Scoped requirements for timing accuracy, validation, and the forthcoming timing IR.</li>
+<li><strong><a href="timing-model-extensions.html">Timing Model Extensions</a></strong>: Pre-spike design notes for δ(T) dynamic delay, clock-tree skew, and wire delay at scale. Formalised in ADR 0007.</li>
+<li><strong><a href="plans/post-phase-0-roadmap.html">Post-Phase-0 Roadmap</a></strong>: Sequencing of Phase 1+ work covering structured timing output (ADR 0008) and timing model fidelity (ADR 0007). (OpenTimer integration was originally Phase 1's centrepiece; ADR 0003 was Superseded by the spike — OpenSTA out of process is now the sole STA path per ADR 0001.)</li>
+<li><strong><a href="adr/README.html">Architecture Decision Records</a></strong>: Design decisions and their rationale (numbered, per-decision). See the index for status and how the ADRs relate.</li>
+<li><strong><a href="plans/README.html">Implementation Plans</a></strong>: Phased implementation plans with entry and exit criteria. See the index for status and reading order.</li>
+<li><strong><a href="spikes/">Spikes</a></strong>: Time-boxed experiments and their outcomes.</li>
+</ul>
+<h3 id="core-documentation"><a class="header" href="#core-documentation">Core Documentation</a></h3>
+<ul>
+<li>
+<p><strong><a href="simulation-architecture.html">Simulation Architecture</a></strong>: Detailed explanation of Jacquard's internal architecture</p>
+<ul>
+<li>Pipeline stages (NetlistDB → AIG → StagedAIG → Partitions → FlattenedScript → GPU)</li>
+<li>Data structures and representations</li>
+<li>VCD input/output format requirements</li>
+<li>Assertion and display support infrastructure</li>
+<li>Performance characteristics</li>
+<li>Known issues and limitations</li>
+</ul>
+</li>
+<li>
+<p><strong><a href="timing-simulation.html">Timing Simulation</a></strong>: CPU-based timing simulation with Liberty/SDF delays</p>
+</li>
+<li>
+<p><strong><a href="timing-violations.html">Timing Violations</a></strong>: GPU-side setup/hold violation detection</p>
+</li>
+</ul>
+<h3 id="troubleshooting-guides"><a class="header" href="#troubleshooting-guides">Troubleshooting Guides</a></h3>
+<ul>
+<li><strong><a href="troubleshooting-vcd.html">Troubleshooting VCD</a></strong>: Debugging VCD input issues
+<ul>
+<li>VCD hierarchy requirements</li>
+<li>Signal naming and matching</li>
+<li>Solutions for flat VCD generation</li>
+<li>Diagnostic checklist</li>
+<li>Working examples</li>
+</ul>
+</li>
+</ul>
+<h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
+<h3 id="vcd-input-requirements-critical"><a class="header" href="#vcd-input-requirements-critical">VCD Input Requirements (Critical!)</a></h3>
+<p>Jacquard expects VCD signals at <strong>absolute top-level</strong> (no module hierarchy):</p>
+<pre><code class="language-verilog">// ✓ Correct testbench
+initial begin
+    $dumpfile("output.vcd");
+    $dumpvars(1, clk, reset, din, dout);  // Depth 1, explicit signals
+end
+
+// ✗ Incorrect testbench
+initial begin
+    $dumpfile("output.vcd");
+    $dumpvars(0, testbench);  // Dumps entire hierarchy
+end
+</code></pre>
+<h3 id="debug-commands"><a class="header" href="#debug-commands">Debug Commands</a></h3>
+<pre><code class="language-bash"># Enable debug logging
+RUST_LOG=debug cargo run -r --features metal --bin jacquard -- sim &lt;args&gt;
+
+# Verify with CPU simulation
+cargo run -r --features metal --bin jacquard -- sim &lt;args&gt; --check-with-cpu
+
+# Check VCD structure
+grep '\$scope\|\$var' input.vcd | head -20
+</code></pre>
+<h3 id="cosim-reactive-peripherals"><a class="header" href="#cosim-reactive-peripherals">Cosim (reactive peripherals)</a></h3>
+<p><code>jacquard cosim</code> runs GPU-resident peripheral models (SPI flash, UART, Wishbone)
+alongside the design so inputs can react to outputs cycle-by-cycle. It runs on
+Metal, CUDA, and HIP (plus a CPU fallback).</p>
+<pre><code class="language-bash"># Drive the design from a JSON testbench config; write an output VCD
+cargo run -r --features metal --bin jacquard -- cosim \
+    design.v --config sim_config.json --output-vcd out.vcd
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>--config &lt;json&gt;</code></td><td>Testbench config: clock(s), reset, peripherals (required)</td></tr>
+<tr><td><code>--output-vcd &lt;path&gt;</code></td><td>Output VCD (chip outputs + any traced nets)</td></tr>
+<tr><td><code>--trace-signals &lt;path&gt;</code></td><td>Surface internal nets in the VCD (<a href="signal-tracing.html">Signal Tracing</a>)</td></tr>
+<tr><td><code>--bus-trace-csv &lt;path&gt;</code></td><td>Decode on-chip bus transactions (<a href="bus-tracing.html">Bus Tracing</a>)</td></tr>
+<tr><td><code>--jtag-server &lt;port&gt;</code> / <code>--jtag-replay &lt;path&gt;</code></td><td>Interactive / deterministic JTAG debug (<a href="jtag-debug.html">JTAG Debug</a>)</td></tr>
+<tr><td><code>--xprop</code></td><td>Selective X-propagation for uninitialised state</td></tr>
+<tr><td><code>--max-clock-edges &lt;n&gt;</code></td><td>Limit simulation length (1 cycle = 2 edges)</td></tr>
+</tbody></table>
+</div>
+<h3 id="key-statistics"><a class="header" href="#key-statistics">Key Statistics</a></h3>
+<p>When running Jacquard, look for these diagnostic outputs:</p>
+<pre><code>netlist has X pins, Y aig pins, Z and gates        # AIG complexity
+current: N endpoints, try M parts                  # Partition count
+Built script for B blocks, reg/io state size S     # Final script
+WARN (GATESIM_VCDI_MISSING_PI) ...                 # VCD issues!
+</code></pre>
+<h2 id="investigation-methodology"><a class="header" href="#investigation-methodology">Investigation Methodology</a></h2>
+<p>This documentation was created through systematic investigation of Jacquard's behavior:</p>
+<ol>
+<li><strong>Source Code Analysis</strong>: Examined <code>src/aig.rs</code>, <code>src/flatten.rs</code>, <code>src/staging.rs</code></li>
+<li><strong>Debug Tracing</strong>: Used <code>RUST_LOG=debug</code> to capture internal state</li>
+<li><strong>Test Case Development</strong>: Created minimal reproducible examples</li>
+<li><strong>Comparative Testing</strong>: Compared Jacquard vs iverilog outputs</li>
+<li><strong>Third-Party Validation</strong>: Tested with real-world examples (sva-playground)</li>
+</ol>
+<h2 id="known-issues"><a class="header" href="#known-issues">Known Issues</a></h2>
+<p>Tracked live on GitHub — see the
+<a href="https://github.com/gpu-eda/Jacquard/issues">open issues</a> and the
+<a href="https://github.com/gpu-eda/Jacquard/labels/priority%3Ahigh"><code>priority:high</code></a>
+label. The long-standing ones:</p>
+<ul>
+<li><strong>VCD hierarchy mismatch</strong> — Jacquard expects a flat top-level VCD; most
+testbenches emit hierarchical ones. Workaround: <code>--input-vcd-scope</code> (see
+<a href="troubleshooting-vcd.html">Troubleshooting VCD</a>). Tracking:
+<a href="https://github.com/gpu-eda/Jacquard/issues/142">#142</a>.</li>
+<li><strong>Complex FSM simulation</strong> — some FSM designs (e.g. <code>safe.v</code>) don't simulate
+correctly; under investigation. Tracking:
+<a href="https://github.com/gpu-eda/Jacquard/issues/143">#143</a>.</li>
+<li><strong>Format-string preservation</strong> — Yosys may drop <code>gem_format</code> attributes, so
+<code>$display</code> messages show placeholders. This is an upstream Yosys limitation;
+the workaround is to extract format strings from the pre-synthesis JSON.</li>
+</ul>
+<h2 id="contributing"><a class="header" href="#contributing">Contributing</a></h2>
+<p>When adding documentation:</p>
+<ol>
+<li><strong>Be specific</strong>: Include actual commands, file paths, code snippets</li>
+<li><strong>Show examples</strong>: Both working and non-working cases</li>
+<li><strong>Link related docs</strong>: Cross-reference other documentation files</li>
+<li><strong>Date updates</strong>: Update version and date at bottom of documents</li>
+<li><strong>Test instructions</strong>: Verify all commands actually work</li>
+</ol>
+<h2 id="future-documentation-needs"><a class="header" href="#future-documentation-needs">Future Documentation Needs</a></h2>
+<p>Dedicated guides not yet written (coverage today is scattered across ADRs and
+reference docs):</p>
+<ul>
+<li><input disabled="" type="checkbox"/>
+Performance tuning guide (choosing <code>NUM_BLOCKS</code>, <code>--level-split</code>)</li>
+<li><input disabled="" type="checkbox"/>
+SRAM modeling &amp; synthesis (synthesis flow + preload + observability in one place)</li>
+<li><input disabled="" type="checkbox"/>
+Multi-clock domain user guide (config examples; cf. <a href="https://github.com/gpu-eda/Jacquard/issues/87">#87</a> for test coverage)</li>
+<li><input disabled="" type="checkbox"/>
+GPU kernel optimization internals (profiling, backend-specific tuning)</li>
+</ul>
+<p>Now covered: custom cell libraries → <a href="adding-a-pdk.html">Adding a New PDK</a> +
+ADR 0010/0011; VCD scope behaviour → <a href="troubleshooting-vcd.html">Troubleshooting VCD</a>.</p>
+<h2 id="related-resources"><a class="header" href="#related-resources">Related Resources</a></h2>
+<ul>
+<li><strong>Main README</strong>: <code>../README.md</code> - Project overview and quick start</li>
+<li><strong>CLAUDE.md</strong>: <code>../CLAUDE.md</code> - Development guidelines and architecture overview</li>
+<li><strong>Test Suite</strong>: <code>../tests/</code> - Examples and regression tests</li>
+<li><strong>Third-Party Tests</strong>: <code>../tests/regression/third_party/</code> - Real-world examples with attribution</li>
+</ul>
+<hr />
+<p><strong>Last Updated</strong>: 2026-06-26
+<strong>Maintained By</strong>: gpu-eda community</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+                            <a rel="next prefetch" href="project-scope.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+                    <a rel="next prefetch" href="project-scope.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,370 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Accepted RTL Surface - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="accepted-behavioral-rtl-surface"><a class="header" href="#accepted-behavioral-rtl-surface">Accepted Behavioral RTL Surface</a></h1>
+<p><code>jacquard sim</code> and <code>jacquard cosim</code> accept behavioral Verilog / SystemVerilog
+directly — no separate synthesis step, no external toolchain. This page
+describes what the on-ramp synthesizes, what it drops, and where the coverage
+boundary lies.</p>
+<p><strong>One-line summary:</strong> the accepted surface is whatever <strong>YoWASP Yosys</strong> (with
+the <strong>yosys-slang</strong> <code>read_slang</code> frontend) can synthesize to an aigpdk netlist.
+Jacquard delegates the elaboration and synthesis; it does not implement a
+Verilog front-end itself.</p>
+<hr />
+<h2 id="invoking-the-on-ramp"><a class="header" href="#invoking-the-on-ramp">Invoking the on-ramp</a></h2>
+<pre><code class="language-sh"># Pass behavioral RTL directly — synthesis is transparent and cached:
+jacquard sim design.v in.vcd out.vcd NUM_BLOCKS
+
+# Cosim works the same way:
+jacquard cosim design.v --config sim_config.json
+</code></pre>
+<p><code>sim</code>/<code>cosim</code> classify the input file automatically:</p>
+<div class="table-wrapper"><table><thead><tr><th>Input</th><th>Dispatch</th></tr></thead><tbody>
+<tr><td>Behavioral RTL (structural parse fails)</td><td>auto-synthesized via embedded Yosys → simulated</td></tr>
+<tr><td>Gate-level netlist, built-in PDK (AIGPDK / SKY130 / GF180MCU)</td><td>simulated directly, no synthesis</td></tr>
+<tr><td>Gate-level netlist, unrecognized cells</td><td><strong>error</strong> directing you to <code>--cell-descriptor &lt;path&gt;</code></td></tr>
+</tbody></table>
+</div>
+<p>Override flags:</p>
+<ul>
+<li><code>--rtl</code> — force the synthesis path (useful if detection misclassifies a file).</li>
+<li><code>--netlist</code> — force direct gate-level loading, skip detection.</li>
+<li><code>--emit-synth &lt;path&gt;</code> — also write the intermediate synthesized netlist for
+inspection or as a fixture.</li>
+</ul>
+<p>The simulator always logs its decision:</p>
+<pre><code>design.v: behavioral RTL → synthesized [YoWASP Yosys, functional QoR] → &lt;cache&gt;
+</code></pre>
+<hr />
+<h2 id="providing-yosyswasm"><a class="header" href="#providing-yosyswasm">Providing <code>yosys.wasm</code></a></h2>
+<p>The synthesis engine requires <code>yosys.wasm</code> (the YoWASP Yosys WebAssembly
+module). It is located in this order:</p>
+<ol>
+<li><strong><code>--yosys-wasm /path/to/yosys.wasm</code></strong> — CLI flag on <code>sim</code>/<code>cosim</code> (highest
+priority; overrides the env var and discovery).</li>
+<li><strong><code>JACQUARD_YOSYS_WASM=/path/to/yosys.wasm</code></strong> — environment variable.</li>
+<li><strong>Installed <code>yowasp-yosys</code></strong> Python package — discovered automatically via
+<code>python3 -c "import yowasp_yosys …"</code>. Install with:
+<pre><code class="language-sh">pip install yowasp-yosys          # or: uvx yowasp-yosys
+</code></pre>
+</li>
+<li><strong>Fetch from release</strong> — a planned follow-up (ADR 0021 / #162 Phase 4); not
+yet implemented. Until then, one of the three methods above is required.</li>
+</ol>
+<blockquote>
+<p><strong>Version caveat.</strong> Pin to <strong><code>yowasp-yosys==0.64.0.0.post1131</code></strong> (the version in
+the project's <code>uv.lock</code>, verified to carry <code>read_slang</code>). <em>Newer</em> wheels ship a
+wasm built with the WebAssembly exception-handling proposal, which the current
+embedded <code>wasmtime</code> engine cannot load yet (<code>pip install yowasp-yosys</code> gets the
+latest and may fail with "exception refs not supported"). Loading newer modules
+is a tracked Phase-4 follow-up; until then, <code>pip install 'yowasp-yosys==0.64.0.0.post1131'</code>.</p>
+</blockquote>
+<blockquote>
+<p>Released <code>jacquard</code> binaries are built with <code>--features synth</code> and include
+the Yosys WASM runtime. Source builds must add <code>--features synth</code> explicitly:
+<code>cargo build -r --features metal,synth --bin jacquard</code>.</p>
+<p>A binary built <strong>without</strong> <code>--features synth</code> gives an actionable error when
+handed behavioral RTL, pointing at the synth-enabled build path.</p>
+</blockquote>
+<p>The compiled Yosys module is cached under <code>$XDG_CACHE_HOME/jacquard</code> by
+content hash — only the first run of a given wasm pays the ~20 s cranelift
+compile. The synthesized netlist is also cached keyed by (design source + synth
+script + wasm), so repeat <code>sim</code> runs skip synthesis entirely.</p>
+<hr />
+<h2 id="systemverilog-frontend"><a class="header" href="#systemverilog-frontend">SystemVerilog frontend</a></h2>
+<p>The embedded wasm (pinned <code>yowasp-yosys 0.64.0.0.post1131</code>) bundles
+<strong>yosys-slang</strong> — a near-complete SystemVerilog-2017 elaborator. Jacquard
+probes for <code>read_slang</code> at startup and uses it when present; it falls back
+gracefully to Yosys's built-in <code>read_verilog -sv</code> for older wasm modules.</p>
+<p><code>read_slang</code> coverage is substantially broader than <code>read_verilog -sv</code>:
+packages, interfaces, structs, enums, and most SV-2017 constructs are handled
+by the slang elaborator before Yosys sees any RTL. If you observe a
+"not supported" message, check whether it names <code>slang</code> or <code>read_verilog</code> — the
+fallback has a narrower surface.</p>
+<hr />
+<h2 id="supported-language-subset"><a class="header" href="#supported-language-subset">Supported language subset</a></h2>
+<p>The following are synthesizable and produce correct simulation output:</p>
+<p><strong>Verilog-2005 (synthesizable subset):</strong></p>
+<ul>
+<li>All combinational logic: <code>assign</code>, <code>always @(*)</code>, <code>always @(posedge/negedge)</code></li>
+<li>Synchronous flip-flops (positive or negative edge)</li>
+<li>Synchronous reset DFFs (<code>if (rst) Q &lt;= 0; else Q &lt;= D;</code>)</li>
+<li>Asynchronous reset / set DFFs (async reset is supported; latches are not)</li>
+<li>Case and if/else chains</li>
+<li>Parameterized modules and <code>generate</code> blocks</li>
+<li>Inferred memories (mapped to <code>RAMGEM</code> by <code>memlib_yosys.txt</code> — see below)</li>
+</ul>
+<p><strong>SystemVerilog-2017 (via yosys-slang <code>read_slang</code>):</strong></p>
+<ul>
+<li>Packages and package imports</li>
+<li>Interfaces (including modports)</li>
+<li><code>always_ff</code>, <code>always_comb</code>, <code>always_latch</code></li>
+<li><code>logic</code>, <code>enum</code>, <code>struct</code>, <code>union</code> (synthesizable forms)</li>
+<li>Parameters with complex types; advanced <code>generate</code> (<code>if</code>, <code>for</code>, <code>case</code>)</li>
+<li>Casting and type conversions (synthesizable)</li>
+</ul>
+<p>This is <strong>not</strong> the narrow subset accepted by Yosys's built-in
+<code>read_verilog -sv</code>; it is the slang elaborator's synthesizable coverage, which
+tracks the SystemVerilog-2017 standard closely.</p>
+<hr />
+<h2 id="project-specific-mappings"><a class="header" href="#project-specific-mappings">Project-specific mappings</a></h2>
+<p>The synthesis script applies three project-specific transformations on top of
+standard Yosys synthesis:</p>
+<div class="table-wrapper"><table><thead><tr><th>RTL construct</th><th>Result</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>$assert</code>, <code>$assume</code>, immediate <code>assert property</code></td><td><code>GEM_ASSERT</code> cell</td><td>Visible in simulation as assertion failures. <code>$cover</code> is silently dropped.</td></tr>
+<tr><td><code>$display</code> (→ Yosys <code>$print</code>)</td><td><code>GEM_DISPLAY</code> cell</td><td>The cell is emitted, but the on-ramp does not yet write the display-info JSON companion the CPU side needs to decode format strings — so <code>$display</code> text is <strong>not surfaced through the on-ramp path</strong> yet (tracked as a Phase-4 follow-up).</td></tr>
+<tr><td>Inferred synchronous memories</td><td><code>$__RAMGEM_SYNC_</code> (RAMGEM)</td><td>Mapped via <code>aigpdk/memlib_yosys.txt</code>. Asynchronous-read ports generate a warning.</td></tr>
+</tbody></table>
+</div>
+<p>The techmap rules are in <code>aigpdk/gem_formal.v</code>. Pass
+<code>--strip-assertions</code> (if available on your build) to use <code>chformal -remove</code> and
+drop GEM_ASSERT cells instead, for a pure logic netlist.</p>
+<hr />
+<h2 id="known-limits"><a class="header" href="#known-limits">Known limits</a></h2>
+<p><strong>Concurrent SVA → synthesizable checker synthesis is partial.</strong> Turning
+concurrent SystemVerilog Assertions (<code>property</code> / <code>sequence</code> bound to
+<code>assert property</code> with a clock) into gate-level checkers is a Yosys formal-flow
+capability — independent of slang's ability to <em>parse</em> SVA. This is tracked in
+issues #106 and #107. Immediate assertions (<code>assert (cond)</code> inside procedural
+blocks) synthesize correctly via the <code>GEM_ASSERT</code> mapping above.</p>
+<p><strong>Testbench-only constructs are dropped.</strong> Synthesis discards constructs that
+have no synthesizable meaning: <code>#delay</code> timing controls, most <code>initial</code> blocks
+(other than register initialization), <code>$finish</code>, <code>$stop</code>, and similar testbench
+procedural code. These are silently dropped by Yosys during elaboration, not
+simulated. If a <code>$display</code> is inside an <code>initial</code> or inside a <code>#delay</code>-driven
+block, it may be dropped too.</p>
+<p><strong>Latches are not supported.</strong> Jacquard's GPU emulator core is synchronous
+only — see <code>docs/synthesis-flow.md</code> for the latch constraint. A latch inferred
+from RTL causes a synthesis or AIG-load error.</p>
+<hr />
+<h2 id="qor-note"><a class="header" href="#qor-note">QoR note</a></h2>
+<p>YoWASP Yosys produces <strong>functional-grade QoR</strong> — correct results but not
+optimized for GPU speed. Synthesis quality is the primary tuner of simulation
+throughput (the AIG the GPU emulates is only as good as the mapping). For peak
+performance, synthesize your design with a commercial synthesizer (DC) or a
+native Yosys install, and point <code>jacquard sim</code> at the resulting gate-level
+netlist directly. See <code>docs/synthesis-flow.md</code> for the performance path.</p>
+<hr />
+<h2 id="authoritative-surface-empirical-coverage-phase-4"><a class="header" href="#authoritative-surface-empirical-coverage-phase-4">Authoritative surface: empirical coverage (Phase 4)</a></h2>
+<p>This prose describes the <em>intended</em> surface. Because the accepted RTL surface is
+whatever the embedded Yosys frontend synthesizes, the <strong>authoritative</strong> measure
+is an empirical pass/fail coverage table driven through
+<a href="https://github.com/SymbiFlow/sv-tests">sv-tests</a> (or a curated subset) — a
+Phase 4 follow-up tracked in <code>docs/plans/rtl-onramp-sim-integration.md</code>. Until
+that table exists, hand-claimed feature lists for a delegated frontend are
+inherently approximate. Report gaps as bugs; they will be tracked in the
+coverage table when it ships.</p>
+<hr />
+<h2 id="see-also"><a class="header" href="#see-also">See also</a></h2>
+<ul>
+<li><a href="getting-started.html">Getting Started</a> — run bundled designs to verify your build first.</li>
+<li><a href="synthesis-flow.html">Synthesis Flow</a> — the performance path (DC / native Yosys, peak QoR).</li>
+<li><a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> — the design decision behind the on-ramp.</li>
+<li><code>docs/plans/rtl-onramp-sim-integration.md</code> — implementation plan and Phase 4 roadmap.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="input-netlist.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="synthesis-flow.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="input-netlist.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="synthesis-flow.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

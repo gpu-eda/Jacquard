@@ -1,0 +1,468 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Release Process - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="release-process"><a class="header" href="#release-process">Release Process</a></h1>
+<p>Lightweight by design. Jacquard is a single-binary Rust project with
+<code>vendor/</code> submodules; releases are git tags + a CHANGELOG entry. No
+crates.io publication, no pre-built binaries (until/unless that
+demand surfaces).</p>
+<h2 id="when-to-release"><a class="header" href="#when-to-release">When to release</a></h2>
+<p>Cut a release when:</p>
+<ul>
+<li>A user-visible feature or fix lands that you want consumers to be
+able to pin against.</li>
+<li>Schema or CLI changes happened (<code>--timing-report</code> JSON, CLI flags)
+and consumers need a stable reference point.</li>
+<li>A meaningful chunk of work in <code>docs/plans/</code> is closed (e.g. a Phase
+exits all criteria).</li>
+</ul>
+<p>There is no fixed cadence.</p>
+<h2 id="versioning"><a class="header" href="#versioning">Versioning</a></h2>
+<p><a href="https://semver.org/">SemVer</a>, starting once the first numbered
+release ships. Pre-1.0 versions (<code>0.x.0</code>) carry the standard SemVer
+caveat: minor bumps may include breaking changes; the public
+contracts (<code>--timing-report</code> schema, IR layout) are documented in their
+own ADRs and follow stricter rules.</p>
+<p>Stable contracts (additive-only, breaking changes require a major
+bump and a deprecation window):</p>
+<ul>
+<li><code>--timing-report</code> JSON schema — <code>src/timing_report.rs::SCHEMA_VERSION</code>,
+governed by ADR 0008.</li>
+<li>Timing IR FlatBuffers schema — <code>crates/timing-ir/schemas/timing_ir.fbs</code>,
+governed by ADR 0002.</li>
+</ul>
+<p>CLI flags, log message formats, and <code>--timing-summary</code> text output are
+<strong>not</strong> stable parseable contracts; consumers that need to script
+against them should use <code>--timing-report</code> JSON.</p>
+<h2 id="steps"><a class="header" href="#steps">Steps</a></h2>
+<p>For maintainers cutting a release:</p>
+<ol>
+<li>
+<p><strong>Verify CI is green</strong> on <code>main</code> for all three GPU backends (Metal,
+CUDA, HIP) plus the unit-test, opensta-to-ir, and lint jobs. If any
+GPU runner is offline, hold the release until it's restored — see
+<a href="https://github.com/gpu-eda/Jacquard/blob/main/.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a>. Do not
+ship a binary the CI hasn't built.</p>
+</li>
+<li>
+<p><strong>Roll the <code>[Unreleased]</code> section in <a href="https://github.com/gpu-eda/Jacquard/blob/main/CHANGELOG.md"><code>CHANGELOG.md</code></a>
+into a numbered version block.</strong> Format follows
+<a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>. Update
+the link references at the bottom of the file. Leave a fresh empty
+<code>[Unreleased]</code> section at the top.</p>
+</li>
+<li>
+<p><strong>Bump the Rust crate version</strong> to match:
+<code>python3 scripts/bump_version.py &lt;X.Y.Z&gt;</code>. The three first-party
+Rust crates (<code>jacquard</code>, <code>opensta-to-ir</code>, <code>timing-ir</code>) ship together
+in one tarball and carry a single shared version, so this script sets
+all three at once — never edit their <code>[package].version</code> by hand.
+Then <code>cargo build</code> to update <code>Cargo.lock</code>. (<code>netlist-graph</code> versions
+independently — see its own <code>netlist-graph-v*</code> tag flow.) The release
+workflow re-runs <code>bump_version.py --check &lt;tag&gt;</code> as a verify-guard and
+aborts before publishing if the tag and the crates disagree.</p>
+</li>
+<li>
+<p><strong>Commit:</strong> <code>chore: release v&lt;X.Y.Z&gt;</code> with the standard
+<code>Co-developed-by</code> trailer.</p>
+</li>
+<li>
+<p><strong>Tag:</strong> <code>git tag -a v&lt;X.Y.Z&gt; -m "v&lt;X.Y.Z&gt;"</code> then <code>git push --tags</code>.</p>
+</li>
+<li>
+<p><strong>Create a GitHub release</strong> from the tag. Body = the CHANGELOG
+section for that version. No artefacts attached unless someone has
+asked for them.</p>
+</li>
+</ol>
+<h2 id="homebrew-tap-automated"><a class="header" href="#homebrew-tap-automated">Homebrew tap (automated)</a></h2>
+<p>The Homebrew formula is <strong>auto-bumped by <code>release.yml</code></strong> — no manual step
+(this closes the drift that had left the tap stale at 0.2.3). On every
+release tag the <code>bump-tap</code> job rewrites <code>packaging/homebrew/jacquard.rb</code>'s
+<code>url</code>/<code>version</code>/<code>sha256</code> from the just-published tarball + <code>.sha256</code> and
+pushes <code>Formula/jacquard.rb</code> to the tap:</p>
+<ul>
+<li><strong>final release</strong> → <code>gpu-eda/homebrew-tap</code> (<code>brew install gpu-eda/tap/jacquard</code>);</li>
+<li><strong>prerelease (RC)</strong> → <code>gpu-eda/homebrew-tap-prerelease</code>
+(<code>brew install gpu-eda/tap-prerelease/jacquard</code>), so RCs are
+<code>brew install</code>-able for staging without touching the stable channel.</li>
+</ul>
+<p><code>packaging/homebrew/jacquard.rb</code> is the <strong>template</strong> — edit it only to change
+the formula's <em>structure</em> (deps, install, test); its version pin is a
+placeholder the job overwrites. Requires the one-time org setup:
+<code>secrets.HOMEBREW_TAP_TOKEN</code> (a token with <code>contents: write</code> on both tap
+repos) and the <code>gpu-eda/homebrew-tap-prerelease</code> repo.</p>
+<h2 id="release-notes--versioned-docs-automated"><a class="header" href="#release-notes--versioned-docs-automated">Release notes &amp; versioned docs (automated)</a></h2>
+<p>Release notes come from the CHANGELOG, and doc links are pinned to the release
+— both automatic in <code>release.yml</code>:</p>
+<ul>
+<li><strong>Notes body</strong> = the CHANGELOG section for the tag's version. A prerelease
+(<code>X.Y.Z-rc.N</code>) has no dated section, so the extractor falls back to
+<code>[Unreleased]</code> — RCs ship the same curated draft you'll ship at promotion.
+So: <strong>write the notes in <code>[Unreleased]</code></strong>.</li>
+<li><strong>Lead with a user-facing overview.</strong> Before the technical <code>### Added</code> /
+<code>### Changed</code> sections, open with a short <em>"What this means for you"</em> block —
+a few benefit-framed bullets (what a user can now <em>do</em>, not just what changed).
+The technical changelog then gives the detail. This becomes the release intro
+and is the first thing a reader sees.</li>
+<li><strong>Doc links are version-pinned.</strong> The extractor rewrites <code>`docs/foo.md`</code>
+references into <code>[docs/foo.md](https://gpu-eda.github.io/Jacquard/&lt;tag&gt;/foo.html)</code>
+— the mdBook page frozen for <em>this</em> release. So keep CHANGELOG doc references
+as repo-relative <code>`docs/foo.md`</code> (clean in-repo); the workflow does the
+URL rewrite.</li>
+<li><strong>Versioned docs deploy.</strong> The <code>docs-version</code> job publishes the book to
+gh-pages <code>/(tag)/</code> on every release tag (<code>keep_files: true</code>), while the
+<code>main</code> push keeps deploying "latest" to the site root. Version subdirs
+accumulate side by side; the pinned links above resolve to them.</li>
+</ul>
+<h2 id="staging-validation-release-candidates"><a class="header" href="#staging-validation-release-candidates">Staging validation (release candidates)</a></h2>
+<p>Optional but recommended before a user-facing release: prove the
+<em>documented install commands</em> work against a staging artifact before
+promoting. There is no "test crates registry", so a <strong>GitHub prerelease</strong>
+is the staging tier for the binary channels.</p>
+<blockquote>
+<p><strong>Sequence matters — do NOT roll main to the final version before the RC
+validates.</strong> During the RC window <code>main</code> <strong>is</strong> the candidate: it stays at
+<code>X.Y.Z-rc.N</code> with the changelog still under <code>[Unreleased]</code>. Only the
+<strong>Promote</strong> step (below) rolls <code>[Unreleased] → [X.Y.Z]</code> and bumps to the
+final <code>X.Y.Z</code>. Rolling the release onto <code>main</code> first leaves <code>main</code>
+advertising a version that has no release — the version pin and dated
+changelog claim <code>X.Y.Z</code> is shipped while only the RC tag exists, which also
+breaks <code>cargo binstall --git</code> (it reads <code>main</code>'s version and fetches a
+non-existent <code>vX.Y.Z</code> tarball). Each new RC is a <code>main</code> commit bumped to the
+next <code>-rc.N</code>; <code>main == the latest RC tag</code> throughout.</p>
+</blockquote>
+<ol>
+<li>
+<p><strong>Cut an RC.</strong> On <code>main</code> at <code>X.Y.Z-rc.N</code> (changelog under <code>[Unreleased]</code>),
+<code>python3 scripts/bump_version.py &lt;X.Y.Z&gt;-rc.&lt;N&gt;</code>, commit, tag
+<code>v&lt;X.Y.Z&gt;-rc.&lt;N&gt;</code>, push the tag. <code>release.yml</code> detects the SemVer
+pre-release suffix and publishes a GitHub <strong>prerelease</strong> (never shown as
+"Latest") with the Metal tarball attached, and <code>bump-tap</code> pushes the
+formula to <code>gpu-eda/homebrew-tap-prerelease</code>.</p>
+</li>
+<li>
+<p><strong>Validate.</strong> Dispatch the <strong>Validate install (staging)</strong> workflow
+(<code>validate-install.yml</code>) with that tag. It runs the real install
+commands against the prerelease asset on macOS:</p>
+<ul>
+<li><code>cargo binstall</code> (asset-fetch via the <code>[package.metadata.binstall]</code>
+override, compile fallback disabled so a missing asset fails hard);</li>
+<li><code>brew install</code> of an RC formula (the source-of-truth formula repointed
+at the prerelease tarball + its <code>.sha256</code>, installed from a throwaway
+local tap).</li>
+</ul>
+</li>
+<li>
+<p><strong>Promote.</strong> A green run means the channels work. Bump to the final
+<code>&lt;X.Y.Z&gt;</code> (drop the <code>-rc.&lt;N&gt;</code>), commit, tag <code>v&lt;X.Y.Z&gt;</code>, push — the same
+flow as a normal release below.</p>
+</li>
+</ol>
+<p>The <code>netlist-graph</code> (PyPI) channel validates separately via its own
+<code>workflow_dispatch</code> → TestPyPI path (see <code>publish-netlist-graph.yml</code>); it
+versions independently of the Rust crates.</p>
+<h2 id="what-does-not-need-to-change-at-release-time"><a class="header" href="#what-does-not-need-to-change-at-release-time">What does NOT need to change at release time</a></h2>
+<ul>
+<li>Submodule pins (unless deliberately bumping a vendored dep).</li>
+<li>The <code>vendor/opensta/</code> submodule pin is the version named in
+<code>crates/opensta-to-ir::MIN_TESTED_OPENSTA_VERSION</code>. If you bump the
+submodule, also bump the constant and the version-probe test — see
+WS-RH.1 in <a href="plans/post-phase-0-roadmap.html"><code>docs/plans/post-phase-0-roadmap.md</code></a>.</li>
+<li><code>LICENSE</code> (unless re-licensing).</li>
+</ul>
+<h2 id="pre-release-checklist-one-time-before-the-first-numbered-release"><a class="header" href="#pre-release-checklist-one-time-before-the-first-numbered-release">Pre-release checklist (one-time, before the first numbered release)</a></h2>
+<p>These items are tracked in <a href="plans/post-phase-0-roadmap.html"><code>docs/plans/post-phase-0-roadmap.md</code></a>
+§ Release hardening; this section is the visible punch-list:</p>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+Phase 1 (ADR 0008 required outputs) closed.</li>
+<li><input disabled="" type="checkbox" checked=""/>
+WS-RH.1 (OpenSTA detection + version check) shipped.</li>
+<li><input disabled="" type="checkbox" checked=""/>
+Metal CI on <code>macos-runner-1</code> green (re-enabled in commit <code>12e98df</code>,
+2026-05-12).</li>
+<li><input disabled="" type="checkbox"/>
+<strong>CUDA CI</strong> on <code>nvidia-runner-1</code> green on main. Currently
+disabled in <code>.github/workflows/ci.yml</code> (<code>if: ${{ false }}</code>,
+~line 268). Re-enable when hardware lands.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>HIP CI</strong> on the AMD runner green on main. Currently disabled
+in <code>.github/workflows/ci.yml</code> (<code>if: ${{ false }}</code>, ~line 357).
+Re-enable when the AMD runner is online.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Prebuilt CUDA/HIP binaries</strong> (ADR 0018 Phase 4), when produced, must
+build with <code>JACQUARD_CUDA_ARCH=all-major</code> so the kernel ships portable
+SASS for every major arch (<code>sm_50</code>…<code>sm_120</code> on CUDA ≥ 12.8, Blackwell
+included) plus PTX for the newest — see the README § CUDA target
+architecture. Local dev uses <code>JACQUARD_CUDA_ARCH=native</code> instead. The
+<code>nvidia1.local</code> Blackwell box (<code>sm_120</code>, CUDA 12.8) is a candidate
+self-hosted CUDA release runner.</li>
+<li><input disabled="" type="checkbox" checked=""/>
+Vendored-dep license posture confirmed
+(<a href="https://github.com/gzz2000/eda-infra-rs/issues/2#issuecomment-4363789319">gzz2000/eda-infra-rs#2</a>
+— sverilogparse AGPL declaration acknowledged as a typo; workspace
+Apache-2.0 governs).</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>Cargo.toml::license = "Apache-2.0"</code> set.</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<code>NOTICE</code> file enumerating vendored deps + their licenses.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Bump <code>vendor/eda-infra-rs</code> submodule</strong> once upstream pushes the
+sverilogparse <code>Cargo.toml</code> correction; remove the corresponding
+footnote in <code>NOTICE</code>. Maintainer acknowledged the typo on
+2026-05-02 but hasn't pushed the fix as of 2026-05-13. Verify
+with <code>git -C vendor/eda-infra-rs fetch &amp;&amp; git log origin/master --oneline</code>.</li>
+<li><input disabled="" type="checkbox" checked=""/>
+<strong>CUDA / HIP runtime violation routing</strong> through
+<code>process_events</code> — done (commit <code>24723b5</code>, issue #104). <code>sim_cuda</code> /
+<code>sim_hip</code> now dispatch the timed-batched path and drain violation
+events, so <code>--timing-report</code> / <code>--timing-summary</code> / <code>--timed</code> are no
+longer Metal-only.</li>
+<li><input disabled="" type="checkbox" checked=""/>
+Bounded violations array (<code>--timing-report-max-violations</code>,
+default 100k).</li>
+<li><input disabled="" type="checkbox" checked=""/>
+End-to-end <code>--timing-report</code> test on Metal CI. The
+<code>inv_chain_pnr</code> sim step uses <code>--timing-ir</code> (pre-generated
+<code>.jtir</code> checked in) + <code>--timing-report</code> + <code>--timing-summary</code>;
+a follow-up step validates the JSON shape (top-level keys,
+semver schema version, metadata, stats, arrays).</li>
+<li><input disabled="" type="checkbox" checked=""/>
+GF180MCU enablement (Phases 0–6) shipped. See
+<code>docs/plans/gf180mcu-enablement.md</code>. Phase 7 (wafer.space
+test-run-1 design integration) deferred pending design
+availability; not release-blocking.</li>
+</ul>
+<h2 id="license-posture"><a class="header" href="#license-posture">License posture</a></h2>
+<p>Project license is Apache-2.0 (<code>LICENSE</code>). Vendored-dep posture is
+enumerated in <code>NOTICE</code>. Summary:</p>
+<ul>
+<li><code>vendor/eda-infra-rs/</code> — Apache-2.0 (workspace). The <code>sverilogparse</code>
+sub-crate's stale <code>AGPL-3.0-only</code> declaration in <code>Cargo.toml</code> is a
+typo per upstream maintainer
+(<a href="https://github.com/gzz2000/eda-infra-rs/issues/2#issuecomment-4363789319">gzz2000/eda-infra-rs#2</a>);
+governed by the workspace LICENSE. Submodule pin will be bumped when
+upstream pushes the correction.</li>
+<li><code>vendor/sky130_fd_sc_hd/</code> — Apache-2.0.</li>
+<li><code>vendor/opensta/</code> — GPL-3 (subprocess only per ADR 0001 + ADR 0006
+§ Amendment; never linked, never bundled).</li>
+</ul>
+<h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
+<ul>
+<li><a href="https://github.com/gpu-eda/Jacquard/blob/main/CHANGELOG.md"><code>CHANGELOG.md</code></a> — release log.</li>
+<li><a href="adr/0008-structured-timing-output.html"><code>docs/adr/0008-structured-timing-output.md</code></a>
+— <code>--timing-report</code> stability contract.</li>
+<li><a href="adr/0002-timing-ir.html"><code>docs/adr/0002-timing-ir.md</code></a> — IR schema
+versioning.</li>
+<li><a href="adr/0006-sdf-preprocessing-model.html"><code>docs/adr/0006-sdf-preprocessing-model.md</code></a>
+— OpenSTA bundling rules.</li>
+<li><a href="project-scope.html"><code>docs/project-scope.md</code></a> — license posture
+contract.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="troubleshooting-vcd.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="handoff-discipline.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="troubleshooting-vcd.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="handoff-discipline.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,312 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Python engine as a bundled binary wheel - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="plan--python-engine-as-a-bundled-binary-wheel"><a class="header" href="#plan--python-engine-as-a-bundled-binary-wheel">Plan — Python engine as a bundled binary wheel</a></h1>
+<p>Implementation plan for <a href="../adr/0020-python-engine-binary-wheel.html">ADR 0020</a>:
+turn PR #53's subprocess API into a <code>pip install jacquard</code> self-contained
+binary wheel built with cibuildwheel.</p>
+<blockquote>
+<p><strong>Deferred (2026-07-01).</strong> ADR 0020 is a <strong>draft</strong> — a native PyO3 binding is
+the preferred long-term direction, and whether we build this subprocess-wheel
+path at all is deferred (<a href="https://github.com/gpu-eda/Jacquard/issues/161">#161</a>). <strong>P0</strong> (adopt
+PR #53's API into the uv workspace) is worth doing regardless — it's the
+Python surface either approach exposes. <strong>P1–P3</strong> (embed-and-delocate the
+subprocess binary) are on hold pending the subprocess-vs-PyO3 decision; note
+the shared hard part (per-platform wheels + <code>libc++</code>/<code>libomp</code> vendoring)
+carries over to a PyO3 extension either way.</p>
+</blockquote>
+<h2 id="guiding-constraints"><a class="header" href="#guiding-constraints">Guiding constraints</a></h2>
+<ul>
+<li><strong>The Python surface is PR #53's</strong> — <code>config</code> / <code>runner</code> / <code>result</code> /
+<code>regression</code> / <code>errors</code>. This plan changes packaging and adds a binary; it
+does not redesign the API.</li>
+<li><strong>Reuse, don't reinvent, the release machinery.</strong> The binary to embed is the
+one <code>release.yml</code> already builds (<code>cargo build --release --features metal --bin jacquard</code>, metallib embedded). The publish path is
+<code>publish-netlist-graph.yml</code>'s OIDC trusted-publishing shape. The smoke idea
+is <code>scripts/ci/user_acceptance_smoke.sh</code> (install relocated → run <code>sim</code>).</li>
+<li><strong>Every phase ends green in CI</strong> with an install-into-clean-venv smoke test,
+and any platform the wheel does <em>not</em> cover is <code>log</code>-ged, not silently
+dropped.</li>
+</ul>
+<h2 id="p0--land-the-api-in-the-workspace-no-binary-yet"><a class="header" href="#p0--land-the-api-in-the-workspace-no-binary-yet">P0 — Land the API in the workspace (no binary yet)</a></h2>
+<p>Adopt PR #53 as a uv workspace member; ship nothing to PyPI yet.</p>
+<ol>
+<li>Move #53's <code>python/jacquard/</code> in as the 5th workspace member; wire it into
+the root <code>pyproject.toml</code> workspace list next to <code>netlist_graph</code> /
+<code>chipflow_harness</code> / <code>mcu_soc</code>.</li>
+<li>Keep <code>find_jacquard_binary()</code>'s current env → <code>PATH</code> → <code>which</code> chain (no
+embedded binary yet); it resolves a dev's local <code>target/release/jacquard</code>.</li>
+<li>CI: a <code>python-api</code> job — <code>uv sync</code>, <code>ruff</code>, <code>pytest</code> — plus one integration
+test that builds <code>jacquard</code> and drives <code>sim()</code> against a tiny fixture
+(guarded like the other Metal jobs; reuses the <code>metal-build</code> artifact from
+the build/test split).</li>
+<li><strong>Exit:</strong> #53's tests green in CI; <code>from jacquard import sim</code> works against a
+locally built binary. #53 can be closed/superseded by this branch.</li>
+</ol>
+<h2 id="p1--macosarm64--metal-binary-wheel-the-spike--the-crux"><a class="header" href="#p1--macosarm64--metal-binary-wheel-the-spike--the-crux">P1 — macOS/arm64 + Metal binary wheel (the spike + the crux)</a></h2>
+<p>The whole ADR rests on "embed the binary + vendor its dylibs into a wheel that
+launches with no Homebrew LLVM." Prove it here on the platform we already
+release for.</p>
+<ol>
+<li><strong>Embed step.</strong> Package build copies the release binary to
+<code>jacquard/_bin/jacquard</code>. <code>find_jacquard_binary()</code> gains step 0: prefer the
+packaged <code>_bin/jacquard</code>; existing chain remains the fallback.</li>
+<li><strong>cibuildwheel + delocate.</strong> Configure <code>cibuildwheel</code> for <code>macos/arm64</code>,
+with <code>delocate</code> repairing the wheel — copying <code>libc++</code>/<code>libomp</code> in and
+rewriting install names. Confirm with <code>otool -L</code> that the repaired binary
+references <code>@loader_path</code>-relative dylibs, not <code>/opt/homebrew</code>.</li>
+<li><strong>Clean-environment smoke (the gate).</strong> In a runner <em>without</em> Homebrew LLVM
+on the load path (or with it hidden), <code>pip install</code> the wheel into a fresh
+venv and run a real <code>sim</code> — the <code>pip</code>-user analogue of the relocated-tarball
+user-acceptance gate. This is the test that would have caught v0.2.1.</li>
+<li><strong>libomp duplicate-runtime check.</strong> Load jacquard in a venv that also imports
+a numpy/scipy stack (which ship their own libomp) and confirm no
+duplicate-OpenMP abort.</li>
+<li><strong>Exit:</strong> a macOS/arm64 wheel that <code>pip install</code>s and runs <code>sim</code> on a clean
+box; TestPyPI upload validated via <code>workflow_dispatch</code>.</li>
+</ol>
+<h2 id="p2--linuxx86_64-cpu-fallback-wheel"><a class="header" href="#p2--linuxx86_64-cpu-fallback-wheel">P2 — Linux/x86_64 CPU-fallback wheel</a></h2>
+<p>Make <code>pip install jacquard</code> work in a plain Linux CI container (no GPU).</p>
+<ol>
+<li>Build the cosim <strong>CPU backend</strong> (ADR 0017) for <code>manylinux</code>; <code>auditwheel</code>
+repairs the (smaller, no-GPU) dylib set.</li>
+<li>Same clean-venv <code>sim</code>/<code>cosim</code> smoke, in a stock <code>manylinux</code>/ubuntu container.</li>
+<li>Document the backend the Linux wheel provides (CPU) vs. what needs P3.</li>
+<li><strong>Exit:</strong> Linux CPU wheel installs and runs in a bare container.</li>
+</ol>
+<h2 id="p3--cuda--hip-gated-likely-extras"><a class="header" href="#p3--cuda--hip-gated-likely-extras">P3 — CUDA / HIP (gated, likely extras)</a></h2>
+<ol>
+<li><strong>Gate:</strong> ADR 0018 Phase 4 (prebuilt CUDA/HIP binaries) must exist first —
+this reuses those binaries, it does not invent GPU CI.</li>
+<li>Decide with data: default manylinux wheel vs. <code>jacquard[cuda]</code> extra vs.
+a separate package — driven by wheel size and CUDA-runtime bundling. <code>log</code>
+and document whichever platforms the default wheel omits.</li>
+<li><strong>Exit:</strong> a documented, working install path for at least one GPU backend on
+Linux, or a recorded decision to keep GPU on the tarball/binstall channel.</li>
+</ol>
+<h2 id="publish-pipeline-built-across-p1p3"><a class="header" href="#publish-pipeline-built-across-p1p3">Publish pipeline (built across P1–P3)</a></h2>
+<ul>
+<li>New <code>publish-jacquard-wheel.yml</code>, modeled on <code>publish-netlist-graph.yml</code>:
+cibuildwheel build matrix → artifact → <strong>TestPyPI</strong> on <code>workflow_dispatch</code>
+(dry-run) → <strong>PyPI</strong> via OIDC trusted publishing on a release tag. No stored
+token; configure the trusted publisher once (mind the case-sensitive
+<code>gpu-eda/Jacquard</code> repo claim — the same gotcha <code>netlist-graph</code> hit).</li>
+<li>Version tracks the binary release via <code>scripts/bump_version.py</code> (the embedded
+binary and the wheel are one artifact), not <code>netlist-graph</code>'s independent line.</li>
+<li>Extend <code>docs/installation.md</code> (a <code>pip install jacquard</code> path) and
+<code>docs/release-process.md</code> (the wheel channel + its staging-validation gate).</li>
+</ul>
+<h2 id="open-questions-from-the-adr"><a class="header" href="#open-questions-from-the-adr">Open questions (from the ADR)</a></h2>
+<ul>
+<li><strong>PyPI name</strong> <code>jacquard</code> — confirm availability; fall back to <code>jacquard-eda</code>
+with an aliased import name if taken. Blocks only the first real publish.</li>
+<li><strong>CUDA wheel size / runtime</strong> — P3 decision, with data.</li>
+<li><strong>libomp duplicate runtime</strong> — must be cleared in the P1 spike (step 4) before
+committing to delocate as the vendoring mechanism.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../plans/jtag-debug-server.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../plans/netlist-graph-xroots.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../plans/jtag-debug-server.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../plans/netlist-graph-xroots.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

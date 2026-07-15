@@ -1,0 +1,335 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Cell-model IR - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="cell-model-ir--staged-delivery-plan"><a class="header" href="#cell-model-ir--staged-delivery-plan">Cell-model IR — staged delivery plan</a></h1>
+<p><strong>Status:</strong> Largely delivered. Realises
+<a href="../adr/0019-cell-model-ir.html">ADR 0019</a>. Tracks
+<a href="https://github.com/gpu-eda/Jacquard/issues/130">#130</a> and
+<a href="https://github.com/gpu-eda/Jacquard/issues/67">#67</a>.</p>
+<ul>
+<li><strong>C1 (foundation + #130)</strong> — ✅ landed (#132). #130 is fixed by default: a 9T
+netlist auto-selects its own 9T descriptor.</li>
+<li><strong>C1b (converter generalization)</strong> — ✅ landed (#155): corner from Liberty PVT,
+ff internal-state-var (<code>IQ</code>). Surfaced by running the converter against the
+proprietary GF130 (GF013BCD) library.</li>
+<li><strong>C2 (L3 sequential + L4 timing)</strong> — ✅ landed (#132).</li>
+<li><strong>C3.1/C3.2 (build-time generation + prefix selection)</strong> — ✅ landed (#132).</li>
+<li><strong>SKY130 <code>.lib.json</code> reader</strong> — ✅ landed (#155): SKY130 ships only
+<code>.lib.json</code>, so <code>liberty-parse</code> reads it.</li>
+<li><strong>C3a (IHP SG13G2, zero-Rust new PDK)</strong> — ✅ landed (#155): vendored as a
+sparse/shallow submodule + a generated descriptor, no <code>ihp_*.rs</code>.</li>
+<li><strong>C3.3 (cut over + drop runtime <code>vendor/</code> dep)</strong> — ✅ landed (#160): the
+runtime binary is self-contained for standard cells (<code>load_pdk_models</code> has no
+runtime callers), and <code>PdkVariant</code> is deleted (<code>grep -rn PdkVariant src/</code> = 0).</li>
+<li><strong>C4 (proprietary workflow + <code>clear_preset</code>)</strong> — 🟡 partial: <code>clear_preset</code>
+set-dominant field landed (#155); <code>docs/adding-a-pdk.md</code> reframed around the
+descriptor workflow (#155). The proprietary <em>sequential</em> end-to-end test and
+the round-trip honesty fix remain (see Remaining follow-ups).</li>
+</ul>
+<p><strong>Goal:</strong> make Jacquard core consume a single, generated, JSON cell-model
+IR carrying <em>all</em> per-cell-type facts of a library — L1 directions, L2
+combinational AIG, L3 sequential/classification, <strong>and L4 timing
+characterization</strong> — so any library, including proprietary ones the
+authors can't vendor, is selectable at runtime, and the per-PDK Rust, the
+hardcoded <code>vendor/</code> paths, <em>and</em> the runtime <code>.lib</code> parse all retire.</p>
+<h2 id="why-staged"><a class="header" href="#why-staged">Why staged</a></h2>
+<p>Each step is independently useful and de-risks the next: step 1 ships the
+#130 fix and <em>validates the format on real cells</em> before the heavier L3
+schema is committed; step 2 is the schema-fidelity work; step 3 is the
+cleanup that the first two earn.</p>
+<h2 id="staged-checkpoints-each--one-reviewable-pr"><a class="header" href="#staged-checkpoints-each--one-reviewable-pr">Staged checkpoints (each ≈ one reviewable PR)</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>#</th><th>Scope</th><th>Gate</th></tr></thead><tbody>
+<tr><td><strong>C1 — foundation + #130</strong></td><td>Relocate <code>pdk_decomp</code> into a shared lib. Define the cell-model-IR JSON schema for <strong>L1 directions + L2 combinational AIG</strong> (D3) — the corner of the schema needed to build the AIG. Write the converter crate (Liberty <code>function</code>/<code>functional.v</code> → IR). Redirect <em>one</em> PDK's (GF180MCU) stdcell logic to consume the IR.</td><td>A 9T netlist (e.g. <code>tests/jtag_minimal</code>) simulates against its <strong>own</strong> generated 9T descriptor; result byte-identical to the current 7T-substituted run where they truly agree, and the round-trip logic check passes.</td></tr>
+<tr><td><strong>C2 — L3 sequential + L4 timing schema</strong></td><td>Add the D4 sequential pin-role schema (clock+edge, D/next-state, Q, async set/reset+polarity, enable) + classification kinds, <strong>and the D5 L4 timing block</strong> (setup/hold, clock→Q, DFF/SRAM timing). Extend the converter to emit both from Liberty <code>ff</code>/<code>latch</code> and the timing groups it already parses, with <strong>L4 keyed by corner</strong> (one descriptor, all corners; mirrors the timing IR). Wire the consumer to replace the hardcoded DFF pin-name matches (<code>src/aig.rs:2080-2260</code>) and to read L4 from the IR instead of <code>TimingLibrary::from_file</code>, selecting the corner via <code>--corner</code> (default <code>default_corner</code>).</td><td>A design with sequential GF180/SKY130 cells simulates <strong>and times</strong> from the IR with <strong>no per-PDK Rust DFF handling and no runtime <code>.lib</code> parse</strong>; equivalence vs the current hardcoded + <code>liberty_parser</code> path (the oracle).</td></tr>
+<tr><td><strong>C3 — bundle + cut over + selection</strong></td><td><strong>Regenerate</strong> bundled descriptors for all built-in PDKs (AIGPDK/SKY130/GF180) <strong>in CI from the pinned vendored submodules and embed at build time — not checked in</strong> (D7); build-time generation replaces the <code>build.rs</code> pin-table step. Selection by descriptor-declared prefix + <code>--cell-descriptor</code> (D8). Drop the runtime <code>vendor/</code> cell dependency, <code>pdk_decomp</code>, and <code>liberty_parser::TimingLibrary</code> from core; retire <code>gf180mcu*.rs</code>/<code>sky130*.rs</code> classifiers, <code>PdkVariant</code>, and the <code>build.rs</code> pin-table generators.</td><td>The existing PDK regression suite (incl. timed runs) passes consuming <strong>only</strong> build-time-generated descriptors; vendored cell submodules are no longer a <em>runtime</em> dependency of jacquard core, and CI regeneration is deterministic.</td></tr>
+<tr><td><strong>C3a — IHP SG13G2 (new PDK, zero Rust)</strong></td><td>Vendor the <a href="https://github.com/IHP-GmbH/IHP-Open-PDK">IHP-Open-PDK</a> SG13G2 stdcells as a submodule; add it to the bundle by <strong>generating a descriptor only — no per-PDK Rust</strong> (D7a). Exercises the Liberty-first path cleanly (every SG13G2 cell has <code>function</code>; every flop a full <code>ff</code> group with reset polarity).</td><td>An SG13G2 gate-level design simulates <strong>and times</strong> purely from its generated descriptor, with no <code>ihp_*.rs</code> in core — the worked proof that adding a PDK is no longer a Jacquard code change.</td></tr>
+<tr><td><strong>C4 (later)</strong></td><td>A documented proprietary-library workflow: user runs the generator on their own Liberty, gets a descriptor, simulates — no Jacquard build. Honesty fix: the round-trip logic check replaces <code>build.rs</code>'s port-only <code>assert_eq!</code>.</td><td><code>docs/adding-a-pdk.md</code> recipe; a synthetic "private" library exercised end-to-end in a test.</td></tr>
+</tbody></table>
+</div>
+<h2 id="remaining-follow-ups-post-cutover"><a class="header" href="#remaining-follow-ups-post-cutover">Remaining follow-ups (post-cutover)</a></h2>
+<p>Discovered during implementation; folded here from the working handoff so they
+survive its deletion. None reopen the runtime <code>vendor/</code> stdcell dependency or
+reintroduce <code>PdkVariant</code>.</p>
+<ol>
+<li><strong>Descriptor-drive AIGPDK <code>DFF</code>/<code>DFFSR</code>.</strong> AIGPDK's two internal flops are
+still on a literal-match path. Their descriptor L3 is well-formed
+(clock=CLK/rising, next_state=D, async S/R active-low, reset-dominant); the
+conversion is gate-covered (every AIGPDK/IHP fixture exercises them). Do this
+first — it is bounded and safe.</li>
+<li><strong>Descriptor-drive the preserved <code>edfxtp</code>/<code>icgtp</code>/<code>icgtn</code> seq branches.</strong> The
+legacy <code>SET_B</code>/<code>RESET_B</code>/<code>RN</code>/<code>SETN</code> sequential-wiring branches remain because
+they still serve <em>preserved</em> cells: SKY130 <code>edfxtp</code> (its data-enable folds
+into <code>next_state</code> via the <code>ff</code> state var <code>IQ</code>, so <code>ir_seq_input_wireable</code>
+returns false) and GF180 <code>icgtp</code>/<code>icgtn</code> clock gates (emit no L3). <strong>No gated
+design exercises these</strong>, so add a small <code>edfxtp</code>/<code>icgtp</code> fixture <em>first</em>, then
+descriptor-drive them and delete the residual literals + the per-PDK
+classifiers.</li>
+<li><strong>Gate IHP sequential.</strong> IHP <code>ff</code> cells are code-supported (previously
+panicked) but ungated — no flop-bearing SG13G2 fixture exists (needs synthesis
+infra to produce an IHP gate-level netlist). Add one to lock in IHP sequential.</li>
+<li><strong>Flat-module <code>.v</code> cross-check indexer.</strong> Commercial libraries (GF130, IHP)
+ship one flat-module <code>.v</code>, so the D6 logic cross-check reports 0 models indexed
+and does not run at generation (the descriptor is still emitted; correctness is
+validated via simulation, and the converter now <em>warns</em>). Teach the indexer
+flat-module <code>.v</code> so commercial descriptors are logic-cross-checked at
+generation.</li>
+<li><strong>Descriptor-backed <code>LeafPinProvider</code> + delete <code>build.rs</code> pin-table gen.</strong>
+Confirmed feasible (descriptor L1 covers every stdcell's scalar pins; chain:
+power-pin → filler → descriptor L1 → preserved pad/IP/SRAM tables). Not yet
+wired; the per-PDK <code>LeafPinProvider</code>s + <code>build.rs::generate_pin_table</code> +
+<code>generated</code> modules remain (inert for stdcell <em>logic</em>, but still the parse-time
+pin-direction source). This is the last mechanical cleanup.</li>
+<li><strong>C4 — proprietary sequential end-to-end test + round-trip honesty fix.</strong> GF130
+descriptor <em>generation</em> is proven (the C4 proof), but no proprietary
+<em>sequential</em> simulation test exists; add a synthetic "private" library
+exercised end-to-end. Separately, the round-trip logic check should replace
+<code>build.rs</code>'s port-only <code>assert_eq!</code> (the plan's C4 honesty fix).</li>
+<li><strong><code>clear_preset</code> for true set-dominant sequential sim.</strong> The field is emitted
+and the consumer honors it, but a proprietary user simulating set-dominant
+flops still needs the non-GF180 sequential path fully descriptor-driven
+(items 1–2) to observe the correct behaviour end-to-end.</li>
+</ol>
+<h2 id="risks--open-questions"><a class="header" href="#risks--open-questions">Risks / open questions</a></h2>
+<ul>
+<li><strong>Sequential fidelity (C2).</strong> Liberty <code>ff</code> <code>clear</code>/<code>preset</code>/
+<code>clear_preset_var</code> → Jacquard async-reset DFF is the bug-prone mapping;
+gate it on equivalence against the current hardcoded behaviour.</li>
+<li><strong>L2 source (Liberty-first; resolved in ADR 0019 D6).</strong> The converter
+reads Liberty <code>function</code>/<code>ff</code>/<code>latch</code> first and falls back to
+<code>functional.v</code>/UDP only where Liberty under-specifies. C1 must therefore
+exercise both ends: a clean <code>function</code> cell <em>and</em> a cell that needs the
+<code>.v</code>/UDP fallback (a UDP-modelled mux). Where both sources exist, the
+converter cross-checks them (logic equivalence; timing arc-set agreement;
+macro/SRAM timing-value divergence) and <strong>surfaces disagreement</strong> — the
+structural check <code>build.rs</code>'s port-only <code>assert_eq!</code> never had (#130).</li>
+<li><strong>AIG payload size (D2/D3).</strong> If the JSON AIG is unwieldy for a full
+library, switch that payload to the FlatBuffers escape hatch — decide at
+C1 from the real GF180 descriptor size.</li>
+<li><strong>Migration ordering (C3) — resolved: per-PDK cutover.</strong> Each PDK
+migrates independently with the IR consumer running alongside the per-PDK
+Rust, keeping the suite green; a single switch is riskier. IHP (C3a) is
+added the same way but greenfield (no Rust to retire).</li>
+<li><strong>Bundled-descriptor provenance — resolved: CI-regenerated (D7).</strong> Not
+checked in; embedded at build time from pinned submodules. C3 must wire
+the generation into the build/CI and prove it deterministic.</li>
+<li><strong>Identifier alignment (D1).</strong> The shared cell/pin-name fragment must be
+fixed in C1 before two IRs exist that would diverge.</li>
+</ul>
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li><a href="../adr/0019-cell-model-ir.html">ADR 0019 — Cell-model IR</a>.</li>
+<li><a href="../adr/0002-timing-ir.html">ADR 0002 — Timing IR</a> (the pattern + scope
+boundary this realises), <a href="../adr/0010-declarative-cell-metadata.html">ADR 0010</a>
+/ <a href="../adr/0011-ram-port-mapping-schema.html">ADR 0011</a> (the declarative path
+this extends).</li>
+<li>Current state: <code>src/aig.rs:1895</code> (hardcoded 7T path), <code>build.rs</code>
+(port-only pin gen), <code>src/pdk.rs</code> / <code>src/gf180mcu_pdk.rs</code> (hardcoded
+classifiers), <code>src/liberty_parser.rs</code> (Liberty group-walker to extend),
+<code>crates/opensta-to-ir</code> + <code>crates/timing-ir</code> (the sibling pattern).</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../plans/netlist-graph-xroots.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../plans/rtl-onramp-sim-integration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../plans/netlist-graph-xroots.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../plans/rtl-onramp-sim-integration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

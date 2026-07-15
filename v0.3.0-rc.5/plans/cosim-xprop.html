@@ -1,0 +1,356 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Selective X-propagation in cosim - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="plan-selective-x-propagation-in-cosim"><a class="header" href="#plan-selective-x-propagation-in-cosim">Plan: selective X-propagation in cosim</a></h1>
+<p>Extends <a href="../adr/0016-selective-x-propagation.html">ADR 0016</a> (selective
+X-propagation, today <code>sim</code>-only) to the reactive <code>cosim</code> path. Issue:
+<a href="https://github.com/gpu-eda/Jacquard/issues/95">#95</a>.</p>
+<h2 id="where-it-stands"><a class="header" href="#where-it-stands">Where it stands</a></h2>
+<blockquote>
+<p><strong>Update 2026-06-03:</strong> while extending to cosim we found the seed
+template was broken for <strong>both</strong> paths — <code>expand_states_for_xprop</code>
+cleared the X-mask for all <code>input_map</code> positions, which includes DFF-Q
+feedback reads, so uninitialised DFFs read as known <code>0</code> and X never
+surfaced even in <code>sim</code>. Fixed via <code>vcd_io::xprop_xmask_template</code>
+(X at genuine X-sources only) plus output-slot seeding in <code>run_cosim</code>.
+See the handoff and ADR-0016 amendment. Phases 1, 2, 5, the seed fix,
+<strong>phase 3</strong> (undriven inputs → X: <code>compute_x_capable_pins(treat_inputs_as_x)</code>
+gated by <code>DesignArgs::xprop_undriven_inputs</code>; <code>xprop_xmask_template_cosim</code>
+seeds inputs X; <code>state_prep</code> + <code>gpu_apply_flash_din</code> clear the X-mask of
+each bit they drive), <strong>phase 6</strong> (end-to-end <code>tests/xprop_cosim/</code>
+guards in CI, sim + cosim) and <strong>phase 4</strong> (observe-kernel output-offset:
+correct by construction — <code>gpu_io_step</code> reads the value half via
+<code>uart_params.state_size = effective_state_size</code>; guarded by re-running the
+APB3 + dual-UART cosims under <code>--xprop</code> and asserting identical decoded
+output) are done. <strong>All phases of #95 are complete</strong>; the bidir
+tristate-mux read <code>Y = OE ? A : external</code> is separately tracked as #96.</p>
+</blockquote>
+<p><code>--xprop</code> is now wired into <strong>both</strong> <code>sim</code> and <code>cosim</code>. (Historically it
+was <code>sim</code>-only and <code>cosim</code> always ran two-state, silently resolving
+uninitialised DFF/SRAM and undriven inputs to <code>0</code> — false agreement
+against 4-state RTL; that gap is what this plan closed.)</p>
+<p>What the work built on (already existed and was reused):</p>
+<ul>
+<li>The <strong>Metal <code>simulate_v1_stage</code> kernel is already X-capable</strong>
+(<code>sram_xmask</code> buffer, <code>xmask_state_offset</code>, the X-mask read logic in
+<code>kernel_v1.metal</code>). cosim dispatches the same kernel — no GPU core
+change.</li>
+<li><code>DesignArgs.xprop</code> already threads into <code>script.xprop_enabled</code> (via
+<code>setup</code>); <code>cmd_cosim</code> just hardcodes <code>xprop: false</code>.</li>
+<li>Host machinery on the sim side: <code>expand_states_for_xprop</code>, the
+<code>sram_xmask</code> shadow (init <code>0xFFFF_FFFF</code>), <code>split_xprop_states</code>,
+<code>write_output_vcd_xprop</code>.</li>
+</ul>
+<p>So this is <strong>host-side reactive plumbing</strong>, not new kernel work.</p>
+<h2 id="x-source-taxonomy-the-semantic-to-get-right"><a class="header" href="#x-source-taxonomy-the-semantic-to-get-right">X-source taxonomy (the semantic to get right)</a></h2>
+<p>X originates from four places; cosim must model all four:</p>
+<div class="table-wrapper"><table><thead><tr><th>Source</th><th>X when…</th><th>Mechanism</th></tr></thead><tbody>
+<tr><td>Uninitialised <strong>DFF</strong></td><td>power-up, before first clocked write</td><td><code>expand_states_for_xprop</code> seeds the X-mask half (as in <code>sim</code>)</td></tr>
+<tr><td>Uninitialised <strong>SRAM</strong></td><td>before first write to a cell</td><td><code>sram_xmask</code> shadow init <code>0xFFFF_FFFF</code>, carried across ticks</td></tr>
+<tr><td><strong>Undriven input pad</strong></td><td>no model / constant / clock / reset drives it</td><td>input X-mask = X for every primary-input bit <em>not</em> in the driven set</td></tr>
+<tr><td><strong>Bidir pad input side</strong></td><td><code>OE</code> deasserted and nothing external drives it</td><td>per-edge: input X-mask = <code>OE ? known : X</code>, reading <code>OE</code> (the <code>__oe</code> observable)</td></tr>
+</tbody></table>
+</div>
+<p>The first two are sequential power-up X (ADR 0016's original scope). The
+<strong>last two are new</strong> — input/IO X-sources the <code>sim</code> static-VCD path never
+had to model, and the reason this is more than "carry the sim machinery
+over."</p>
+<p><strong>Driven set</strong> (bits that are <em>known</em>, X-mask cleared): scheduler-driven
+clock(s) + reset, each peripheral model's <code>driven_positions()</code>, and
+<code>constant_inputs</code> / <code>constant_ports</code>. The complement of the driven set
+within the primary inputs is X.</p>
+<h2 id="phases"><a class="header" href="#phases">Phases</a></h2>
+<h3 id="phase-1--flag-plumbing"><a class="header" href="#phase-1--flag-plumbing">Phase 1 — Flag plumbing</a></h3>
+<ul>
+<li>Add <code>xprop: bool</code> to <code>CosimArgs</code>; stop hardcoding <code>xprop: false</code> in
+<code>cmd_cosim</code>'s <code>DesignArgs</code>. (<code>setup</code> already turns it into
+<code>script.xprop_enabled</code>.)</li>
+</ul>
+<h3 id="phase-2--x-state-in-the-cosim-loop---done-1ba01eb"><a class="header" href="#phase-2--x-state-in-the-cosim-loop---done-1ba01eb">Phase 2 — X-state in the cosim loop  ✅ done (1ba01eb)</a></h3>
+<ul>
+<li>Expanded the cosim state buffer via <code>expand_states_for_xprop</code> and
+allocated the <code>sram_xmask</code> shadow (init <code>0xFFFF_FFFF</code>), bound at
+<code>simulate_v1_stage</code> buffer(7) through the dispatch chain.</li>
+<li>No <code>write_params</code> change needed: <code>is_x_capable</code> / <code>xmask_state_offset</code>
+are baked into the <em>script</em> at flatten time and <code>state_size</code> already
+uses <code>effective_state_size</code> (so the layout scales automatically).</li>
+</ul>
+<h3 id="phase-3--input-x-mask-policy--per-edge-maintenance-the-novel-part"><a class="header" href="#phase-3--input-x-mask-policy--per-edge-maintenance-the-novel-part">Phase 3 — Input X-mask policy + per-edge maintenance (the novel part)</a></h3>
+<ul>
+<li><strong>Init:</strong> every primary-input X-mask bit = X, except the driven set
+(clock/reset/model/constants), which start known. The
+<code>expand_states_for_xprop</code> template clears <em>all</em> inputs to known, so
+Phase 3 re-marks the <em>undriven</em> inputs back to X.</li>
+<li><strong>Per edge:</strong> wherever <code>state_prep</code> / model <code>ModelOverrides</code> drive an
+input bit, also clear that bit's X-mask (driven ⇒ known). Undriven
+bits stay X.</li>
+<li><strong>Bidir: no special handling in this issue.</strong> A <code>bi_24t</code> pad's
+core-read is modelled <code>Y = PAD</code> (tristate not modelled — <code>aig.rs</code>),
+and the PAD net is an undriven primary input, so bidir reads fall out
+of the generic undriven-input rule above as <strong>X</strong> — conservative and
+safe (an unmodelled bidir read surfaces as unknown, never a false
+0/1). The earlier "per-edge OE→input feedback with one-edge latency"
+idea was <strong>wrong</strong>: the correct read is combinational
+<code>Y = OE ? A : external</code>, which requires modelling the tristate mux in
+the AIG. That is deferred to
+<a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>; until it lands,
+an <code>OE=1</code> loopback reads pessimistic-X (safe).</li>
+</ul>
+<h3 id="phase-4--observe-kernel-offset-done--correct-by-construction"><a class="header" href="#phase-4--observe-kernel-offset-done--correct-by-construction">Phase 4 — Observe-kernel offset (DONE — correct by construction)</a></h3>
+<ul>
+<li><code>gpu_io_step</code>'s output reads (<code>READ_OUT_BIT</code> → <code>states[state_size + …]</code>)
+for UART, Wishbone, and bus-trace turned out to be <strong>already correct</strong>
+under xprop: <code>state_size</code> here is <code>uart_params.state_size</code>, set to the
+full <code>effective_state_size</code>, so <code>states[state_size + word]</code> indexes the
+output slot and <code>word &lt; reg_io_state_size</code> lands in the value half (value
+is at the front of <code>[value | xmask | …]</code>). The earlier worry that "the
+offset shifts" was unfounded — no Rust/kernel change was needed.</li>
+<li><strong>Guard added</strong> so it can't silently regress: CI re-runs the APB3
+bus-trace and dual-UART cosims under <code>--xprop</code> and asserts the decoded
+transactions/bytes are identical to the two-state runs (both designs are
+fully reset-driven, so phase-3 undriven-input X never reaches the traced
+signals). If a future layout change made the observe reads hit the xmask
+half, the decoded values would corrupt and the checkers would fail.</li>
+</ul>
+<h3 id="phase-5--x-aware-vcd-output"><a class="header" href="#phase-5--x-aware-vcd-output">Phase 5 — X-aware VCD output</a></h3>
+<ul>
+<li>cosim emit path uses a <code>write_output_vcd_xprop</code>-equivalent so traced
+nets and top-level IO emit <code>x</code> (not <code>0</code>) where unknown; the bidir
+<code>__out</code>/<code>__oe</code> split already exists and should reflect X correctly.</li>
+</ul>
+<h3 id="phase-6--verification"><a class="header" href="#phase-6--verification">Phase 6 — Verification</a></h3>
+<ul>
+<li>A small reactive test design with (a) an unreset register and (b) an
+unconnected input pad — assert the output VCD shows <code>x</code> until each is
+resolved (clocked write / model drive), <code>0</code>/<code>1</code> after. (Bidir
+read-back correctness is deferred to #96.)</li>
+<li>Where feasible, extend the CPU <code>sanity_check_cpu_xprop</code> parity to a
+cosim scenario.</li>
+</ul>
+<h2 id="risks--open-questions"><a class="header" href="#risks--open-questions">Risks / open questions</a></h2>
+<ul>
+<li><strong>Bidir read-back is pessimistic-X</strong> until <a href="https://github.com/gpu-eda/Jacquard/issues/96">#96</a>
+models the tristate mux (<code>Y = OE ? A : external</code>). Safe (false-X, not
+false-0); resolve by driving the pad's external side with a model.</li>
+<li><strong>Observe-offset regression</strong> (Phase 4): the highest-risk interaction;
+the bus-trace code is days old. Needs an explicit test under <code>--xprop</code>.</li>
+<li><strong>Performance:</strong> the state buffer doubles again on top of any timing
+expansion; the VCD ring-buffer snapshot grows. Measure on a real
+JTAG-replay run.</li>
+<li><strong>SRAM xmask carry:</strong> confirm the shadow persists correctly across the
+batched/single-tick dispatch modes the cosim loop uses.</li>
+</ul>
+<h2 id="adr--docs-impact"><a class="header" href="#adr--docs-impact">ADR / docs impact</a></h2>
+<ul>
+<li><strong>Amend ADR 0016</strong>: record the cosim extension and broaden the
+X-source taxonomy to include undriven input pads + bidir-OE (the
+original ADR covered only sequential power-up X).</li>
+<li>Fold the IO X-source rules into <code>docs/selective-x-propagation.md</code>.</li>
+<li>Update the cosim <code>--xprop</code> help + <code>docs/installation.md</code> once shipped.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../plans/distribution.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../plans/cosim-backend-portability.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../plans/distribution.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../plans/cosim-backend-portability.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

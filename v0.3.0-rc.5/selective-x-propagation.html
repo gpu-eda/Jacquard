@@ -1,0 +1,619 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Selective X-Propagation - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="selective-x-propagation-for-jacquard"><a class="header" href="#selective-x-propagation-for-jacquard">Selective X-Propagation for Jacquard</a></h1>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>This document proposes adding <strong>selective unknown-value (X) propagation</strong> to Jacquard's
+gate-level simulator. Rather than uniformly upgrading the entire simulator to
+four-state logic (2x storage, ~2-3x ALU cost), we use <strong>static analysis at
+compile time</strong> to identify which signals can carry X values, and only apply
+X-aware simulation to the affected partitions. The rest of the design continues
+to run with the existing fast two-state kernel.</p>
+<h2 id="motivation"><a class="header" href="#motivation">Motivation</a></h2>
+<p>Jacquard currently simulates in pure two-state Boolean logic (0/1). All DFFs and
+SRAMs start at 0. This is fast but has two significant drawbacks:</p>
+<ol>
+<li>
+<p><strong>Undetected initialisation bugs</strong>: If a design reads a register before it
+has been written through a proper reset sequence, the simulator silently
+returns 0 instead of flagging the value as unknown. Real hardware would
+produce an arbitrary bit pattern.</p>
+</li>
+<li>
+<p><strong>SRAM initialisation masking</strong>: SRAMs read as all-zeros before being
+written. A design that depends on SRAM initialisation may appear to work
+in simulation but fail on silicon.</p>
+</li>
+<li>
+<p><strong>No RTL/gate-level mismatch detection</strong>: RTL simulators (Icarus, VCS,
+Questa) propagate X values that expose these bugs. When comparing Jacquard's
+gate-level results against an RTL reference, false mismatches arise because
+Jacquard resolves unknowns to zero.</p>
+</li>
+</ol>
+<p>Naively upgrading the entire simulator to four-state would halve throughput
+(double storage per signal, double ALU per gate). The key insight is that in a
+well-designed SoC after reset, typically <strong>&lt;5% of signals</strong> are genuinely
+X-capable (uninitialised memories, clock-domain crossings, registers without
+reset). We should only pay the overhead where it matters.</p>
+<h2 id="background-x-in-and-inverter-graphs"><a class="header" href="#background-x-in-and-inverter-graphs">Background: X in And-Inverter Graphs</a></h2>
+<p>Jacquard's core IR is an And-Inverter Graph (AIG). Every gate is an AND with
+optional input inversions. The boomerang reduction tree computes:</p>
+<pre><code>ret = (a ^ xora) &amp; ((b ^ xorb) | orb)
+</code></pre>
+<p>Where <code>xora</code>/<code>xorb</code> encode inversions and <code>orb</code> encodes pass-through (when
+<code>orb = 0xFFFFFFFF</code>, input <code>b</code> is forced to 1, making the gate a buffer for <code>a</code>).</p>
+<p>The AND gate has a favourable property for X propagation:</p>
+<div class="table-wrapper"><table><thead><tr><th>a</th><th>b</th><th>a AND b</th></tr></thead><tbody>
+<tr><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>0</td><td>1</td><td>0</td></tr>
+<tr><td>0</td><td>X</td><td><strong>0</strong></td></tr>
+<tr><td>1</td><td>0</td><td>0</td></tr>
+<tr><td>1</td><td>1</td><td>1</td></tr>
+<tr><td>1</td><td>X</td><td><strong>X</strong></td></tr>
+<tr><td>X</td><td>0</td><td><strong>0</strong></td></tr>
+<tr><td>X</td><td>1</td><td><strong>X</strong></td></tr>
+<tr><td>X</td><td>X</td><td><strong>X</strong></td></tr>
+</tbody></table>
+</div>
+<p>A known-zero on either input forces the output to known-zero regardless of X
+on the other input. This means X does not spread as aggressively through AND
+logic as it would through XOR or MUX logic. AIG-based designs have a natural
+tendency to "absorb" X values at AND gates with known-zero inputs.</p>
+<p>NOT (inversion) simply preserves the X mask: <code>NOT(X) = X</code>, <code>NOT(0) = 1</code>,
+<code>NOT(1) = 0</code>.</p>
+<h2 id="design"><a class="header" href="#design">Design</a></h2>
+<h3 id="phase-1-static-x-source-analysis-compile-time"><a class="header" href="#phase-1-static-x-source-analysis-compile-time">Phase 1: Static X-Source Analysis (Compile Time)</a></h3>
+<p>At AIG construction time, identify all <strong>X sources</strong> -- signals whose initial
+value is unknown:</p>
+<ol>
+<li>
+<p><strong>DFF Q outputs</strong>: Every DFF output is an X source at cycle 0. In real
+hardware, flip-flop power-on state is indeterminate.</p>
+</li>
+<li>
+<p><strong>SRAM read ports</strong>: All 32 data-output pins of each <code>RAMBlock</code> are X
+sources. Memory contents are undefined until written.</p>
+</li>
+<li>
+<p><strong>Undriven primary inputs</strong>: If a primary input is not driven by the
+testbench VCD, it should be marked X. (Currently Jacquard warns about missing
+PI signals; this would upgrade that warning to X propagation.)</p>
+</li>
+</ol>
+<p>These are identified directly from <code>AIG.drivers</code> (variant <code>DFF(_)</code> and
+<code>SRAM(_)</code>) and from <code>AIG.dffs</code> / <code>AIG.srams</code>.</p>
+<h3 id="phase-2-forward-cone-computation-compile-time"><a class="header" href="#phase-2-forward-cone-computation-compile-time">Phase 2: Forward Cone Computation (Compile Time)</a></h3>
+<p>Compute the <strong>forward cone of influence</strong> from all X sources through the AIG.
+Since AIG pins are guaranteed to be in topological order, this is a single
+linear-time forward pass:</p>
+<pre><code>x_capable = BitVec::zeros(num_aigpins + 1)
+
+// Mark X sources
+for each DFF:
+    x_capable.set(dff.q)
+for each SRAM:
+    for each read data pin:
+        x_capable.set(pin)
+
+// Forward propagate (pins are in topological order)
+for aigpin in 1..=num_aigpins:
+    if let AndGate(a_iv, b_iv) = drivers[aigpin]:
+        a = a_iv &gt;&gt; 1   // strip inversion bit
+        b = b_iv &gt;&gt; 1
+        if x_capable[a] || x_capable[b]:
+            x_capable.set(aigpin)
+</code></pre>
+<p>This is O(V + E) on the AIG -- negligible compared to partitioning.</p>
+<p><strong>Sequential propagation</strong>: X-capability also propagates through DFF feedback
+loops. If a DFF's D input is X-capable, its Q output remains X-capable (even
+after the first clock edge, because it may have captured an X value). The
+analysis iterates until a fixpoint:</p>
+<pre><code>loop:
+    changed = false
+    for each DFF:
+        d_pin = dff.d_iv &gt;&gt; 1
+        if x_capable[d_pin] &amp;&amp; !x_capable[dff.q]:
+            x_capable.set(dff.q)
+            changed = true
+    if !changed:
+        break
+    // Re-run forward cone from newly-marked DFF Q outputs
+</code></pre>
+<p>In practice this converges in 1-2 iterations because most feedback loops
+go through DFFs that are already marked.</p>
+<h3 id="phase-3-partition-classification"><a class="header" href="#phase-3-partition-classification">Phase 3: Partition Classification</a></h3>
+<p>After partitioning (mt-kahypar), classify each partition:</p>
+<ul>
+<li>
+<p><strong>X-capable</strong>: Contains at least one X-capable aigpin, OR reads input state
+from an X-capable partition's output. Run with the X-aware kernel variant.</p>
+</li>
+<li>
+<p><strong>X-free</strong>: All signals are provably not-X. Run with the existing fast
+two-state kernel.</p>
+</li>
+</ul>
+<p>The classification must account for inter-partition communication:</p>
+<pre><code>loop:
+    changed = false
+    for each partition P:
+        if P is already X-capable:
+            continue
+        for each global-read in P's script:
+            source_word = identify source partition and state word
+            if source partition is X-capable:
+                mark P as X-capable
+                changed = true
+                break
+    if !changed:
+        break
+</code></pre>
+<h3 id="phase-4-x-mask-representation"><a class="header" href="#phase-4-x-mask-representation">Phase 4: X-Mask Representation</a></h3>
+<p>For X-capable partitions, each signal carries a <strong>sideband X mask</strong> alongside
+its value:</p>
+<ul>
+<li><code>v</code> (value bit): The Boolean value. When <code>x = 1</code>, this is a "best guess"
+(we use 0 by convention, matching Jacquard's current behaviour for
+backwards-compatible output).</li>
+<li><code>x</code> (X-mask bit): 1 = unknown, 0 = known.</li>
+</ul>
+<p>This doubles the per-signal storage within X-capable partitions only.</p>
+<h4 id="state-buffer-layout"><a class="header" href="#state-buffer-layout">State Buffer Layout</a></h4>
+<pre><code>State buffer (current):
+  [word 0] [word 1] ... [word N-1]   ← N u32 words, 32 signals each
+
+State buffer (with X sideband):
+  [word 0] [word 1] ... [word N-1]   ← value words (unchanged)
+  [word N] [word N+1] ... [word 2N-1] ← X-mask words (new, same layout)
+</code></pre>
+<p>X-free partitions only read/write the value section. X-capable partitions
+read/write both sections. The sideband occupies the same state-buffer address
+space with a fixed offset of <code>state_size</code> words.</p>
+<h3 id="phase-5-x-aware-boomerang-kernel"><a class="header" href="#phase-5-x-aware-boomerang-kernel">Phase 5: X-Aware Boomerang Kernel</a></h3>
+<p>The existing boomerang gate computation:</p>
+<pre><code>ret_v = (a ^ xora) &amp; ((b ^ xorb) | orb)
+</code></pre>
+<p>The X-aware version computes in parallel:</p>
+<pre><code>// Effective inputs after inversion and OR-bypass
+a_eff   = a_v ^ xora
+b_eff   = (b_v ^ xorb) | orb
+b_eff_x = b_x &amp; ~orb        // OR-bypass forces bits to known-1
+
+// Value: same as before (X bits treated as 0 in value lane)
+ret_v = a_eff &amp; b_eff
+
+// X mask: result is X when both inputs are not-known-zero AND at
+// least one input is X
+//
+//   known_zero_a = ~a_x &amp; ~a_eff  (not X, and effective value is 0)
+//   known_zero_b = ~b_eff_x &amp; ~b_eff
+//   ret_x = (a_x | b_eff_x) &amp; ~known_zero_a &amp; ~known_zero_b
+//
+// Expanded:
+ret_x = (a_x | b_eff_x) &amp; (a_eff | a_x) &amp; (b_eff | b_eff_x)
+</code></pre>
+<p><strong>Verification of the X-mask formula:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>a</th><th>b</th><th>orb=0</th><th>a_eff(xora=0)</th><th>b_eff(xorb=0)</th><th>b_eff_x</th><th>ret_v</th><th>ret_x</th><th>Expected</th></tr></thead><tbody>
+<tr><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>0</td><td>X</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td><td>0</td><td>0 (0&amp;X=0)</td></tr>
+<tr><td>1</td><td>X</td><td>0</td><td>1</td><td>0</td><td>1</td><td>0</td><td>1</td><td>X (1&amp;X=X)</td></tr>
+<tr><td>X</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0 (X&amp;0=0)</td></tr>
+<tr><td>X</td><td>1</td><td>0</td><td>0</td><td>1</td><td>0</td><td>0</td><td>1</td><td>X (X&amp;1=X)</td></tr>
+<tr><td>X</td><td>X</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td><td>1</td><td>X (X&amp;X=X)</td></tr>
+<tr><td>X</td><td>*</td><td>1</td><td>0</td><td>1</td><td>0</td><td>0</td><td>1</td><td>X (pass-thru of X a)</td></tr>
+<tr><td>0</td><td>*</td><td>1</td><td>0</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0 (pass-thru of 0 a)</td></tr>
+<tr><td>1</td><td>*</td><td>1</td><td>1</td><td>1</td><td>0</td><td>1</td><td>0</td><td>1 (pass-thru of 1 a)</td></tr>
+</tbody></table>
+</div>
+<p>Wait -- row for <code>a=X, b=*, orb=1</code> (pass-through): <code>a_x=1, a_eff=0, b_eff=1, b_eff_x=0</code>.
+<code>ret_x = (1|0) &amp; (0|1) &amp; (1|0) = 1 &amp; 1 &amp; 1 = 1</code>. Correct.</p>
+<p>The X-mask computation adds <strong>5 extra bitwise operations</strong> per boomerang level
+(2 OR, 2 AND, 1 AND-NOT -- plus loading the X mask values). This is roughly
+1.5-1.6x the CPU ALU work per gate, but only within X-capable partitions.</p>
+<h4 id="gpu-resource-impact"><a class="header" href="#gpu-resource-impact">GPU Resource Impact</a></h4>
+<p>Per X-capable partition:</p>
+<div class="table-wrapper"><table><thead><tr><th>Resource</th><th>Current</th><th>With X-mask</th><th>Delta</th></tr></thead><tbody>
+<tr><td>Shared state (threadgroup mem)</td><td>256 x u32 = 1 KB</td><td>512 x u32 = 2 KB</td><td>+1 KB</td></tr>
+<tr><td>Shared arrival (threadgroup mem)</td><td>256 x u16 = 512 B</td><td>unchanged</td><td>0</td></tr>
+<tr><td>Global state buffer</td><td>N words</td><td>2N words</td><td>+N words</td></tr>
+<tr><td>ALU per boomerang stage</td><td>~3 ops/thread</td><td>~7 ops/thread</td><td>~2.3x</td></tr>
+</tbody></table>
+</div>
+<p>Metal threadgroup memory limit is 32 KB; current usage is ~4 KB. The extra
+1 KB is well within budget.</p>
+<h3 id="phase-6-boundary-protocol"><a class="header" href="#phase-6-boundary-protocol">Phase 6: Boundary Protocol</a></h3>
+<p>When signals cross from an X-capable partition to another partition:</p>
+<ul>
+<li>
+<p><strong>X-capable -&gt; X-capable</strong>: Both value and X-mask words are communicated
+through the state buffer. The reading partition loads both.</p>
+</li>
+<li>
+<p><strong>X-capable -&gt; X-free</strong>: At the boundary, we <strong>assert</strong> that no X values
+cross. If an X-mask bit is set for a signal read by an X-free partition,
+this is a simulation error (the design has an X reaching a region we
+statically proved should be X-free). Report it and optionally halt.</p>
+</li>
+<li>
+<p><strong>X-free -&gt; X-capable</strong>: The reading partition loads the value word normally
+and treats the X-mask as all-zero for those inputs. No overhead.</p>
+</li>
+</ul>
+<h3 id="phase-7-dynamic-x-narrowing-optional-enhancement"><a class="header" href="#phase-7-dynamic-x-narrowing-optional-enhancement">Phase 7: Dynamic X Narrowing (Optional Enhancement)</a></h3>
+<p>After the design's reset sequence completes, most DFFs will hold known values
+and the X-mask will be all-zeros across most of the state. The simulator can
+detect this:</p>
+<pre><code>every K cycles (e.g., K = 1000):
+    for each X-capable partition:
+        if all X-mask words in this partition's state are zero:
+            switch partition to fast two-state kernel
+</code></pre>
+<p>This gives the best of both worlds: full X-propagation during initialisation
+(when it matters most), then automatic fallback to maximum throughput once
+the design is in steady state.</p>
+<p>For designs with a clear reset phase, this means the performance overhead
+of X-propagation is confined to the first few thousand cycles.</p>
+<h2 id="expected-performance-impact"><a class="header" href="#expected-performance-impact">Expected Performance Impact</a></h2>
+<h3 id="compile-time"><a class="header" href="#compile-time">Compile Time</a></h3>
+<p>The static analysis adds:</p>
+<ul>
+<li>X-source identification: O(|DFFs| + |SRAMs|) -- negligible</li>
+<li>Forward cone computation: O(|AIG pins|) -- one linear pass</li>
+<li>Partition classification: O(|partitions| x |global reads|) -- negligible</li>
+<li>Fixpoint iteration: 1-2 rounds of the above</li>
+</ul>
+<p>Total: well under 1% of the partitioning time.</p>
+<h3 id="simulation-time"><a class="header" href="#simulation-time">Simulation Time</a></h3>
+<p>For a typical SoC with reset:</p>
+<div class="table-wrapper"><table><thead><tr><th>Phase</th><th>X-capable partitions</th><th>Overhead</th></tr></thead><tbody>
+<tr><td>Before reset (cycles 0-100)</td><td>~30-50% of partitions</td><td>~1.5-2x slowdown</td></tr>
+<tr><td>During reset (cycles 100-1000)</td><td>Shrinking as resets propagate</td><td>Decreasing</td></tr>
+<tr><td>After reset (steady state)</td><td>&lt;5% of partitions (uninitialised SRAM, CDC)</td><td>&lt;10% overhead</td></tr>
+<tr><td>After dynamic narrowing</td><td>~0%</td><td>~0% overhead</td></tr>
+</tbody></table>
+</div>
+<p>The overall impact on a full simulation run is estimated at <strong>5-15% throughput
+reduction</strong> compared to current two-state, in exchange for catching
+initialisation bugs that would otherwise escape to silicon.</p>
+<h2 id="implementation-status"><a class="header" href="#implementation-status">Implementation Status</a></h2>
+<p>All stages are implemented. Enable with <code>--xprop</code> on <code>jacquard sim</code>.</p>
+<h3 id="stage-1-static-x-source-analysis-srcaigrs"><a class="header" href="#stage-1-static-x-source-analysis-srcaigrs">Stage 1: Static X-Source Analysis (<code>src/aig.rs</code>)</a></h3>
+<ul>
+<li><code>compute_x_sources() -&gt; Vec&lt;bool&gt;</code> -- identifies DFF Q outputs and SRAM read data ports</li>
+<li><code>compute_x_capable_pins() -&gt; (Vec&lt;bool&gt;, XPropStats)</code> -- forward cone + fixpoint iteration</li>
+</ul>
+<h3 id="stage-2-partition-classification-srcflattenrs"><a class="header" href="#stage-2-partition-classification-srcflattenrs">Stage 2: Partition Classification (<code>src/flatten.rs</code>)</a></h3>
+<ul>
+<li><code>FlattenedScriptV1</code> fields: <code>xprop_enabled</code>, <code>partition_x_capable</code>, <code>xprop_state_offset</code></li>
+<li><code>effective_state_size()</code> returns <code>2 * reg_io_state_size</code> when xprop enabled</li>
+<li>Metadata words 8 (is_x_capable) and 9 (xmask_state_offset) encode per-partition xprop info</li>
+<li>X-propagation is configured at simulation startup, no separate mapping step needed</li>
+</ul>
+<h3 id="stage-3-x-aware-cpu-reference-kernel-srcsimcpu_referencers"><a class="header" href="#stage-3-x-aware-cpu-reference-kernel-srcsimcpu_referencers">Stage 3: X-Aware CPU Reference Kernel (<code>src/sim/cpu_reference.rs</code>)</a></h3>
+<ul>
+<li><code>simulate_block_v1_xprop()</code> -- dual-lane value + X-mask computation</li>
+<li><code>sanity_check_cpu_xprop()</code> -- CPU vs GPU comparison for both lanes</li>
+<li>Non-X-capable partitions delegate to <code>simulate_block_v1</code> (zero overhead)</li>
+</ul>
+<h3 id="stage-4-cli-and-vcd-integration-srcbinjacquardrs-srcsimvcd_iors"><a class="header" href="#stage-4-cli-and-vcd-integration-srcbinjacquardrs-srcsimvcd_iors">Stage 4: CLI and VCD Integration (<code>src/bin/jacquard.rs</code>, <code>src/sim/vcd_io.rs</code>)</a></h3>
+<ul>
+<li><code>jacquard sim --xprop</code> runs static analysis, logs X-capable pin/partition stats, and enables X-aware simulation with doubled state buffer</li>
+<li><code>write_output_vcd_xprop()</code> emits <code>Value::X</code> for X-masked primary outputs</li>
+<li><code>expand_states_for_xprop()</code> / <code>split_xprop_states()</code> for state buffer management</li>
+</ul>
+<h3 id="stage-5-gpu-kernels-csrckernel_v1metal-csrckernel_v1_implcuh"><a class="header" href="#stage-5-gpu-kernels-csrckernel_v1metal-csrckernel_v1_implcuh">Stage 5: GPU Kernels (<code>csrc/kernel_v1.metal</code>, <code>csrc/kernel_v1_impl.cuh</code>)</a></h3>
+<ul>
+<li>Dual-lane X-mask tracking through all kernel phases (global read, boomerang, SRAM, DFF writeout)</li>
+<li><code>is_x_capable</code> branch is uniform per threadgroup (zero warp/SIMD divergence)</li>
+<li>Shared memory: <code>shared_state_x[256]</code> + <code>shared_writeouts_x[256]</code> (+2KB, within 32KB limit)</li>
+<li>SRAM X-mask shadow via <code>sram_xmask</code> buffer (buffer slot 7 on Metal)</li>
+</ul>
+<h3 id="stage-6-diagnostics"><a class="header" href="#stage-6-diagnostics">Stage 6: Diagnostics</a></h3>
+<ul>
+<li>Compile-time: X-source count, X-capable pin %, X-capable partition %</li>
+<li>Runtime: first-cycle-X-free detection, final-cycle X warning</li>
+<li>CPU sanity check uses xprop variant when enabled</li>
+</ul>
+<h3 id="stage-7-benchmarks-benchesxproprs"><a class="header" href="#stage-7-benchmarks-benchesxproprs">Stage 7: Benchmarks (<code>benches/xprop.rs</code>)</a></h3>
+<ul>
+<li>Criterion micro-benchmarks: two_state vs xprop_xfree vs xprop_xcapable</li>
+<li>X-free partitions: zero overhead confirmed</li>
+<li>X-capable partitions: ~1.5-1.6x CPU overhead (well within 2x budget)</li>
+</ul>
+<h3 id="dynamic-narrowing-future-enhancement"><a class="header" href="#dynamic-narrowing-future-enhancement">Dynamic Narrowing (Future Enhancement)</a></h3>
+<ul>
+<li>Periodic X-mask scan on CPU between GPU batches</li>
+<li>Partition kernel hot-swapping from X-aware to fast mode</li>
+<li>Statistics reporting: "X cleared after N cycles"</li>
+</ul>
+<h2 id="prior-art"><a class="header" href="#prior-art">Prior Art</a></h2>
+<ul>
+<li>
+<p><strong><a href="https://ieeexplore.ieee.org/document/588537">Mixed 2-4 State Simulation with VCS (Chaudhry et al., 1997)</a></strong>: Proved that mixed two-state / four-state simulation is viable within a single Verilog simulator, validating the core approach.</p>
+</li>
+<li>
+<p><strong><a href="https://ieeexplore.ieee.org/document/782029">A Two-State Methodology for RTL Logic Simulation (1999)</a></strong>: Eliminated X entirely using random two-state initialisation, arguing it catches more bugs than X-optimistic RTL simulation. Their technique for handling Z-state boundaries is relevant to our boundary protocol.</p>
+</li>
+<li>
+<p><strong><a href="https://scottbeamer.net/pubs/beamer-dac2020.pdf">Essent (Beamer, 2020-2021)</a></strong>: Demonstrated that partitioning a compiled simulator by signal activity yields significant speedups. Their activity-proportional execution is analogous to our dynamic X narrowing -- skip work for partitions where nothing interesting is happening.</p>
+</li>
+<li>
+<p><strong><a href="https://semiengineering.com/simulation-with-taint-propagation-for-security-verification/">Synopsys VCS T-Prop</a></strong>: Taint propagation in VCS uses a parallel sideband bit per signal to track data flow for security verification. Our X-mask is architecturally identical -- a sideband bit that propagates alongside the value using different rules.</p>
+</li>
+<li>
+<p><strong><a href="https://cjdrake.substack.com/p/improving-verilog-four-state-logic">Chris Drake, "Improving Verilog Four State Logic" (2024)</a></strong>: Argues that Verilog conflates "uninitialised" and "don't care" uses of X, and proposes splitting them. Our approach naturally supports this: the X-mask tracks only uninitialised/unknown values, not synthesis don't-cares (which are already resolved by the synthesis tool before Jacquard sees the netlist).</p>
+</li>
+</ul>
+<h2 id="what-this-does-not-address"><a class="header" href="#what-this-does-not-address">What This Does NOT Address</a></h2>
+<ul>
+<li>
+<p><strong>Z (high-impedance)</strong>: Jacquard does not support tri-state buses and this
+proposal does not add support. Z would require a third state bit and bus
+resolution logic.</p>
+</li>
+<li>
+<p><strong>X-optimism in RTL control flow</strong>: Since Jacquard operates on gate-level
+netlists (post-synthesis), there are no <code>if</code>/<code>case</code> statements to
+be X-optimistic about. Gate-level X propagation through AND/OR truth tables
+is naturally correct (though potentially X-pessimistic -- see below).</p>
+</li>
+<li>
+<p><strong>X-pessimism reduction</strong>: Gate-level simulation is inherently X-pessimistic
+in some cases (e.g., <code>a XOR a</code> should be 0 even if <code>a</code> is X, but
+standard gate-level propagation gives X). Since AIGs decompose XOR into
+AND/NOT, this pessimism is present. Addressing this would require symbolic
+analysis or reconvergence detection, which is out of scope.</p>
+</li>
+<li>
+<p><strong>Strength modelling</strong>: No weak/strong drive strength tracking. All known
+values are "strong."</p>
+</li>
+</ul>
+<h2 id="design-decisions"><a class="header" href="#design-decisions">Design Decisions</a></h2>
+<ol>
+<li>
+<p><strong>SRAM X granularity</strong>: Conservative whole-SRAM approach -- all reads return
+X until any write occurs. This is pessimistic but correct and simple.
+Per-address tracking (requiring <code>8192 x 32</code> bits of shadow state per SRAM
+block) is a potential follow-up for reduced pessimism.</p>
+</li>
+<li>
+<p><strong>Reset-aware analysis</strong>: Skipped for v1 -- all DFF Q outputs start as X
+regardless of whether they have async reset. Identifying reset nets is
+fragile (varies by synthesis tool and coding style), and the fixpoint
+iteration naturally resolves DFFs that become non-X after reset propagates.</p>
+</li>
+<li>
+<p><strong>VCD X output</strong>: Yes -- <code>write_output_vcd_xprop()</code> emits <code>Value::X</code> when
+the X-mask bit is set for a primary output. This is the primary user-visible
+benefit. The <code>vcd-ng</code> crate already supports <code>Value::X</code>. Downstream tools
+that only handle two-state VCD would need updating, but Verilog-standard
+four-state VCD is widely supported.</p>
+</li>
+<li>
+<p><strong>Partition-level granularity</strong>: X-awareness is applied at partition
+granularity (entire partition runs X-aware kernel or not). This provides
+better steady-state performance than per-signal tracking when most
+partitions are X-free (~95% typical), at the cost of slightly more
+pessimism at partition boundaries.</p>
+</li>
+<li>
+<p><strong>Runtime CLI flag</strong>: X-propagation is controlled by <code>--xprop</code> on <code>jacquard sim</code>,
+rather than a compile-time feature flag. No new Cargo dependencies are needed.</p>
+</li>
+<li>
+<p><strong>State buffer layout</strong>: When xprop is enabled, the state buffer doubles.
+Value words occupy <code>[0 .. reg_io_state_size)</code> and X-mask words occupy
+<code>[reg_io_state_size .. 2*reg_io_state_size)</code> per cycle. Per-partition
+metadata word 8 stores the <code>is_x_capable</code> flag, and word 9 stores the
+<code>xmask_state_offset</code> (equal to <code>reg_io_state_size</code> for X-capable
+partitions). X-free partitions ignore both fields and run unchanged.</p>
+</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="gpu-capture.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="x-debugging.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="gpu-capture.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="x-debugging.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,328 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0009 — OpenSTA Verilog reader input constraints - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="adr-0009--opensta-verilog-reader-input-constraints"><a class="header" href="#adr-0009--opensta-verilog-reader-input-constraints">ADR 0009 — OpenSTA Verilog reader input constraints</a></h1>
+<p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
+<blockquote>
+<p><strong>Amendment (2026-06-25):</strong> The claim that the filter has "integration
+test coverage in <code>tests/opensta_integration.rs</code>" is imprecise — the
+module-filtering tests are <strong>unit</strong> tests in <code>src/verilog_filter.rs</code>
+(<code>tests/opensta_integration.rs</code> covers the OpenSTA end-to-end run, not
+the filter). Decision unchanged.</p>
+</blockquote>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>OpenSTA's <code>read_verilog</code> Tcl command is structural-only: it accepts cell
+instantiations and bare-net <code>assign</code> statements but rejects RTL
+operators (<code>~</code>, <code>&amp;</code>, <code>|</code>, <code>^</code>), bit-selects in assigns, and ranged
+concatenations. Violations surface as <code>Error: &lt;file&gt; line &lt;N&gt;, syntax error</code> and exit 1. This is a long-standing OpenSTA limitation, not a
+flag.</p>
+<p>Two patterns make this surprising in practice — both have already
+caught us once:</p>
+<ol>
+<li>
+<p><strong>Final-stage outputs from the LibreLane/OpenROAD flow are
+sometimes wrapped.</strong> LibreLane itself only ever reads structural
+netlists (<code>&lt;design&gt;.pnl.v</code> — verified locally on
+<code>chip_top.pnl.v</code>: zero RTL operators, single module). The wrapping
+is added by downstream integration tooling — for the SkyWater
+openframe flow, chipflow's harness wraps the LibreLane output in
+<code>openframe_project_wrapper</code> to patch active-low OEB pins into the
+pad ring, producing the <code>assign gpio_oeb[0] = ~( ... );</code> pattern.
+The combined file (<code>tests/mcu_soc/data/6_final.v</code>) contains both
+the readable-by-OpenSTA structural <code>top</code> module <em>and</em> the
+wrapper's unreadable RTL. The SDF was generated against the inner
+<code>top</code>, not the wrapper — matching what LibreLane's own STA saw.</p>
+</li>
+<li>
+<p><strong>Post-synthesis Verilog has the right form but the wrong cells.</strong>
+Pre-P&amp;R synthesis output (e.g. <code>top_synth.v</code>) is fully structural
+and uses the same module name <code>top</code> as the post-P&amp;R body, so it
+<em>looks</em> like an acceptable substitute. It is not: the SDF
+references hundreds of thousands of P&amp;R-inserted cells
+(<code>clkbuf_regs_*</code> CTS buffers, <code>ANTENNA_*</code> diodes, <code>delaybuf_*</code>,
+fillers) that simply do not exist in synthesis output. OpenSTA
+quietly drops SDF entries whose endpoints are not in the loaded
+design; the resulting IR back-annotates only the surviving subset.
+Concrete numbers from the MCU SoC fixture: <code>top_synth.v</code> has
+31,500 cells; <code>module top</code> inside <code>6_final.v</code> has 266,746. Feeding
+<code>top_synth.v</code> would silently drop ~88% of the design's structure.</p>
+</li>
+</ol>
+<p>Past convention (<code>docs/plans/ws3-cosim-sdf-followup.md</code>, pre
+2026-05-18) recommended substituting <code>top_synth.v</code> to dodge the
+wrapper-parse error. The contemporaneous verification log
+(<code>28162 matched, 2090 unmatched</code>) reported the jtir-to-cosim-netlist
+match rate, <em>not</em> SDF coverage against the jtir — high surface
+"working" while the IR was missing most of the design's real
+timing. That recommendation is retracted in the same change as this
+ADR lands.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>The "structural-only" constraint is <strong>owned by <code>opensta-to-ir</code></strong>,
+not by the caller. Specifically:</p>
+<ol>
+<li>
+<p><strong><code>opensta-to-ir</code> filters Verilog inputs at invocation time.</strong> For
+each <code>--verilog</code> file, it extracts the <code>module &lt;--top&gt; … endmodule</code> block before handing files to OpenSTA. Files that do
+not contain <code>module &lt;--top&gt;</code> (sub-module-only files in
+hierarchical designs) are passed through unchanged. The wrapper
+modules that LibreLane + wafer.space integration adds — and any
+future analogues — are simply not seen by OpenSTA. Implementation
+in <code>crates/opensta-to-ir/src/verilog_filter.rs</code>; integration test
+coverage in <code>tests/opensta_integration.rs</code>.</p>
+</li>
+<li>
+<p><strong>The cell-set match against the SDF is the caller's
+responsibility.</strong> <code>opensta-to-ir</code> cannot determine programmatically
+whether a given Verilog input is the right design stage for a
+given SDF. The CI fixture comment in <code>prepare-mcu-soc-jtir</code>
+captures the rule for sky130 mcu_soc; copy the <em>spirit</em> (use the
+post-P&amp;R structural body, not synthesis output) when adding new
+fixtures, but don't copy a per-design extraction recipe — there
+no longer is one to copy.</p>
+</li>
+</ol>
+<p><strong>Architectural alternative (separate concern):</strong> the upstream
+chipflow harness could preserve LibreLane's pre-wrap <code>&lt;top&gt;.pnl.v</code>
+alongside its wrapped <code>&lt;top&gt;_final.v</code> output. That would make
+<code>opensta-to-ir</code>'s in-tool extraction a no-op for the common chipflow
+case, but it would not obviate the filter — third-party LibreLane +
+wafer.space users (hazard3 and future tapeouts using the vanilla
+flow) hit the same wrapper pattern. The filter is the right place
+for the fix because it covers both <code>opensta-to-ir</code> as a CLI and
+<code>jacquard sim --sdf</code> (which subprocesses <code>opensta-to-ir</code>).</p>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li>End-user runs of <code>jacquard sim --sdf &lt;path&gt;</code> and the standalone
+<code>opensta-to-ir</code> tool both transparently handle the LibreLane +
+wafer.space wrapper pattern. No flags, no preprocessing recipe in
+user-facing docs.</li>
+<li>Match-rate metrics in the IR consumer measure jtir coverage
+against the <em>consuming</em> netlist, not against the source SDF. A
+high match rate is necessary but not sufficient — confirm the jtir
+contains the post-P&amp;R cell population separately (e.g. by spot
+checking for <code>clkbuf_regs_*</code> / <code>ANTENNA_*</code> arcs in the IR JSON
+sidecar) before declaring a flow "working".</li>
+<li>The filter assumes <code>module &lt;--top&gt; … endmodule</code> is line-anchored
+in the Verilog source. Machine-generated post-P&amp;R netlists meet
+this; hand-rolled Verilog that opens a module mid-line would not.
+If that ever surfaces, upgrade the filter to use a real Verilog
+tokenizer (<code>sverilogparse</code> is already a workspace dependency).</li>
+<li>This ADR retroactively retracts the <code>top_synth.v</code> recommendation
+in <code>docs/plans/ws3-cosim-sdf-followup.md</code>; that doc is corrected
+in the same change.</li>
+</ul>
+<h2 id="links"><a class="header" href="#links">Links</a></h2>
+<ul>
+<li>ADR 0001 — OpenSTA as oracle and sole STA path (the upstream
+tool whose constraints these are).</li>
+<li>ADR 0006 — SDF preprocessing model (the surrounding flow that
+consumes these inputs).</li>
+<li><code>docs/plans/ws3-cosim-sdf-followup.md</code> — the prior workaround
+this ADR corrects.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../adr/0008-structured-timing-output.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../adr/0010-declarative-cell-metadata.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../adr/0008-structured-timing-output.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../adr/0010-declarative-cell-metadata.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
