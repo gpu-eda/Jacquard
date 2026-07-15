@@ -100,6 +100,12 @@ cargo run -r --features metal --bin jacquard -- sim design.gv input.vcd output.v
 
 Partitioning (mapping the design to GPU blocks) happens automatically at startup.
 
+`sim` replays a **static** VCD, which is enough when the stimulus doesn't depend
+on what the design does. When it does, `jacquard cosim` runs peripheral models —
+SPI flash / QSPI PSRAM, UART, JTAG (with an interactive `--jtag-server`), and
+Wishbone / APB3 bus tracing — as GPU kernels alongside the design, so inputs can
+react to outputs cycle by cycle.
+
 **See [Getting Started](https://gpu-eda.github.io/Jacquard/getting-started.html)** to run bundled
 designs in seconds, or the [Synthesis Flow](https://gpu-eda.github.io/Jacquard/synthesis-flow.html)
 for synthesis preparation, VCD scope handling, and running your own RTL.
@@ -114,32 +120,32 @@ mdbook serve   # opens at http://localhost:3000
 
 ## Input
 
-Jacquard is a gate-level **emulator**: the input to `sim` / `cosim` is a
-**synthesized gate-level Verilog netlist** (structural Verilog mapped to
-`aigpdk` / SKY130 / GF180MCU cells).
+Point it at behavioral Verilog or SystemVerilog and it runs:
 
-**Behavioral RTL is the intended design input — through a synthesis step.** Bring
-your RTL, synthesize it to a gate-level netlist (Yosys or a commercial tool;
-synthesis *quality* sets Jacquard's speed, so it's a deliberate step), then
-simulate. The full flow — memory mapping + logic synthesis to `aigpdk.lib` — is
-in the [Synthesis Flow](https://gpu-eda.github.io/Jacquard/synthesis-flow.html)
-guide.
+```sh
+jacquard sim design.v input.vcd output.vcd 1
+```
 
-- **Feed it:** a synthesized netlist (`design.gv`), or your RTL after synthesis.
-- **Don't feed it raw behavioral RTL** (`always`/`if`/`case`/`reg`/params) — the
-  synthesizer elaborates those away first.
-- Full supported netlist syntax + SystemVerilog/SVA status:
-  [Input netlist language](https://gpu-eda.github.io/Jacquard/input-netlist.html).
+Synthesis happens on the way in, transparently and cached, through an embedded
+Yosys engine. It needs the `synth` feature — on in release and Homebrew binaries,
+`--features metal,synth` if you're building yourself — and a `yosys.wasm`. See
+**[Accepted RTL Surface](https://gpu-eda.github.io/Jacquard/accepted-rtl.html)**
+for the supported language subset and how to supply the wasm.
 
-> An integrated `jacquard build design.v` on-ramp (Yosys embedded via YoWASP, no
-> manual synthesis) is planned — [ADR 0021](https://gpu-eda.github.io/Jacquard/adr/0021-behavioral-rtl-support.html) / [#162](https://github.com/gpu-eda/Jacquard/issues/162).
+A **pre-synthesized gate-level netlist** (`design.gv`, mapped to `aigpdk` /
+SKY130 / GF180MCU cells) works too, and it's the faster path: synthesis quality
+sets Jacquard's speed, so a design you'll run many times is worth synthesizing
+deliberately. The full flow — memory mapping plus logic synthesis to
+`aigpdk.lib` — is in
+[Synthesis Flow](https://gpu-eda.github.io/Jacquard/synthesis-flow.html). A
+binary built without `synth` still simulates netlists, and says so clearly if
+handed RTL.
+
+Netlist syntax and SystemVerilog/SVA status:
+[Input netlist language](https://gpu-eda.github.io/Jacquard/input-netlist.html).
 
 ## Limitations
 
-- `jacquard sim` takes a static VCD input waveform. For reactive testbenches,
-  `jacquard cosim` runs peripheral models (SPI flash, UART, JTAG — including an
-  interactive `--jtag-server` — and Wishbone / APB3 bus tracing) as GPU kernels
-  alongside the design, so inputs can depend on design outputs cycle-by-cycle.
 - **Edge-triggered flip-flops only in the logic** — a raw `LATCH` cell in the
   gate-level netlist is rejected (async set/reset on flip-flops is fine; async
   reset is *not* the restriction). The two common structured latch uses are
