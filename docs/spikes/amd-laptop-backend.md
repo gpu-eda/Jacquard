@@ -216,16 +216,73 @@ UCC_HIP_TARGETS=gfx1030,gfx1100,gfx1103,gfx1150,gfx1151 cargo build -r --feature
 If that compiles and the goldens pass on real laptop silicon, AMD-laptop support
 costs a default-list change in a vendored fork, not a backend.
 
+## Result of the compile test (2026-07-15)
+
+Ran it on the AMD runner (ROCm 7.2.4) with
+`UCC_HIP_TARGETS=gfx1030,gfx1100,gfx1103,gfx1150,gfx1151`. Two findings, and the
+second is bigger than the spike's original question.
+
+**1. hipcc accepts every laptop target.** The compiler was invoked as
+
+```
+clang++ --offload-arch=gfx1030 --offload-arch=gfx1100 --offload-arch=gfx1103 \
+        --offload-arch=gfx1150 --offload-arch=gfx1151 ...
+```
+
+and raised no objection to any arch. The arch list is not a barrier — consistent
+with the research: only *rocBLAS* needs per-arch prebuilt libraries, and we don't
+use it.
+
+**2. We have never compiled against real ROCm at all.** The build died here:
+
+```
+csrc/types.hpp:26:10: fatal error: 'math_constants.h' file not found
+   26 | #include <math_constants.h>
+1 error generated when compiling for gfx1030.
+```
+
+That's vendored `ulib/csrc/types.hpp`:
+
+```cpp
+#if defined(__NVCC__) || defined(__HIP_DEVICE_COMPILE__)
+#include <math_constants.h>
+```
+
+The guard fires for HIP device compilation, but **`math_constants.h` is a CUDA
+toolkit header**. ROCm ships `hip/hip_math_constants.h` instead. It has never
+been caught because `hip-build` **installs the CUDA Toolkit** ("no GPU needed to
+compile") and builds `hip-runtime-nvidia`: the HIP path has only ever been
+compiled with CUDA headers on the include path.
+
+So the `HIP Tests (NVIDIA backend)` job name is exact, and nobody read it that
+literally: **the HIP backend is HIP-over-CUDA only.** It has never been built,
+let alone run, on ROCm — on a laptop, a discrete Radeon, or anything else. Note
+this fails on **`gfx1030`**, the arch we nominally support and the one our own
+runner is. Laptop support was never the first blocker; it's the second.
+
+This is a one-header fix in a fork we control (conditionalise on
+`__HIP_PLATFORM_AMD__` and use `hip/hip_math_constants.h`), but it must be fixed
+before any claim about ROCm — laptop or otherwise — can be tested.
+
 ## Next steps
 
-1. **Compile-only test, cheap and immediate.** `hip-build` already compiles
-   without a GPU on `ubuntu-22.04`, and the AMD runner has ROCm 7.2.4 + hipcc.
-   Add the laptop targets to `UCC_HIP_TARGETS` and see whether the kernel builds
-   for them. Answers "can we even emit code for these" for free.
-2. **Then find real silicon.** Compiling is necessary, not sufficient — the
-   goldens must pass. The cross-backend goldens make that a byte-diff, not a
-   judgement call. This is the step that needs a Strix/Phoenix laptop; no runner
-   we have can stand in for it (ours is `gfx1030`).
+1. ~~Compile-only test.~~ **Done — see above.** It answered a bigger question
+   than it asked. Fix the `types.hpp` CUDA-header leak in vendored `ulib`, then
+   re-run; only then is "does it build for laptop archs" a meaningful question.
+2. **Then run the goldens on our own AMD runner** — which has never happened.
+   That's the first real test of the "CpuBackend == Metal == CUDA == HIP"
+   equivalence the goldens assert, since HIP has only ever run over CUDA. If the
+   goldens don't match on ROCm, that's a genuine finding about the kernel, and
+   it lands *before* laptops are even in scope.
+3. **Then find real silicon.** Compiling is necessary, not sufficient. The
+   cross-backend goldens make the check a byte-diff, not a judgement call. This
+   is the step that needs a Strix/Phoenix laptop; no runner we have can stand in
+   (ours is `gfx1030`, a different ROCm support tier).
+   `scripts/amd-laptop-probe.sh` is a self-contained volunteer test: it compiles
+   a ~40-line HIP program using exactly Jacquard's kernel surface (wave32 +
+   `__shfl_down_sync` + `__syncthreads`, nothing else), runs it, cross-compiles
+   for each laptop arch, and prints a pasteable report. No Jacquard build, no
+   root, nothing installed.
 3. **Only if 1 or 2 fails**, revisit portable compute — and then Vulkan, not
    OpenCL: it's what actually works on these parts today per the evidence above,
    it isn't deprecated, and the runner's `vulkan`/`cubecl` labels suggest prior
