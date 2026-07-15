@@ -6,3 +6,7 @@ src = "docs"
 [output.html]
 default-theme = "light"
 git-repository-url = "https://github.com/gpu-eda/Jacquard"
+# Version picker: main's docs live at the site root, each release also freezes a
+# copy under /vX.Y.Z/. See theme/version-picker.js.
+additional-js = ["theme/version-picker.js"]
+additional-css = ["theme/version-picker.css"]
