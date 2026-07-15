@@ -202,19 +202,22 @@ knows; only *rocBLAS* needs per-arch prebuilt libraries, and we don't use it.
 
 ## Revised conclusion
 
-**Do not port to OpenCL on this evidence.** The cost is a third 1400-line kernel
-plus a permanent 3× tax on every kernel change, and `sim` can't port at all
-(no device-wide barrier). The premise that motivated it — "ROCm won't reach AMD
-laptops" — is not what the evidence says for a kernel shaped like ours.
+**Do not port to OpenCL.** The cost is a third 1400-line kernel plus a permanent
+3× tax on every kernel change, and `sim` can't port at all (no device-wide
+barrier). The premise that motivated it — "ROCm won't reach AMD laptops" — did
+not survive contact: with two small fixes the existing HIP backend compiles for
+every laptop arch and passes 13/14 goldens on real ROCm hardware. We were three
+commits from ROCm, not one backend.
 
-**Try the one-line thing first:**
+Both blockers were **ours**, not AMD's, and both were hidden by the same thing:
+`hip-build` installs the CUDA Toolkit and targets `hip-runtime-nvidia`, so the
+HIP path had only ever been compiled with CUDA headers and CUDA semantics on
+hand. `HIP Tests (NVIDIA backend)` was an accurate job name that nobody read
+literally.
 
-```
-UCC_HIP_TARGETS=gfx1030,gfx1100,gfx1103,gfx1150,gfx1151 cargo build -r --features hip
-```
-
-If that compiles and the goldens pass on real laptop silicon, AMD-laptop support
-costs a default-list change in a vendored fork, not a backend.
+What's left for laptops specifically is unproven but no longer speculative:
+compiling for `gfx1103`/`gfx1150`/`gfx1151` works; whether they *run* correctly
+needs silicon we don't have.
 
 ## Result of the compile test (2026-07-15)
 
@@ -260,20 +263,88 @@ let alone run, on ROCm — on a laptop, a discrete Radeon, or anything else. Not
 this fails on **`gfx1030`**, the arch we nominally support and the one our own
 runner is. Laptop support was never the first blocker; it's the second.
 
-This is a one-header fix in a fork we control (conditionalise on
-`__HIP_PLATFORM_AMD__` and use `hip/hip_math_constants.h`), but it must be fixed
-before any claim about ROCm — laptop or otherwise — can be tested.
+This is a one-header fix in a fork we control, but it must be fixed before any
+claim about ROCm — laptop or otherwise — can be tested.
+
+## Result of actually fixing it (2026-07-15)
+
+Two blockers, both invisible until something compiled against real ROCm. Both
+fixed; the third finding is open.
+
+**Blocker 1 — CUDA header on the HIP path.** `81184fa` ("Add HIP (AMD GPU)
+backend support") widened ulib's guard from `#ifdef __NVCC__` to
+`#if defined(__NVCC__) || defined(__HIP_DEVICE_COMPILE__)`, dragging the
+CUDA-only `<math_constants.h>` into HIP device compilation. Upstream is
+unaffected — its `#ifdef __NVCC__` is correct for a CUDA header; **the bug is
+ours, introduced with the HIP patch**. Nothing uses the `CUDART_*` constants that
+header provides; the macros beneath it want `nanf`/`nan`/`INFINITY` from
+`<cmath>`. Fixed by including what's used.
+
+**Blocker 2 — the lane mask is CUDA-shaped.** With the header fixed, the compile
+reached our one arch-specific intrinsic and died:
+
+```
+amd_warp_sync_functions.h:297:62: error: static assertion failed due to
+requirement 'sizeof(unsigned int) == 8': The mask must be a 64-bit integer.
+```
+
+CUDA's `__shfl_*_sync` takes a 32-bit mask; **HIP-on-AMD takes a 64-bit one**
+(an AMD wave can be 64 lanes) and static-asserts it. Every call site in the
+shared kernel was a hard compile error on ROCm, and invisible on CUDA and on
+HIP-over-CUDA — which is all we had ever built. Fixed with a `lane_mask_t`
+typedef (64-bit under `__HIP_PLATFORM_AMD__`, `unsigned` otherwise). It has to be
+a *type*, not a constant: one mask is a ragged tail (`0xffffffff >> n`) whose
+value must survive widening. No-op off AMD, and Metal goldens stayed 14/14.
+
+### With both fixed: it builds, and it very nearly works
+
+```
+UCC_HIP_TARGETS=gfx1030,gfx1100,gfx1103,gfx1150,gfx1151
+→ build: SUCCESS  (all five archs, incl. every laptop target)
+```
+
+And on the AMD runner's real gfx1030 — **the first time Jacquard has ever
+executed on ROCm** — the goldens are byte-identical to the CpuBackend/Metal
+captures:
+
+| | |
+| --- | --- |
+| PASS | xprop, 2state, noreginit, reginit, dual_uart_events, apb_trace, apb_trace_xprop, multi_mem, vcd_axes, qspi_psram (+content), qspi_shared_bus (+content) |
+| **FAIL** | **multi_mem_split** |
+
+**13 of 14.** The cross-backend equivalence the goldens assert
+(CpuBackend == Metal == CUDA == HIP) had never been tested against ROCm; it
+largely holds.
+
+### The one failure: a GPU memory fault on the staged path
+
+```
+Memory access fault by GPU node-1 on address 0x7501bce00000.
+Reason: Page not present or supervisor privilege.
+```
+
+`multi_mem_split` is `multi_mem` with `--level-split 10`. The **non-split**
+fixture passes on the same hardware and the same binary; only the staged path
+faults. It's an out-of-bounds GPU access that CUDA/Metal tolerate (or that maps
+to benign memory there) and ROCm traps.
+
+Worth noting the coincidence: level-split + SRAM is exactly where #186 lived (a
+staged endpoint index read against the original AIG's accounting). That bug was
+fixed and its silent-wrong-offset case is gone — but ROCm faulting on the same
+path is a strong hint there is more staged-index trouble that only a
+bounds-checking runtime notices. **This is a real bug in Jacquard, surfaced by
+ROCm, not a ROCm quirk.**
 
 ## Next steps
 
 1. ~~Compile-only test.~~ **Done — see above.** It answered a bigger question
    than it asked. Fix the `types.hpp` CUDA-header leak in vendored `ulib`, then
    re-run; only then is "does it build for laptop archs" a meaningful question.
-2. **Then run the goldens on our own AMD runner** — which has never happened.
-   That's the first real test of the "CpuBackend == Metal == CUDA == HIP"
-   equivalence the goldens assert, since HIP has only ever run over CUDA. If the
-   goldens don't match on ROCm, that's a genuine finding about the kernel, and
-   it lands *before* laptops are even in scope.
+2. ~~Run the goldens on our own AMD runner.~~ **Done — 13/14.** What remains is
+   the `multi_mem_split` GPU memory fault: a real out-of-bounds access on the
+   level-split path that only a bounds-checking runtime traps. Fix that before
+   laptops; it is a correctness bug on hardware we already claim to support.
+   Everything else is byte-identical to the CPU/Metal goldens.
 3. **Then find real silicon.** Compiling is necessary, not sufficient. The
    cross-backend goldens make the check a byte-diff, not a judgement call. This
    is the step that needs a Strix/Phoenix laptop; no runner we have can stand in
