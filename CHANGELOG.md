@@ -25,6 +25,17 @@ external QSPI PSRAM, on Metal, CUDA, or HIP. And two new tools show what the GPU
 does during a run: a per-edge timing report built from device timestamps, and
 Xcode `.gputrace` capture for reading individual dispatches.
 
+One thing to know before you upgrade: **cosim output-VCD timestamps change in
+this release.** They were stretched by the number of clock edges per period —
+2x for a single clock — so an output VCD never lined up with the stimulus VCD
+from the same run. Both now sit on the scheduler's own time grid. Times within a
+run were self-consistent before, so relative measurements were fine, but
+anything reading absolute times out of a cosim output VCD will read different
+numbers. Waveforms that used to drift apart when overlaid now line up.
+
+A design with SRAM that gets level-split also used to abort, or worse, silently
+read the wrong memory. That's fixed.
+
 ### Added
 
 - **Behavioral-RTL on-ramp (ADR 0021).** `jacquard sim` and `cosim` accept
@@ -88,6 +99,14 @@ Xcode `.gputrace` capture for reading individual dispatches.
   they change with this release**; times within a run were self-consistent
   before, so relative measurements were unaffected. The committed fixture goldens
   are regenerated accordingly. (#195)
+- **A design with SRAM that was level-split read the wrong backing storage, or
+  panicked.** The SRAM storage-offset walk indexed the original AIG's memories
+  using an index from the *current stage's* endpoint space. The two only agree
+  when staging is the identity, which is why no existing fixture caught it: none
+  of them stage. Split a design with SRAM (`--level-split`, or any design large
+  enough to stage on its own) and the index either ran off the end and panicked,
+  or — worse — landed on a valid but wrong offset and quietly read another
+  memory's contents. Staged indices are now translated before use. (#186)
 
 ## [0.2.4] - 2026-06-26
 
