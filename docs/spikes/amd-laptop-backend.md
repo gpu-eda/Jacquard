@@ -135,29 +135,111 @@ a submodule change), 24 `CosimBackend` methods, and a packaging change (OpenCL
 compiles kernels at runtime from source/SPIR-V, unlike the build-time `ucc`
 compile).
 
-## Open questions
+## What the local-LLM community has learned — and why most of it isn't our problem
 
-1. **Does `gfx1103` (Phoenix/Hawk Point) work under ROCm today?** Sources
-   conflict. It's the volume part in current AMD laptops, so the answer changes
-   the picture.
-2. **Does OpenCL actually reach these parts** (Mesa rusticl / AMD's runtime) on
-   distros users have? OpenCL's reputation for breadth and its current AMD
-   reality may have diverged the way ROCm's did — worth checking rather than
-   assuming.
-3. **Vulkan compute as the alternative.** Same no-device-barrier constraint, but
-   not deprecated anywhere, and the AMD runner is labelled `vulkan` + `cubecl`,
-   suggesting someone already thought about this. CubeCL is Rust-native, which
-   may beat hand-written OpenCL C as a third kernel.
-4. **How much does `sim`-on-laptop matter?** If cosim-only is acceptable, the
-   whole problem shrinks.
+llama.cpp / ollama have driven these parts in anger far longer than any vendor
+matrix reflects. Their pain on AMD laptops is real and well documented. It is
+also, **almost entirely, rocBLAS pain** — which we don't have.
 
-## Next step
+**gfx1103 (Radeon 780M)**, [llama.cpp#20839][20839] — three failure modes:
 
-Research what the local-LLM community has learned running on `gfx1103` /
-`gfx1150` / `gfx1151` — llama.cpp, ollama, LM Studio have been driving these
-parts in anger for far longer than any vendor matrix reflects, across ROCm,
-Vulkan, and OpenCL backends. Their bug trackers are the best available evidence
-of what actually works on real laptops, as opposed to what's on a support list.
+1. Flash-Attention **WMMA** kernel: "no device code compatible with HIP arch
+   1300", tuned for discrete RDNA3;
+2. **rocBLAS TensileLibrary** missing: "Cannot read TensileLibrary.dat … for GPU
+   arch: gfx1103" — ROCm 6.3.2 ships gfx1100/1101/1102 only;
+3. **MMQ** kernels: `HSA_OVERRIDE_GFX_VERSION=11.0.0` spoofing gives "invalid
+   device function".
+
+The decisive line in that issue: *"The problem didn't exist in older llama.cpp
+versions (~late 2024 vintage) that **embedded HIP kernels directly rather than
+calling rocBLAS externally**."* Vulkan works there, ~2 s/generation slower than
+a working ROCm build.
+
+**gfx1151 (Strix Halo)**, [llama.cpp#13565][13565] — an *officially supported*
+part where HIP is 2.5× slower than Vulkan (pp512: HIP 348 tok/s vs Vulkan 881).
+Tellingly, compiling for gfx1100 and spoofing `HSA_OVERRIDE_GFX_VERSION=11.0.0`
+reaches ~599 — **faster than the native gfx1151 path**. Both hit max clock, so
+it isn't hardware; it's untuned rocBLAS/Tensile kernels for the arch. Still open.
+See also [ROCm#5643][5643] (hipBLASLt falls back on gfx1151 as unsupported) and
+the community's [custom rocBLAS builds for gfx1103][rocmlibs] — an entire cottage
+industry of rebuilding *the library* per arch.
+
+### Why this mostly doesn't bind on us
+
+Checked against our kernel:
+
+- **No BLAS.** Zero references to `rocblas`/`hipblas`/`cublas`/`tensile`
+  anywhere in `csrc/` or `src/`. Failure modes 2 and 3, and the gfx1151
+  performance gap, are all rocBLAS/Tensile artefacts.
+- **No matrix intrinsics.** No `wmma`/`mfma`/`matrix_core`. Failure mode 1 is a
+  WMMA kernel. We simulate AND gates.
+- **One arch-specific intrinsic**, `__shfl_down_sync` (`kernel_v1_impl.cuh:273`)
+  — a standard warp shuffle, fine on RDNA.
+- **wave32 is required and satisfied.** `kernel_v1.hip.cpp` hard-rejects
+  `warpSize != 32` (CDNA/GCN wave64 unsupported). `gfx1103` (RDNA3), `gfx1150`
+  and `gfx1151` (RDNA3.5) are all wave32 — the laptop parts are exactly the
+  shape we want.
+
+We're the "embedded HIP kernels directly" case that *worked* on gfx1103.
+
+## The actual blocker is one line
+
+`ucc::cl_hip()` (vendored `eda-infra-rs/ucc/src/compile.rs`):
+
+```rust
+// Default AMD targets: RDNA2 + RDNA3.
+vec!["gfx1030".to_string(), "gfx1100".to_string()]
+```
+
+**We only emit code for `gfx1030` and `gfx1100` — both discrete.** No
+`gfx1103`, no `gfx1150`, no `gfx1151`. That is why the CI runner works (it
+reports `gfx1030`) and why a laptop wouldn't: not because HIP can't, but because
+we never compiled for it.
+
+There is already an escape hatch — `UCC_HIP_TARGETS`, comma-separated — in a
+fork we control. Custom HIP kernels can be compiled for any arch the compiler
+knows; only *rocBLAS* needs per-arch prebuilt libraries, and we don't use it.
+
+## Revised conclusion
+
+**Do not port to OpenCL on this evidence.** The cost is a third 1400-line kernel
+plus a permanent 3× tax on every kernel change, and `sim` can't port at all
+(no device-wide barrier). The premise that motivated it — "ROCm won't reach AMD
+laptops" — is not what the evidence says for a kernel shaped like ours.
+
+**Try the one-line thing first:**
+
+```
+UCC_HIP_TARGETS=gfx1030,gfx1100,gfx1103,gfx1150,gfx1151 cargo build -r --features hip
+```
+
+If that compiles and the goldens pass on real laptop silicon, AMD-laptop support
+costs a default-list change in a vendored fork, not a backend.
+
+## Next steps
+
+1. **Compile-only test, cheap and immediate.** `hip-build` already compiles
+   without a GPU on `ubuntu-22.04`, and the AMD runner has ROCm 7.2.4 + hipcc.
+   Add the laptop targets to `UCC_HIP_TARGETS` and see whether the kernel builds
+   for them. Answers "can we even emit code for these" for free.
+2. **Then find real silicon.** Compiling is necessary, not sufficient — the
+   goldens must pass. The cross-backend goldens make that a byte-diff, not a
+   judgement call. This is the step that needs a Strix/Phoenix laptop; no runner
+   we have can stand in for it (ours is `gfx1030`).
+3. **Only if 1 or 2 fails**, revisit portable compute — and then Vulkan, not
+   OpenCL: it's what actually works on these parts today per the evidence above,
+   it isn't deprecated, and the runner's `vulkan`/`cubecl` labels suggest prior
+   thought. CubeCL being Rust-native likely beats hand-written OpenCL C as a
+   third kernel.
+4. **Fix the runner label** — it says `gfx1036`, hardware says `gfx1030`.
+
+Still open: whether `sim` (not just cosim) matters on a laptop; if cosim-only is
+acceptable the problem shrinks either way.
+
+[20839]: https://github.com/ggml-org/llama.cpp/issues/20839
+[13565]: https://github.com/ggml-org/llama.cpp/issues/13565
+[5643]: https://github.com/ROCm/ROCm/issues/5643
+[rocmlibs]: https://github.com/likelovewant/ROCmLibs-for-gfx1103-AMD780M-APU
 
 [matrix]: https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html
 [radeon]: https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/index.html
