@@ -109,10 +109,16 @@ jobs:
             echo "x/8i \$pc"
             echo "quit"
           } > "${RUNNER_TEMP}/gdb.cmds"
+          # `--batch -x` still blocks on a prompt if anything asks (and it does:
+          # the GPU fault leaves rocgdb at an interactive prompt, which hangs the
+          # job until the 45-minute timeout). </dev/null closes stdin so any
+          # prompt gets EOF, and `timeout` is the backstop.
           # shellcheck disable=SC2086
-          AMD_SERIALIZE_KERNEL=3 rocgdb --batch -x "${RUNNER_TEMP}/gdb.cmds" \
+          timeout 600 env AMD_SERIALIZE_KERNEL=3 \
+            rocgdb --batch -nx -x "${RUNNER_TEMP}/gdb.cmds" \
             --args ./target/release/jacquard $FIXTURE_ARGS \
-            --output-vcd "${RUNNER_TEMP}/split_gdb.vcd" 2>&1 | tail -45
+            --output-vcd "${RUNNER_TEMP}/split_gdb.vcd" \
+            </dev/null 2>&1 | tail -45 || echo "  (rocgdb exited ${PIPESTATUS[0]})"
 
       # Bisect the split threshold: --level-split N controls how many stages the
       # AIG is cut into. Which N first faults tells us whether it's "any staging
