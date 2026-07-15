@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 176" role="img" aria-labelledby="t">
+  <title id="t">Jacquard</title>
+  <!-- A 4x4 weave carrying an and-inverter graph: two ANDs and two NOTs, one per
+       row and one per column (a 4-queens solution). Warp threads run under the
+       weft and hop where they cross; where a warp feeds a gate's second leg it
+       taps in at a junction instead. Madder is reserved for the logic. -->
+
+  <!-- warp: verticals, their taps into the gates, and the junctions -->
+  <g stroke="#7191CE" stroke-width="4" stroke-linecap="round" fill="none">
+    <line x1="24" y1="10" x2="24" y2="166"/>
+    <line x1="62" y1="10" x2="62" y2="166"/>
+    <line x1="100" y1="10" x2="100" y2="166"/>
+    <line x1="138" y1="10" x2="138" y2="166"/>
+    <path d="M24 66 H40"/>
+    <path d="M62 142 H78"/>
+  </g>
+  <g fill="#7191CE">
+    <circle cx="24" cy="66" r="3.4"/>
+    <circle cx="62" cy="142" r="3.4"/>
+  </g>
+
+  <!-- weft: the horizontals, where the signal runs -->
+  <g stroke="#3A559A" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M10 24 H19 A5 5 0 0 1 29 24 H57 A5 5 0 0 1 67 24 H95 A5 5 0 0 1 105 24 H108"/>
+    <path d="M129 24 H133 A5 5 0 0 1 143 24 H166"/>
+
+    <path d="M10 62 H19 A5 5 0 0 1 29 62 H32 V58 H40"/>
+    <path d="M56 62 H57 A5 5 0 0 1 67 62 H95 A5 5 0 0 1 105 62 H133 A5 5 0 0 1 143 62 H166"/>
+
+    <path d="M10 100 H19 A5 5 0 0 1 29 100 H57 A5 5 0 0 1 67 100 H95 A5 5 0 0 1 105 100 H133 A5 5 0 0 1 143 100 H144"/>
+    <path d="M164 100 H166"/>
+
+    <path d="M10 138 H19 A5 5 0 0 1 29 138 H57 A5 5 0 0 1 67 138 H70 V134 H78"/>
+    <path d="M94 138 H95 A5 5 0 0 1 105 138 H133 A5 5 0 0 1 143 138 H166"/>
+  </g>
+
+  <!-- the logic: the only coloured thing, because it's the only thing that computes -->
+  <g stroke="#9C2A1E" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M108 17 L108 31 L122 24 Z"/>
+    <circle cx="125.5" cy="24" r="3.5"/>
+    <path d="M40 54 L48 54 A8 8 0 0 1 48 70 L40 70 Z"/>
+    <path d="M144 93 L144 107 L157 100 Z"/>
+    <circle cx="160.5" cy="100" r="3.5"/>
+    <path d="M78 130 L86 130 A8 8 0 0 1 86 146 L78 146 Z"/>
+  </g>
+</svg>

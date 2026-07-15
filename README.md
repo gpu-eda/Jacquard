@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/jacquard-logo-dark.svg">
+  <img src="docs/assets/jacquard-logo.svg" alt="Jacquard" width="120" align="right">
+</picture>
+
 # Jacquard
 
 ![CI](https://github.com/gpu-eda/Jacquard/actions/workflows/ci.yml/badge.svg)

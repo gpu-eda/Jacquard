@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/jacquard-logo-dark.svg">
+  <img src="assets/jacquard-logo.svg" alt="" width="104" align="right">
+</picture>
+
 # Jacquard Documentation
 
 Welcome to the documentation for Jacquard, a GPU-accelerated RTL logic simulator.

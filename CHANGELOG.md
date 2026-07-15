@@ -9,6 +9,15 @@ the public contracts in `docs/release-process.md` follow stricter rules).
 
 ## [Unreleased]
 
+### Documentation
+
+- **A logo.** A 4×4 weave carrying an and-inverter graph: two ANDs and two NOTs,
+  one per row and one per column. Warp threads pass under the weft and hop where
+  they cross, except where one taps a gate's second leg; madder is reserved for
+  the logic, being the only part that computes. It sits at the top of the README
+  and the docs, and its unit cell — one warp, one weft, one gate — is the docs
+  favicon.
+
 ## [0.3.0] - 2026-07-15
 
 The headline change is the RTL on-ramp. `jacquard sim` and `cosim` now take
