@@ -28,6 +28,7 @@
         <link rel="stylesheet" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/version-picker.css">
 
 
         <!-- Provide site root to javascript -->
@@ -267,6 +268,17 @@ URL rewrite.</li>
 gh-pages <code>/(tag)/</code> on every release tag (<code>keep_files: true</code>), while the
 <code>main</code> push keeps deploying "latest" to the site root. Version subdirs
 accumulate side by side; the pinned links above resolve to them.</li>
+<li><strong>The version picker</strong> (<code>theme/version-picker.js</code>) reads <code>versions.json</code> at
+the site root and lets a reader move between main's docs and the frozen
+releases. <strong>main is the default</strong> and stays at the root, so anyone arriving
+without a version in the URL reads main HEAD; a pinned build is flagged in the
+control, since someone who followed a link out of a release note has no other
+cue that the page is frozen. <code>versions.json</code> is regenerated after each deploy
+by <code>docs/scripts/refresh_doc_versions.sh</code>, <strong>derived from the directories actually
+published</strong> rather than accumulated — so pruning an old version directory also
+removes it from the picker, and the control can never offer a 404. Release
+candidates are deliberately excluded: their docs stay published (RC notes link
+into them) but they would crowd out the releases people want.</li>
 </ul>
 <h2 id="staging-validation-release-candidates"><a class="header" href="#staging-validation-release-candidates">Staging validation (release candidates)</a></h2>
 <p>Optional but recommended before a user-facing release: prove the
@@ -460,6 +472,7 @@ contract.</li>
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="theme/version-picker.js"></script>
 
 
     </div>
