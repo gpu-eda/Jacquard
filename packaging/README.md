@@ -15,9 +15,10 @@ archive root (matching the `cargo-binstall` `bin-dir` in `Cargo.toml`),
 smoke-tests the relocated binary, and creates a **draft** release. Review
 the assets, then publish.
 
-`cargo binstall jacquard` then resolves the macOS/Metal asset (Linux is
+`cargo binstall jacquard-sim` then resolves the macOS/Metal asset (the
+package is `jacquard-sim`; the binary it installs is `jacquard`). Linux is
 not binstall-able — two GPU backends per target triple; use the tarball
-or a container).
+or a container.
 
 ## Homebrew tap (macOS/Metal)
 
