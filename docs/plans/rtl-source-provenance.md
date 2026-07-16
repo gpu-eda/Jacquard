@@ -1,24 +1,37 @@
 # Plan — RTL-source provenance (ADR 0021 Phase 2)
 
-> **2026-07-07 — end-to-end closed (PR pending on `ws-a-abc-new-provenance`).**
-> The WS-A↔WS-B loop works: behavioral RTL → `sim` → a signal resolves to its RTL
-> line. `src/synth.rs` maps via `abc_new` and emits `\src`; **A1/A2 landed** — the
-> provenance fork was moved to **`gpu-eda/yowasp-yosys`**, whose CI builds +
-> validates + **releases** the wheel, and `jacquard` fetches that pinned release on
-> first use (no PAT, no artifact expiry). WS-B B0–B2 + B3 (xsources, trace-signals)
-> done; B3 timing-report remains (see below). aigpdk mapping needed two fixes the
-> sky130 A0 didn't surface: `read_liberty -lib` + `hierarchy -purge_lib` before a
-> single `abc_new` pass. The per-section markers below predate this and are being
-> folded in at merge.
+> **2026-07-15 — shipped in v0.3.0.** Behavioral RTL → `sim` → a signal resolves
+> to its RTL line, in a released binary. `src/synth.rs` maps via `abc_new` and
+> emits `\src`; the provenance fork lives at **`gpu-eda/yowasp-yosys`**, whose CI
+> builds + validates + **releases** the wheel, and `jacquard` fetches that pinned
+> release on first use (no PAT, no artifact expiry). aigpdk mapping needed two
+> fixes the sky130 A0 didn't surface: `read_liberty -lib` + `hierarchy -purge_lib`
+> before a single `abc_new` pass. Verified against third-party RTL (PULP
+> common-cells via core-v-mcu): the emitted netlist carries
+> `(* src = "binary_to_gray.sv:15.8" *)`.
 
-**Status:** Active — **in flight** (updated 2026-07-06; per-section ✅ markers below
-are authoritative). **WS-A: A0 is GO** — the forked provenance wasm builds and
-carries origins through the in-process WASI `abc_new`/`aiger2` XAIGER-`"y"` path
-(100% `\src` coverage on comb + seq2); remaining A1 (harden/pin) + A2 (distribute)
-+ the `src/synth.rs` → `abc_new` integration. **WS-B: B0–B2 done** (`sverilogparse`
-capture → `netlistdb.cell_src` → `AIG::aigpin_src_locations`); **B3** (surface in
-`--trace-signals` / timing / `xsources`-`xroots`) is next. WS-A and WS-B are
-independent; full end-to-end needs A1+A2 *and* B3.
+**Status:** **Shipped (v0.3.0)** with one deferred item and one known toolchain
+bug. Per-section ✅ markers below remain authoritative for detail.
+
+- **WS-A — done.** The forked provenance wasm builds and carries origins through
+  the in-process WASI `abc_new`/`aiger2` XAIGER-`"y"` path (100% `\src` coverage
+  on comb + seq2). A1 (harden/pin) + A2 (distribute) + the `src/synth.rs` →
+  `abc_new` integration all landed (#176).
+- **WS-B — B0–B3 done** (`sverilogparse` capture → `netlistdb.cell_src` →
+  `AIG::aigpin_src_locations`, surfaced in `xsources` and `--trace-signals`).
+  **Deferred: B3's timing-report surface** — src locations in `--timing-report`.
+  That's the one piece of the original plan not shipped.
+- **Known bug in the toolchain this plan adopted:** `abc_new` hard-traps (wasm
+  `unreachable`) on a design that reaches it with **zero primary I/O** — bisected;
+  neither the constant clock nor emptiness is the trigger, one port of either
+  direction avoids it, and the failure is inside the `ABC9` sub-pass. Whether
+  `&origins` causes it or it's stock abc9 is **open**; the A/B is blocked because
+  a stock YoWASP wheel won't load under our `wasmtime` (built with wasm exception
+  handling, which we don't enable). Tracking:
+  [robtaylor/origin-shell#1](https://github.com/robtaylor/origin-shell/issues/1)
+  upstream, [#211](https://github.com/gpu-eda/Jacquard/issues/211) here (whose
+  reporting half is fixed — a trap now names the pass instead of printing 27 wasm
+  frames). Low impact for real designs: a portless module is testbench-shaped.
 
 **ADRs:** [0021](../adr/0021-behavioral-rtl-support.md) Phase 2 (the roadmap this
 realises), [0014](../adr/0014-aig-as-simulation-ir.md) (AIG core the provenance
