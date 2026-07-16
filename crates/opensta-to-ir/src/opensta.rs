@@ -70,10 +70,7 @@ pub enum LocateError {
         stderr: String,
     },
     /// `<binary> -version` produced output we couldn't parse.
-    VersionUnparseable {
-        binary: PathBuf,
-        raw: String,
-    },
+    VersionUnparseable { binary: PathBuf, raw: String },
     /// Detected version is older than `MIN_TESTED_OPENSTA_VERSION`.
     TooOld {
         binary: PathBuf,
@@ -90,11 +87,9 @@ impl std::fmt::Display for LocateError {
                 "OpenSTA binary not found. Set JACQUARD_OPENSTA_BIN, ensure `sta` is on PATH, \
                  or run scripts/build-opensta.sh to build the vendored copy."
             ),
-            Self::VersionProbeFailed { binary, err } => write!(
-                f,
-                "failed to spawn `{} -version`: {err}",
-                binary.display()
-            ),
+            Self::VersionProbeFailed { binary, err } => {
+                write!(f, "failed to spawn `{} -version`: {err}", binary.display())
+            }
             Self::VersionProbeNonZero {
                 binary,
                 exit_code,
@@ -137,10 +132,7 @@ pub fn parse_version(raw: &str) -> Option<OpenstaVersion> {
     let s = raw.trim().lines().next()?.trim();
     let s = s.strip_prefix('v').unwrap_or(s);
     // Strip pre-release / build-metadata suffixes.
-    let core = s
-        .split(|c: char| c == '-' || c == '+')
-        .next()
-        .unwrap_or(s);
+    let core = s.split(|c: char| c == '-' || c == '+').next().unwrap_or(s);
     let mut parts = core.split('.');
     let major: u32 = parts.next()?.parse().ok()?;
     let minor: u32 = parts.next()?.parse().ok()?;
@@ -391,8 +383,7 @@ pub fn run(
     // contain a `module <top>` declaration are passed through
     // unchanged so hierarchical designs with sub-modules split across
     // multiple files still link cleanly. See ADR 0009.
-    let filtered_verilog_paths =
-        filter_verilog_inputs(inv.verilog, inv.top, dir.path())?;
+    let filtered_verilog_paths = filter_verilog_inputs(inv.verilog, inv.top, dir.path())?;
     let verilog_arg = paths_to_lines(&filtered_verilog_paths);
 
     let mut cmd = Command::new(binary);

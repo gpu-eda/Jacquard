@@ -219,7 +219,20 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Check formatting
-        run: cargo fmt --all -- --check || echo "::warning::Formatting issues found"
+        # Enforced, not advisory — it used to end in `|| echo "::warning::"`, so it
+        # could never fail and the tree drifted out of shape unnoticed.
+        #
+        # Not `cargo fmt --all`: that reaches into vendor/eda-infra-rs, a
+        # submodule we don't format, so it can never be clean here — which is
+        # presumably why the check was defanged rather than fixed. rustfmt's own
+        # `ignore` setting would be the tidy answer but is nightly-only, and
+        # `cargo fmt` has no --exclude. So: check our sources explicitly. New
+        # files under these paths are picked up automatically; a new top-level
+        # source directory needs adding here.
+        run: |
+          set -euo pipefail
+          git ls-files 'src/*.rs' 'src/**/*.rs' 'crates/**/*.rs' 'benches/*.rs' \
+            | xargs rustfmt --edition 2021 --check
       - name: Clippy
         run: cargo clippy --lib 2>&1 | tee clippy_output.txt || true
       - name: Check for clippy errors (not warnings)

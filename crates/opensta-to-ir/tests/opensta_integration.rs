@@ -466,8 +466,12 @@ fn aigpdk_dff_emits_per_corner_timing_values() {
         assert_eq!(setup.len(), 2, "two corners → two setup TimingValues");
         assert_eq!(hold.len(), 2, "two corners → two hold TimingValues");
         // Corner indices are positional; entry 0 → corner 0, etc.
-        let setup_indices: Vec<u32> = (0..setup.len()).map(|j| setup.get(j).corner_index()).collect();
-        let hold_indices: Vec<u32> = (0..hold.len()).map(|j| hold.get(j).corner_index()).collect();
+        let setup_indices: Vec<u32> = (0..setup.len())
+            .map(|j| setup.get(j).corner_index())
+            .collect();
+        let hold_indices: Vec<u32> = (0..hold.len())
+            .map(|j| hold.get(j).corner_index())
+            .collect();
         assert_eq!(setup_indices, vec![0, 1]);
         assert_eq!(hold_indices, vec![0, 1]);
     }
