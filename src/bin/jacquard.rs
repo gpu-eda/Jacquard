@@ -702,25 +702,51 @@ fn cmd_sim(args: SimArgs) {
 
     let timing_constraints = setup::build_timing_constraints(&design.script);
 
-    // Parse input VCD
-    let input_vcd = std::fs::File::open(&args.input_vcd).unwrap();
+    // Parse input VCD. These are user-supplied paths and user-authored files, so
+    // failures here are ordinary bad input, not bugs: report them the way the
+    // netlist path above does rather than panicking with a backtrace.
+    let input_vcd = match std::fs::File::open(&args.input_vcd) {
+        Ok(f) => f,
+        Err(e) => {
+            clilog::error!("cannot open input VCD {}: {e}", args.input_vcd);
+            std::process::exit(1);
+        }
+    };
     let mut bufrd = std::io::BufReader::with_capacity(65536, input_vcd);
     let header = {
         let mut vcd_parser = vcd_ng::Parser::new(&mut bufrd);
-        vcd_parser.parse_header().unwrap()
+        match vcd_parser.parse_header() {
+            Ok(h) => h,
+            Err(e) => {
+                clilog::error!(
+                    "cannot parse the header of input VCD {}: {e}",
+                    args.input_vcd
+                );
+                std::process::exit(1);
+            }
+        }
     };
     use std::io::{Seek, SeekFrom};
     let mut vcd_file = bufrd.into_inner();
-    vcd_file.seek(SeekFrom::Start(0)).unwrap();
+    if let Err(e) = vcd_file.seek(SeekFrom::Start(0)) {
+        clilog::error!("cannot rewind input VCD {}: {e}", args.input_vcd);
+        std::process::exit(1);
+    }
     let mut vcdflow = vcd_ng::FastFlow::new(vcd_file, 65536);
 
     // Resolve VCD scope
-    let top_scope = vcd_io::resolve_vcd_scope(
+    let top_scope = match vcd_io::resolve_vcd_scope(
         &header.items[..],
         args.input_vcd_scope.as_deref(),
         &design.netlistdb,
         args.top_module.as_deref(),
-    );
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            clilog::error!("{e:#}");
+            std::process::exit(1);
+        }
+    };
 
     // Match VCD inputs to netlist ports
     let (vcd2inp, _) = vcd_io::match_vcd_inputs(top_scope, &design.netlistdb);

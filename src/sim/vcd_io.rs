@@ -247,26 +247,34 @@ pub struct ParsedInputVCD {
 }
 
 /// Resolve the top scope from VCD header, either from user-specified path or auto-detection.
+/// Both failures here are ordinary bad input — a VCD whose scope doesn't match
+/// the design — so they are returned rather than panicked. See
+/// `docs/troubleshooting-vcd.md`, which exists because this is a common mistake.
 pub fn resolve_vcd_scope<'i>(
     header_items: &'i [ScopeItem],
     input_vcd_scope: Option<&str>,
     netlistdb: &NetlistDB,
     top_module: Option<&str>,
-) -> &'i Scope {
+) -> anyhow::Result<&'i Scope> {
     if let Some(scope_path) = input_vcd_scope {
         clilog::info!("Using user-specified VCD scope: {}", scope_path);
-        find_top_scope(header_items, scope_path).expect("Specified top scope not found in VCD.")
+        find_top_scope(header_items, scope_path).ok_or_else(|| {
+            anyhow::anyhow!(
+                "the VCD has no scope '{scope_path}' (given by --input-vcd-scope). \
+                 Check the scope path against the VCD's $scope declarations."
+            )
+        })
     } else {
         let top_module_name = top_module.unwrap_or("top");
         clilog::info!("No VCD scope specified - attempting auto-detection");
 
         match auto_detect_vcd_scope(header_items, netlistdb, top_module_name) {
-            Some((_path, scope)) => scope,
-            None => {
-                panic!(
-                    "Failed to auto-detect VCD scope. Please specify --input-vcd-scope manually."
-                );
-            }
+            Some((_path, scope)) => Ok(scope),
+            None => Err(anyhow::anyhow!(
+                "could not work out which VCD scope holds the inputs of '{top_module_name}'. \
+                 Pass --input-vcd-scope with the scope path to use. \
+                 See docs/troubleshooting-vcd.md."
+            )),
         }
     }
 }
