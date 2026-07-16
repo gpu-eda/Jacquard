@@ -1,30 +1,31 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/jacquard-logo-dark.svg">
-  <img src="docs/assets/jacquard-logo.svg" alt="Jacquard" width="120" align="right">
-</picture>
-
-# Jacquard
-
 ![CI](https://github.com/gpu-eda/Jacquard/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Rust](https://img.shields.io/badge/rust-edition%202021-orange)
 
+<table width="100%">
+  <tr>
+    <td align="left" width="120">
+      <img src="docs/assets/jacquard-logo.svg" alt="Jacquard Logo" width="120" />
+    </td>
+    <td align="right">
+      <h1>Jacquard</h1>
+      <h3 style="margin-top: -10px;">GPU-Accelerated RTL and Gate-Level Logic Simulator</h3>
+    </td>
+  </tr>
+</table>
+
 Jacquard is a GPU-accelerated RTL logic simulator. Like a Jacquard loom weaving patterns from punched cards, Jacquard maps gate-level netlists onto a virtual manycore Boolean processor and executes them on GPUs, delivering 5-40X speedup over CPU-based RTL simulators.
 
-Jacquard builds on the excellent [GEM](https://github.com/NVlabs/GEM) research by Zizheng Guo, Yanqing Zhang, Runsheng Wang, Yibo Lin, and Haoxing Ren at NVIDIA Research. Jacquard extends their work with:
+Jacquard builds on the excellent [GEM](https://github.com/NVlabs/GEM) research by Zizheng Guo, Yanqing Zhang, Runsheng Wang, Yibo Lin, and Haoxing Ren at NVIDIA Research and extends their work to a workhorse simulator for ASIC design:
 
-- **Metal backend** for Apple Silicon Macs (in addition to the original CUDA backend)
-- **Liberty timing support** — load real cell delays from Liberty files (e.g. SKY130) for timing-annotated simulation
+- **Cross Platform** - Supports Apple Silicon Macs, AMD GPUs, NVIDIA and plain old CPU-only
+- **System Verilog support** - Sythesisable System Verilog supported via [Slang](https://github.com/MikePopoloski/slang) and [yosys-slang](https://github.com/povik/sv-elab)
+- **Liberty timing support** — load real cell delays from any PDK for timing-annotated simulation (with built-in support for [SKY130](https://github.com/google/skywater-pdk-libs-sky130_fd_sc_hd), [GF180MCU](https://github.com/google/gf180mcu-pdk) and [IHP SG13G2](https://github.com/IHP-GmbH/IHP-Open-PDK.git vendor/IHP-Open-PDK))
 - **SDF back-annotation** — post-layout timing from Standard Delay Format files
-- **Setup/hold violation detection** — both CPU and GPU-side checking
-- **Significant performance optimizations** to the partition mapping pipeline
+- **Setup/hold violation detection**
+- **X-value propagation** - along with tools to identify X-propagation paths
+- **Cosimulation support**
 - **CI/CD** with automated testing across all three backends
-
-GPU-accelerated gate-level simulation with real cell timing is live across all
-three backends. For the per-backend feature status — Liberty parsing, SDF
-back-annotation, setup/hold violation detection, and the structured
-`--timing-report` — see **[Timing Simulation](https://gpu-eda.github.io/Jacquard/timing-simulation.html)**.
-[`CHANGELOG.md`](CHANGELOG.md) tracks released and unreleased changes.
 
 ## Quick Start
 
