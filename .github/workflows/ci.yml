@@ -1021,6 +1021,62 @@ jobs:
             hip_timed.txt
             perf_metrics/
 
+  # The same HIP source, on actual AMD silicon. `HIP Tests (NVIDIA backend)`
+  # above builds hip-runtime-nvidia with the CUDA toolkit and runs on a T4 — an
+  # accurate job name that meant HIP had never once been compiled or run against
+  # real ROCm (#203, docs/spikes/amd-laptop-backend.md).
+  #
+  # Keep this job. It is not redundant with the NVIDIA-backend one: ROCm is the
+  # only backend that computes device addresses exactly rather than narrowing
+  # them to 32 bits, which makes it our only oracle for out-of-bounds access and
+  # UB in the shared kernel (kernel_v1_impl.cuh). It earned its keep on the
+  # first run by catching #203 — a 16 GiB out-of-bounds staged read that Metal,
+  # CUDA, HIP-over-CUDA and the CpuBackend all passed straight over.
+  #
+  # Builds on the runner (unlike hip-build → hip-on-nvidia, which ships an
+  # artifact) because the ROCm toolchain is what's under test here.
+  #
+  # Follow-up: this runs cosim only. `sim`'s scan kernel uses a cooperative
+  # grid.sync (hipLaunchCooperativeKernel) that has never executed on ROCm
+  # either; add a sim fixture once it's known to work, rather than wiring an
+  # untested path into a required check.
+  hip-on-rocm:
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
+    name: HIP Tests (ROCm backend)
+    # gfx1030 (the label says gfx1036; the hardware disagrees — see
+    # .github/actionlint.yaml). ROCm 7.2.4, wave32, no HSA_OVERRIDE needed.
+    runs-on: [self-hosted, amd, rocm]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init required submodules
+        run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+      # The image ships Rust at /opt/cargo, but it isn't writable by the runner
+      # user — cargo then dies with "failed to create directory
+      # /opt/cargo/registry/cache: Permission denied". Point CARGO_HOME at the
+      # workspace instead.
+      - name: Toolchain
+        run: |
+          echo "PATH=/opt/rocm/bin:$PATH" >> "$GITHUB_ENV"
+          echo "CARGO_HOME=${RUNNER_TEMP}/cargo" >> "$GITHUB_ENV"
+          /opt/rocm/bin/hipcc --version | head -3
+          /opt/rocm/bin/hipconfig --platform
+          cargo --version
+      # No pipe here: `cargo ... | tail` masks cargo's exit status behind
+      # tail's, so a failed build reports success.
+      - name: Build jacquard (HIP, real ROCm)
+        run: cargo build --release --features hip --bin jacquard
+      # The cross-backend equivalence check: CpuBackend == Metal == CUDA == HIP,
+      # byte-identical VCDs (diff -q against the committed goldens). Includes
+      # multi_mem_split (--level-split 10), the fixture that caught #203.
+      - name: Run ROCm cosim — logic + UART/bus + QSPI goldens
+        run: |
+          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=all \
+            bash scripts/ci/cosim_cpu_check.sh
+
   # Check formatting and clippy
   # Note: Currently set to warn-only due to existing issues in codebase
   lint:
