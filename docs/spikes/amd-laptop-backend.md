@@ -312,11 +312,12 @@ captures:
 | PASS | xprop, 2state, noreginit, reginit, dual_uart_events, apb_trace, apb_trace_xprop, multi_mem, vcd_axes, qspi_psram (+content), qspi_shared_bus (+content) |
 | **FAIL** | **multi_mem_split** |
 
-**13 of 14.** The cross-backend equivalence the goldens assert
-(CpuBackend == Metal == CUDA == HIP) had never been tested against ROCm; it
-largely holds.
+**13 of 14 on the first run — 14 of 14 once the one failure was fixed.** The
+cross-backend equivalence the goldens assert (CpuBackend == Metal == CUDA ==
+HIP) had never been tested against ROCm. It holds, and finding where it didn't
+was worth the whole exercise.
 
-### The one failure: a GPU memory fault on the staged path
+### The one failure: a GPU memory fault on the staged path (#203, fixed)
 
 ```
 Memory access fault by GPU node-1 on address 0x7501bce00000.
@@ -324,16 +325,40 @@ Reason: Page not present or supervisor privilege.
 ```
 
 `multi_mem_split` is `multi_mem` with `--level-split 10`. The **non-split**
-fixture passes on the same hardware and the same binary; only the staged path
-faults. It's an out-of-bounds GPU access that CUDA/Metal tolerate (or that maps
-to benign memory there) and ROCm traps.
+fixture passed on the same hardware and the same binary; only the staged path
+faulted.
 
-Worth noting the coincidence: level-split + SRAM is exactly where #186 lived (a
-staged endpoint index read against the original AIG's accounting). That bug was
-fixed and its silent-wrong-offset case is gone — but ROCm faulting on the same
-path is a strong hint there is more staged-index trouble that only a
-bounds-checking runtime notices. **This is a real bug in Jacquard, surfaced by
-ROCm, not a ROCm quirk.**
+The cause was ours, in `simulate_block_v1`'s staged-IO read. Bit 31 of a word
+index flags "read this cycle's inter-stage intermediates from the output slot"
+(§5 of ADR 0015). The kernel decoded that flag by biasing the base pointer to
+cancel it out of the subscript — with a **signed** `1 << 31`, which is
+`INT_MIN`. So the pointer moved *+*2^31 words instead of −2^31, and the
+subsequent `[idx]` (bit 31 set, so idx ≥ 2^31) added another 2^31: every staged
+read landed 2^32 words — 16 GiB — past the buffer. Unreachable without
+`--level-split`, since `staged_io_map` is empty when the design is one stage,
+and unreachable in stage 0, which reads primary inputs and DFFs. Hence:
+stage 0 survives, stage 1 faults.
+
+**Why only ROCm.** The instinct that ROCm is a bounds-checking oracle was
+right, but the mechanism is more interesting than "CUDA tolerates an OOB
+access". nvcc narrows the address arithmetic to 32 bits, which truncates the
+overflow back to the intended offset — so CUDA and HIP-over-CUDA were silently
+*correct*, not silently wrong. Metal had the same decode written with an
+unsigned `1u << 31` and was correct outright. ROCm was the only backend that
+computed the address the way the language says to, and it faulted. The bug was
+not that ROCm is strict; it was that we relied on a compiler to paper over
+undefined behaviour, and one of them declined.
+
+The fix decodes by clearing the flag from the *index* instead — the idiom
+`CpuBackend` already used (`src/sim/cpu_reference.rs`) — in all three kernels.
+That removes the UB rather than correcting its sign, so no backend's address
+arithmetic can resurrect the class. `multi_mem_split` now passes on ROCm
+byte-identically to the golden, and Metal is re-verified 14/14 locally.
+
+Worth noting where it sat: level-split + SRAM is exactly where #186 lived (a
+staged endpoint index read against the original AIG's accounting). Two staged-
+index bugs in the same neighbourhood, the second only visible on a runtime that
+checks. **Both were real bugs in Jacquard, surfaced by ROCm, not ROCm quirks.**
 
 ## Next steps
 
