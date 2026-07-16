@@ -82,21 +82,22 @@ pub fn synthesize(design: &Path, opts: &SynthOptions) -> Result<PathBuf> {
         use_slang,
     );
 
-    // Cache key: design source + generated script + wasm module (+ crate
-    // version, to invalidate across incompatible synth-engine changes).
-    let cache_key = {
-        use std::hash::{Hash, Hasher};
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        design_bytes.hash(&mut h);
-        script.hash(&mut h);
-        wasm_bytes.hash(&mut h);
-        env!("CARGO_PKG_VERSION").hash(&mut h);
-        format!("synth-{:016x}.gv", h.finish())
-    };
+    let cache_key = synth_cache_key(
+        &design_bytes,
+        &script,
+        &wasm_bytes,
+        // Every file the script reads out of the work dir. Add here when the run
+        // gains an input, or editing that input yields a stale hit.
+        &[AIGPDK_NOMEM_LIB, MEMLIB_YOSYS, GEM_FORMAL_V],
+    );
     let cache_dir = cache_dir();
     let cached = cache_dir.join(&cache_key);
 
-    if cached.is_file() {
+    // Escape hatch for bisecting a synthesis problem, where a hit is exactly
+    // what you don't want. Still refreshes the entry afterwards.
+    let bypass = std::env::var_os("JACQUARD_NO_SYNTH_CACHE").is_some_and(|v| !v.is_empty());
+
+    if cached.is_file() && !bypass {
         clilog::info!("synth: cache hit {}", cached.display());
     } else {
         clilog::info!("synth: using yosys.wasm at {}", wasm_path.display());
@@ -138,6 +139,45 @@ pub fn synthesize(design: &Path, opts: &SynthOptions) -> Result<PathBuf> {
     }
 
     Ok(cached)
+}
+
+/// Content hash of *everything* that determines the synthesized netlist.
+///
+/// Every input the run reads has to be in here, or a change to it yields a
+/// stale hit — the netlist gets reused despite having been produced under
+/// different conditions. The non-obvious members are the three embedded support
+/// files: they're `include_str!`, so editing `aigpdk/aigpdk_nomem.lib` changes
+/// the binary but *not* `CARGO_PKG_VERSION`, which only moves at release. Before
+/// they were hashed, editing the standard-cell library the script maps against
+/// (`read_liberty -lib aigpdk_nomem.lib`) silently reused a netlist built with
+/// the old one.
+///
+/// `script` covers the top module, assertion handling, and the chosen SV
+/// frontend, since all three are baked into the text. `CARGO_PKG_VERSION` stays
+/// as a coarse backstop for engine changes the inputs above don't capture.
+///
+/// `support` is taken as an argument rather than read from the consts directly
+/// so the tests can vary it: hashing a `const` can't be exercised by a test that
+/// can't change it, and a test that cannot fail is worse than none.
+///
+/// If you add an input to the synthesis run, add it to `support` at the call
+/// site — `cache_key_covers_the_support_files` makes dropping one loud.
+fn synth_cache_key(
+    design_bytes: &[u8],
+    script: &str,
+    wasm_bytes: &[u8],
+    support: &[&str],
+) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    design_bytes.hash(&mut h);
+    script.hash(&mut h);
+    wasm_bytes.hash(&mut h);
+    for s in support {
+        s.hash(&mut h);
+    }
+    env!("CARGO_PKG_VERSION").hash(&mut h);
+    format!("synth-{:016x}.gv", h.finish())
 }
 
 /// Whether the embedded Yosys exposes `read_slang` (yosys-slang, a
@@ -502,6 +542,95 @@ fn run_yosys_wasm(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SUP: &[&str] = &[AIGPDK_NOMEM_LIB, MEMLIB_YOSYS, GEM_FORMAL_V];
+
+    /// Every input that changes the netlist must change the key. A miss here is
+    /// a stale cache hit in the field: the user silently gets a netlist built
+    /// under conditions that no longer hold.
+    #[test]
+    fn cache_key_covers_each_direct_input() {
+        let base = synth_cache_key(
+            b"module m(); endmodule",
+            "read_verilog m.v\n",
+            b"\0asm-a",
+            SUP,
+        );
+
+        assert_ne!(
+            base,
+            synth_cache_key(
+                b"module n(); endmodule",
+                "read_verilog m.v\n",
+                b"\0asm-a",
+                SUP
+            ),
+            "a different design must not reuse the netlist"
+        );
+        assert_ne!(
+            base,
+            synth_cache_key(
+                b"module m(); endmodule",
+                "read_slang m.v\n",
+                b"\0asm-a",
+                SUP
+            ),
+            "a different script (top module, assertions, SV frontend) must not reuse it"
+        );
+        assert_ne!(
+            base,
+            synth_cache_key(
+                b"module m(); endmodule",
+                "read_verilog m.v\n",
+                b"\0asm-b",
+                SUP
+            ),
+            "a different yosys.wasm must not reuse it"
+        );
+    }
+
+    /// The support files are synthesis inputs: the script does `read_liberty
+    /// -lib aigpdk_nomem.lib`, `memory_libmap -lib memlib_yosys.txt`, `techmap
+    /// -map gem_formal.v`. They arrive by `include_str!`, so editing one moves
+    /// neither the design, the script, the wasm, nor `CARGO_PKG_VERSION` (which
+    /// only moves at release) — they were absent from the key, and editing the
+    /// standard-cell library silently reused a netlist mapped against the old
+    /// one. Verified by hand before the fix: same key, "cache hit", stale
+    /// netlist.
+    #[test]
+    fn cache_key_covers_the_support_files() {
+        let k = |support: &[&str]| synth_cache_key(b"d", "s", b"w", support);
+        let real = k(SUP);
+
+        assert_ne!(
+            real,
+            k(&["edited", MEMLIB_YOSYS, GEM_FORMAL_V]),
+            "editing the liberty the script maps against must change the key"
+        );
+        assert_ne!(
+            real,
+            k(&[AIGPDK_NOMEM_LIB, "edited", GEM_FORMAL_V]),
+            "editing the memory-mapping rules must change the key"
+        );
+        assert_ne!(
+            real,
+            k(&[AIGPDK_NOMEM_LIB, MEMLIB_YOSYS, "edited"]),
+            "editing the assertion techmap must change the key"
+        );
+        assert_ne!(
+            real,
+            k(&[AIGPDK_NOMEM_LIB, MEMLIB_YOSYS]),
+            "dropping a support file from the key is exactly the bug that shipped"
+        );
+    }
+
+    /// Keys are filenames; a stray path separator would escape the cache dir.
+    #[test]
+    fn cache_key_is_a_plain_filename() {
+        let k = synth_cache_key(b"d", "s", b"w", SUP);
+        assert!(k.starts_with("synth-") && k.ends_with(".gv"), "{k}");
+        assert!(!k.contains('/') && !k.contains(".."), "{k}");
+    }
 
     /// Guard the pinned-wasm trio against a copy-paste slip on re-pin: the
     /// download URL must reference the tag, and the hash must be a 64-char
