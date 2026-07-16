@@ -1,7 +1,11 @@
 # Spike — reaching AMD laptops
 
-**Status:** In progress. Findings below are what's established so far; the
-compute-API question is open.
+**Status:** The compute-API question is **answered — stay on HIP, do not port
+to OpenCL** (see "Revised conclusion"). ROCm now builds, runs, and passes all 14
+cosim goldens byte-identically on gfx1030, guarded by the permanent `HIP Tests
+(ROCm backend)` CI job. What remains open is only the last mile: whether the
+laptop archs (`gfx1103`/`gfx1150`/`gfx1151`) *run* correctly, which needs
+silicon we don't have.
 
 **Question:** what does Jacquard need in order to run on an AMD laptop, and is
 the answer HIP/ROCm, OpenCL, Vulkan, or something else?
@@ -365,13 +369,15 @@ checks. **Both were real bugs in Jacquard, surfaced by ROCm, not ROCm quirks.**
 1. ~~Compile-only test.~~ **Done — see above.** It answered a bigger question
    than it asked. Fix the `types.hpp` CUDA-header leak in vendored `ulib`, then
    re-run; only then is "does it build for laptop archs" a meaningful question.
-2. ~~Run the goldens on our own AMD runner.~~ **Done — 13/14.** The one failure
-   is now **#203**: `cosim_simulate_stage` faults on stage 1 when the AIG
-   level-splits. Traced with `AMD_SERIALIZE_KERNEL=3` to the exact kernel and
-   dispatch; bisected to splits that produce 2 stages (5, 10 fault; 20, 30, 40
-   are single-stage and pass). A real out-of-bounds access on hardware we
-   already claim to support — CUDA and Metal don't trap it. Fix that before
-   laptops. Everything else is byte-identical to the CPU/Metal goldens.
+2. ~~Run the goldens on our own AMD runner.~~ **Done — 14/14.** The first run
+   was 13/14; the one failure became **#203** and is fixed (a signed `1 << 31`
+   put every staged-IO read 2^32 words out of bounds; see above). Traced with
+   `AMD_SERIALIZE_KERNEL=3` to the exact kernel and dispatch — `rocgdb` hangs,
+   that route is the one that works. The goldens are now guarded permanently by
+   the `HIP Tests (ROCm backend)` job in `ci.yml`, which is worth keeping for
+   its own sake: ROCm is the only backend that computes addresses exactly
+   rather than narrowing them to 32 bits, so it is our only standing oracle for
+   OOB/UB in the shared kernel.
 3. **Then find real silicon.** Compiling is necessary, not sufficient. The
    cross-backend goldens make the check a byte-diff, not a judgement call. This
    is the step that needs a Strix/Phoenix laptop; no runner we have can stand in
