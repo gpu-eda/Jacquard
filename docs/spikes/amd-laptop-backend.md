@@ -2,10 +2,17 @@
 
 **Status:** The compute-API question is **answered — stay on HIP, do not port
 to OpenCL** (see "Revised conclusion"). ROCm now builds, runs, and passes all 14
-cosim goldens byte-identically on gfx1030, guarded by the permanent `HIP Tests
-(ROCm backend)` CI job. What remains open is only the last mile: whether the
-laptop archs (`gfx1103`/`gfx1150`/`gfx1151`) *run* correctly, which needs
-silicon we don't have.
+**cosim** goldens byte-identically, guarded by the permanent `HIP Tests (ROCm
+backend)` CI job — and on APU-class silicon, which is better news than this doc
+originally thought (see the correction below).
+
+`sim` now runs on ROCm too — it never had, because the device has no
+cooperative launch — via a non-cooperative fallback; see "`sim` on a device
+without cooperative launch" below.
+
+What remains open is the last mile: whether the laptop archs
+(`gfx1103`/`gfx1150`/`gfx1151`) *run* correctly, which needs silicon we don't
+have.
 
 **Question:** what does Jacquard need in order to run on an AMD laptop, and is
 the answer HIP/ROCm, OpenCL, Vulkan, or something else?
@@ -18,7 +25,7 @@ online and idle because nothing targeted it (#198).
 
 Probing it (2026-07-15) showed the box itself is fine — ROCm 7.2.4, `hipcc` (HIP
 7.2.53211), `hipconfig --platform` = `amd`, and a trivial HIP kernel compiles and
-runs correctly on the GPU with **no** `HSA_OVERRIDE_GFX_VERSION`:
+runs correctly on the GPU:
 
 ```
 --- native ---
@@ -26,11 +33,35 @@ result: 1 2 3 4 5 6 7 8
 NATIVE: OK
 ```
 
-But it reports **`gfx1030`**, despite a `gfx1036` runner label. `gfx1030` is
-RDNA2 *discrete*-class and sits on ROCm's main compute compatibility matrix. It
-is a different support tier from any laptop part. **Green HIP CI on that runner
-would tell us nothing about an AMD laptop.** That is the finding that started
-this spike.
+It reports **`gfx1030`**, despite a `gfx1036` runner label — and the original
+version of this spike drew the wrong conclusion from that, which is worth
+recording because the error ran for a while and pointed the whole investigation
+the wrong way.
+
+**Corrected (2026-07-16, measured on the runner):** the label is right and the
+*report* is spoofed. The runner is the **Raphael iGPU integrated into nvidia1's
+own Ryzen 5 7600** — `lspci` says `1002:164e` (Raphael), which is `gfx1036`, and
+the `amd-runner` container image bakes in `HSA_OVERRIDE_GFX_VERSION=10.3.0`:
+
+```
+$ docker inspect amd-runner --format '{{range .Config.Env}}{{println .}}{{end}}'
+HSA_OVERRIDE_GFX_VERSION=10.3.0
+RUNNER_LABELS=self-hosted,amd,gfx1036,rocm,hip,vulkan,cubecl
+
+$ rocminfo | grep gfx                        →  gfx1030    # spoofed
+$ env -u HSA_OVERRIDE_GFX_VERSION rocminfo   →  gfx1036    # the truth
+```
+
+So the claim that *"green HIP CI on that runner would tell us nothing about an
+AMD laptop"* was **backwards, and wrong in our favour.** The runner is an
+*integrated* RDNA2 GPU — an APU, on the same support tier as the laptop parts we
+care about, not a discrete board on ROCm's main matrix. The 14/14 ROCm cosim
+goldens are therefore *already* passing on APU-class silicon. That is a far
+better laptop proxy than a discrete gfx1030 would have been.
+
+Note what that also means: `gfx1036` (Raphael) appears nowhere on ROCm's
+supported lists (see the table below) — and it works anyway, via the override.
+That is a data point about how binding those lists really are.
 
 ## What ROCm actually supports on laptops (as of 2026-07-15)
 

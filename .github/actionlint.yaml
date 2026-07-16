@@ -16,10 +16,13 @@ self-hosted-runner:
     # Self-hosted AMD ROCm runner, registered at org level and targeted as
     # `runs-on: [self-hosted, amd, rocm]` by `HIP Tests (ROCm backend)`.
     #
-    # The `gfx1036` label is wrong: the hardware reports **gfx1030** (RDNA2
-    # discrete-class, on ROCm's main compatibility matrix — a different support
-    # tier from any laptop APU). Left as-is because the label is set at
-    # registration, not here; see docs/spikes/amd-laptop-backend.md.
+    # The `gfx1036` label is correct: the runner is the Raphael iGPU integrated
+    # into nvidia1's Ryzen 5 7600 (PCI 1002:164e, RDNA2). ROCm reports `gfx1030`
+    # only because the `amd-runner` image sets HSA_OVERRIDE_GFX_VERSION=10.3.0 —
+    # it is the report that is spoofed, not the label.
+    #
+    # So the runner is an APU rather than a discrete card, which makes it a
+    # closer proxy for an AMD laptop. See docs/spikes/amd-laptop-backend.md.
     - amd
     - rocm
     - gfx1036
