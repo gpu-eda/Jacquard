@@ -176,6 +176,25 @@
 <tr><td>Per-receiver wire delay (Pillar C Tier 1)</td><td>❌ Phase 2 (blocked on ADR 0007)</td></tr>
 </tbody></table>
 </div>
+<p><strong>What "HIP" means above.</strong> HIP is two quite different things, and for most of
+this project's life the table only ever meant the first:</p>
+<ul>
+<li><strong>HIP-over-CUDA</strong> — <code>hip-runtime-nvidia</code>, built with the CUDA toolkit and
+executed on an NVIDIA GPU (<code>HIP Tests (NVIDIA backend)</code>, <code>tesla4-runner</code>).
+Source-compatible with CUDA and, in practice, CUDA semantics throughout.</li>
+<li><strong>HIP on real ROCm</strong> — an actual AMD GPU (<code>HIP Tests (ROCm backend)</code>). This
+had never been built, let alone run, until 2026-07-15, and <code>sim</code> did not run
+there at all until the non-cooperative fallback landed: the device has no
+cooperative launch, so the grid-wide barrier <code>sim</code> relies on is unavailable
+and the host drives one launch per (cycle, stage) instead. See
+<a href="spikes/amd-laptop-backend.html"><code>spikes/amd-laptop-backend.md</code></a>.</li>
+</ul>
+<p>Both are now covered by CI and both pass, so the ✅s above are accurate for
+each. The distinction still matters when reading a green tick: it is what hid
+<a href="https://github.com/gpu-eda/Jacquard/issues/203">#203</a> — an out-of-bounds read
+that nvcc silently truncated back into range, so CUDA and HIP-over-CUDA were
+accidentally <em>correct</em> while ROCm faulted. Arrival/violation arithmetic itself
+is host-side Rust (#195) and therefore backend-independent.</p>
 <p>See <a href="timing-violations.html"><code>timing-violations.md</code></a> for the full violation-output
 interface and <a href="why-jacquard.html"><code>why-jacquard.md</code></a> for positioning.</p>
 <h2 id="background-the-simulation-challenge"><a class="header" href="#background-the-simulation-challenge">Background: The Simulation Challenge</a></h2>

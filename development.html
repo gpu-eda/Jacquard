@@ -184,8 +184,9 @@ cargo bench --bench event_buffer # criterion micro-benchmarks, no GPU needed
 cargo bench --bench xprop
 </code></pre>
 <p>For the GPU path, two flags matter more than the test suite:</p>
-<pre><code class="language-sh">jacquard sim ... --check-with-cpu   # run a CPU baseline and compare
-jacquard sim ... --max-cycles 1000  # bound a long run while bisecting
+<pre><code class="language-sh">jacquard sim ... --check-with-cpu        # run a CPU baseline and compare
+jacquard sim ... --max-clock-edges 1000  # bound a long run while bisecting
+                                         # (edges, not cycles: 2 per cycle)
 </code></pre>
 <p><code>--check-with-cpu</code> is the one to reach for when a kernel change produces
 plausible-looking waveforms: it is the difference between "it ran" and "it is
