@@ -1,0 +1,48 @@
+{
+  "netlist_path": "tests/qspi_psram/qspi_psram_dut_synth.gv",
+  "clock_gpio": 0,
+  "reset_gpio": 1,
+  "reset_active_high": false,
+  "reset_cycles": 10,
+  "num_cycles": 4000,
+  "clock_period_ps": 40000,
+  "_comment": "A READ-ONLY QPI flash serving preloaded firmware (gpu-eda/Jacquard#222). Reuses the tests/qspi_psram DUT unchanged: it enters QPI (0x35), quad-writes 0xA5 to addr 0x01, then quad-reads addr 0x01 and asserts rdata == 0xA5. fw/ro_flash.bin already holds 0xA5 at addr 0x01, so the write is redundant — a correct read-only QPI part passes on the preloaded content alone. read_dummy_cycles is set explicitly because flash_ram_params defaults it off `writable` too (src/sim/cosim/mod.rs), which would otherwise confound the QPI-entry bug with a dummy-cycle mismatch.",
+  "flash": {
+    "clk_gpio": 2,
+    "csn_gpio": 3,
+    "d0_gpio": 4,
+    "writable": false,
+    "enter_qpi_cmd": 53,
+    "read_dummy_cycles": 6,
+    "firmware": "tests/qspi_ro_qpi/fw/ro_flash.bin",
+    "size_bytes": 65536
+  },
+  "port_mapping": {
+    "inputs": {
+      "0": "clk",
+      "1": "rst_n",
+      "4": "sio_i[0]",
+      "5": "sio_i[1]",
+      "6": "sio_i[2]",
+      "7": "sio_i[3]"
+    },
+    "outputs": {
+      "2": "sck",
+      "3": "cs_n",
+      "4": "sio_o[0]",
+      "5": "sio_o[1]",
+      "6": "sio_o[2]",
+      "7": "sio_o[3]",
+      "8": "rdata[0]",
+      "9": "rdata[1]",
+      "10": "rdata[2]",
+      "11": "rdata[3]",
+      "12": "rdata[4]",
+      "13": "rdata[5]",
+      "14": "rdata[6]",
+      "15": "rdata[7]",
+      "16": "done",
+      "17": "match"
+    }
+  }
+}
