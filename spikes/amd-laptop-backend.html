@@ -1,0 +1,526 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Spike — reaching AMD laptops - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-picker.css">
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="spike--reaching-amd-laptops"><a class="header" href="#spike--reaching-amd-laptops">Spike — reaching AMD laptops</a></h1>
+<p><strong>Status:</strong> The compute-API question is <strong>answered — stay on HIP, do not port
+to OpenCL</strong> (see "Revised conclusion"). ROCm now builds, runs, and passes all 14
+cosim goldens byte-identically on gfx1030, guarded by the permanent <code>HIP Tests (ROCm backend)</code> CI job. What remains open is only the last mile: whether the
+laptop archs (<code>gfx1103</code>/<code>gfx1150</code>/<code>gfx1151</code>) <em>run</em> correctly, which needs
+silicon we don't have.</p>
+<p><strong>Question:</strong> what does Jacquard need in order to run on an AMD laptop, and is
+the answer HIP/ROCm, OpenCL, Vulkan, or something else?</p>
+<h2 id="why-this-is-a-question-at-all"><a class="header" href="#why-this-is-a-question-at-all">Why this is a question at all</a></h2>
+<p>The <code>HIP Tests (NVIDIA backend)</code> job builds <code>hip-runtime-nvidia</code> and runs on
+<code>tesla4-runner</code>: HIP-over-CUDA, never ROCm. The org's self-hosted AMD runner sat
+online and idle because nothing targeted it (#198).</p>
+<p>Probing it (2026-07-15) showed the box itself is fine — ROCm 7.2.4, <code>hipcc</code> (HIP
+7.2.53211), <code>hipconfig --platform</code> = <code>amd</code>, and a trivial HIP kernel compiles and
+runs correctly on the GPU with <strong>no</strong> <code>HSA_OVERRIDE_GFX_VERSION</code>:</p>
+<pre><code>--- native ---
+result: 1 2 3 4 5 6 7 8
+NATIVE: OK
+</code></pre>
+<p>But it reports <strong><code>gfx1030</code></strong>, despite a <code>gfx1036</code> runner label. <code>gfx1030</code> is
+RDNA2 <em>discrete</em>-class and sits on ROCm's main compute compatibility matrix. It
+is a different support tier from any laptop part. <strong>Green HIP CI on that runner
+would tell us nothing about an AMD laptop.</strong> That is the finding that started
+this spike.</p>
+<h2 id="what-rocm-actually-supports-on-laptops-as-of-2026-07-15"><a class="header" href="#what-rocm-actually-supports-on-laptops-as-of-2026-07-15">What ROCm actually supports on laptops (as of 2026-07-15)</a></h2>
+<p>Prior assumption — "ROCm doesn't do laptop APUs, you need
+<code>HSA_OVERRIDE_GFX_VERSION</code>" — is <strong>out of date</strong>. ROCm 7.2.1 added official
+Ryzen APU support. But it's narrower than "AMD laptops":</p>
+<p>The <a href="https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html">main compute compatibility matrix</a> lists <strong>no APU targets at all</strong>
+(<code>gfx908, gfx90a, gfx942, gfx1030, gfx1100, gfx1101, gfx1200, gfx1201, gfx950</code>).
+APU support lives in a separate tier, <a href="https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/index.html">Use ROCm on Radeon and Ryzen</a>.
+The <a href="https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/compatibility/compatibilityryz/native_linux/native_linux_compatibility.html">native-Linux support matrix</a> there lists exactly <strong>two</strong> gfx
+targets:</p>
+<div class="table-wrapper"><table><thead><tr><th>Silicon</th><th>Target</th><th>Parts</th></tr></thead><tbody>
+<tr><td>Strix Halo</td><td><code>gfx1151</code></td><td>Ryzen AI Max+ 395, Max 390, Max 385</td></tr>
+<tr><td>Strix Point</td><td><code>gfx1150</code></td><td>Ryzen AI 9 HX 375, HX 370, 365</td></tr>
+<tr><td>400-series</td><td><code>gfx1150</code>/<code>gfx1151</code></td><td>Ryzen AI 9 HX 475, HX 470, 465</td></tr>
+</tbody></table>
+</div>
+<p>Not listed: <strong><code>gfx1103</code></strong> (Phoenix / Hawk Point — Ryzen 7040/8040), <code>gfx1035</code>
+(Rembrandt), <code>gfx1036</code> (Raphael), <code>gfx90c</code> (Cezanne). One search summary claimed
+<code>gfx1103</code> was supported; the authoritative page does not list it. Treat as
+unconfirmed pending the research below.</p>
+<p>Support is also version-churny — <a href="https://github.com/ROCm/ROCm/issues/5339">ROCm#5339</a> is titled "Confusing rocm
+support for gfx1151", and reports suggest 6.4.2 had <code>gfx1151</code> but not <code>gfx1150</code>,
+with both in the 7.13.0 preview matrix.</p>
+<h3 id="the-install-contract-is-the-real-problem"><a class="header" href="#the-install-contract-is-the-real-problem">The install contract is the real problem</a></h3>
+<p>Per the <a href="https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installryz/native_linux/install-ryzen.html">Ryzen Linux install guide</a>, running ROCm on a supported APU
+needs:</p>
+<ul>
+<li><strong>Ubuntu 24.04.4</strong> specifically (24.04.3 "preliminary");</li>
+<li>the <strong><code>6.14-1018</code> OEM kernel or newer</strong> (<code>apt install linux-oem-24.04c</code>);</li>
+<li><code>amdgpu-install -y --usecase=rocm --no-dkms</code> — <code>--no-dkms</code> is <em>mandatory</em>
+(inbox drivers required); if DKMS lands anyway, <code>autoremove amdgpu-dkms dkms</code>;</li>
+<li><strong>BIOS changes</strong>: minimum dedicated VRAM (0.5 GB) plus a raised TTM limit (via
+<code>amd-ttm</code> from the <code>amd-debug-tools</code> PyPI package);</li>
+<li><code>usermod -a -G render,video</code> + reboot;</li>
+<li>no in-place upgrades — uninstall before upgrading.</li>
+</ul>
+<p>And a trap that presents as "the tool is broken": on <code>gfx1150</code>, <a href="https://github.com/ollama/ollama/issues/11451">GPU detection
+fails when UMA is "Auto"/Dynamic VRAM</a> and silently falls back to
+CPU. Fixed VRAM in BIOS works.</p>
+<p>So even on <em>supported</em> laptop silicon, ROCm is: two gfx targets, one Ubuntu
+point release, a specific OEM kernel, and a BIOS change. That is a demanding
+contract to put in front of someone who just wants to simulate a netlist.</p>
+<h2 id="what-a-non-cuda-backend-costs-us"><a class="header" href="#what-a-non-cuda-backend-costs-us">What a non-CUDA backend costs us</a></h2>
+<p>Measured, not estimated:</p>
+<div class="table-wrapper"><table><thead><tr><th>File</th><th>Lines</th><th>Role</th></tr></thead><tbody>
+<tr><td><code>csrc/kernel_v1_impl.cuh</code></td><td><strong>1462</strong></td><td>the kernel logic</td></tr>
+<tr><td><code>csrc/kernel_v1.cu</code></td><td>207</td><td>CUDA launch wrapper — <code>#include</code>s the impl</td></tr>
+<tr><td><code>csrc/kernel_v1.hip.cpp</code></td><td><strong>226</strong></td><td>HIP launch wrapper — <strong><code>#include</code>s the same impl</strong></td></tr>
+<tr><td><code>csrc/kernel_v1.metal</code></td><td><strong>1441</strong></td><td>can't share it; full reimplementation</td></tr>
+</tbody></table>
+</div>
+<p>Host side mirrors this: <code>cuda.rs</code> 690, <code>hip.rs</code> 695, <strong><code>metal.rs</code> 2116</strong>.</p>
+<p><strong>AMD support currently costs ~226 lines because HIP is source-compatible with
+CUDA.</strong> Metal is the honest precedent for a backend that isn't: a whole parallel
+kernel plus 3× the host code. Any move off HIP moves AMD from the first column
+to the second.</p>
+<h3 id="the-blocker-sim-needs-a-device-wide-barrier"><a class="header" href="#the-blocker-sim-needs-a-device-wide-barrier">The blocker: <code>sim</code> needs a device-wide barrier</a></h3>
+<p><code>kernel_v1_impl.cuh:623</code> calls <code>cooperative_groups::this_grid().sync()</code> — a
+grid-wide barrier <em>inside</em> the kernel, via <code>hipLaunchCooperativeKernel</code>.
+<strong>Neither OpenCL nor Vulkan has a device-wide barrier primitive.</strong></p>
+<p><code>cosim</code> does not have this problem, and says so itself:</p>
+<blockquote>
+<p>Unlike the <code>sim</code> scan above, cosim is reactive (inputs depend on outputs), so
+the host drives one scheduler edge at a time over a 2-slot [input|output]
+state. These kernels are NON-cooperative ordinary launches — the host loops
+major stages and each launch is the grid-wide barrier — so cosim never needs
+the cooperative grid.sync the scan relies on. They mirror Metal's <code>state_prep</code>
+and <code>simulate_v1_stage</code>.</p>
+</blockquote>
+<p>So the realistic scope of any portable-compute backend is <strong>cosim only, <code>sim</code>
+stays on CUDA/HIP</strong> — unless <code>sim</code> is restructured into N host-driven launches,
+which is a barrier per sync point and is precisely what the cooperative launch
+exists to avoid.</p>
+<h3 id="what-makes-it-cheaper-than-feared"><a class="header" href="#what-makes-it-cheaper-than-feared">What makes it cheaper than feared</a></h3>
+<ul>
+<li><strong>Zero templates</strong> in the impl; only 26 CUDA qualifiers
+(<code>__device__</code>/<code>__global__</code>/<code>__shared__</code>/<code>__forceinline__</code>). It's C-like CUDA,
+so a port is transliteration plus the sync problem, not a fight with a type
+system.</li>
+<li><strong>The cross-backend goldens already exist</strong> — CpuBackend == Metal == CUDA ==
+HIP, byte-identical. A new backend gets a correctness oracle on day one. The
+timestamp maths is host-side Rust (#195), so goldens should match outright.</li>
+</ul>
+<h3 id="the-recurring-cost"><a class="header" href="#the-recurring-cost">The recurring cost</a></h3>
+<p>Two kernel implementations become three. Every kernel-level change lands three
+times and must stay byte-identical against the goldens. That tax is forever and
+is larger than the port. Plus: a <code>Device::OpenCL</code> variant in vendored <code>ulib</code>
+(the <code>[CPU] [CUDA] [HIP] [Metal]</code> device-ID layout is positional — additive, but
+a submodule change), 24 <code>CosimBackend</code> methods, and a packaging change (OpenCL
+compiles kernels at runtime from source/SPIR-V, unlike the build-time <code>ucc</code>
+compile).</p>
+<h2 id="what-the-local-llm-community-has-learned--and-why-most-of-it-isnt-our-problem"><a class="header" href="#what-the-local-llm-community-has-learned--and-why-most-of-it-isnt-our-problem">What the local-LLM community has learned — and why most of it isn't our problem</a></h2>
+<p>llama.cpp / ollama have driven these parts in anger far longer than any vendor
+matrix reflects. Their pain on AMD laptops is real and well documented. It is
+also, <strong>almost entirely, rocBLAS pain</strong> — which we don't have.</p>
+<p><strong>gfx1103 (Radeon 780M)</strong>, <a href="https://github.com/ggml-org/llama.cpp/issues/20839">llama.cpp#20839</a> — three failure modes:</p>
+<ol>
+<li>Flash-Attention <strong>WMMA</strong> kernel: "no device code compatible with HIP arch
+1300", tuned for discrete RDNA3;</li>
+<li><strong>rocBLAS TensileLibrary</strong> missing: "Cannot read TensileLibrary.dat … for GPU
+arch: gfx1103" — ROCm 6.3.2 ships gfx1100/1101/1102 only;</li>
+<li><strong>MMQ</strong> kernels: <code>HSA_OVERRIDE_GFX_VERSION=11.0.0</code> spoofing gives "invalid
+device function".</li>
+</ol>
+<p>The decisive line in that issue: <em>"The problem didn't exist in older llama.cpp
+versions (~late 2024 vintage) that <strong>embedded HIP kernels directly rather than
+calling rocBLAS externally</strong>."</em> Vulkan works there, ~2 s/generation slower than
+a working ROCm build.</p>
+<p><strong>gfx1151 (Strix Halo)</strong>, <a href="https://github.com/ggml-org/llama.cpp/issues/13565">llama.cpp#13565</a> — an <em>officially supported</em>
+part where HIP is 2.5× slower than Vulkan (pp512: HIP 348 tok/s vs Vulkan 881).
+Tellingly, compiling for gfx1100 and spoofing <code>HSA_OVERRIDE_GFX_VERSION=11.0.0</code>
+reaches ~599 — <strong>faster than the native gfx1151 path</strong>. Both hit max clock, so
+it isn't hardware; it's untuned rocBLAS/Tensile kernels for the arch. Still open.
+See also <a href="https://github.com/ROCm/ROCm/issues/5643">ROCm#5643</a> (hipBLASLt falls back on gfx1151 as unsupported) and
+the community's <a href="https://github.com/likelovewant/ROCmLibs-for-gfx1103-AMD780M-APU">custom rocBLAS builds for gfx1103</a> — an entire cottage
+industry of rebuilding <em>the library</em> per arch.</p>
+<h3 id="why-this-mostly-doesnt-bind-on-us"><a class="header" href="#why-this-mostly-doesnt-bind-on-us">Why this mostly doesn't bind on us</a></h3>
+<p>Checked against our kernel:</p>
+<ul>
+<li><strong>No BLAS.</strong> Zero references to <code>rocblas</code>/<code>hipblas</code>/<code>cublas</code>/<code>tensile</code>
+anywhere in <code>csrc/</code> or <code>src/</code>. Failure modes 2 and 3, and the gfx1151
+performance gap, are all rocBLAS/Tensile artefacts.</li>
+<li><strong>No matrix intrinsics.</strong> No <code>wmma</code>/<code>mfma</code>/<code>matrix_core</code>. Failure mode 1 is a
+WMMA kernel. We simulate AND gates.</li>
+<li><strong>One arch-specific intrinsic</strong>, <code>__shfl_down_sync</code> (<code>kernel_v1_impl.cuh:273</code>)
+— a standard warp shuffle, fine on RDNA.</li>
+<li><strong>wave32 is required and satisfied.</strong> <code>kernel_v1.hip.cpp</code> hard-rejects
+<code>warpSize != 32</code> (CDNA/GCN wave64 unsupported). <code>gfx1103</code> (RDNA3), <code>gfx1150</code>
+and <code>gfx1151</code> (RDNA3.5) are all wave32 — the laptop parts are exactly the
+shape we want.</li>
+</ul>
+<p>We're the "embedded HIP kernels directly" case that <em>worked</em> on gfx1103.</p>
+<h2 id="the-actual-blocker-is-one-line"><a class="header" href="#the-actual-blocker-is-one-line">The actual blocker is one line</a></h2>
+<p><code>ucc::cl_hip()</code> (vendored <code>eda-infra-rs/ucc/src/compile.rs</code>):</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Default AMD targets: RDNA2 + RDNA3.
+vec!["gfx1030".to_string(), "gfx1100".to_string()]
+<span class="boring">}</span></code></pre></pre>
+<p><strong>We only emit code for <code>gfx1030</code> and <code>gfx1100</code> — both discrete.</strong> No
+<code>gfx1103</code>, no <code>gfx1150</code>, no <code>gfx1151</code>. That is why the CI runner works (it
+reports <code>gfx1030</code>) and why a laptop wouldn't: not because HIP can't, but because
+we never compiled for it.</p>
+<p>There is already an escape hatch — <code>UCC_HIP_TARGETS</code>, comma-separated — in a
+fork we control. Custom HIP kernels can be compiled for any arch the compiler
+knows; only <em>rocBLAS</em> needs per-arch prebuilt libraries, and we don't use it.</p>
+<h2 id="revised-conclusion"><a class="header" href="#revised-conclusion">Revised conclusion</a></h2>
+<p><strong>Do not port to OpenCL.</strong> The cost is a third 1400-line kernel plus a permanent
+3× tax on every kernel change, and <code>sim</code> can't port at all (no device-wide
+barrier). The premise that motivated it — "ROCm won't reach AMD laptops" — did
+not survive contact: with two small fixes the existing HIP backend compiles for
+every laptop arch and passes 13/14 goldens on real ROCm hardware. We were three
+commits from ROCm, not one backend.</p>
+<p>Both blockers were <strong>ours</strong>, not AMD's, and both were hidden by the same thing:
+<code>hip-build</code> installs the CUDA Toolkit and targets <code>hip-runtime-nvidia</code>, so the
+HIP path had only ever been compiled with CUDA headers and CUDA semantics on
+hand. <code>HIP Tests (NVIDIA backend)</code> was an accurate job name that nobody read
+literally.</p>
+<p>What's left for laptops specifically is unproven but no longer speculative:
+compiling for <code>gfx1103</code>/<code>gfx1150</code>/<code>gfx1151</code> works; whether they <em>run</em> correctly
+needs silicon we don't have.</p>
+<h2 id="result-of-the-compile-test-2026-07-15"><a class="header" href="#result-of-the-compile-test-2026-07-15">Result of the compile test (2026-07-15)</a></h2>
+<p>Ran it on the AMD runner (ROCm 7.2.4) with
+<code>UCC_HIP_TARGETS=gfx1030,gfx1100,gfx1103,gfx1150,gfx1151</code>. Two findings, and the
+second is bigger than the spike's original question.</p>
+<p><strong>1. hipcc accepts every laptop target.</strong> The compiler was invoked as</p>
+<pre><code>clang++ --offload-arch=gfx1030 --offload-arch=gfx1100 --offload-arch=gfx1103 \
+        --offload-arch=gfx1150 --offload-arch=gfx1151 ...
+</code></pre>
+<p>and raised no objection to any arch. The arch list is not a barrier — consistent
+with the research: only <em>rocBLAS</em> needs per-arch prebuilt libraries, and we don't
+use it.</p>
+<p><strong>2. We have never compiled against real ROCm at all.</strong> The build died here:</p>
+<pre><code>csrc/types.hpp:26:10: fatal error: 'math_constants.h' file not found
+   26 | #include &lt;math_constants.h&gt;
+1 error generated when compiling for gfx1030.
+</code></pre>
+<p>That's vendored <code>ulib/csrc/types.hpp</code>:</p>
+<pre><code class="language-cpp">#if defined(__NVCC__) || defined(__HIP_DEVICE_COMPILE__)
+#include &lt;math_constants.h&gt;
+</code></pre>
+<p>The guard fires for HIP device compilation, but <strong><code>math_constants.h</code> is a CUDA
+toolkit header</strong>. ROCm ships <code>hip/hip_math_constants.h</code> instead. It has never
+been caught because <code>hip-build</code> <strong>installs the CUDA Toolkit</strong> ("no GPU needed to
+compile") and builds <code>hip-runtime-nvidia</code>: the HIP path has only ever been
+compiled with CUDA headers on the include path.</p>
+<p>So the <code>HIP Tests (NVIDIA backend)</code> job name is exact, and nobody read it that
+literally: <strong>the HIP backend is HIP-over-CUDA only.</strong> It has never been built,
+let alone run, on ROCm — on a laptop, a discrete Radeon, or anything else. Note
+this fails on <strong><code>gfx1030</code></strong>, the arch we nominally support and the one our own
+runner is. Laptop support was never the first blocker; it's the second.</p>
+<p>This is a one-header fix in a fork we control, but it must be fixed before any
+claim about ROCm — laptop or otherwise — can be tested.</p>
+<h2 id="result-of-actually-fixing-it-2026-07-15"><a class="header" href="#result-of-actually-fixing-it-2026-07-15">Result of actually fixing it (2026-07-15)</a></h2>
+<p>Two blockers, both invisible until something compiled against real ROCm. Both
+fixed; the third finding is open.</p>
+<p><strong>Blocker 1 — CUDA header on the HIP path.</strong> <code>81184fa</code> ("Add HIP (AMD GPU)
+backend support") widened ulib's guard from <code>#ifdef __NVCC__</code> to
+<code>#if defined(__NVCC__) || defined(__HIP_DEVICE_COMPILE__)</code>, dragging the
+CUDA-only <code>&lt;math_constants.h&gt;</code> into HIP device compilation. Upstream is
+unaffected — its <code>#ifdef __NVCC__</code> is correct for a CUDA header; <strong>the bug is
+ours, introduced with the HIP patch</strong>. Nothing uses the <code>CUDART_*</code> constants that
+header provides; the macros beneath it want <code>nanf</code>/<code>nan</code>/<code>INFINITY</code> from
+<code>&lt;cmath&gt;</code>. Fixed by including what's used.</p>
+<p><strong>Blocker 2 — the lane mask is CUDA-shaped.</strong> With the header fixed, the compile
+reached our one arch-specific intrinsic and died:</p>
+<pre><code>amd_warp_sync_functions.h:297:62: error: static assertion failed due to
+requirement 'sizeof(unsigned int) == 8': The mask must be a 64-bit integer.
+</code></pre>
+<p>CUDA's <code>__shfl_*_sync</code> takes a 32-bit mask; <strong>HIP-on-AMD takes a 64-bit one</strong>
+(an AMD wave can be 64 lanes) and static-asserts it. Every call site in the
+shared kernel was a hard compile error on ROCm, and invisible on CUDA and on
+HIP-over-CUDA — which is all we had ever built. Fixed with a <code>lane_mask_t</code>
+typedef (64-bit under <code>__HIP_PLATFORM_AMD__</code>, <code>unsigned</code> otherwise). It has to be
+a <em>type</em>, not a constant: one mask is a ragged tail (<code>0xffffffff &gt;&gt; n</code>) whose
+value must survive widening. No-op off AMD, and Metal goldens stayed 14/14.</p>
+<h3 id="with-both-fixed-it-builds-and-it-very-nearly-works"><a class="header" href="#with-both-fixed-it-builds-and-it-very-nearly-works">With both fixed: it builds, and it very nearly works</a></h3>
+<pre><code>UCC_HIP_TARGETS=gfx1030,gfx1100,gfx1103,gfx1150,gfx1151
+→ build: SUCCESS  (all five archs, incl. every laptop target)
+</code></pre>
+<p>And on the AMD runner's real gfx1030 — <strong>the first time Jacquard has ever
+executed on ROCm</strong> — the goldens are byte-identical to the CpuBackend/Metal
+captures:</p>
+<div class="table-wrapper"><table><thead><tr><th></th><th></th></tr></thead><tbody>
+<tr><td>PASS</td><td>xprop, 2state, noreginit, reginit, dual_uart_events, apb_trace, apb_trace_xprop, multi_mem, vcd_axes, qspi_psram (+content), qspi_shared_bus (+content)</td></tr>
+<tr><td><strong>FAIL</strong></td><td><strong>multi_mem_split</strong></td></tr>
+</tbody></table>
+</div>
+<p><strong>13 of 14 on the first run — 14 of 14 once the one failure was fixed.</strong> The
+cross-backend equivalence the goldens assert (CpuBackend == Metal == CUDA ==
+HIP) had never been tested against ROCm. It holds, and finding where it didn't
+was worth the whole exercise.</p>
+<h3 id="the-one-failure-a-gpu-memory-fault-on-the-staged-path-203-fixed"><a class="header" href="#the-one-failure-a-gpu-memory-fault-on-the-staged-path-203-fixed">The one failure: a GPU memory fault on the staged path (#203, fixed)</a></h3>
+<pre><code>Memory access fault by GPU node-1 on address 0x7501bce00000.
+Reason: Page not present or supervisor privilege.
+</code></pre>
+<p><code>multi_mem_split</code> is <code>multi_mem</code> with <code>--level-split 10</code>. The <strong>non-split</strong>
+fixture passed on the same hardware and the same binary; only the staged path
+faulted.</p>
+<p>The cause was ours, in <code>simulate_block_v1</code>'s staged-IO read. Bit 31 of a word
+index flags "read this cycle's inter-stage intermediates from the output slot"
+(§5 of ADR 0015). The kernel decoded that flag by biasing the base pointer to
+cancel it out of the subscript — with a <strong>signed</strong> <code>1 &lt;&lt; 31</code>, which is
+<code>INT_MIN</code>. So the pointer moved *+*2^31 words instead of −2^31, and the
+subsequent <code>[idx]</code> (bit 31 set, so idx ≥ 2^31) added another 2^31: every staged
+read landed 2^32 words — 16 GiB — past the buffer. Unreachable without
+<code>--level-split</code>, since <code>staged_io_map</code> is empty when the design is one stage,
+and unreachable in stage 0, which reads primary inputs and DFFs. Hence:
+stage 0 survives, stage 1 faults.</p>
+<p><strong>Why only ROCm.</strong> The instinct that ROCm is a bounds-checking oracle was
+right, but the mechanism is more interesting than "CUDA tolerates an OOB
+access". nvcc narrows the address arithmetic to 32 bits, which truncates the
+overflow back to the intended offset — so CUDA and HIP-over-CUDA were silently
+<em>correct</em>, not silently wrong. Metal had the same decode written with an
+unsigned <code>1u &lt;&lt; 31</code> and was correct outright. ROCm was the only backend that
+computed the address the way the language says to, and it faulted. The bug was
+not that ROCm is strict; it was that we relied on a compiler to paper over
+undefined behaviour, and one of them declined.</p>
+<p>The fix decodes by clearing the flag from the <em>index</em> instead — the idiom
+<code>CpuBackend</code> already used (<code>src/sim/cpu_reference.rs</code>) — in all three kernels.
+That removes the UB rather than correcting its sign, so no backend's address
+arithmetic can resurrect the class. <code>multi_mem_split</code> now passes on ROCm
+byte-identically to the golden, and Metal is re-verified 14/14 locally.</p>
+<p>Worth noting where it sat: level-split + SRAM is exactly where #186 lived (a
+staged endpoint index read against the original AIG's accounting). Two staged-
+index bugs in the same neighbourhood, the second only visible on a runtime that
+checks. <strong>Both were real bugs in Jacquard, surfaced by ROCm, not ROCm quirks.</strong></p>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next steps</a></h2>
+<ol>
+<li><del>Compile-only test.</del> <strong>Done — see above.</strong> It answered a bigger question
+than it asked. Fix the <code>types.hpp</code> CUDA-header leak in vendored <code>ulib</code>, then
+re-run; only then is "does it build for laptop archs" a meaningful question.</li>
+<li><del>Run the goldens on our own AMD runner.</del> <strong>Done — 14/14.</strong> The first run
+was 13/14; the one failure became <strong>#203</strong> and is fixed (a signed <code>1 &lt;&lt; 31</code>
+put every staged-IO read 2^32 words out of bounds; see above). Traced with
+<code>AMD_SERIALIZE_KERNEL=3</code> to the exact kernel and dispatch — <code>rocgdb</code> hangs,
+that route is the one that works. The goldens are now guarded permanently by
+the <code>HIP Tests (ROCm backend)</code> job in <code>ci.yml</code>, which is worth keeping for
+its own sake: ROCm is the only backend that computes addresses exactly
+rather than narrowing them to 32 bits, so it is our only standing oracle for
+OOB/UB in the shared kernel.</li>
+<li><strong>Then find real silicon.</strong> Compiling is necessary, not sufficient. The
+cross-backend goldens make the check a byte-diff, not a judgement call. This
+is the step that needs a Strix/Phoenix laptop; no runner we have can stand in
+(ours is <code>gfx1030</code>, a different ROCm support tier).
+<code>scripts/amd-laptop-probe.sh</code> is a self-contained volunteer test: it compiles
+a ~40-line HIP program using exactly Jacquard's kernel surface (wave32 +
+<code>__shfl_down_sync</code> + <code>__syncthreads</code>, nothing else), runs it, cross-compiles
+for each laptop arch, and prints a pasteable report. No Jacquard build, no
+root, nothing installed.</li>
+<li><strong>Only if 1 or 2 fails</strong>, revisit portable compute — and then Vulkan, not
+OpenCL: it's what actually works on these parts today per the evidence above,
+it isn't deprecated, and the runner's <code>vulkan</code>/<code>cubecl</code> labels suggest prior
+thought. CubeCL being Rust-native likely beats hand-written OpenCL C as a
+third kernel.</li>
+<li><strong>Fix the runner label</strong> — it says <code>gfx1036</code>, hardware says <code>gfx1030</code>.</li>
+</ol>
+<p>Still open: whether <code>sim</code> (not just cosim) matters on a laptop; if cosim-only is
+acceptable the problem shrinks either way.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../spikes/opentimer-sky130.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../spikes/opentimer-sky130.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-picker.js"></script>
+
+
+    </div>
+    </body>
+</html>

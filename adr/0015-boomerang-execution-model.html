@@ -323,6 +323,17 @@ the bits indicated by the mask using a <code>pext</code>-like loop.  Rounds
 are packed to maximise throughput (each thread accumulates up to
 32 bits across rounds).  An index high-bit flag distinguishes
 previous-cycle state from current-cycle inter-stage intermediates.</p>
+<p>That flag is a cross-backend wire format: one encoder
+(<code>src/flatten.rs</code> sets bit 31 of the word index) and four
+independent hand-written decoders (<code>src/flatten.rs</code>,
+<code>src/sim/cpu_reference.rs</code>, <code>csrc/kernel_v1_impl.cuh</code> for CUDA and
+HIP, and <code>csrc/kernel_v1.metal</code>).  Every decoder must clear the flag
+from the <strong>index</strong>.  Do not bias the base pointer by -2^31 to cancel
+the flag out of the subscript instead: that forms an out-of-bounds
+pointer whose behaviour is a compiler's to define, and the sign error
+it invites put every staged read 2^32 words past the buffer — visible
+only on ROCm, which is the one backend that computes the address
+exactly rather than narrowing it to 32 bits (#203).</p>
 </li>
 <li>
 <p><strong>Boomerang sections</strong> (per stage, <code>NUM_THREADS_V1 × 20</code> u32):</p>
