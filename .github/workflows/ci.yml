@@ -1071,6 +1071,90 @@ jobs:
       # tail's, so a failed build reports success.
       - name: Build jacquard (HIP, real ROCm)
         run: cargo build --release --features hip --bin jacquard
+      # DIAGNOSTIC (#203 follow-up): `sim` dies at kernel_v1.hip.cpp:65 —
+      # `hipLaunchCooperativeKernel` → "unspecified launch failure" — on a
+      # 1-block, 1-stage, 6-cycle design. Isolate whether gfx1030 supports
+      # cooperative launch at all, or claims to and then fails. We query
+      # hipDeviceAttributeWarpSize today but never CooperativeLaunch: we just
+      # launch and hope. Uses only what the real kernel uses.
+      - name: Diagnose — does gfx1030 support cooperative launch?
+        continue-on-error: true
+        run: |
+          cat > /tmp/coop_probe.hip <<'PROBE'
+          #include <hip/hip_runtime.h>
+          #include <hip/hip_cooperative_groups.h>
+          #include <cstdio>
+          namespace cg = cooperative_groups;
+
+          // Same shape as simulate_v1_noninteractive_simple_scan: 256 threads,
+          // shared memory, and a grid-wide barrier in a loop.
+          __global__ void coop_kernel(int *out) {
+            __shared__ int scratch[256];
+            cg::grid_group grid = cg::this_grid();
+            int t = blockIdx.x * blockDim.x + threadIdx.x;
+            scratch[threadIdx.x] = t;
+            __syncthreads();
+            for (int i = 0; i < 3; ++i) {
+              out[t] = scratch[threadIdx.x] + i;
+              grid.sync();            // <-- the device-wide barrier under test
+            }
+          }
+          __global__ void plain_kernel(int *out) {
+            int t = blockIdx.x * blockDim.x + threadIdx.x;
+            out[t] = t + 1;
+          }
+
+          static void try_launch(const char *label, int blocks, bool coop) {
+            int *d = nullptr;
+            if (hipMalloc(&d, blocks * 256 * sizeof(int)) != hipSuccess) {
+              printf("  %-28s hipMalloc FAILED\n", label); return;
+            }
+            hipError_t err;
+            if (coop) {
+              void *args[] = { (void *)&d };
+              err = hipLaunchCooperativeKernel((void *)coop_kernel,
+                      dim3(blocks), dim3(256), args, 0, (hipStream_t)0);
+            } else {
+              hipLaunchKernelGGL(plain_kernel, dim3(blocks), dim3(256), 0, 0, d);
+              err = hipGetLastError();
+            }
+            hipError_t sync_err = hipDeviceSynchronize();
+            printf("  %-28s launch=%-28s sync=%s\n", label,
+                   hipGetErrorString(err), hipGetErrorString(sync_err));
+            hipFree(d);
+          }
+
+          int main() {
+            hipDeviceProp_t p;
+            if (hipGetDeviceProperties(&p, 0) != hipSuccess) {
+              printf("hipGetDeviceProperties failed\n"); return 1;
+            }
+            printf("device      : %s\n", p.name);
+            printf("gcnArchName : %s\n", p.gcnArchName);
+            printf("CUs         : %d   warpSize: %d\n",
+                   p.multiProcessorCount, p.warpSize);
+            printf("prop.cooperativeLaunch            = %d\n", p.cooperativeLaunch);
+            printf("prop.cooperativeMultiDeviceLaunch = %d\n",
+                   p.cooperativeMultiDeviceLaunch);
+            int attr = -1;
+            hipDeviceGetAttribute(&attr, hipDeviceAttributeCooperativeLaunch, 0);
+            printf("attr CooperativeLaunch            = %d\n", attr);
+            int maxblocks = -1;
+            hipOccupancyMaxActiveBlocksPerMultiprocessor(
+              &maxblocks, (void *)coop_kernel, 256, 0);
+            printf("maxActiveBlocksPerCU(coop_kernel) = %d  → coop grid cap = %d\n",
+                   maxblocks, maxblocks * p.multiProcessorCount);
+            printf("\nlaunches:\n");
+            try_launch("plain, 1 block",  1, false);
+            try_launch("cooperative, 1 block", 1, true);
+            try_launch("cooperative, 2 blocks", 2, true);
+            return 0;
+          }
+          PROBE
+          echo "::group::compile + run cooperative-launch probe"
+          /opt/rocm/bin/hipcc /tmp/coop_probe.hip -o /tmp/coop_probe && /tmp/coop_probe
+          echo "::endgroup::"
+
       # The full functional suite the CUDA/Blackwell jobs run: sim, X-prop, the
       # timed launcher + report, then the cosim goldens (Stage B logic/UART/bus,
       # Stage C flash, QSPI). The cosim half is the cross-backend equivalence
