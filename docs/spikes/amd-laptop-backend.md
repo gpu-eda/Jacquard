@@ -410,9 +410,10 @@ checks. **Both were real bugs in Jacquard, surfaced by ROCm, not ROCm quirks.**
    rather than narrowing them to 32 bits, so it is our only standing oracle for
    OOB/UB in the shared kernel.
 3. **Then find real silicon.** Compiling is necessary, not sufficient. The
-   cross-backend goldens make the check a byte-diff, not a judgement call. This
-   is the step that needs a Strix/Phoenix laptop; no runner we have can stand in
-   (ours is `gfx1030`, a different ROCm support tier).
+   cross-backend goldens make the check a byte-diff, not a judgement call. Our
+   runner is APU-class (`gfx1036`, spoofed to `gfx1030`), so it stands in better
+   than first thought — but it is RDNA2 Raphael, not RDNA3/3.5 Phoenix or Strix,
+   so it still cannot answer for `gfx1103`/`gfx1150`/`gfx1151`.
    `scripts/amd-laptop-probe.sh` is a self-contained volunteer test: it compiles
    a ~40-line HIP program using exactly Jacquard's kernel surface (wave32 +
    `__shfl_down_sync` + `__syncthreads`, nothing else), runs it, cross-compiles
@@ -423,10 +424,83 @@ checks. **Both were real bugs in Jacquard, surfaced by ROCm, not ROCm quirks.**
    it isn't deprecated, and the runner's `vulkan`/`cubecl` labels suggest prior
    thought. CubeCL being Rust-native likely beats hand-written OpenCL C as a
    third kernel.
-4. **Fix the runner label** — it says `gfx1036`, hardware says `gfx1030`.
+4. ~~Fix the runner label.~~ **Void — the label was right all along.** It says
+   `gfx1036`, the hardware *is* `gfx1036`, and the `gfx1030` report is an
+   `HSA_OVERRIDE_GFX_VERSION=10.3.0` spoof baked into the `amd-runner` image
+   (see "Why this is a question at all"). Nothing to fix. If anything is worth
+   changing it is the *override*, not the label — though it is what makes an
+   unsupported-tier APU work at all, so leave it be.
+5. ~~Ship the cooperative-launch check in `scripts/amd-laptop-probe.sh`.~~
+   **Done** — the probe now reports `PROBE_COOP_VERDICT` alongside the wave32 /
+   shuffle result. Whether the laptop archs support cooperative launch remains
+   unknown and unknowable to us (we have measured exactly one AMD GPU, and it
+   cannot), but a volunteer's report now answers it. `sim` works either way; the
+   answer only decides fast path vs fallback.
 
 Still open: whether `sim` (not just cosim) matters on a laptop; if cosim-only is
 acceptable the problem shrinks either way.
+
+## `sim` on a device without cooperative launch (2026-07-16)
+
+Until this was fixed, `sim` had **never** run on ROCm. It died in
+`csrc/kernel_v1.hip.cpp` at the `hipLaunchCooperativeKernel` call with
+`unspecified launch failure`, on the simplest design that exists — 1 block,
+1 stage, 6 cycles. Cosim was unaffected: it is reactive, so it already drives
+one ordinary launch per scheduler edge and never needs a device-wide barrier.
+
+The device simply does not support the mechanism, and says so:
+
+```
+prop.cooperativeLaunch            = 0
+attr CooperativeLaunch            = 0
+plain,       1 block   launch=no error                    sync=no error
+cooperative, 1 block   launch=unspecified launch failure  sync=no error
+cooperative, 2 blocks  launch=unspecified launch failure  sync=no error
+```
+
+A *trivial* `grid.sync` kernel fails at 1 block while a plain launch of the same
+shape succeeds. It is not our kernel, our launch config, or occupancy.
+
+**It is also not the spoof.** The obvious suspicion — that `cooperativeLaunch=0`
+is an artefact of running gfx1030 code on gfx1036 silicon — was tested directly,
+compiling the probe with `--offload-arch=gfx1036` and running it with
+`env -u HSA_OVERRIDE_GFX_VERSION`. The result is **identical** to the spoofed
+run, field for field. The limitation is the hardware's.
+
+**Do not generalise this to "RDNA2 can't do cooperative launch."** We have
+measured one integrated 2-CU Raphael APU. A discrete gfx1030 may well report
+`1`. That is what the volunteer probe (next step 5) is for.
+
+This sharpens — but does not overturn — the stay-on-HIP conclusion. The argument
+against porting leaned partly on "cosim-only is the realistic scope, `sim` stays
+on CUDA/HIP", and on APU-class AMD we were briefly cosim-only in fact, which is
+the exact limitation that argument used to dismiss portable compute.
+
+### The fix: a non-cooperative fallback (landed)
+
+Not a port — a host loop over cycles × stages where each launch is the barrier,
+which is precisely what Metal (no device-wide barrier either) has always done
+and what cosim already did. `csrc/kernel_v1.hip.cpp` now queries
+`hipDeviceAttributeCooperativeLaunch` and picks:
+
+- **supported** → one `hipLaunchCooperativeKernel` for the whole run, unchanged;
+- **not supported** → `num_cycles × num_major_stages` ordinary launches of
+  `simulate_v1_stage`.
+
+The enabling move was generalising cosim's stage kernel into one
+`simulate_v1_stage` parameterised by `current_cycle`, matching Metal's
+long-standing shape. Cosim passes `current_cycle = 0`, so its behaviour is
+unchanged by construction; `sim`'s fallback passes the real cycle index.
+
+Verified on the runner: `sim` matches the `CpuBackend` reference
+(`--check-with-cpu`) on a 6-cycle single-stage design and on mcu_soc
+(`--level-split 10`, 13 cycles × 2 major stages — i.e. the staged-IO path with
+both loops non-trivial), and the full `gpu_test_suite.sh` — sim, X-prop, the
+timed launcher + report, and all 14 cosim goldens — passes on ROCm.
+
+Cost: a launch per stage rather than one per run. `HIP Tests (ROCm backend)` is
+the only CI job that exercises this path, since CUDA and HIP-over-CUDA both
+support cooperative launch.
 
 [20839]: https://github.com/ggml-org/llama.cpp/issues/20839
 [13565]: https://github.com/ggml-org/llama.cpp/issues/13565

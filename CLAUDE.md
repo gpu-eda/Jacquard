@@ -116,15 +116,21 @@ If mapping fails with "single endpoint cannot map", use `--level-split` to force
 # Run with CPU baseline verification (CUDA)
 cargo run -r --features cuda --bin jacquard -- sim ... --check-with-cpu
 
-# Limit simulation cycles (CUDA)
-cargo run -r --features cuda --bin jacquard -- sim ... --max-cycles 1000
+# Limit the run (CUDA). NB: the flag counts clock *edges*, not cycles —
+# one full cycle = 2 edges (posedge + negedge) in a single clock domain.
+cargo run -r --features cuda --bin jacquard -- sim ... --max-clock-edges 1000
 
 # HIP equivalent (AMD)
-cargo run -r --features hip --bin jacquard -- sim ... --max-cycles 1000
+cargo run -r --features hip --bin jacquard -- sim ... --max-clock-edges 1000
 
 # Metal equivalent
-cargo run -r --features metal --bin jacquard -- sim ... --max-cycles 1000
+cargo run -r --features metal --bin jacquard -- sim ... --max-clock-edges 1000
 ```
+
+`sim` on AMD needs no special flags, but note it runs differently there: on a
+device without cooperative-launch support the kernel cannot take a grid-wide
+barrier, so the host drives one launch per (cycle, stage) instead of one launch
+per run. Correct, and slower. See `docs/spikes/amd-laptop-backend.md`.
 
 ## Benchmarks
 

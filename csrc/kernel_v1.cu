@@ -13,6 +13,44 @@
     }                                                         \
   } while (0)
 
+// Shared by both public entry points below (timed and untimed); they differ only
+// in whether timing_constraints/event_buffer are null, which the kernel already
+// handles.
+//
+// The HIP twin of this helper additionally picks between the cooperative launch
+// and a host-driven fallback, because not every AMD device supports cooperative
+// launch (see kernel_v1.hip.cpp). There is no such branch here: cooperative
+// launch is universally available on CUDA.
+static void launch_noninteractive_scan(
+  usize num_blocks,
+  usize num_major_stages,
+  const usize *blocks_start,
+  const u32 *blocks_data,
+  u32 *sram_data,
+  u32 *sram_xmask,
+  usize num_cycles,
+  usize state_size,
+  u32 *states_noninteractive,
+  const u32 *timing_constraints,
+  EventBuffer *event_buffer,
+  i32 arrival_state_offset
+  )
+{
+  void *arg_ptrs[12] = {
+    (void *)&num_blocks, (void *)&num_major_stages,
+    (void *)&blocks_start, (void *)&blocks_data,
+    (void *)&sram_data, (void *)&sram_xmask,
+    (void *)&num_cycles, (void *)&state_size,
+    (void *)&states_noninteractive,
+    (void *)&timing_constraints, (void *)&event_buffer,
+    (void *)&arrival_state_offset
+  };
+  checkCudaErrors(cudaLaunchCooperativeKernel(
+    (void *)simulate_v1_noninteractive_simple_scan, num_blocks, 256,
+    arg_ptrs, 0, (cudaStream_t)0
+    ));
+}
+
 // Original function without timing support (backward compatible).
 extern "C"
 void simulate_v1_noninteractive_simple_scan_cuda(
@@ -28,21 +66,11 @@ void simulate_v1_noninteractive_simple_scan_cuda(
   i32 arrival_state_offset
   )
 {
-  const u32 *timing_constraints = nullptr;
-  EventBuffer *event_buffer = nullptr;
-  void *arg_ptrs[12] = {
-    (void *)&num_blocks, (void *)&num_major_stages,
-    (void *)&blocks_start, (void *)&blocks_data,
-    (void *)&sram_data, (void *)&sram_xmask,
-    (void *)&num_cycles, (void *)&state_size,
-    (void *)&states_noninteractive,
-    (void *)&timing_constraints, (void *)&event_buffer,
-    (void *)&arrival_state_offset
-  };
-  checkCudaErrors(cudaLaunchCooperativeKernel(
-    (void *)simulate_v1_noninteractive_simple_scan, num_blocks, 256,
-    arg_ptrs, 0, (cudaStream_t)0
-    ));
+  launch_noninteractive_scan(
+    num_blocks, num_major_stages, blocks_start, blocks_data,
+    sram_data, sram_xmask, num_cycles, state_size, states_noninteractive,
+    /*timing_constraints=*/nullptr, /*event_buffer=*/nullptr,
+    arrival_state_offset);
 }
 
 // Extended function with timing constraints and event buffer support.
@@ -62,19 +90,11 @@ void simulate_v1_noninteractive_timed_cuda(
   i32 arrival_state_offset
   )
 {
-  void *arg_ptrs[12] = {
-    (void *)&num_blocks, (void *)&num_major_stages,
-    (void *)&blocks_start, (void *)&blocks_data,
-    (void *)&sram_data, (void *)&sram_xmask,
-    (void *)&num_cycles, (void *)&state_size,
-    (void *)&states_noninteractive,
-    (void *)&timing_constraints, (void *)&event_buffer,
-    (void *)&arrival_state_offset
-  };
-  checkCudaErrors(cudaLaunchCooperativeKernel(
-    (void *)simulate_v1_noninteractive_simple_scan, num_blocks, 256,
-    arg_ptrs, 0, (cudaStream_t)0
-    ));
+  launch_noninteractive_scan(
+    num_blocks, num_major_stages, blocks_start, blocks_data,
+    sram_data, sram_xmask, num_cycles, state_size, states_noninteractive,
+    timing_constraints, (EventBuffer *)event_buffer,
+    arrival_state_offset);
 }
 
 // ── cosim launchers (non-cooperative; #105 Phase 2) ──────────────────────────
@@ -108,9 +128,12 @@ void cosim_simulate_stage_cuda(
   i32 arrival_state_offset
   )
 {
-  cosim_simulate_stage<<<(unsigned int)num_blocks, 256>>>(
+  // 2-slot [input | output] buffer, hence current_cycle = 0; see
+  // simulate_v1_stage in kernel_v1_impl.cuh. This extern is cosim's FFI symbol
+  // (src/sim/cosim/cuda.rs), so it keeps its name.
+  simulate_v1_stage<<<(unsigned int)num_blocks, 256>>>(
     num_blocks, blocks_start, blocks_data, sram_data, sram_xmask,
-    state_size, states, current_stage,
+    state_size, states, /*current_cycle=*/0, current_stage,
     timing_constraints, (EventBuffer *)event_buffer, arrival_state_offset);
   checkCudaErrors(cudaGetLastError());
 }
