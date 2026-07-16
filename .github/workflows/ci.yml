@@ -1034,12 +1034,14 @@ jobs:
   # CUDA, HIP-over-CUDA and the CpuBackend all passed straight over.
   #
   # Builds on the runner (unlike hip-build → hip-on-nvidia, which ships an
-  # artifact) because the ROCm toolchain is what's under test here.
+  # artifact) because the ROCm toolchain is what's under test here: the
+  # hip-build artifact is HIP_PLATFORM=nvidia and cannot execute on AMD.
   #
-  # Follow-up: this runs cosim only. `sim`'s scan kernel uses a cooperative
-  # grid.sync (hipLaunchCooperativeKernel) that has never executed on ROCm
-  # either; add a sim fixture once it's known to work, rather than wiring an
-  # untested path into a required check.
+  # Runs the same `gpu_test_suite.sh` as the CUDA jobs, so ROCm and CUDA stay in
+  # lockstep by construction and the only difference is which GPU executes. That
+  # suite covers the paths cosim never reaches — plain `sim`, `--xprop`, and the
+  # `--timed`/`--timing-report` launcher — including `sim`'s cooperative
+  # grid.sync (hipLaunchCooperativeKernel), which had never executed on ROCm.
   hip-on-rocm:
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
@@ -1069,13 +1071,30 @@ jobs:
       # tail's, so a failed build reports success.
       - name: Build jacquard (HIP, real ROCm)
         run: cargo build --release --features hip --bin jacquard
-      # The cross-backend equivalence check: CpuBackend == Metal == CUDA == HIP,
-      # byte-identical VCDs (diff -q against the committed goldens). Includes
-      # multi_mem_split (--level-split 10), the fixture that caught #203.
-      - name: Run ROCm cosim — logic + UART/bus + QSPI goldens
+      # The full functional suite the CUDA/Blackwell jobs run: sim, X-prop, the
+      # timed launcher + report, then the cosim goldens (Stage B logic/UART/bus,
+      # Stage C flash, QSPI). The cosim half is the cross-backend equivalence
+      # check — CpuBackend == Metal == CUDA == HIP, byte-identical VCDs via
+      # `diff -q` — and includes multi_mem_split (--level-split 10), the fixture
+      # that caught #203.
+      - name: Run the shared GPU test suite (sim + xprop + timed + cosim)
         run: |
-          JACQUARD_BIN=target/release/jacquard COSIM_SCOPE=all \
-            bash scripts/ci/cosim_cpu_check.sh
+          JACQUARD_BIN=target/release/jacquard \
+            bash scripts/ci/gpu_test_suite.sh rocm
+      - name: Upload ROCm artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: rocm-outputs
+          path: |
+            tests/timing_test/ci_rocm_output.vcd
+            tests/timing_test/ci_rocm_xprop_output.vcd
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_rocm.vcd
+            tests/timing_test/inv_chain_pnr/timing_report_rocm.json
+            rocm_timing.txt
+            rocm_xprop.txt
+            rocm_timed.txt
+          if-no-files-found: ignore
 
   # Check formatting and clippy
   # Note: Currently set to warn-only due to existing issues in codebase
