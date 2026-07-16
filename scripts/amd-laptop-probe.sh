@@ -9,6 +9,10 @@
 #   * warpSize == 32          — Jacquard requires wave32 (RDNA); wave64 is rejected
 #   * __shfl_down_sync        — the only architecture-specific intrinsic it uses
 #   * __syncthreads           — universal
+#   * cooperative launch      — a device-wide barrier; `jacquard sim` uses it as
+#                               a fast path, `cosim` never needs it. Reported
+#                               separately: "unsupported" is a fine answer and
+#                               costs only speed, not correctness.
 #
 # That's the whole surface. Jacquard simulates AND gates: no rocBLAS, no
 # hipBLAS, no matrix/WMMA kernels. Most AMD-laptop grief reported by projects
@@ -62,7 +66,10 @@ trap 'rm -rf "$TMP"' EXIT
 
 cat > "$TMP/probe.hip" <<'EOF'
 #include <hip/hip_runtime.h>
+#include <hip/hip_cooperative_groups.h>
 #include <cstdio>
+
+namespace cg = cooperative_groups;
 
 // Mirrors Jacquard's kernel surface: a __shfl_down_sync reduction across a
 // 32-lane wave, plus __syncthreads. Nothing else is architecture-specific.
@@ -78,6 +85,57 @@ __global__ void wave_reduce(int *out) {
   scratch[lane] = v;
   __syncthreads();
   if (lane == 0) *out = scratch[0];
+}
+
+// The second question, and the one we most need an answer to.
+//
+// Jacquard's `sim` takes a device-wide barrier *inside* the kernel
+// (cooperative_groups::this_grid().sync(), launched via
+// hipLaunchCooperativeKernel). `cosim` does not — it is reactive, so the host
+// already drives one ordinary launch at a time.
+//
+// Not every AMD device supports this. The only AMD GPU we own is an integrated
+// Raphael APU, and it reports 0 here and fails the launch even at 1 block — so
+// `sim` needs a non-cooperative fallback there. Whether that is true of *laptop*
+// silicon (gfx1103/gfx1150/gfx1151) we have no way to find out: this is the
+// question your report answers for us.
+//
+// Same shape as the real thing: 256 threads, a grid-wide barrier in a loop.
+__global__ void coop_kernel(int *out) {
+  cg::grid_group grid = cg::this_grid();
+  int t = blockIdx.x * blockDim.x + threadIdx.x;
+  for (int i = 0; i < 3; ++i) {
+    out[t] = t + i;
+    grid.sync();          // <-- the device-wide barrier under test
+  }
+}
+
+// Informational only — never changes the main verdict. A GPU that fails this
+// still runs cosim perfectly well.
+static void probe_cooperative_launch(const hipDeviceProp_t &prop) {
+  int attr = -1;
+  if (hipDeviceGetAttribute(&attr, hipDeviceAttributeCooperativeLaunch, 0)
+      != hipSuccess) {
+    attr = -1;
+  }
+  printf("PROBE_COOP_PROP=%d\n", (int)prop.cooperativeLaunch);
+  printf("PROBE_COOP_ATTR=%d\n", attr);
+
+  int *d = nullptr;
+  if (hipMalloc(&d, 256 * sizeof(int)) != hipSuccess) {
+    printf("PROBE_COOP_VERDICT=HIPMALLOC_FAILED\n");
+    return;
+  }
+  void *args[] = { (void *)&d };
+  hipError_t err = hipLaunchCooperativeKernel(
+    (void *)coop_kernel, dim3(1), dim3(256), args, 0, (hipStream_t)0);
+  hipError_t sync_err = hipDeviceSynchronize();
+  hipFree(d);
+
+  printf("PROBE_COOP_LAUNCH=%s\n", hipGetErrorString(err));
+  printf("PROBE_COOP_SYNC=%s\n", hipGetErrorString(sync_err));
+  printf("PROBE_COOP_VERDICT=%s\n",
+         (err == hipSuccess && sync_err == hipSuccess) ? "OK" : "UNSUPPORTED");
 }
 
 int main() {
@@ -110,7 +168,13 @@ int main() {
     return 5;
   }
   hipMemcpy(&h, d, sizeof(int), hipMemcpyDeviceToHost);
+  hipFree(d);
   printf("PROBE_SHFL_RESULT=%d (expect 528)\n", h);
+
+  // Separate axis from the verdict below: this decides whether `sim` needs the
+  // non-cooperative fallback on this GPU, not whether Jacquard runs on it.
+  probe_cooperative_launch(prop);
+
   printf("PROBE_VERDICT=%s\n", (h == 528) ? "OK" : "WRONG_RESULT");
   return (h == 528) ? 0 : 6;
 }
@@ -186,5 +250,20 @@ case "${RUN_OUT}" in
     ;;
   *)
     echo "Verdict: inconclusive — the report above still tells us what we need."
+    ;;
+esac
+
+# Reported separately because it is a different question: not "does Jacquard run
+# here" but "does the fast path for `sim` run here". Either answer is useful, and
+# we cannot get it ourselves — the only AMD GPU we own says UNSUPPORTED.
+case "${RUN_OUT}" in
+  *PROBE_COOP_VERDICT=OK*)
+    echo "Cooperative launch: supported — 'jacquard sim' can use its fast path here."
+    echo "This is genuinely new information to us. Thank you!"
+    ;;
+  *PROBE_COOP_VERDICT=UNSUPPORTED*)
+    echo "Cooperative launch: unsupported — 'jacquard cosim' is unaffected, and"
+    echo "'jacquard sim' falls back to one GPU launch per cycle (slower, correct)."
+    echo "Not a problem, and exactly the data point we're missing."
     ;;
 esac
