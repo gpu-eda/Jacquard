@@ -112,8 +112,16 @@ pub fn synthesize(design: &Path, opts: &SynthOptions) -> Result<PathBuf> {
         std::fs::write(wp.join(&base), &design_bytes)?;
         std::fs::write(wp.join("synth.ys"), &script)?;
 
-        run_yosys_wasm(&wasm_path, &share_dir, wp, &["yosys", "-s", "synth.ys"])
-            .context("running YoWASP Yosys synthesis")?;
+        // `-l`: Yosys tees its log to the file as well as stdout, so a crash can
+        // be reported with the pass that died (see `describe_wasm_trap`). Stdout
+        // is still inherited, so the user's view is unchanged.
+        run_yosys_wasm(
+            &wasm_path,
+            &share_dir,
+            wp,
+            &["yosys", "-l", "synth.log", "-s", "synth.ys"],
+        )
+        .context("running YoWASP Yosys synthesis")?;
 
         let produced = wp.join("gatelevel.gv");
         if !produced.exists() {
@@ -534,9 +542,53 @@ fn run_yosys_wasm(
         Err(e) => match e.downcast_ref::<I32Exit>() {
             Some(exit) if exit.0 == 0 => Ok(()),
             Some(exit) => bail!("Yosys exited with code {}", exit.0),
-            None => Err(e).context("Yosys WASM trap"),
+            // A trap is the engine dying — abort(), a failed assert, or memory
+            // unsafety — not an ordinary error. Yosys reports those itself and
+            // exits non-zero, which lands in the arm above. See gpu-eda/Jacquard#211.
+            None => bail!(describe_wasm_trap(&e, work_dir)),
         },
     }
+}
+
+/// Turn a wasm trap into something a person can act on.
+///
+/// `wasmtime`'s Display for a trap appends the whole wasm backtrace: dozens of
+/// `<wasm function 32210>` frames that are meaningless without the module's
+/// symbols, and which bury the one fact that matters — synthesis crashed, and
+/// where. Keep the trap kind, drop the frames, and name the last pass Yosys
+/// announced (from the `-l` log) so the report points at a culprit.
+fn describe_wasm_trap(e: &anyhow::Error, work_dir: &Path) -> String {
+    // Trap's Display already reads "wasm trap: …", so don't prefix it again.
+    let kind = e
+        .downcast_ref::<wasmtime::Trap>()
+        .map(|t| t.to_string())
+        .unwrap_or_else(|| "wasm trap".to_string());
+
+    let last_pass = std::fs::read_to_string(work_dir.join("synth.log"))
+        .ok()
+        .and_then(|log| {
+            log.lines()
+                .filter(|l| l.contains(". Executing "))
+                .next_back()
+                .map(|l| l.trim().to_string())
+        });
+
+    let mut msg = String::from("the synthesis engine crashed (");
+    msg.push_str(&kind);
+    msg.push(')');
+    match last_pass {
+        Some(pass) => {
+            msg.push_str("\n  it died in: ");
+            msg.push_str(&pass);
+        }
+        None => msg.push_str("\n  (no Yosys log was captured; see the output above)"),
+    }
+    msg.push_str(
+        "\n  A crash is an engine bug rather than a problem with your RTL, though \
+         unusual input can trigger one.\n  Please report it, with the design, at \
+         https://github.com/gpu-eda/Jacquard/issues",
+    );
+    msg
 }
 
 #[cfg(test)]
