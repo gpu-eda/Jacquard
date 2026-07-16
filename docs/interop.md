@@ -43,12 +43,19 @@ These are directions under consideration, not commitments or dated milestones:
 - **SVA (SystemVerilog Assertions)** — *planned.* Jacquard already lowers a class
   of immediate assertions through synthesis (`GEM_ASSERT` cells; see the
   assertion handling in `aigpdk.rs`). Broader SVA support is the next step here.
-- **Running UVM test suites** — *being explored.* The open question is which
-  parts of the UVM runtime can be driven against a gate-level GPU engine versus
-  what has to be reworked.
+- **Running UVM test suites** — *design settled, unbuilt.* The shape is
+  [ADR 0022](adr/0022-transaction-based-stimulus.md): split the testbench the way
+  emulators have since SCE-MI. Sequences, randomisation and checking stay on the
+  host; the driver's *timed* half is rewritten as a synthesizable transactor and
+  compiled into the AIG beside the design (possible since the
+  [RTL on-ramp](adr/0021-behavioral-rtl-support.md) shipped), so it wiggles pins
+  at GPU speed. Existing UVM drivers don't port as-is, and that isn't a gap we
+  can close: they drive every cycle, and cosim runs 1024 edges per dispatch with
+  the CPU absent, which is where the speed comes from.
 - **cocotb** — *needs more work.* A naive bridge would marshal Python ↔ GPU every
-  cycle, which would dominate runtime and erase the GPU speedup. Making cocotb
-  *performant* against Jacquard needs more design thinking, not just a shim.
+  cycle, which would dominate runtime and erase the GPU speedup. Same cliff as
+  above, same fix: exchange transactions, not cycles. Making cocotb *performant*
+  against Jacquard needs more design thinking, not just a shim.
 
 If any of these is blocking for you, the record-and-replay path above is the
 recommended interim approach.
