@@ -77,6 +77,43 @@ to the pipe's buffering**. That is the same statement as "no per-tick CPU
 interaction within a batch", arrived at independently by people with the same
 constraint. Jacquard being emulator-inspired (GEM) is not a coincidence here.
 
+### No open-source testbench will drop into this
+
+Worth stating plainly, because it sets expectations: **no open-source UVM
+testbench uses SCE-MI pipes.** That isn't an oversight to be fixed, it's
+structural — SCE-MI exists to talk to Palladium, Veloce and ZeBu, and
+open-source UVM targets simulators, which have no boundary to amortise. The
+public material is DVCon papers and the spec, not repositories.
+
+The consequence for us: there is no ready-made UVM testbench to point at
+Jacquard, and adopting this ADR will not produce one. **The transactor is ours
+to write**, per protocol, and the untimed side has to be adapted to speak
+transactions. Anyone hoping to lift an existing testbench off GitHub should read
+that as a no.
+
+### The open-source world solved it anyway, under another name
+
+[FireSim](https://docs.fires.im/) / **Golden Gate (MIDAS II)** is the same
+architecture with different vocabulary, and unlike SCE-MI it is readable code
+rather than a PDF:
+
+| SCE-MI | FireSim | here |
+|---|---|---|
+| transactor / BFM | **bridge** (target-side RTL + host-side software) | synthesizable BFM in the AIG |
+| pipe | **token channel** | the CPU↔GPU rings |
+| untimed / timed split | host-decoupling | CPU model / GPU batch |
+
+Its central idea is worth more than the vocabulary: Golden Gate decomposes the
+target into a dataflow graph of **latency-insensitive** models, so the target's
+notion of time is decoupled from the host's and either side may run ahead or
+stall without changing the result. That is the general form of what
+`BATCH_SIZE` does for us by hand, and it is the reason FireSim can be both
+FPGA-accelerated and deterministic.
+
+We cannot lift the implementation — FireSim is Chisel/FIRRTL onto FPGAs, we are
+Verilog/AIG onto GPUs — but it is the closest prior art with source, and the
+place to look before inventing channel semantics.
+
 ### Two things recently made this reachable
 
 1. **[ADR 0021](0021-behavioral-rtl-support.md) shipped** (v0.3.0). A transactor
@@ -154,6 +191,11 @@ retired per batch**, not features supported.
 - SCE-MI (Standard Co-Emulation Modeling Interface), Accellera —
   [standard downloads](https://www.accellera.org/downloads/standards/sce-mi).
   v2.4 (Nov 2016) is current at the time of writing.
+- FireSim / Golden Gate (MIDAS II), UC Berkeley — the same split in open source,
+  with code: [target-to-host bridges](https://docs.fires.im/en/latest/Golden-Gate/Bridges.html)
+  (transactors), [target abstraction & host decoupling](https://docs.fires.im/en/latest/Golden-Gate/LI-BDN.html)
+  (latency-insensitive models and token channels). Read before designing the
+  channel semantics.
 - [Testbench Interop](../interop.md) — what Jacquard drives today, and the
   record-and-replay fallback.
 - [Cosim Perf Report](../cosim-perf-report.md) — where the per-edge time goes,
