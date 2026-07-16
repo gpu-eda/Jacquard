@@ -283,9 +283,7 @@ fn build_setup_hold<'a>(
 
     let setup: Vec<_> = checks
         .iter()
-        .map(|c| {
-            ir::TimingValue::new(c.corner_index, c.setup_min, c.setup_typ, c.setup_max)
-        })
+        .map(|c| ir::TimingValue::new(c.corner_index, c.setup_min, c.setup_typ, c.setup_max))
         .collect();
     let hold: Vec<_> = checks
         .iter()
