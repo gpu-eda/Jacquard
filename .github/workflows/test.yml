@@ -337,17 +337,14 @@ jobs:
       # detect RTL, synthesize via embedded YoWASP Yosys, and produce waves
       # bit-identical to the gate-level fixture run. Only CI coverage of synth on
       # real GPU (the prebuilt binary was built --features metal,synth).
-      - name: Set up uv (YoWASP Yosys on-ramp)
-        uses: astral-sh/setup-uv@v7
-      - name: Resolve pinned yosys.wasm
-        run: |
-          set -euo pipefail
-          # PIN the version — keep in sync with uv.lock's yowasp-yosys.
-          WASM=$(uv run --with 'yowasp-yosys==0.64.0.0.post1131' python3 -c \
-            "import yowasp_yosys, pathlib; print(next(pathlib.Path(yowasp_yosys.__file__).parent.rglob('*.wasm')))")
-          test -f "$WASM"
-          echo "JACQUARD_YOSYS_WASM=$WASM" >> "$GITHUB_ENV"
-          echo "resolved yosys.wasm: $WASM"
+      #
+      # No JACQUARD_YOSYS_WASM override: the on-ramp now fetches the pinned
+      # provenance fork wasm from its gpu-eda/yowasp-yosys release by default
+      # (ADR 0021 Phase 2 / A2). That fork is REQUIRED — the abc_new origins flow
+      # in src/synth.rs breaks on flops (dff_test.v has one) on the stock wasm.
+      # It's a develop-0.64-era build, so our wasmtime engine loads it (the
+      # exception-handling issue that forced the old 0.64 pin doesn't apply). This
+      # step therefore also exercises the real fetch-from-release path on GPU.
       - name: Behavioral RTL on-ramp smoke (ADR 0021)
         run: |
           set -euo pipefail
@@ -699,6 +696,73 @@ jobs:
             hip_timed.txt
             perf_metrics/
 
+  # Real ROCm on the self-hosted AMD runner. Unlike every other GPU job here it
+  # does NOT consume a build.yml artifact: build.yml's `hip` config is
+  # HIP_PLATFORM=nvidia (HIP-over-CUDA, built on a cheap ubuntu runner) and
+  # cannot execute on an AMD GPU. Real ROCm needs `--features hip` compiled
+  # against ROCm, so this job builds in place on the runner — the one config
+  # where build-host and test-host are the same scarce self-hosted box and an
+  # artifact round-trip would buy nothing. Hence no "Gate on the build" and no
+  # download-jacquard: it depends only on `inputs.code`.
+  hip-on-rocm:
+    if: inputs.code == 'true'
+    name: HIP Tests (ROCm backend)
+    # A Raphael APU iGPU: really gfx1036, reported as gfx1030 because the
+    # `amd-runner` image sets HSA_OVERRIDE_GFX_VERSION=10.3.0, which every job
+    # here inherits. ROCm 7.2.4, wave32. See .github/actionlint.yaml.
+    #
+    # The device has no cooperative launch, so `sim` takes the non-cooperative
+    # fallback here (csrc/kernel_v1.hip.cpp). This job is the only standing guard
+    # on that fallback path — CUDA and HIP-over-CUDA both support cooperative
+    # launch, so no other backend exercises it.
+    runs-on: [self-hosted, amd, rocm]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Init required submodules
+        run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+      # The image ships Rust at /opt/cargo, but it isn't writable by the runner
+      # user — cargo then dies with "failed to create directory
+      # /opt/cargo/registry/cache: Permission denied". Point CARGO_HOME at the
+      # workspace instead.
+      - name: Toolchain
+        run: |
+          echo "PATH=/opt/rocm/bin:$PATH" >> "$GITHUB_ENV"
+          echo "CARGO_HOME=${RUNNER_TEMP}/cargo" >> "$GITHUB_ENV"
+          /opt/rocm/bin/hipcc --version | head -3
+          /opt/rocm/bin/hipconfig --platform
+          cargo --version
+      # No pipe here: `cargo ... | tail` masks cargo's exit status behind
+      # tail's, so a failed build reports success.
+      - name: Build jacquard (HIP, real ROCm)
+        run: cargo build --release --features hip --bin jacquard
+      # The full functional suite: sim, X-prop, the timed launcher + report, then
+      # the cosim goldens (Stage B logic/UART/bus, Stage C flash, QSPI). The
+      # cosim half is the cross-backend equivalence check — CpuBackend == Metal
+      # == CUDA == HIP, byte-identical VCDs via `diff -q` — and includes
+      # multi_mem_split (--level-split 10), the fixture that caught #203. The
+      # `sim` half is what the non-cooperative fallback made runnable here.
+      - name: Run the shared GPU test suite (sim + xprop + timed + cosim)
+        run: |
+          JACQUARD_BIN=target/release/jacquard \
+            bash scripts/ci/gpu_test_suite.sh rocm
+      - name: Upload ROCm artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: rocm-outputs
+          path: |
+            tests/timing_test/ci_rocm_output.vcd
+            tests/timing_test/ci_rocm_xprop_output.vcd
+            tests/timing_test/inv_chain_pnr/jacquard_timed_output_rocm.vcd
+            tests/timing_test/inv_chain_pnr/timing_report_rocm.json
+            rocm_timing.txt
+            rocm_xprop.txt
+            rocm_timed.txt
+          if-no-files-found: ignore
+
   # ── MCU SoC + JTAG downstream (Metal artifact consumers) ────────────────────
 
   prepare-mcu-soc-jtir:
@@ -842,11 +906,30 @@ jobs:
         timeout-minutes: 30
         run: |
           set -o pipefail
+          # --cosim-perf-json emits a per-edge timing breakdown incl.
+          # ground-truth GPU-execution time from Metal device timestamps
+          # (GPUStartTime/GPUEndTime). Report-only — surfaced in the step
+          # summary below; no perf gate. See docs/cosim-perf-report.md.
           target/release/jacquard cosim \
             tests/mcu_soc/data/6_final.v \
             --config tests/mcu_soc/sim_config.json --top-module top \
             --max-clock-edges 500000 \
+            --cosim-perf-json cosim_perf.json \
             2>&1 | tee cosim_output.txt
+
+      - name: Report cosim timing (Metal, mcu_soc)
+        if: always()
+        run: |
+          # Report-only: log the device-timestamp timing breakdown to the job
+          # summary. Never fails the job (no regression gate — see
+          # docs/cosim-perf-report.md for the rationale and follow-up gating).
+          {
+            echo "## Cosim perf — mcu_soc (Metal, 500K edges)"
+            echo '```json'
+            cat cosim_perf.json 2>/dev/null || echo '{ "error": "no perf report produced" }'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Verify UART boot output
         run: |
           if grep -q "nyaa" cosim_output.txt; then

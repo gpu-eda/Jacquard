@@ -51,12 +51,21 @@ jobs:
         id: filter
         with:
           # `every`: a changed file counts toward `code` only if it matches ALL
-          # patterns — i.e. NOT under docs/ AND NOT a markdown file.
+          # patterns — i.e. it is not documentation by any of the measures below.
+          #
+          # This is a denylist of doc paths, not an allowlist of code paths, and
+          # deliberately so: a doc path missing here only wastes CI, whereas a
+          # code path missing from an allowlist would *silently skip the tests*.
+          # mdBook's theme/ and book.toml are inputs to the `docs` job alone, so
+          # a change to either must not drag in the GPU builds. Add to this list
+          # when documentation grows a new home outside docs/.
           predicate-quantifier: 'every'
           filters: |
             code:
               - '!docs/**'
               - '!**/*.md'
+              - '!theme/**'
+              - '!book.toml'
 
   # Compile every target config on a cheap standard runner and upload one
   # artifact per config (jacquard-{cpu,cuda,hip,metal}).
@@ -88,12 +97,12 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      - name: Init submodules
-        uses: ./.github/actions/init-submodules
-        with:
-          submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+      - name: Init required submodules
+        run: git submodule update --init vendor/eda-infra-rs vendor/sky130_fd_sc_hd
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
       - name: Cache cargo
         uses: actions/cache@v5
         with:
@@ -106,24 +115,52 @@ jobs:
           key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-docs-
+
       - name: Build cargo docs
         run: cargo doc --no-deps --lib
+
       - name: Install mdbook
         run: |
           mkdir -p ~/.cargo/bin
           curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.44/mdbook-v0.4.44-x86_64-unknown-linux-gnu.tar.gz \
             | tar -xz -C ~/.cargo/bin
+
       - name: Build mdbook
         run: mdbook build
+
       - name: Check for broken / 404-ing doc links
-        run: python3 scripts/check_doc_links.py
+        # Validates links against the *rendered* mdBook page set (SUMMARY.md),
+        # catching links to pages that exist on disk but aren't rendered (which
+        # 404 on the published site). See docs/scripts/check_doc_links.py.
+        run: python3 docs/scripts/check_doc_links.py
+
       - name: Prepare Pages site
         run: |
           cp -r target/doc book/api
           touch book/.nojekyll
+
       - name: Deploy to gh-pages branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./book
+          # 'latest' docs stay at the site root (existing URLs unaffected).
+          # keep_files preserves the per-release /vX.Y.Z/ subdirs that
+          # release.yml publishes — a plain deploy would wipe them.
+          keep_files: true
+          # docs/scripts/ is documentation *tooling*, so it lives under docs/ to
+          # stay out of the code path-filter — but mdbook copies every non-md
+          # file in src/ into the book, so drop it at the deploy rather than
+          # serving a gh-pages push script on the docs site. ('.github' is
+          # peaceiris's own default, restated because setting this replaces it.)
+          exclude_assets: '.github,scripts'
+
+      # Keeps the version picker's list in step with what's published. Also here
+      # (not only in release.yml) so the list is right after any merge, and so
+      # it bootstraps without waiting for the next release.
+      - name: Refresh the docs version list
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash docs/scripts/refresh_doc_versions.sh
