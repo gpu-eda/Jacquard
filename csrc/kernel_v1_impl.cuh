@@ -706,18 +706,33 @@ __global__ void cosim_state_prep(
   }
 }
 
-// cosim_simulate_stage: evaluate ONE major stage over the 2-slot state. Reads
-// the input slot (states[0..state_size]), writes the output slot
-// (states[state_size..2*state_size]). The host loops stages 0..num_major_stages,
-// each launch acting as the cross-stage barrier. Grid = num_blocks × 256.
-__global__ void cosim_simulate_stage(
+// simulate_v1_stage: evaluate ONE major stage of ONE cycle. Reads the state
+// slot for `current_cycle`, writes the slot for `current_cycle + 1`. The host
+// loops stages (and, for `sim`, cycles), each launch acting as the barrier that
+// `simulate_v1_noninteractive_simple_scan` gets from its cooperative grid.sync.
+// Grid = num_blocks × 256.
+//
+// Serves both callers, hence not `cosim_*`:
+//
+//   * cosim passes current_cycle = 0 over a 2-slot [input | output] buffer: it
+//     is reactive and advances one scheduler edge at a time, so the slot it
+//     writes is always slot 1.
+//   * `sim`'s non-cooperative fallback passes the real cycle index over the
+//     full (num_cycles + 1) × state_size buffer, which is the same addressing
+//     the scan kernel does internally.
+//
+// Mirrors Metal's `simulate_v1_stage` (csrc/kernel_v1.metal), parameterised the
+// same way — Metal has no device-wide barrier either.
+__global__ void simulate_v1_stage(
   usize num_blocks,
   const usize *__restrict__ blocks_start,
   const u32 *__restrict__ blocks_data,
   u32 *__restrict__ sram_data,
   u32 *__restrict__ sram_xmask,
   usize state_size,
-  u32 *__restrict__ states,        // 2 slots: [input | output]
+  u32 *__restrict__ states,        // cosim: 2 slots [input | output]
+                                   // sim:   (num_cycles + 1) slots
+  usize current_cycle,
   usize current_stage,
   const u32 *__restrict__ timing_constraints,  // nullptr if timing off
   EventBuffer *__restrict__ event_buffer,      // nullptr if timing off
@@ -749,8 +764,8 @@ __global__ void cosim_simulate_stage(
   simulate_block_v1(
     blocks_data + script_start,
     script_size,
-    states,                 // input slot
-    states + state_size,    // output slot
+    states + current_cycle * state_size,        // input slot
+    states + (current_cycle + 1) * state_size,  // output slot
     sram_data,
     sram_xmask,
     shared_metadata, shared_writeouts, shared_state,
@@ -760,7 +775,8 @@ __global__ void cosim_simulate_stage(
     constraints_data,
     clock_period_ps,
     event_buffer,
-    0,                      // cycle_i: cosim advances one transition at a time
+    (u32)current_cycle,     // 0 for cosim (one transition at a time), the real
+                            // cycle index for `sim`'s fallback
     arrival_state_offset
     );
 }
