@@ -119,9 +119,16 @@ __device__ void simulate_block_v1(
       if(mask) {
         const u32 *real_input_array;
         const u32 *real_xmask_array;
+        // Bit 31 of idx flags a read of this cycle's inter-stage intermediates
+        // (output slot) rather than previous-cycle state; flatten.rs sets it,
+        // cpu_reference.rs decodes it the same way. Clear it from the index —
+        // do NOT bias the base pointer by -2^31 instead: that forms an
+        // out-of-bounds pointer (UB) and got the sign wrong, putting the access
+        // 2^32 words out of bounds. nvcc narrowed it away; ROCm faulted (#203).
         if(idx >> 31) {
-          real_input_array = output_state - (1 << 31);
-          real_xmask_array = output_state + xmask_state_offset - (1 << 31);
+          real_input_array = output_state;
+          real_xmask_array = output_state + xmask_state_offset;
+          idx ^= (1u << 31);
         } else {
           real_input_array = input_state;
           real_xmask_array = input_state + xmask_state_offset;
@@ -147,9 +154,11 @@ __device__ void simulate_block_v1(
       if(mask) {
         const u32 *real_input_array;
         const u32 *real_xmask_array;
+        // Staged-IO flag decode; see the twin site above.
         if(idx >> 31) {
-          real_input_array = output_state - (1 << 31);
-          real_xmask_array = output_state + xmask_state_offset - (1 << 31);
+          real_input_array = output_state;
+          real_xmask_array = output_state + xmask_state_offset;
+          idx ^= (1u << 31);
         } else {
           real_input_array = input_state;
           real_xmask_array = input_state + xmask_state_offset;
