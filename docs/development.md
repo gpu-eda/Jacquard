@@ -41,8 +41,9 @@ cargo bench --bench xprop
 For the GPU path, two flags matter more than the test suite:
 
 ```sh
-jacquard sim ... --check-with-cpu   # run a CPU baseline and compare
-jacquard sim ... --max-cycles 1000  # bound a long run while bisecting
+jacquard sim ... --check-with-cpu        # run a CPU baseline and compare
+jacquard sim ... --max-clock-edges 1000  # bound a long run while bisecting
+                                         # (edges, not cycles: 2 per cycle)
 ```
 
 `--check-with-cpu` is the one to reach for when a kernel change produces

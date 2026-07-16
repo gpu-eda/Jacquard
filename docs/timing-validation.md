@@ -105,7 +105,7 @@ cargo run -r --features metal --bin jacquard -- sim \
     --sdf tests/mcu_soc/data/6_final_stripped.sdf \
     --sdf-corner typ \
     --timed \
-    --max-cycles 10000
+    --max-clock-edges 10000
 
 # 3. Generate CVC reference
 cvc64 +typdelays tests/mcu_soc/cvc/tb_cvc.v \
