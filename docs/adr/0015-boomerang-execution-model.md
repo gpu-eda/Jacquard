@@ -187,6 +187,18 @@ The script encodes:
    32 bits across rounds).  An index high-bit flag distinguishes
    previous-cycle state from current-cycle inter-stage intermediates.
 
+   That flag is a cross-backend wire format: one encoder
+   (`src/flatten.rs` sets bit 31 of the word index) and four
+   independent hand-written decoders (`src/flatten.rs`,
+   `src/sim/cpu_reference.rs`, `csrc/kernel_v1_impl.cuh` for CUDA and
+   HIP, and `csrc/kernel_v1.metal`).  Every decoder must clear the flag
+   from the **index**.  Do not bias the base pointer by -2^31 to cancel
+   the flag out of the subscript instead: that forms an out-of-bounds
+   pointer whose behaviour is a compiler's to define, and the sign error
+   it invites put every staged read 2^32 words past the buffer — visible
+   only on ROCm, which is the one backend that computes the address
+   exactly rather than narrowing it to 32 bits (#203).
+
 3. **Boomerang sections** (per stage, `NUM_THREADS_V1 × 20` u32):
    - 16 u32 per thread: shuffle permutation (16-bit index pairs
      selecting source bits from shared memory)
