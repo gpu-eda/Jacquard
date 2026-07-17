@@ -5,7 +5,7 @@ description: >
   — the same convention build.yml uploads under.
 inputs:
   backend:
-    description: Backend config to download (cpu | cuda | hip | metal).
+    description: Backend config to download (cpu | cuda | hip-rocm | metal).
     required: true
 runs:
   using: composite
