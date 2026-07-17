@@ -75,6 +75,11 @@ jobs:
         run: |
           apt-get update -qq
           apt-get install -y -qq git curl build-essential
+          # The container runs as root but the checked-out workspace is owned by
+          # the runner UID, so git refuses it as "dubious ownership". checkout
+          # marks its own tree safe, but the init-submodules step's raw git
+          # commands need this too. Persists in /root/.gitconfig for later steps.
+          git config --global --add safe.directory '*'
 
       - uses: actions/checkout@v6
         with:
