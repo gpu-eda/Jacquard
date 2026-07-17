@@ -592,10 +592,12 @@ jobs:
           # ground-truth GPU-execution time from Metal device timestamps
           # (GPUStartTime/GPUEndTime). Report-only — surfaced in the step
           # summary below; no perf gate. See docs/cosim-perf-report.md.
+          # The boot marker "nyaa" prints at ~edge 201k (measured); 250k caps it
+          # with headroom without running to completion the way 500k did.
           target/release/jacquard cosim \
             tests/mcu_soc/data/6_final.v \
             --config tests/mcu_soc/sim_config.json --top-module top \
-            --max-clock-edges 500000 \
+            --max-clock-edges 250000 \
             --cosim-perf-json cosim_perf.json \
             2>&1 | tee cosim_output.txt
 
@@ -606,7 +608,7 @@ jobs:
           # summary. Never fails the job (no regression gate — see
           # docs/cosim-perf-report.md for the rationale and follow-up gating).
           {
-            echo "## Cosim perf — mcu_soc (Metal, 500K edges)"
+            echo "## Cosim perf — mcu_soc (Metal, 250K edges)"
             echo '```json'
             cat cosim_perf.json 2>/dev/null || echo '{ "error": "no perf report produced" }'
             echo '```'
