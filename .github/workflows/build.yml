@@ -3,11 +3,19 @@ name: Build
 # Reusable build workflow: compile the jacquard binary for each target
 # configuration on a cheap standard runner and upload it as an artifact for the
 # test workflow (and, later, for release publishing). One artifact per config:
-#   jacquard-cpu   (no GPU backend)      — ubuntu, for the CPU-only test config
-#   jacquard-cuda  (--features cuda)     — ubuntu, all-major SASS
-#   jacquard-hip   (--features hip)      — ubuntu, HIP-on-NVIDIA today
-#   jacquard-metal (--features metal)    — macos, Metal
+#   jacquard-cpu      (no GPU backend)   — ubuntu, for the CPU-only test config
+#   jacquard-cuda     (--features cuda)  — ubuntu, all-major SASS
+#   jacquard-hip-rocm (--features hip)   — ubuntu, inside a ROCm container
+#   jacquard-metal    (--features metal) — macos, Metal
 # `synth` (the RTL on-ramp) is uniform on every artifact.
+#
+# Every config builds on a standard runner — no self-hosted GPU box builds
+# anything. The AMD/ROCm binary is the one that can't be produced by a plain
+# `apt` toolchain, so its build runs inside the official `rocm/dev-ubuntu-24.04`
+# container (pinned to 7.2.4, matching the self-hosted AMD runner's runtime).
+# hipcc cross-compiles the gfx code objects with no GPU present; the binary is
+# then downloaded and run on the real AMD hardware by the `amd` test job. This
+# is HIP_PLATFORM=amd (real ROCm), NOT the old HIP-over-CUDA path.
 #
 # The cuda + hip artifacts are separate today; ulib already supports both
 # backends in one binary (Device is an additive runtime enum), so they can later
@@ -33,6 +41,9 @@ jobs:
   build:
     name: Build ${{ matrix.config }}
     runs-on: ${{ matrix.runner }}
+    # Empty for host jobs; the ROCm image only for the hip-rocm config. GitHub
+    # treats an empty `container:` as "run on the host".
+    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
@@ -45,8 +56,10 @@ jobs:
             runner: ubuntu-22.04
             features: cuda,synth
             submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd
-          - config: hip
-            runner: ubuntu-22.04
+          - config: hip-rocm
+            runner: ubuntu-latest
+            # Real ROCm toolchain, version-matched to the AMD runner (7.2.4).
+            container: rocm/dev-ubuntu-24.04:7.2.4
             features: hip,synth
             submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd
           - config: metal
@@ -54,6 +67,15 @@ jobs:
             features: metal,synth
             submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd vendor/gf180mcu_fd_sc_mcu7t5v0 vendor/gf180mcu_fd_sc_mcu9t5v0
     steps:
+      # The ROCm container is a bare devel image: it has hipcc but not the tools
+      # actions/checkout, rust-toolchain, and cc need. Install them before the
+      # first action runs. No-op (skipped) on the host-based configs.
+      - name: Container prerequisites (ROCm image)
+        if: matrix.container != ''
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq git curl build-essential
+
       - uses: actions/checkout@v6
         with:
           submodules: false
@@ -69,10 +91,6 @@ jobs:
       - name: Setup CUDA toolkit
         if: matrix.config == 'cuda'
         uses: ./.github/actions/setup-cuda
-
-      - name: Setup HIP toolchain
-        if: matrix.config == 'hip'
-        uses: ./.github/actions/setup-hip
 
       - name: Setup Metal toolchain
         if: matrix.config == 'metal'

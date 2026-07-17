@@ -81,4 +81,51 @@ echo "::group::[$PREFIX] cosim — QSPI PSRAM (RAM-mode flash)"
 JACQUARD_BIN="$JACQUARD_BIN" COSIM_SCOPE=qspi bash scripts/ci/cosim_cpu_check.sh
 echo "::endgroup::"
 
+mkdir -p target/test-out
+
+# ADR 0021 behavioral on-ramp: feed the *behavioral* dff_test.v to `sim` — it
+# must detect RTL, synthesize via the embedded YoWASP Yosys, and produce waves
+# bit-identical to the gate-level fixture run at the top of this suite. Needs the
+# synth feature (all release/CI binaries carry it). Historically Metal-only.
+echo "::group::[$PREFIX] behavioral RTL on-ramp smoke (ADR 0021)"
+"$JACQUARD_BIN" sim \
+  "$TT/dff_test.v" "$TT/dff_test.vcd" \
+  "$TT/onramp_${PREFIX}_output.vcd" 1 --emit-synth "$TT/onramp_${PREFIX}_synth.gv"
+if diff <(grep '^[01]!' "$TT/ci_${PREFIX}_output.vcd") \
+        <(grep '^[01]!' "$TT/onramp_${PREFIX}_output.vcd"); then
+  echo "on-ramp waves are bit-identical to the gate-level fixture run"
+else
+  echo "ERROR: on-ramp output diverged from the gate-level fixture run"
+  exit 1
+fi
+echo "::endgroup::"
+
+# X-propagation via the `sim` path (#95): xprop_demo under --xprop and 2-state,
+# each validated by the property checker (distinct from the cosim goldens, which
+# check the cosim path). Historically Metal-only.
+echo "::group::[$PREFIX] X-propagation sim — xprop_demo (#95)"
+XD=tests/xprop_cosim
+"$JACQUARD_BIN" sim "$XD/xprop_demo_synth.gv" "$XD/xprop_demo_stim.vcd" \
+  "target/test-out/ci_${PREFIX}_sim_xprop.vcd" 1 --xprop --check-with-cpu
+python3 "$XD/check.py" "target/test-out/ci_${PREFIX}_sim_xprop.vcd" xprop
+"$JACQUARD_BIN" sim "$XD/xprop_demo_synth.gv" "$XD/xprop_demo_stim.vcd" \
+  "target/test-out/ci_${PREFIX}_sim_2state.vcd" 1
+python3 "$XD/check.py" "target/test-out/ci_${PREFIX}_sim_2state.vcd" two-state
+echo "::endgroup::"
+
+# Register value-injection under --xprop (#108): with and without reg-init, each
+# validated by the property checker. Historically Metal-only.
+echo "::group::[$PREFIX] register value-injection cosim (#108)"
+"$JACQUARD_BIN" cosim "$XD/xprop_demo_synth.gv" \
+  --config "$XD/sim_config.json" \
+  --output-vcd "target/test-out/ci_${PREFIX}_cosim_noreginit.vcd" \
+  --max-clock-edges 200 --xprop
+python3 "$XD/check.py" "target/test-out/ci_${PREFIX}_cosim_noreginit.vcd" xprop
+"$JACQUARD_BIN" cosim "$XD/xprop_demo_synth.gv" \
+  --config "$XD/sim_config_reginit.json" \
+  --output-vcd "target/test-out/ci_${PREFIX}_cosim_reginit.vcd" \
+  --max-clock-edges 200 --xprop
+python3 "$XD/check.py" "target/test-out/ci_${PREFIX}_cosim_reginit.vcd" reg-init
+echo "::endgroup::"
+
 echo "[$PREFIX] GPU test suite passed."
