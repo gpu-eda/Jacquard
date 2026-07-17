@@ -948,7 +948,7 @@ jobs:
       - name: Download Metal artifacts
         uses: actions/download-artifact@v8
         with:
-          name: vcd-outputs
+          name: metal-outputs
           path: metal-results/
       - name: Download CVC artifacts
         uses: actions/download-artifact@v8
@@ -960,7 +960,7 @@ jobs:
           uv run scripts/compare_timing.py \
             --cvc-log cvc-results/tests/timing_test/inv_chain_pnr/cvc_output.log \
             --cvc-vcd cvc-results/tests/timing_test/inv_chain_pnr/cvc_inv_chain_output.vcd \
-            --jacquard-vcd metal-results/tests/timing_test/inv_chain_pnr/jacquard_timed_output.vcd \
+            --jacquard-vcd metal-results/tests/timing_test/inv_chain_pnr/jacquard_timed_output_metal.vcd \
             --clock-period-ps 10000 \
             --clock-signal CLK \
             --output-signal Q \
