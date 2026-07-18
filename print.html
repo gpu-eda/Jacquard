@@ -1111,12 +1111,19 @@ peripheral as a cosim kernel instead.</p>
 <li><strong>SVA (SystemVerilog Assertions)</strong> — <em>planned.</em> Jacquard already lowers a class
 of immediate assertions through synthesis (<code>GEM_ASSERT</code> cells; see the
 assertion handling in <code>aigpdk.rs</code>). Broader SVA support is the next step here.</li>
-<li><strong>Running UVM test suites</strong> — <em>being explored.</em> The open question is which
-parts of the UVM runtime can be driven against a gate-level GPU engine versus
-what has to be reworked.</li>
+<li><strong>Running UVM test suites</strong> — <em>design settled, unbuilt.</em> The shape is
+<a href="adr/0022-transaction-based-stimulus.html">ADR 0022</a>: split the testbench the way
+emulators have since SCE-MI. Sequences, randomisation and checking stay on the
+host; the driver's <em>timed</em> half is rewritten as a synthesizable transactor and
+compiled into the AIG beside the design (possible since the
+<a href="adr/0021-behavioral-rtl-support.html">RTL on-ramp</a> shipped), so it wiggles pins
+at GPU speed. Existing UVM drivers don't port as-is, and that isn't a gap we
+can close: they drive every cycle, and cosim runs 1024 edges per dispatch with
+the CPU absent, which is where the speed comes from.</li>
 <li><strong>cocotb</strong> — <em>needs more work.</em> A naive bridge would marshal Python ↔ GPU every
-cycle, which would dominate runtime and erase the GPU speedup. Making cocotb
-<em>performant</em> against Jacquard needs more design thinking, not just a shim.</li>
+cycle, which would dominate runtime and erase the GPU speedup. Same cliff as
+above, same fix: exchange transactions, not cycles. Making cocotb <em>performant</em>
+against Jacquard needs more design thinking, not just a shim.</li>
 </ul>
 <p>If any of these is blocking for you, the record-and-replay path above is the
 recommended interim approach.</p>
@@ -5758,6 +5765,7 @@ the code before writing it.</p>
 <tr><td><a href="adr/0019-cell-model-ir.html">0019</a></td><td>Cell-model IR: a complete per-cell-type library descriptor</td><td>Proposed</td></tr>
 <tr><td><a href="adr/0020-python-engine-binary-wheel.html">0020</a></td><td>Python engine as a bundled binary wheel (cibuildwheel)</td><td>Draft — deferred (PyO3 preferred; see ADR)</td></tr>
 <tr><td><a href="adr/0021-behavioral-rtl-support.html">0021</a></td><td>Behavioral RTL support via an embedded synthesis front-end (YoWASP)</td><td>Proposed</td></tr>
+<tr><td><a href="adr/0022-transaction-based-stimulus.html">0022</a></td><td>Transaction-based external stimulus (SCE-MI-style pipes)</td><td>Proposed</td></tr>
 </tbody></table>
 </div>
 <h2 id="how-the-adrs-relate"><a class="header" href="#how-the-adrs-relate">How the ADRs relate</a></h2>
@@ -9277,6 +9285,184 @@ one-command promise while the same <code>src/synth.rs</code> engine still backs 
 it contradicts the emulator model (ADR 0014) and would reimplement a Verilog
 front-end Yosys already provides — enormous scope for no architectural gain.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adr-0022--transaction-based-external-stimulus-sce-mi-style-pipes"><a class="header" href="#adr-0022--transaction-based-external-stimulus-sce-mi-style-pipes">ADR 0022 — Transaction-based external stimulus (SCE-MI-style pipes)</a></h1>
+<p><strong>Status:</strong> Proposed</p>
+<p><strong>Relates to:</strong> <a href="adr/0013-plural-peripheral-configs.html">ADR 0013</a> (peripheral models,
+GPU→CPU ring buffers), <a href="adr/0017-cosim-execution-model.html">ADR 0017</a> (batch dispatch),
+<a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> (RTL on-ramp — what makes a
+synthesizable transactor possible), and <a href="adr/../interop.html">Testbench Interop</a>.</p>
+<h2 id="context-21"><a class="header" href="#context-21">Context</a></h2>
+<p>"Can I point my UVM / cocotb testbench at Jacquard?" is the most common question
+we get, and <a href="adr/../interop.html">interop.md</a> currently answers it as an open one. It
+isn't. The batching constant decides it.</p>
+<h3 id="the-number"><a class="header" href="#the-number">The number</a></h3>
+<p><code>src/sim/cosim/mod.rs</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Batch size for backend dispatch: number of consecutive scheduler edges run
+/// in one `run_edges` call (no per-tick CPU interaction within a batch).
+const BATCH_SIZE: usize = 1024;
+<span class="boring">}</span></code></pre></pre>
+<p><strong>No per-tick CPU interaction within a batch.</strong> That clause is where cosim's
+throughput comes from: 1024 scheduler edges execute with the CPU absent. Device
+timestamps put the run firmly GPU-compute-bound (the simulate kernel is ~72% of
+per-edge GPU time; see <a href="adr/../cosim-perf-report.html">Cosim Perf Report</a>), which is
+only true because nothing crosses the boundary in between.</p>
+<p>A UVM driver is per-cycle by construction: it reaches through a virtual interface
+and wiggles pins on every clock. Driving Jacquard that way forces <code>BATCH_SIZE</code>
+to 1 and a CPU round-trip per edge, which deletes the reason to use a GPU. So
+this was never an effort question. Any external stimulus that needs to observe
+or drive <strong>every cycle</strong> is incompatible with the engine, and no amount of
+implementation makes it otherwise.</p>
+<h3 id="why-not-run-the-testbench-on-the-gpu"><a class="header" href="#why-not-run-the-testbench-on-the-gpu">Why not run the testbench on the GPU</a></h3>
+<p>Running UVM <em>inside</em> Jacquard is not a long tail of missing features, it is a
+category error:</p>
+<ul>
+<li><strong>No runtime to allocate into.</strong> The AIG is elaborated once into a static
+instruction script (<code>FlattenedScriptV1</code>). UVM needs a heap, <code>new()</code>,
+inheritance, virtual dispatch, and a factory doing runtime type overrides.</li>
+<li><strong>No scheduler.</strong> fork/join, mailboxes, events and UVM's phasing all sit on
+SystemVerilog's stratified event queue. Jacquard deliberately has no event
+queue — discarding it, and evaluating whole logic cones per edge, <em>is</em> the
+speed thesis.</li>
+<li><strong>No solver.</strong> <code>randomize()</code> is a constraint solve per transaction, a search,
+not circuit evaluation.</li>
+<li><strong>No strings or associative arrays</strong> for <code>uvm_config_db</code> and reporting.</li>
+<li><strong>Only immediate assertions.</strong> <code>$check</code> lowers to <code>GEM_ASSERT</code> cells today;
+temporal SVA (<code>|-&gt;</code>, <code>##[1:$]</code>) needs automata with runtime state.</li>
+</ul>
+<p>Building all that is writing a SystemVerilog simulator. And the payoff would be
+negative: a testbench is sequential and dynamic, so it would run at CPU speed
+<em>while</em> dragging the GPU into a per-edge handshake. A slow simulator inside a
+fast one.</p>
+<h3 id="the-industry-settled-this"><a class="header" href="#the-industry-settled-this">The industry settled this</a></h3>
+<p>Emulators hit this wall decades ago and standardised the answer:
+<a href="https://www.accellera.org/downloads/standards/sce-mi">SCE-MI</a> (Accellera,
+currently v2.4, Nov 2016). Split the testbench in two:</p>
+<ul>
+<li>an <strong>untimed</strong> side, on the host, holding sequences, randomisation, scoreboard
+and coverage;</li>
+<li>a <strong>timed</strong> side, in the emulator, holding a <strong>transactor</strong> (BFM) that turns
+messages into pin activity;</li>
+<li><strong>pipes</strong> between them: buffered, flow-controlled, message-oriented channels
+with a configurable depth.</li>
+</ul>
+<p>The property that matters for us: <strong>a transactor may run ahead of the host, up
+to the pipe's buffering</strong>. That is the same statement as "no per-tick CPU
+interaction within a batch", arrived at independently by people with the same
+constraint. Jacquard being emulator-inspired (GEM) is not a coincidence here.</p>
+<h3 id="no-open-source-testbench-will-drop-into-this"><a class="header" href="#no-open-source-testbench-will-drop-into-this">No open-source testbench will drop into this</a></h3>
+<p>Worth stating plainly, because it sets expectations: <strong>no open-source UVM
+testbench uses SCE-MI pipes.</strong> That isn't an oversight to be fixed, it's
+structural — SCE-MI exists to talk to Palladium, Veloce and ZeBu, and
+open-source UVM targets simulators, which have no boundary to amortise. The
+public material is DVCon papers and the spec, not repositories.</p>
+<p>The consequence for us: there is no ready-made UVM testbench to point at
+Jacquard, and adopting this ADR will not produce one. <strong>The transactor is ours
+to write</strong>, per protocol, and the untimed side has to be adapted to speak
+transactions. Anyone hoping to lift an existing testbench off GitHub should read
+that as a no.</p>
+<h3 id="the-open-source-world-solved-it-anyway-under-another-name"><a class="header" href="#the-open-source-world-solved-it-anyway-under-another-name">The open-source world solved it anyway, under another name</a></h3>
+<p><a href="https://docs.fires.im/">FireSim</a> / <strong>Golden Gate (MIDAS II)</strong> is the same
+architecture with different vocabulary, and unlike SCE-MI it is readable code
+rather than a PDF:</p>
+<div class="table-wrapper"><table><thead><tr><th>SCE-MI</th><th>FireSim</th><th>here</th></tr></thead><tbody>
+<tr><td>transactor / BFM</td><td><strong>bridge</strong> (target-side RTL + host-side software)</td><td>synthesizable BFM in the AIG</td></tr>
+<tr><td>pipe</td><td><strong>token channel</strong></td><td>the CPU↔GPU rings</td></tr>
+<tr><td>untimed / timed split</td><td>host-decoupling</td><td>CPU model / GPU batch</td></tr>
+</tbody></table>
+</div>
+<p>Its central idea is worth more than the vocabulary: Golden Gate decomposes the
+target into a dataflow graph of <strong>latency-insensitive</strong> models, so the target's
+notion of time is decoupled from the host's and either side may run ahead or
+stall without changing the result. That is the general form of what
+<code>BATCH_SIZE</code> does for us by hand, and it is the reason FireSim can be both
+FPGA-accelerated and deterministic.</p>
+<p>We cannot lift the implementation — FireSim is Chisel/FIRRTL onto FPGAs, we are
+Verilog/AIG onto GPUs — but it is the closest prior art with source, and the
+place to look before inventing channel semantics.</p>
+<h3 id="two-things-recently-made-this-reachable"><a class="header" href="#two-things-recently-made-this-reachable">Two things recently made this reachable</a></h3>
+<ol>
+<li><strong><a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> shipped</strong> (v0.3.0). A transactor
+is synthesizable RTL, so it now compiles into the same AIG as the DUT through
+the on-ramp. Before that, every protocol meant a hand-written kernel.</li>
+<li><strong>Half the channel exists.</strong> <a href="adr/0013-plural-peripheral-configs.html">ADR 0013</a>
+already defines GPU→CPU ring buffers, carrying UART bytes and bus traces out
+of a batch.</li>
+</ol>
+<h2 id="decision-20"><a class="header" href="#decision-20">Decision</a></h2>
+<p>Adopt the SCE-MI <strong>split and pipe semantics</strong> as the model for external
+stimulus. Do not implement the SCE-MI API.</p>
+<ul>
+<li><strong>Untimed side (host).</strong> Sequences, randomisation, checking. UVM in a real
+simulator, or cocotb, or plain Rust — the model doesn't care.</li>
+<li><strong>Timed side (GPU).</strong> A transactor written as synthesizable SystemVerilog,
+compiled via the on-ramp into the AIG beside the DUT, so it lives <em>inside</em> the
+batch and wiggles pins at GPU speed.</li>
+<li><strong>Between them: pipes.</strong> Buffered, flow-controlled, message-oriented, with a
+depth. Semantics only — the C API, the SCE-MI 1 macro-based message ports, and
+DMI are all out of scope.</li>
+</ul>
+<p>What this requires, concretely:</p>
+<div class="table-wrapper"><table><thead><tr><th>Direction</th><th>Status</th></tr></thead><tbody>
+<tr><td>GPU→CPU (responses, monitors)</td><td><strong>exists</strong> — the ADR 0013 ring buffers</td></tr>
+<tr><td>CPU→GPU (transactions in)</td><td><strong>missing</strong> — the one new mechanism</td></tr>
+</tbody></table>
+</div>
+<p>The CPU→GPU pipe must be <strong>pre-loaded before dispatch, not streamed</strong>. <code>ulib</code>'s
+H2D is synchronous, so uploading per edge reintroduces exactly the stall the
+batch exists to avoid. Load a batch's worth of messages into device memory, and
+let a GPU-side feeder pop them as the transactor asserts ready.</p>
+<h3 id="the-sizing-rule"><a class="header" href="#the-sizing-rule">The sizing rule</a></h3>
+<p><strong>Pipe depth buys batch depth.</strong> A transfer of ~4–40 cycles means a 1024-edge
+batch consumes roughly 25–250 transactions, so the pipe must hold at least that
+or the batch stalls on an empty queue and we are back to per-edge. This is the
+design's one hard number, and the metric to judge it by is <strong>transactions
+retired per batch</strong>, not features supported.</p>
+<h2 id="consequences-21"><a class="header" href="#consequences-21">Consequences</a></h2>
+<ul>
+<li><strong>Existing UVM drivers do not port.</strong> Their timed half is rewritten as a BFM.
+That is the standard SCE-MI/TBX workflow rather than a Jacquard tax, but it is
+real work and should be stated plainly to anyone asking.</li>
+<li><strong>Suits protocol transactors, not big memories.</strong> A BFM has little state. A
+16 MB flash backing store does not want to be an AIG memory, so bespoke
+kernels keep earning their place there.</li>
+<li><strong>Gives ADR 0013's target architecture a second answer.</strong> Rather than
+generalising the bespoke-kernel pattern to every peripheral, some peripherals
+could simply <em>be RTL</em>.</li>
+<li><strong>UVM is not free at the end of this.</strong> A host adapter (DPI or a socket) is
+still needed to put a real SystemVerilog simulator on the untimed side.</li>
+<li><strong>The failure mode is a starved pipe.</strong> If the host cannot keep it full, the
+batch stalls and the GPU idles — the same cliff, reached from the other side.</li>
+</ul>
+<h2 id="alternatives-considered-3"><a class="header" href="#alternatives-considered-3">Alternatives considered</a></h2>
+<ul>
+<li><strong>Per-cycle bridge (naive cocotb/DPI).</strong> Rejected: <code>BATCH_SIZE</code> → 1. This is
+what <a href="adr/../interop.html">interop.md</a> means by "a naive bridge would marshal
+Python ↔ GPU every cycle"; the number above is the reason.</li>
+<li><strong>UVM runtime on the GPU.</strong> Rejected, see Context — an SV simulator, and
+slower than the thing it replaces.</li>
+<li><strong>Record-and-replay only.</strong> Works today and stays the recommended interim
+path, but it is not reactive: the stimulus cannot depend on the design.</li>
+<li><strong>Vendoring the SCE-MI spec into <code>docs/</code>.</strong> Rejected: it is Accellera's
+copyrighted work, a checked-in copy has no update path, and we need the split
+and the pipes, not the DPI binding details. Cite it, don't copy it.</li>
+</ul>
+<h2 id="references-7"><a class="header" href="#references-7">References</a></h2>
+<ul>
+<li>SCE-MI (Standard Co-Emulation Modeling Interface), Accellera —
+<a href="https://www.accellera.org/downloads/standards/sce-mi">standard downloads</a>.
+v2.4 (Nov 2016) is current at the time of writing.</li>
+<li>FireSim / Golden Gate (MIDAS II), UC Berkeley — the same split in open source,
+with code: <a href="https://docs.fires.im/en/latest/Golden-Gate/Bridges.html">target-to-host bridges</a>
+(transactors), <a href="https://docs.fires.im/en/latest/Golden-Gate/LI-BDN.html">target abstraction &amp; host decoupling</a>
+(latency-insensitive models and token channels). Read before designing the
+channel semantics.</li>
+<li><a href="adr/../interop.html">Testbench Interop</a> — what Jacquard drives today, and the
+record-and-replay fallback.</li>
+<li><a href="adr/../cosim-perf-report.html">Cosim Perf Report</a> — where the per-edge time goes,
+and how the GPU-bound claim was measured.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="implementation-plans"><a class="header" href="#implementation-plans">Implementation Plans</a></h1>
 <p>Phased implementation plans with entry and exit criteria. Plans live
 here when the work spans multiple commits and needs an explicit
@@ -10115,7 +10301,7 @@ Exit codes:
 <li>Comparison against OpenTimer (that's a separate ADR-0003-spike concern).</li>
 <li>Replacing OpenSTA's role as oracle in CI — <code>opensta-to-ir</code> is a producer, not a checker.</li>
 </ul>
-<h2 id="references-7"><a class="header" href="#references-7">References</a></h2>
+<h2 id="references-8"><a class="header" href="#references-8">References</a></h2>
 <ul>
 <li><code>../adr/0001-opensta-as-oracle.md</code> — subprocess model, license posture.</li>
 <li><code>../adr/0002-timing-ir.md</code> — IR contract this tool emits.</li>
@@ -10257,7 +10443,7 @@ flat.load_timing_from_ir(&amp;aig, &amp;netlistdb, &amp;ir, ...);
 <li>Validating SDF round-trip equivalence between the old parser and OpenSTA. (CI corpus test in WS4/WS2.5 covers this when fixtures exist.)</li>
 <li>Refactoring the broader <code>flatten.rs</code> structure beyond what migration requires.</li>
 </ul>
-<h2 id="references-8"><a class="header" href="#references-8">References</a></h2>
+<h2 id="references-9"><a class="header" href="#references-9">References</a></h2>
 <ul>
 <li><code>../adr/0002-timing-ir.md</code> — IR contract.</li>
 <li><code>../adr/0006-sdf-preprocessing-model.md</code> — interim runtime subprocess + release-time cutover.</li>
@@ -10745,7 +10931,7 @@ early means later phases pick up cleanly.</li>
 </ul>
 <p>If MC.1 + MC.2 ship in isolation, they don't commit Jacquard to any of the
 later phases. Each later phase remains demand-driven.</p>
-<h2 id="references-9"><a class="header" href="#references-9">References</a></h2>
+<h2 id="references-10"><a class="header" href="#references-10">References</a></h2>
 <ul>
 <li>Current multi-clock infrastructure: <code>src/sim/cosim_metal.rs:855</code> and
 following (<code>ClockDomainFlags</code>, <code>MultiClockScheduler</code>).</li>
@@ -12712,7 +12898,7 @@ exits cosim or lets it free-run — pick the gdb-friendly behaviour during J3.</
 budget; decide whether <code>--jtag-server</code> disables/relaxes the cap while a client
 is connected.</li>
 </ul>
-<h2 id="references-10"><a class="header" href="#references-10">References</a></h2>
+<h2 id="references-11"><a class="header" href="#references-11">References</a></h2>
 <ul>
 <li>Issue <a href="https://github.com/gpu-eda/Jacquard/issues/124">#124</a>.</li>
 <li>ADR 0017 (cosim execution model) — Amendment 2026-06-21 (interactive,
@@ -13064,7 +13250,7 @@ the generation into the build/CI and prove it deterministic.</li>
 <li><strong>Identifier alignment (D1).</strong> The shared cell/pin-name fragment must be
 fixed in C1 before two IRs exist that would diverge.</li>
 </ul>
-<h2 id="references-11"><a class="header" href="#references-11">References</a></h2>
+<h2 id="references-12"><a class="header" href="#references-12">References</a></h2>
 <ul>
 <li><a href="plans/../adr/0019-cell-model-ir.html">ADR 0019 — Cell-model IR</a>.</li>
 <li><a href="plans/../adr/0002-timing-ir.html">ADR 0002 — Timing IR</a> (the pattern + scope
@@ -13247,26 +13433,38 @@ referencing the existing <code>sim_config.json</code>. Its own ADR when schedule
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="plan--rtl-source-provenance-adr-0021-phase-2"><a class="header" href="#plan--rtl-source-provenance-adr-0021-phase-2">Plan — RTL-source provenance (ADR 0021 Phase 2)</a></h1>
 <blockquote>
-<p><strong>2026-07-07 — end-to-end closed (PR pending on <code>ws-a-abc-new-provenance</code>).</strong>
-The WS-A↔WS-B loop works: behavioral RTL → <code>sim</code> → a signal resolves to its RTL
-line. <code>src/synth.rs</code> maps via <code>abc_new</code> and emits <code>\src</code>; <strong>A1/A2 landed</strong> — the
-provenance fork was moved to <strong><code>gpu-eda/yowasp-yosys</code></strong>, whose CI builds +
-validates + <strong>releases</strong> the wheel, and <code>jacquard</code> fetches that pinned release on
-first use (no PAT, no artifact expiry). WS-B B0–B2 + B3 (xsources, trace-signals)
-done; B3 timing-report remains (see below). aigpdk mapping needed two fixes the
-sky130 A0 didn't surface: <code>read_liberty -lib</code> + <code>hierarchy -purge_lib</code> before a
-single <code>abc_new</code> pass. The per-section markers below predate this and are being
-folded in at merge.</p>
+<p><strong>2026-07-15 — shipped in v0.3.0.</strong> Behavioral RTL → <code>sim</code> → a signal resolves
+to its RTL line, in a released binary. <code>src/synth.rs</code> maps via <code>abc_new</code> and
+emits <code>\src</code>; the provenance fork lives at <strong><code>gpu-eda/yowasp-yosys</code></strong>, whose CI
+builds + validates + <strong>releases</strong> the wheel, and <code>jacquard</code> fetches that pinned
+release on first use (no PAT, no artifact expiry). aigpdk mapping needed two
+fixes the sky130 A0 didn't surface: <code>read_liberty -lib</code> + <code>hierarchy -purge_lib</code>
+before a single <code>abc_new</code> pass. Verified against third-party RTL (PULP
+common-cells via core-v-mcu): the emitted netlist carries
+<code>(* src = "binary_to_gray.sv:15.8" *)</code>.</p>
 </blockquote>
-<p><strong>Status:</strong> Active — <strong>in flight</strong> (updated 2026-07-06; per-section ✅ markers below
-are authoritative). <strong>WS-A: A0 is GO</strong> — the forked provenance wasm builds and
-carries origins through the in-process WASI <code>abc_new</code>/<code>aiger2</code> XAIGER-<code>"y"</code> path
-(100% <code>\src</code> coverage on comb + seq2); remaining A1 (harden/pin) + A2 (distribute)</p>
+<p><strong>Status:</strong> <strong>Shipped (v0.3.0)</strong> with one deferred item and one known toolchain
+bug. Per-section ✅ markers below remain authoritative for detail.</p>
 <ul>
-<li>the <code>src/synth.rs</code> → <code>abc_new</code> integration. <strong>WS-B: B0–B2 done</strong> (<code>sverilogparse</code>
-capture → <code>netlistdb.cell_src</code> → <code>AIG::aigpin_src_locations</code>); <strong>B3</strong> (surface in
-<code>--trace-signals</code> / timing / <code>xsources</code>-<code>xroots</code>) is next. WS-A and WS-B are
-independent; full end-to-end needs A1+A2 <em>and</em> B3.</li>
+<li><strong>WS-A — done.</strong> The forked provenance wasm builds and carries origins through
+the in-process WASI <code>abc_new</code>/<code>aiger2</code> XAIGER-<code>"y"</code> path (100% <code>\src</code> coverage
+on comb + seq2). A1 (harden/pin) + A2 (distribute) + the <code>src/synth.rs</code> →
+<code>abc_new</code> integration all landed (#176).</li>
+<li><strong>WS-B — B0–B3 done</strong> (<code>sverilogparse</code> capture → <code>netlistdb.cell_src</code> →
+<code>AIG::aigpin_src_locations</code>, surfaced in <code>xsources</code> and <code>--trace-signals</code>).
+<strong>Deferred: B3's timing-report surface</strong> — src locations in <code>--timing-report</code>.
+That's the one piece of the original plan not shipped.</li>
+<li><strong>Known bug in the toolchain this plan adopted:</strong> <code>abc_new</code> hard-traps (wasm
+<code>unreachable</code>) on a design that reaches it with <strong>zero primary I/O</strong> — bisected;
+neither the constant clock nor emptiness is the trigger, one port of either
+direction avoids it, and the failure is inside the <code>ABC9</code> sub-pass. Whether
+<code>&amp;origins</code> causes it or it's stock abc9 is <strong>open</strong>; the A/B is blocked because
+a stock YoWASP wheel won't load under our <code>wasmtime</code> (built with wasm exception
+handling, which we don't enable). Tracking:
+<a href="https://github.com/robtaylor/origin-shell/issues/1">robtaylor/origin-shell#1</a>
+upstream, <a href="https://github.com/gpu-eda/Jacquard/issues/211">#211</a> here (whose
+reporting half is fixed — a trap now names the pass instead of printing 27 wasm
+frames). Low impact for real designs: a portless module is testbench-shaped.</li>
 </ul>
 <p><strong>ADRs:</strong> <a href="plans/../adr/0021-behavioral-rtl-support.html">0021</a> Phase 2 (the roadmap this
 realises), <a href="plans/../adr/0014-aig-as-simulation-ir.html">0014</a> (AIG core the provenance
@@ -13737,7 +13935,7 @@ it's the surrounding ecosystem that doesn't.</p>
 <p>Q3 (cross-check vs OpenSTA) and Q4 (correlation with Jacquard's
 <code>timing-analysis</code>) both depend on OpenTimer producing arrivals. With Q2
 unable to produce a single path, they're moot for this spike.</p>
-<h3 id="decision-20"><a class="header" href="#decision-20">Decision</a></h3>
+<h3 id="decision-21"><a class="header" href="#decision-21">Decision</a></h3>
 <p><strong>ADR 0003 → Superseded.</strong> Per the spike's decision matrix
 ("Fail on any → ADR 0003 → Superseded. Fall back to OpenSTA-subprocess-only
 validation"), the right move is to retire the in-process-OpenTimer plan

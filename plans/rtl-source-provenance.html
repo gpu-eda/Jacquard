@@ -157,26 +157,38 @@
                     <main>
                         <h1 id="plan--rtl-source-provenance-adr-0021-phase-2"><a class="header" href="#plan--rtl-source-provenance-adr-0021-phase-2">Plan — RTL-source provenance (ADR 0021 Phase 2)</a></h1>
 <blockquote>
-<p><strong>2026-07-07 — end-to-end closed (PR pending on <code>ws-a-abc-new-provenance</code>).</strong>
-The WS-A↔WS-B loop works: behavioral RTL → <code>sim</code> → a signal resolves to its RTL
-line. <code>src/synth.rs</code> maps via <code>abc_new</code> and emits <code>\src</code>; <strong>A1/A2 landed</strong> — the
-provenance fork was moved to <strong><code>gpu-eda/yowasp-yosys</code></strong>, whose CI builds +
-validates + <strong>releases</strong> the wheel, and <code>jacquard</code> fetches that pinned release on
-first use (no PAT, no artifact expiry). WS-B B0–B2 + B3 (xsources, trace-signals)
-done; B3 timing-report remains (see below). aigpdk mapping needed two fixes the
-sky130 A0 didn't surface: <code>read_liberty -lib</code> + <code>hierarchy -purge_lib</code> before a
-single <code>abc_new</code> pass. The per-section markers below predate this and are being
-folded in at merge.</p>
+<p><strong>2026-07-15 — shipped in v0.3.0.</strong> Behavioral RTL → <code>sim</code> → a signal resolves
+to its RTL line, in a released binary. <code>src/synth.rs</code> maps via <code>abc_new</code> and
+emits <code>\src</code>; the provenance fork lives at <strong><code>gpu-eda/yowasp-yosys</code></strong>, whose CI
+builds + validates + <strong>releases</strong> the wheel, and <code>jacquard</code> fetches that pinned
+release on first use (no PAT, no artifact expiry). aigpdk mapping needed two
+fixes the sky130 A0 didn't surface: <code>read_liberty -lib</code> + <code>hierarchy -purge_lib</code>
+before a single <code>abc_new</code> pass. Verified against third-party RTL (PULP
+common-cells via core-v-mcu): the emitted netlist carries
+<code>(* src = "binary_to_gray.sv:15.8" *)</code>.</p>
 </blockquote>
-<p><strong>Status:</strong> Active — <strong>in flight</strong> (updated 2026-07-06; per-section ✅ markers below
-are authoritative). <strong>WS-A: A0 is GO</strong> — the forked provenance wasm builds and
-carries origins through the in-process WASI <code>abc_new</code>/<code>aiger2</code> XAIGER-<code>"y"</code> path
-(100% <code>\src</code> coverage on comb + seq2); remaining A1 (harden/pin) + A2 (distribute)</p>
+<p><strong>Status:</strong> <strong>Shipped (v0.3.0)</strong> with one deferred item and one known toolchain
+bug. Per-section ✅ markers below remain authoritative for detail.</p>
 <ul>
-<li>the <code>src/synth.rs</code> → <code>abc_new</code> integration. <strong>WS-B: B0–B2 done</strong> (<code>sverilogparse</code>
-capture → <code>netlistdb.cell_src</code> → <code>AIG::aigpin_src_locations</code>); <strong>B3</strong> (surface in
-<code>--trace-signals</code> / timing / <code>xsources</code>-<code>xroots</code>) is next. WS-A and WS-B are
-independent; full end-to-end needs A1+A2 <em>and</em> B3.</li>
+<li><strong>WS-A — done.</strong> The forked provenance wasm builds and carries origins through
+the in-process WASI <code>abc_new</code>/<code>aiger2</code> XAIGER-<code>"y"</code> path (100% <code>\src</code> coverage
+on comb + seq2). A1 (harden/pin) + A2 (distribute) + the <code>src/synth.rs</code> →
+<code>abc_new</code> integration all landed (#176).</li>
+<li><strong>WS-B — B0–B3 done</strong> (<code>sverilogparse</code> capture → <code>netlistdb.cell_src</code> →
+<code>AIG::aigpin_src_locations</code>, surfaced in <code>xsources</code> and <code>--trace-signals</code>).
+<strong>Deferred: B3's timing-report surface</strong> — src locations in <code>--timing-report</code>.
+That's the one piece of the original plan not shipped.</li>
+<li><strong>Known bug in the toolchain this plan adopted:</strong> <code>abc_new</code> hard-traps (wasm
+<code>unreachable</code>) on a design that reaches it with <strong>zero primary I/O</strong> — bisected;
+neither the constant clock nor emptiness is the trigger, one port of either
+direction avoids it, and the failure is inside the <code>ABC9</code> sub-pass. Whether
+<code>&amp;origins</code> causes it or it's stock abc9 is <strong>open</strong>; the A/B is blocked because
+a stock YoWASP wheel won't load under our <code>wasmtime</code> (built with wasm exception
+handling, which we don't enable). Tracking:
+<a href="https://github.com/robtaylor/origin-shell/issues/1">robtaylor/origin-shell#1</a>
+upstream, <a href="https://github.com/gpu-eda/Jacquard/issues/211">#211</a> here (whose
+reporting half is fixed — a trap now names the pass instead of printing 27 wasm
+frames). Low impact for real designs: a portless module is testbench-shaped.</li>
 </ul>
 <p><strong>ADRs:</strong> <a href="../adr/0021-behavioral-rtl-support.html">0021</a> Phase 2 (the roadmap this
 realises), <a href="../adr/0014-aig-as-simulation-ir.html">0014</a> (AIG core the provenance
