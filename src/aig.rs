@@ -895,8 +895,8 @@ impl AIG {
                         let mut result = if clksignal != usize::MAX {
                             clksignal << 1
                         } else {
-                            let aigpin = self
-                                .add_aigpin(DriverType::InputClockFlag(dp, is_negedge as u8));
+                            let aigpin =
+                                self.add_aigpin(DriverType::InputClockFlag(dp, is_negedge as u8));
                             let clkentry = self.clock_pin2aigpins.get_mut(&dp).unwrap();
                             match is_negedge {
                                 false => clkentry.0 = aigpin,
