@@ -541,7 +541,10 @@ endmodule
         // to that cell's src (this is exactly what registration logs).
         let (iv, _) = aig.extra_observable_names.iter().next().unwrap();
         let src = aig.aigpin_src_locations(*iv >> 1, &nl);
-        assert_eq!(src, vec![compact_str::CompactString::from("top.v:5.3-5.34")]);
+        assert_eq!(
+            src,
+            vec![compact_str::CompactString::from("top.v:5.3-5.34")]
+        );
     }
 
     /// Unresolved names increment `dropped`, log a warning, and do

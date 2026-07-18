@@ -159,21 +159,18 @@ fn parse_corner_specs(
     }
     Ok(by_name
         .into_iter()
-        .map(
-            |(name, liberty)| opensta_to_ir::opensta::CornerSpec {
-                name,
-                process: "tt".into(),
-                voltage: 1.0,
-                temperature: 25.0,
-                liberty,
-            },
-        )
+        .map(|(name, liberty)| opensta_to_ir::opensta::CornerSpec {
+            name,
+            process: "tt".into(),
+            voltage: 1.0,
+            temperature: 25.0,
+            liberty,
+        })
         .collect())
 }
 
 fn run_opensta(args: &Args) -> Result<opensta_to_ir::dump::DumpDocument, (u8, String)> {
-    let corners =
-        parse_corner_specs(&args.liberty).map_err(|e| (EXIT_ARG_INVALID, e))?;
+    let corners = parse_corner_specs(&args.liberty).map_err(|e| (EXIT_ARG_INVALID, e))?;
     if args.verilog.is_empty() {
         return Err((
             EXIT_ARG_INVALID,

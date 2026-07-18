@@ -347,11 +347,7 @@ impl AIG {
     /// one. An internal AND node with no recorded origin (or a netlist without
     /// `src`) yields `[]`, a typical gate output one, and an aigpin fed by
     /// several merged origin cells many. De-duplicated, in first-seen order.
-    pub fn aigpin_src_locations(
-        &self,
-        aigpin: usize,
-        netlistdb: &NetlistDB,
-    ) -> Vec<CompactString> {
+    pub fn aigpin_src_locations(&self, aigpin: usize, netlistdb: &NetlistDB) -> Vec<CompactString> {
         let mut locs: Vec<CompactString> = Vec::new();
         let Some(origins) = self.aigpin_cell_origins.get(aigpin) else {
             return locs;
@@ -899,8 +895,8 @@ impl AIG {
                         let mut result = if clksignal != usize::MAX {
                             clksignal << 1
                         } else {
-                            let aigpin = self
-                                .add_aigpin(DriverType::InputClockFlag(dp, is_negedge as u8));
+                            let aigpin =
+                                self.add_aigpin(DriverType::InputClockFlag(dp, is_negedge as u8));
                             let clkentry = self.clock_pin2aigpins.get_mut(&dp).unwrap();
                             match is_negedge {
                                 false => clkentry.0 = aigpin,
@@ -4966,7 +4962,11 @@ mod path_mapping_tests {
 
         // Precondition: netlistdb (B1) carried the annotation onto the nand2 cell.
         assert!(
-            netlistdb.cell_src.iter().flatten().any(|s| s.as_str() == "prov.v:12.3-12.44"),
+            netlistdb
+                .cell_src
+                .iter()
+                .flatten()
+                .any(|s| s.as_str() == "prov.v:12.3-12.44"),
             "B1 regression: cell_src did not carry the (* src *) annotation"
         );
 

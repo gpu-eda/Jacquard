@@ -1495,9 +1495,10 @@ fn derived_clock_timing(
     };
     // The driver pin the AIG cut minted the clock flag on: the net's output
     // (Direction::O) pin, or a primary input if the net is top-driven.
-    let driver_pin = netlistdb.net2pin.iter_set(netid).find(|&p| {
-        netlistdb.pindirect[p] == Direction::O || netlistdb.pin2cell[p] == 0
-    });
+    let driver_pin = netlistdb
+        .net2pin
+        .iter_set(netid)
+        .find(|&p| netlistdb.pindirect[p] == Direction::O || netlistdb.pin2cell[p] == 0);
     let Some(driver_pin) = driver_pin else {
         clilog::warn!(
             "Clock config[{}] ({:?}): derived net '{}' has no driver pin; skipping",
