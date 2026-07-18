@@ -716,6 +716,9 @@ jobs:
         timeout-minutes: 40
         run: |
           set -o pipefail
+          # The 11759-byte replay feeds ~94k edges; data0_obs latches 0xCAFEBABE
+          # by ~110k (measured: passes at 120k, fails at 100k). 150k caps it with
+          # headroom rather than running to 400k idle.
           target/release/jacquard cosim \
             tests/jtag_minimal/data/top.pnl.v \
             --config tests/jtag_minimal/sim_config.json \
@@ -724,7 +727,7 @@ jobs:
             --jtag-hold-cycles 8 \
             --trace-signals tests/jtag_minimal/trace_signals.txt \
             --output-vcd tests/jtag_minimal/data/cosim_trace.vcd \
-            --max-clock-edges 400000 \
+            --max-clock-edges 150000 \
             2>&1 | tee jtag_minimal_cosim.log
       - name: Assert data0_obs == 0xCAFEBABE
         run: |
