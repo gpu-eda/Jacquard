@@ -19,6 +19,10 @@ on:
   # No base-branch filter: run CI on every PR regardless of its base, so stacked
   # PRs (based on other feature branches) get CI automatically.
   pull_request:
+  # Required for the merge queue: the queue validates each entry by firing
+  # `merge_group`, and every check `main` requires must run here or an entry sits
+  # in the queue forever waiting for a status that can never arrive.
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -28,7 +32,11 @@ permissions:
 # up on the billed GPU + macOS runners.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a merge-queue run. The queue is blocking on these checks, and a
+  # cancelled check reports as failed — which evicts the PR from the queue rather
+  # than merely delaying it. PR and push runs stay cancellable: superseding them
+  # is the point.
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -42,12 +50,17 @@ jobs:
     name: Detect code changes
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.filter.outputs.code }}
+      # A merge-queue entry is a candidate `main`, and the filter has no
+      # meaningful base to diff against there. Run everything rather than trust
+      # it: the failure mode of over-running is wasted CI, while a mis-based
+      # filter would *skip tests on the commit about to become main*.
+      code: ${{ github.event_name == 'merge_group' && 'true' || steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: false
       - uses: dorny/paths-filter@v3
+        if: github.event_name != 'merge_group'
         id: filter
         with:
           # `every`: a changed file counts toward `code` only if it matches ALL
