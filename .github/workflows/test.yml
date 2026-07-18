@@ -770,6 +770,11 @@ jobs:
         timeout-minutes: 40
         run: |
           set -o pipefail
+          # The server blocks on the socket (advances the design clock only per
+          # bitbang command, not free-running), so it is as deterministic as the
+          # replay: same 11759-byte stream, CAFEBABE latched by ~110k edges
+          # (measured locally: passes at 100k and 150k). 150k, matching the
+          # replay job, rather than idling to 400k.
           ./target/release/jacquard cosim \
             tests/jtag_minimal/data/top.pnl.v \
             --config tests/jtag_minimal/sim_config.json \
@@ -778,7 +783,7 @@ jobs:
             --jtag-hold-cycles 8 \
             --trace-signals tests/jtag_minimal/trace_signals.txt \
             --output-vcd tests/jtag_minimal/data/cosim_server_trace.vcd \
-            --max-clock-edges 400000 \
+            --max-clock-edges 150000 \
             > jtag_minimal_server.log 2>&1 &
           SERVER_PID=$!
           python3 tests/jtag_minimal/scripts/bitbang_client.py \
