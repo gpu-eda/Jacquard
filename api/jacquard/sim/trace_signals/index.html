@@ -47,6 +47,10 @@ Unresolved names emit a <code>clilog::warn!</code> and increment <code>dropped</
 but don’t abort the registration loop — the rest of the list
 still lands. Names whose resolved aigpin is the constant-0/1
 (<code>iv &lt;= 1</code>) are dropped with a warning since they don’t need
-runtime observation.</dd><dt><a class="fn" href="fn.resolve_to_input_state_pos.html" title="fn jacquard::sim::trace_signals::resolve_to_input_state_pos">resolve_<wbr>to_<wbr>input_<wbr>state_<wbr>pos</a></dt><dd>Resolve a hierarchical register (DFF) name to its bit position in the
+runtime observation.</dd><dt><a class="fn" href="fn.resolve_net_id.html" title="fn jacquard::sim::trace_signals::resolve_net_id">resolve_<wbr>net_<wbr>id</a></dt><dd>Resolve a hierarchical signal name to its bit position in the GPU
+output state buffer, using the same multi-candidate matching as
+<a href="fn.register_trace_signals.html" title="fn jacquard::sim::trace_signals::register_trace_signals"><code>register_trace_signals</code></a> (so Yosys-flattened / scalar-expanded /
+structural naming all work) but reading <code>script.output_map</code> instead
+of registering an observable.</dd><dt><a class="fn" href="fn.resolve_to_input_state_pos.html" title="fn jacquard::sim::trace_signals::resolve_to_input_state_pos">resolve_<wbr>to_<wbr>input_<wbr>state_<wbr>pos</a></dt><dd>Resolve a hierarchical register (DFF) name to its bit position in the
 <strong>input</strong> state slot — the DFF Q slot a power-up value must be deposited
 into for <code>reg_init</code> value-injection (issue #108).</dd><dt><a class="fn" href="fn.resolve_to_state_pos.html" title="fn jacquard::sim::trace_signals::resolve_to_state_pos">resolve_<wbr>to_<wbr>state_<wbr>pos</a></dt></dl></section></div></main></body></html>

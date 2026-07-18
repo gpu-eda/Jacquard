@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["TraceError"],"fn":["parse_signal_name","read_trace_file","register_trace_signals","resolve_to_input_state_pos","resolve_to_state_pos"],"struct":["ParsedSignalName"]};
+window.SIDEBAR_ITEMS = {"enum":["TraceError"],"fn":["parse_signal_name","read_trace_file","register_trace_signals","resolve_net_id","resolve_to_input_state_pos","resolve_to_state_pos"],"struct":["ParsedSignalName"]};

@@ -309,7 +309,7 @@
 <a href=#309 id=309 data-nosnippet>309</a>/// multi-candidate interpretations (`parse_signal_name`) until one hits
 <a href=#310 id=310 data-nosnippet>310</a>/// `netname2id`. Shared by the state-position resolvers below. Returns `None`
 <a href=#311 id=311 data-nosnippet>311</a>/// if the name can't be parsed or matches no net.
-<a href=#312 id=312 data-nosnippet>312</a></span><span class="kw">fn </span>resolve_net_id(netlistdb: <span class="kw-2">&amp;</span>NetlistDB, name: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#312 id=312 data-nosnippet>312</a></span><span class="kw">pub fn </span>resolve_net_id(netlistdb: <span class="kw-2">&amp;</span>NetlistDB, name: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
 <a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">let </span>candidates = parse_signal_name(name).ok()<span class="question-mark">?</span>;
 <a href=#314 id=314 data-nosnippet>314</a>    candidates.iter().find_map(|c| {
 <a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">let </span>key = (c.hier.clone(), c.leaf.clone(), c.bit);
