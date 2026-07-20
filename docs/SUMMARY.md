@@ -52,7 +52,7 @@
   - [0019 — Cell-model IR: a complete per-cell-type library descriptor (Proposed)](adr/0019-cell-model-ir.md)
   - [0020 — Python engine as a bundled binary wheel (Draft — deferred)](adr/0020-python-engine-binary-wheel.md)
   - [0021 — Behavioral RTL support via an embedded synthesis front-end (Proposed)](adr/0021-behavioral-rtl-support.md)
-  - [0022 — Transaction-based external stimulus (SCE-MI-style pipes) (Proposed)](adr/0022-transaction-based-stimulus.md)
+  - [0022 — Flow-controlled external I/O across the batch boundary (Proposed)](adr/0022-flow-controlled-io.md)
 - [Implementation Plans](plans/README.md)
   - [Post-Phase-0 Roadmap](plans/post-phase-0-roadmap.md)
   - [GF180MCU PDK enablement](plans/gf180mcu-enablement.md)
