@@ -3,10 +3,18 @@ title = "Jacquard Documentation"
 authors = ["ChipFlow"]
 src = "docs"
 
+[preprocessor.d2]
+# Renders ```d2 fenced blocks to inline SVG at build time by shelling out to the
+# `d2` binary (must be on PATH in the docs CI job). Chosen over mermaid for
+# noticeably better auto-layout on 2-D architecture diagrams; see
+# docs/spikes/architecture-doc-redesign.md.
+path = "d2"
+layout = "elk"
+
 [output.html]
 default-theme = "light"
 git-repository-url = "https://github.com/gpu-eda/Jacquard"
 # Version picker: main's docs live at the site root, each release also freezes a
 # copy under /vX.Y.Z/. See theme/version-picker.js.
 additional-js = ["theme/version-picker.js"]
-additional-css = ["theme/version-picker.css"]
+additional-css = ["theme/version-picker.css", "theme/d2-diagrams.css"]

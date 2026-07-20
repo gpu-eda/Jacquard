@@ -35,9 +35,30 @@ SUMMARY = DOCS / "SUMMARY.md"
 LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
 # SUMMARY list entries: - [Title](path.md)
 SUMMARY_LINK_RE = re.compile(r"\]\(([^)\s]+\.md)\)")
+# Opens/closes a fenced code block: a line starting (after indent) with ``` or ~~~.
+FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 # Directories whose pages are deliberately out-of-book working memory.
 IGNORE_ORPHAN_DIRS = {"handoffs"}
+
+
+def strip_fenced_code(text: str) -> str:
+    """Drop fenced code blocks so ``](...)`` *inside* a code sample isn't read as
+    a link. mdBook renders fenced content as literal text, not markup — a doc that
+    illustrates example markdown (e.g. a future SUMMARY.md nav) would otherwise
+    trip false 404s. Fences close on the same marker char that opened them."""
+    out: list[str] = []
+    fence: str | None = None
+    for line in text.splitlines():
+        m = FENCE_RE.match(line)
+        if fence is None:
+            if m:
+                fence = m.group(1)[0]  # ` or ~
+            else:
+                out.append(line)
+        elif m and m.group(1)[0] == fence:
+            fence = None
+    return "\n".join(out)
 
 
 def rendered_pages() -> set[str]:
@@ -59,7 +80,7 @@ def main() -> int:
         if not page_path.exists():
             errors.append(f"SUMMARY.md lists a page that does not exist: {page}")
             continue
-        for m in LINK_RE.finditer(page_path.read_text()):
+        for m in LINK_RE.finditer(strip_fenced_code(page_path.read_text())):
             raw = m.group(1)
             target = raw.split("#", 1)[0]
             if not target or target.startswith(("http://", "https://", "mailto:")):
