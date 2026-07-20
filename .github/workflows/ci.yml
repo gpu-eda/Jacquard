@@ -144,6 +144,19 @@ jobs:
           curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.44/mdbook-v0.4.44-x86_64-unknown-linux-gnu.tar.gz \
             | tar -xz -C ~/.cargo/bin
 
+      - name: Install d2 + mdbook-d2 (architecture diagrams)
+        # The docs render ```d2 fenced blocks to SVG at build time. mdbook-d2
+        # shells out to the `d2` binary, so both must be present. Install d2 from
+        # its release tarball into ~/.cargo/bin (already on PATH, same pattern as
+        # mdbook above) rather than the install script, whose target dir isn't
+        # guaranteed on PATH. The preprocessor comes from crates.io.
+        run: |
+          mkdir -p ~/.cargo/bin
+          curl -sSL https://github.com/terrastruct/d2/releases/download/v0.7.1/d2-v0.7.1-linux-amd64.tar.gz \
+            | tar -xz -C /tmp
+          install /tmp/d2-v0.7.1/bin/d2 ~/.cargo/bin/d2
+          cargo install mdbook-d2 --version 0.3.8 --locked
+
       - name: Build mdbook
         run: mdbook build
 
