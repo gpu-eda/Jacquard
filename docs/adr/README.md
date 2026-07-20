@@ -49,6 +49,37 @@ This extends to user-facing docs and `--help` text: a sentence telling
 the reader how the tool behaves is a verifiable claim — check it against
 the code before writing it.
 
+## Three kinds of claim, aged differently
+
+An ADR is written against a codebase it usually changes, often *because* of
+the ADR. To stay readable once that change lands, keep three kinds of claim
+distinct, because they age at different rates:
+
+1. **Why the decision was made** — the rationale, and the problem that
+   prompted it. This is the ADR's lasting value; the code and `git log` show
+   the *what*, only the ADR holds the *why*. Write the motivating facts as the
+   state at decision time (past tense, or "when this was written") and don't
+   rewrite them when the code moves. The problem is worth keeping even after
+   it's solved.
+2. **What the current architecture is** — what the code does today. A
+   verifiable present-tense claim (see [Keeping status honest](#keeping-status-honest)),
+   kept in step with the code. This is what goes stale when the code changes,
+   and what an edit-in-place update targets. Each "what" should link back to the
+   "why" that produced it, so a reader who lands on the current shape can reach
+   the reasoning without hunting for it.
+3. **What's decided but not built yet** — the gap between the decision and the
+   code. Lives in `## Implementation status`; each piece moves into (2) as it
+   lands, with a plan or issue so the unbuilt half isn't lost.
+
+The failure mode is present-tensing all three the same way, so a future reader
+can't tell whether a sentence is *why we did it*, *what the code does*, or
+*what we still intend*. "`BATCH_SIZE` is 1024" reads as current fact; "today's
+fixed `BATCH_SIZE` is what this replaces" reads as the starting point the
+decision moves past. A `Proposed` ADR is the sharp case: everything it proposes
+is bucket 3, so an early Implementation-status note ("nothing built; the code
+today is X") lets the body describe the proposed design in the present without a
+reader mistaking it for current reality.
+
 ## Index
 
 | # | Title | Status |
