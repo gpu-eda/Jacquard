@@ -74,7 +74,7 @@ the code before writing it.
 | [0019](0019-cell-model-ir.md) | Cell-model IR: a complete per-cell-type library descriptor | Proposed |
 | [0020](0020-python-engine-binary-wheel.md) | Python engine as a bundled binary wheel (cibuildwheel) | Draft — deferred (PyO3 preferred; see ADR) |
 | [0021](0021-behavioral-rtl-support.md) | Behavioral RTL support via an embedded synthesis front-end (YoWASP) | Proposed |
-| [0022](0022-transaction-based-stimulus.md) | Transaction-based external stimulus (SCE-MI-style pipes) | Proposed |
+| [0022](0022-flow-controlled-io.md) | Flow-controlled external I/O across the batch boundary | Proposed |
 
 ## How the ADRs relate
 

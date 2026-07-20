@@ -44,7 +44,7 @@ These are directions under consideration, not commitments or dated milestones:
   of immediate assertions through synthesis (`GEM_ASSERT` cells; see the
   assertion handling in `aigpdk.rs`). Broader SVA support is the next step here.
 - **Running UVM test suites** — *design settled, unbuilt.* The shape is
-  [ADR 0022](adr/0022-transaction-based-stimulus.md): split the testbench the way
+  [ADR 0022](adr/0022-flow-controlled-io.md): split the testbench the way
   emulators have since SCE-MI. Sequences, randomisation and checking stay on the
   host; the driver's *timed* half is rewritten as a synthesizable transactor and
   compiled into the AIG beside the design (possible since the
