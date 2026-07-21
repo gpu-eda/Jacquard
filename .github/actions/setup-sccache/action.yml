@@ -1,0 +1,44 @@
+name: Setup sccache
+description: >
+  Install sccache with the GitHub Actions cache backend and route rustc, cc-rs
+  C/C++, and nvcc through it, plus bound build parallelism to nproc/2.
+
+  One wrapper covers all three: cc-rs (>= 1.0.84, ours is 1.2.x) honours
+  RUSTC_WRAPPER for its C/C++ and nvcc invocations via rustc_wrapper_fallback,
+  so the heavy mt-kahypar/TBB/boost objects get cached on warm runs. The
+  nproc/2 job cap bounds peak memory of those parallel -O3 C++ TUs on *cold*
+  builds (a cache miss still compiles), which is what was OOM-killing runners.
+
+inputs:
+  multiarch:
+    description: >
+      Set SCCACHE_CACHE_MULTIARCH=1. Needed for multi-arch device code (the
+      all-major CUDA build) so nvcc objects still cache.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # Installs the sccache binary, wires the GHA cache tokens, and prints
+    # `sccache --show-stats` in its post-run step (so cache hit-rates are
+    # visible without a manual step).
+    - uses: mozilla-actions/sccache-action@v0.0.10
+
+    - name: Configure sccache + build parallelism
+      shell: bash
+      run: |
+        set -euo pipefail
+        n=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null \
+              || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+        jobs=$(( n / 2 )); [ "$jobs" -lt 1 ] && jobs=1
+        {
+          echo "CARGO_BUILD_JOBS=$jobs"
+          echo "RUSTC_WRAPPER=sccache"
+          echo "SCCACHE_GHA_ENABLED=true"
+        } >> "$GITHUB_ENV"
+        echo "sccache enabled; CARGO_BUILD_JOBS=$jobs (of $n cpus)"
+        if [ "${{ inputs.multiarch }}" = "true" ]; then
+          echo "SCCACHE_CACHE_MULTIARCH=1" >> "$GITHUB_ENV"
+          echo "multi-arch device-code caching enabled"
+        fi
