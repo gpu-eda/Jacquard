@@ -1,0 +1,290 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0022 — Flow-controlled external I/O across the batch boundary (Proposed) - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-picker.css">
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="adr-0022--flow-controlled-external-io-across-the-batch-boundary"><a class="header" href="#adr-0022--flow-controlled-external-io-across-the-batch-boundary">ADR 0022 — Flow-controlled external I/O across the batch boundary</a></h1>
+<p><strong>Status:</strong> Proposed</p>
+<p><strong>Relates to:</strong> <a href="0013-plural-peripheral-configs.html">ADR 0013</a> (peripheral models and the GPU→CPU ring buffers, which are half of this channel already), <a href="0017-cosim-execution-model.html">ADR 0017</a> (batch dispatch, where <code>BATCH_SIZE</code> lives), <a href="0021-behavioral-rtl-support.html">ADR 0021</a> (the RTL on-ramp that makes a synthesizable transactor possible), and <a href="../interop.html">Testbench Interop</a>.</p>
+<h2 id="implementation-status"><a class="header" href="#implementation-status">Implementation status</a></h2>
+<p>Proposed; none of this is built. The code today has a fixed <code>BATCH_SIZE = 1024</code> (<a href="0017-cosim-execution-model.html">ADR 0017</a>), the GPU→CPU ring buffers from <a href="0013-plural-peripheral-configs.html">ADR 0013</a>, and the per-edge full readback the cost section describes. What this ADR adds, the adaptive window, per-tap GPU-side projection, the CPU→GPU input pipe, the reactor, and any SCE-MI adapter, is unbuilt. The design sections below are written in the present tense as the intended shape, not current behaviour.</p>
+<h2 id="the-batch-is-where-the-speed-comes-from"><a class="header" href="#the-batch-is-where-the-speed-comes-from">The batch is where the speed comes from</a></h2>
+<p>Everything external to the simulation crosses one seam: the batch. A testbench driving stimulus in, a video renderer streaming samples out, a debugger reaching in and reading back are all I/O across the same GPU↔CPU boundary, and one constant governs every one of them.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Batch size for backend dispatch: number of consecutive scheduler edges run
+/// in one `run_edges` call (no per-tick CPU interaction within a batch).
+const BATCH_SIZE: usize = 1024;
+<span class="boring">}</span></code></pre></pre>
+<p>The parenthetical is the whole story. 1024 scheduler edges execute with the CPU absent, which is why cosim is GPU-compute-bound (the simulate kernel is about 72% of per-edge GPU time; see the <a href="../cosim-perf-report.html">Cosim Perf Report</a>). Nothing crosses the boundary in between, and that is the only reason the number holds. Any external I/O that reaches across inside a batch pulls the boundary back to per-edge and deletes the point of using a GPU.</p>
+<p>A UVM driver does exactly that. It reaches through a virtual interface and wiggles pins on every clock, which forces <code>BATCH_SIZE</code> to 1 and a CPU round-trip per edge. So the question was never one of effort. Anything that has to observe or drive every cycle is incompatible with the engine, and no implementation makes it otherwise.</p>
+<p>The bound is per-cycle specifically, not latency in general, and the difference is easy to miss. A consumer that wants low latency at a <em>domain</em> cadence (a video tap at vsync, roughly 16 ms; a link at a packet boundary) crosses on that design signal rather than every clock. That cadence is coarse, so the batch stays large and the GPU stays busy. Latency-sensitive I/O and deep batches coexist; only per-cycle interaction collapses the batch to 1.</p>
+<h2 id="the-cost-is-the-readback-not-the-socket"><a class="header" href="#the-cost-is-the-readback-not-the-socket">The cost is the readback, not the socket</a></h2>
+<p>The signal-streaming and video tap (#184) measured about half its wall-clock on the CPU side. The natural guess was the socket, but the socket write is already non-blocking and drops on backpressure, so that isn't where the time went. It goes to the full per-edge state readback the tap rides on. Moving <em>state</em> across the boundary is the expensive part, not the syscall, so the fix is a correctly shaped and sized pipe rather than a faster socket. That is what this ADR is about.</p>
+<h2 id="cross-the-boundary-through-bounded-pipes"><a class="header" href="#cross-the-boundary-through-bounded-pipes">Cross the boundary through bounded pipes</a></h2>
+<p>The decision that both applications below build on: cross the batch boundary only through bounded, flow-controlled FIFOs, sized so either side can run ahead of the other up to the pipe's depth without changing the result. This is latency-insensitive I/O, and it is settled prior art rather than an invention.</p>
+<p>Emulators standardised the answer decades ago. <a href="https://www.accellera.org/downloads/standards/sce-mi">SCE-MI</a> (Accellera, v2.4, 2016) splits the testbench into an untimed host side and a timed emulator side, with buffered, flow-controlled, message-oriented pipes of configurable depth between them. The property that matters is that a transactor may run ahead of the host up to the pipe's buffering, which is the same statement as "no per-tick CPU interaction within a batch" reached independently under the same constraint. Jacquard being emulator-inspired (GEM) isn't a coincidence.</p>
+<p><a href="https://docs.fires.im/">FireSim / Golden Gate (MIDAS II)</a> is the same architecture in open source, as readable code rather than a PDF. The vocabulary maps cleanly:</p>
+<div class="table-wrapper"><table><thead><tr><th>SCE-MI</th><th>FireSim</th><th>here</th></tr></thead><tbody>
+<tr><td>transactor / BFM</td><td>bridge (target RTL + host software)</td><td>synthesizable BFM in the AIG, or a CPU-side tap</td></tr>
+<tr><td>pipe</td><td>token channel</td><td>the CPU↔GPU rings</td></tr>
+<tr><td>untimed / timed split</td><td>host-decoupling</td><td>CPU model / GPU batch</td></tr>
+</tbody></table>
+</div>
+<p>Golden Gate's idea outlasts its vocabulary. It decomposes the target into a dataflow graph of latency-insensitive models, so either side can run ahead or stall without changing the result. That is the general form of what <code>BATCH_SIZE</code> does by hand, and why FireSim is both accelerated and deterministic. We can't lift the implementation (Chisel/FIRRTL onto FPGAs against Verilog/AIG onto GPUs), but it is the closest prior art with source, and the place to look before inventing channel semantics.</p>
+<h2 id="the-window-is-the-only-knob"><a class="header" href="#the-window-is-the-only-knob">The window is the only knob</a></h2>
+<p>One value controls everything: the commit window, meaning how many edges the GPU runs before it lets the CPU drain. At the GPU boundary the buffer <em>is</em> the window. The upstream (GPU→CPU) ring holds one batch's snapshots, so its depth is the window. The input (CPU→GPU) pipe is pre-loaded to feed the window, so its depth is <code>window / crossing-rate</code>. Nobody sets those depths; you size the window and they fall out. Today's fixed <code>BATCH_SIZE = 1024</code> is the degenerate case this replaces, a fixed window and therefore a fixed depth, wrong at both ends: too small for bulk throughput, too large for interactive latency.</p>
+<p>The stall is still a real risk, and it is the same cliff from either side. If the window outruns what the pipes can hold, the batch stalls and the GPU idles on a starved input or a full output ring. But since the depths derive from the window, that can't come from mis-sizing a buffer. It comes only from pushing the window past a genuine limit, and three limits bound it. Memory is one, because a deeper window needs a bigger ring and device memory is the ceiling; this is why per-tap projection matters, since small entries make deep windows affordable. Latency is the second, because a big window delays a latency-sensitive consumer, so a latency budget or a flush signal caps it. Input supply is the third, because an input-gating pipe fills only as fast as the host produces, and if it starves the window shrinks on its own.</p>
+<p>So the caller never picks a depth. It declares intent (a latency budget or a flush signal, and a backpressure policy), and the window adapts within those limits with every depth derived. The one buffer that isn't window-derived is the downstream CPU→socket ring, the slack between draining the GPU ring and writing the socket, and even there the knob is the policy rather than a size: <code>DropOldest</code> for video (a generous default, overflow drops) or <code>Block</code> for lossless JTAG. A caller can pin a depth as an optional override when the workload is known and warm-up should be skipped, but that is the exception, not the contract.</p>
+<p>Our vocabulary diverges from SCE-MI's here, and it is worth being precise. A settable depth is SCE-MI's <em>FIFO</em> semantics, not its <em>pipe</em> depth, which is query-only (§5.8.5.7). That settable case surfaces here only at the optional override and the socket buffer. Most depth isn't set at all; it is the window.</p>
+<p>Three levers realise the adaptive window, in rising order of sophistication. The first is mode selection: bound the window by the tightest attached consumer's class (small for interactive, large for bulk) plus a backpressure clamp. It is predictable and the right first move. The second is the flush signal, a designated design signal that closes the window when it fires, vsync for a video tap or a packet boundary for a link. The window becomes "until the next domain event", which stays large in edge terms so GPU throughput is untouched, while delivery tracks the domain's own cadence. This is the concrete form of the per-cycle-versus-domain-cadence distinction from earlier, and SCE-MI pipes already carry it as <code>eom</code> end-of-message markers and auto-flush (§5.8), prior art to borrow rather than reinvent. The third, for when a tight consumer and a bulk consumer share a run, decouples the GPU commit window (kept large) from per-consumer drain cadence by having the GPU publish a progress counter the drain polls. That costs mid-batch GPU→CPU visibility (a device-written atomic plus a CPU poll, cheap on Metal and managed memory but worth confirming per backend), and it is deferred until the flush signal proves insufficient. Continuous AIMD control is deferred further still.</p>
+<p>Judge any of it by crossings retired per batch (transactions in, frames out), not by features supported.</p>
+<h2 id="backpressure-and-the-inputoutput-asymmetry"><a class="header" href="#backpressure-and-the-inputoutput-asymmetry">Backpressure and the input/output asymmetry</a></h2>
+<p>Backpressure policy belongs to each pipe, not to the system, because the two directions want opposite things. A lossless input blocks: a dropped transaction or bitbang command corrupts the session, so the pipe is sized and the producer waits when it fills. A streaming output drops: latest-wins, never stall the sim, since a late frame is worth less than a stalled GPU.</p>
+<p>The deeper asymmetry is that outputs decouple and inputs don't. An output tap is fire-and-forget into a ring, and the sim never waits on it. An input-driving pipe is different in kind, because the sim's next step depends on the message. Flow control makes the I/O asynchronous, with no syscall on the hot path, but it can't remove that dependency, so when a gating input's pipe is empty and the sim needs the next message, it stalls. That isn't a bug to engineer away; it is what interactive debug is, and it is why the JTAG-server run sits at a large edge ceiling with the sim as the fast side waiting on OpenOCD.</p>
+<h2 id="determinism-is-the-line"><a class="header" href="#determinism-is-the-line">Determinism is the line</a></h2>
+<p>Cosim is byte-identical across CpuBackend, CUDA, HIP and Metal, and that equivalence is the correctness oracle. The pipes can fill and drain whenever they like, but the sim's consumption and sampling points stay deterministic, tied to sim time and FIFO order (TCP preserves order) and never to wall-clock. Windowing changes where we sync, never what the sim computes. Replay and bulk capture stay bit-exact regardless of window size or when a socket was serviced; only genuinely-live interactive sessions run on wall-clock time, and those were never golden-compared. The moment a message's wall-clock arrival could change which edge it lands on, the equivalence breaks. That is the line the design can't cross.</p>
+<h2 id="driving-stimulus-in-transactors-not-testbenches"><a class="header" href="#driving-stimulus-in-transactors-not-testbenches">Driving stimulus in: transactors, not testbenches</a></h2>
+<p>The input case is pointing a UVM, cocotb or Rust testbench at Jacquard, and the model is SCE-MI's split. The untimed side (sequences, randomisation, checking) runs on the host, as UVM in a real simulator, cocotb, or plain Rust; the model doesn't care which. The timed side is a transactor written as synthesizable SystemVerilog, compiled through the on-ramp (<a href="0021-behavioral-rtl-support.html">ADR 0021</a>) into the AIG next to the DUT, so it lives inside the batch and wiggles pins at GPU speed. Pipes sit between them, as above.</p>
+<p>How the transactor attaches is the part that shows the architecture already fits, and it corrects a mistake worth stating plainly: there is no DPI running on the emulator fabric, and there wouldn't be on ours. A SCE-MI transactor is two pieces, split exactly where our design puts a FIFO boundary. Its synthesizable half touches only a structural pipe endpoint, an interface exposing ready/valid/message wires (<code>scemi_input_pipe</code> and <code>scemi_output_pipe</code>), which the on-ramp synthesises like any RTL with the endpoint as a blackbox boundary cell. The DPI and the <code>scemi_pipe_c_*</code> calls are host-side glue that attaches to that endpoint and marshals to the untimed side. The synthesised transactor never calls C; it drives structural wires, and the host runtime supplies the driver.</p>
+<p>That is why SCE-MI is a plausible future interface rather than something the design forecloses. We aren't implementing the SCE-MI API now, but our pipe is the same FIFO-at-a-boundary plus host-driver split that SCE-MI needs, so a conformant front-end could slot on later as an adapter over the same rings. Leaving it unbuilt for now is a deliberate choice, and the design keeps it reachable.</p>
+<p>The one mechanism we're missing is the input pipe. The GPU→CPU direction (responses, monitors) already exists as the ADR 0013 ring buffers; the CPU→GPU direction (transactions in) doesn't. It has to be pre-loaded before dispatch rather than streamed, because <code>ulib</code>'s H2D is synchronous and uploading per edge reintroduces the very stall the batch avoids. Load a batch's worth of messages into device memory and let a GPU-side feeder pop them as the transactor asserts ready.</p>
+<p>Running the untimed side on the GPU instead is a category error, not a long tail of missing features. The AIG is elaborated once into a static script (<code>FlattenedScriptV1</code>), so there is no heap for UVM's <code>new()</code> and factory, no event queue for fork/join and phasing (throwing that queue away is the speed thesis), no solver for <code>randomize()</code>, no strings or associative arrays for <code>uvm_config_db</code>, and only immediate assertions (temporal SVA needs runtime automata). Building all that is writing a SystemVerilog simulator, and it would run at CPU speed while dragging the GPU into a per-edge handshake, a slow simulator running inside a fast one.</p>
+<p>The reason to adopt SCE-MI's semantics but not chase its API is the ecosystem, or the lack of one. SCE-MI exists to talk to Palladium, Veloce and ZeBu; open-source UVM targets simulators, which have no boundary to amortise, so no public UVM testbench uses SCE-MI pipes. A survey of the field turned up exactly one open SCE-MI implementation, a small single-author reference last touched in 2019 (<code>narenkn/scemi_lib</code>), and no open synthesizable transactor library at all, since the AXI, APB and UART BFMs are commercial VIP. Conformance would buy interop with proprietary emulators we can't obtain or test against, which is unfalsifiable and low-value. The spec and its headers are public, so we borrow the shape; the code and the transactor corpus aren't there to reuse. The with-source model to mirror is FireSim/Golden Gate, whose bridges and token channels are the same split in readable code under their own API. Study their channel semantics before inventing ours.</p>
+<p>Two costs are real and worth stating to anyone asking. The transactor is ours to write, per protocol, with the untimed side adapted to speak transactions; commercial users escape that only because a marketplace sells them the BFM. And if this is to be more than a demo, the honest investment is an open library of on-ramp-synthesizable protocol transactors, the thing that would produce the examples we currently lack. Anyone hoping to lift a testbench off GitHub and press go should read that as a no.</p>
+<h2 id="streaming-and-interactive-taps"><a class="header" href="#streaming-and-interactive-taps">Streaming and interactive taps</a></h2>
+<p>The output and interactive case is a video renderer, the signal-stream scope (#184), a <code>--jtag-server</code> driving OpenOCD in and reading back, or <code>--trace-signals</code> observing. These multiply, they run in both directions at once, and they need a structure rather than per-tap socket calls threaded through the loop.</p>
+<p>A <code>Tap</code> declares what it needs, and the runtime decides how to serve it:</p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>direction</code></td><td><code>Out</code>, <code>In</code> (drives pins), or <code>InOut</code> (JTAG)</td></tr>
+<tr><td><code>projection</code></td><td>the signal set it observes or drives, its slice of state rather than the whole thing</td></tr>
+<tr><td><code>cadence</code></td><td>every edge, on a strobe, or on a clock domain (JTAG's TCK)</td></tr>
+<tr><td><code>backpressure</code></td><td><code>DropOldest</code> / <code>Block</code> / <code>Coalesce</code>, governing the socket-side ring</td></tr>
+<tr><td><code>latency_budget</code> / <code>flush_signal</code></td><td>the tap's intent, which bounds the window; ring depths derive from it</td></tr>
+<tr><td><code>depth</code> (optional)</td><td>override the derived depth for a known workload</td></tr>
+</tbody></table>
+</div>
+<p>The field that is deliberately absent is a required depth. Per the sizing section, the tap declares intent and the depths follow from the window.</p>
+<p>The model produces two FIFO boundaries sized by different constraints. Upstream are the per-tap GPU→CPU rings, generalising the ADR 0013 buffers from UART and bus traces to any projection. Downstream are per-tap socket rings owned by a reactor: one <code>mio</code>-style thread over every tap fd, doing accept, read and write, so N taps compose without a thread each and no socket syscall lands on the hot path. The sim loop touches this at two points per batch, draining input rings (blocking only for a gating input) and pushing output rings (never blocking).</p>
+<p>The projection is what actually recovers the #184 cost, and it is separate from the reactor. If the GPU packs only a tap's projected signals at the tap's cadence, each ring entry is a few bytes rather than the whole <code>2×state_size</code>, so the ring can be deep without the per-edge full readback that was the 50%. Off-thread sockets are cleaner but small; the projection is the win. Keeping them as separate workstreams stops the reactor being credited with a fix it didn't make.</p>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<p>One coherent model covers both cases, because direction, backpressure policy, and endpoint (a GPU-side feeder or the CPU reactor) are parameters of one flow-control design rather than separate designs. A third crossing slots in instead of re-deriving channels, and <code>BATCH_SIZE</code> stops being a single wrong number, following the workload and the attached consumers instead.</p>
+<p>The costs are equally concrete. Existing UVM drivers don't port; their timed half is rewritten as a BFM (standard SCE-MI and TBX work, but real), and a host adapter over DPI or a socket is still needed on the untimed side. The model suits protocol transactors and targeted taps, not big memories: a BFM carries little state, whereas a 16 MB flash backing store still wants a bespoke kernel rather than an AIG memory, which gives ADR 0013's target architecture a second answer where some peripherals could simply be RTL. It also adds surface to get right, namely a lock-free SPSC ring on the hot path, per-backend GPU-side projection packing, the reactor, and the CPU→GPU feeder. The determinism contract has to be tested rather than assumed, since a live-versus-replay divergence would be silent. When it does fail, the failure is a window pushed past a limit (a starved input, a full output, or memory), reached by over-running the window rather than by picking a wrong buffer size.</p>
+<h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives considered</a></h2>
+<p>A per-cycle bridge (naive cocotb or DPI) is rejected for throughput because it forces <code>BATCH_SIZE</code> to 1. It is worth naming honestly, though: this is the signal-level acceleration mode commercial emulators do ship, keeping the driver and co-modelling pin values every clock, with the accelerator idling on the host. Legitimate for bring-up and debug, not a throughput path, and exactly the cliff this ADR avoids.</p>
+<p>Full SCE-MI API conformance is deferred rather than rejected. The architecture is shaped to admit it later, but with no open conformant peer and no open transactor corpus there is nothing to validate against, so it would buy interop only with proprietary emulators. Adopt the semantics now and leave the door open.</p>
+<p>Running a UVM runtime on the GPU is rejected for the reasons above: it is a SystemVerilog simulator, slower than the thing it replaces. Moving only the socket to a thread is necessary but not sufficient, since it leaves the per-edge readback where the time actually goes. A thread per tap doesn't scale, which is what the reactor is for. Continuous AIMD window control from day one is premature; mode selection plus a flush signal is predictable and likely captures most of the benefit. Record-and-replay works today and stays the recommended interim path, but it isn't reactive, so stimulus can't depend on the design. Vendoring the SCE-MI spec into <code>docs/</code> is rejected because it is Accellera's copyrighted work with no update path, and we need the split and the pipes, not the DPI binding details; cite it, don't copy it.</p>
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li>SCE-MI (Standard Co-Emulation Modeling Interface), Accellera: the <a href="https://www.accellera.org/downloads/standards/sce-mi">standard downloads</a>. v2.4 (2016) is current, and the spec prints the C and SV pipe API in its appendices, including query-only pipe depth (§5.8.5.7) and blocking plus non-blocking transfer with <code>eom</code> and auto-flush (§5.8).</li>
+<li><a href="https://github.com/narenkn/scemi_lib"><code>narenkn/scemi_lib</code></a>: the only open-source SCE-MI implementation found (function-based plus a pipes reference, MIT, single-author, last touched 2019). Useful for API shape and for seeing the structural-endpoint-versus-host-DPI split, not a foundation to build on.</li>
+<li>FireSim / Golden Gate (MIDAS II), UC Berkeley: the same split in open source with code, in <a href="https://docs.fires.im/en/latest/Golden-Gate/Bridges.html">target-to-host bridges</a> and <a href="https://docs.fires.im/en/latest/Golden-Gate/LI-BDN.html">target abstraction and host decoupling</a>. Read it before designing channel semantics.</li>
+<li><a href="../interop.html">Testbench Interop</a>: what Jacquard drives today, and the record-and-replay fallback.</li>
+<li><a href="../cosim-perf-report.html">Cosim Perf Report</a>: where the per-edge time goes, and how the GPU-bound claim was measured.</li>
+<li>#184: the signal-streaming and video tap that surfaced the readback-versus-socket distinction.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../adr/0021-behavioral-rtl-support.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../plans/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../adr/0021-behavioral-rtl-support.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../plans/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-picker.js"></script>
+
+
+    </div>
+    </body>
+</html>

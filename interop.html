@@ -193,7 +193,7 @@ peripheral as a cosim kernel instead.</p>
 of immediate assertions through synthesis (<code>GEM_ASSERT</code> cells; see the
 assertion handling in <code>aigpdk.rs</code>). Broader SVA support is the next step here.</li>
 <li><strong>Running UVM test suites</strong> — <em>design settled, unbuilt.</em> The shape is
-<a href="adr/0022-transaction-based-stimulus.html">ADR 0022</a>: split the testbench the way
+<a href="adr/0022-flow-controlled-io.html">ADR 0022</a>: split the testbench the way
 emulators have since SCE-MI. Sequences, randomisation and checking stay on the
 host; the driver's <em>timed</em> half is rewritten as a synthesizable transactor and
 compiled into the AIG beside the design (possible since the
