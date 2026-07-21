@@ -12,40 +12,53 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon.svg">
-        <link rel="stylesheet" href="../css/variables.css">
-        <link rel="stylesheet" href="../css/general.css">
-        <link rel="stylesheet" href="../css/chrome.css">
-        <link rel="stylesheet" href="../css/print.css" media="print">
+        <link rel="icon" href="../favicon-5e44e8e6.svg">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../fonts/fonts.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="../highlight.css">
-        <link rel="stylesheet" href="../tomorrow-night.css">
-        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="../theme/version-picker.css">
+        <link rel="stylesheet" href="../theme/version-picker-0393021e.css">
+        <link rel="stylesheet" href="../theme/d2-diagrams-d5432d61.css">
 
 
-        <!-- Provide site root to javascript -->
+        <!-- Provide site root and default themes to javascript -->
         <script>
-            var path_to_root = "../";
-            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc.js"></script>
+        <script src="../toc-acf3df94.js"></script>
     </head>
     <body>
-    <div id="body-container">
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
-                var theme = localStorage.getItem('mdbook-theme');
-                var sidebar = localStorage.getItem('mdbook-sidebar');
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
 
                 if (theme.startsWith('"') && theme.endsWith('"')) {
                     localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
@@ -59,7 +72,8 @@
 
         <!-- Set the theme before any content is loaded, prevents flash -->
         <script>
-            var theme;
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
@@ -68,55 +82,59 @@
             html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var sidebar = null;
-            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
-        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
                 <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
-            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <div id="page-wrapper" class="page-wrapper">
+        <div id="mdbook-page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
-                            <i class="fa fa-bars"></i>
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
                         </label>
-                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
-                            <i class="fa fa-paint-brush"></i>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
                         </button>
-                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
-                            <i class="fa fa-search"></i>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
                         </button>
                     </div>
 
@@ -124,36 +142,41 @@
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
-                            <i id="print-button" class="fa fa-print"></i>
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
-                            <i id="git-repository-button" class="fa fa-github"></i>
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="search-wrapper" class="hidden">
-                    <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
                     </form>
-                    <div id="searchresults-outer" class="searchresults-outer hidden">
-                        <div id="searchresults-header" class="searchresults-header"></div>
-                        <ul id="searchresults">
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="content" class="content">
+                <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="adr-0017--cosim-execution-model"><a class="header" href="#adr-0017--cosim-execution-model">ADR 0017 — Cosim execution model</a></h1>
 <p><strong>Status:</strong> Accepted (amended 2026-06-25).</p>
@@ -165,7 +188,7 @@ are now stale: <code>CudaBackend</code> and <code>HipBackend</code> implement <c
 (<code>src/sim/cosim/cuda.rs</code>, <code>hip.rs</code>; dispatched from <code>jacquard.rs</code>), and
 <code>step_edge</code> receives the real output slice. The later in-body amendments
 (2026-06-07/06-19/06-21) document this architecture; this note flags that
-the original "Metal-only" wording reflects the state at initial
+the original “Metal-only” wording reflects the state at initial
 acceptance, not current reality.</p>
 </blockquote>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
@@ -267,7 +290,7 @@ CPU would need to read output state after every single edge.</li>
 <li><strong>CPU reference check</strong> — when <code>--check-with-cpu</code> is active, the
 CPU replays the batch with the reference kernel and compares.</li>
 </ol>
-<p>No synchronisation beyond Metal's command buffer completion is
+<p>No synchronisation beyond Metal’s command buffer completion is
 needed — all drains happen after <code>waitUntilCompleted</code>.</p>
 <h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
 <ul>
@@ -280,7 +303,7 @@ rejects exotic clock ratios. A min-heap scheduler (proposed in
 <code>docs/plans/multi-clock-and-stimulus-architecture.md</code> as MC.2)
 would remove this limit.</li>
 <li>The edges-vs-cycles distinction must be maintained carefully in
-any code that converts user-facing "cycles" to internal "ticks".
+any code that converts user-facing “cycles” to internal “ticks”.
 The <code>sched_ticks_per_sys_clk_cycle</code> helper exists for this purpose.</li>
 <li>Pre-allocated schedule buffers consume <code>O(schedule_len)</code> Metal
 buffer pairs at startup. Each schedule entry creates two Metal
@@ -295,8 +318,8 @@ small (tens of bytes).</li>
 hard-errors on other backends. This amendment records the <strong>target
 architecture</strong> for making cosim backend-portable (CPU reference + CUDA/HIP),
 tracked as <a href="https://github.com/gpu-eda/Jacquard/issues/105">#105</a>. It
-supersedes the incremental 2026-06-05 note (whose "per-edge on every
-backend" framing the measurements below correct). It describes the
+supersedes the incremental 2026-06-05 note (whose “per-edge on every
+backend” framing the measurements below correct). It describes the
 steady-state design; the staging to reach it lives in
 <a href="../plans/cosim-backend-portability.html"><code>docs/plans/cosim-backend-portability.md</code></a>.
 It does <strong>not</strong> change the batch/scheduler model above — it factors <em>where</em>
@@ -307,12 +330,18 @@ each part runs and along what seam.</p>
 fast path (<code>batch &gt; 1</code>) runs versus forced single-edge dispatch
 (<code>force_single_edge = any_model_active</code>, plus diagnostic modes). Per-edge
 handover is the only mode needing a true per-edge CPU↔GPU round-trip.</p>
-<div class="table-wrapper"><table><thead><tr><th>Fixture</th><th>Edges</th><th>Batched (edges)</th><th>Single-edge commits</th><th>Commits</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Fixture</th><th>Edges</th><th>Batched (edges)</th><th>Single-edge commits</th><th>Commits</th></tr>
+</thead>
+<tbody>
 <tr><td><code>dual_uart</code></td><td>10,000</td><td>100%</td><td>0</td><td>11</td></tr>
 <tr><td><code>apb_trace</code></td><td>200</td><td>100%</td><td>0</td><td>2</td></tr>
 <tr><td><code>xprop_cosim</code></td><td>40</td><td>100%</td><td>0</td><td>2</td></tr>
 <tr><td><code>jtag_minimal</code></td><td>4,000,000</td><td>97.4%</td><td>102,310</td><td>106,117</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <p>Designs whose peripherals have GPU-side halves (UART, APB bus-trace, SPI
 flash — the <code>gpu_io_step</code> / <code>gpu_flash_model_step</code> kernels) run <strong>100%
@@ -331,10 +360,10 @@ event/ring-buffer draining. The batch-size decision stays here, unchanged.</p>
 <h3 id="layer-2--the-cosimbackend-trait-one-impl-per-backend"><a class="header" href="#layer-2--the-cosimbackend-trait-one-impl-per-backend">Layer 2 — the <code>CosimBackend</code> trait (one impl per backend)</a></h3>
 <p>Owns the <code>[2 × state_size]</code> design state and runs the design. Crucially it
 is <strong>batch-granular, not single-edge</strong> — the measurements show a literal
-<code>simulate_edge</code>-per-edge trait would collapse Metal's 100%-batched designs
+<code>simulate_edge</code>-per-edge trait would collapse Metal’s 100%-batched designs
 to one command-buffer submit per edge (~1000× regression). The trait method
-is therefore <em>"run N consecutive scheduler edges, applying each edge's ops
-and snapshotting each output slot to the ring"</em>, plus <code>state_prep</code>
+is therefore <em>“run N consecutive scheduler edges, applying each edge’s ops
+and snapshotting each output slot to the ring”</em>, plus <code>state_prep</code>
 (output→input copy + apply <code>BitOp</code>s + clear driven X-mask) and
 <code>input_state()/output_state()</code> accessors. <code>MetalSimulator</code> becomes
 <code>MetalBackend</code>; <code>CpuBackend</code> and <code>Cuda</code>/<code>HipBackend</code> are added.</p>
@@ -342,7 +371,7 @@ and snapshotting each output slot to the ring"</em>, plus <code>state_prep</code
 edge ops are a tiny, fixed, repeating set (<code>edges_per_period</code> entries, =2 for
 single-clock) built <em>once</em>; the orchestration must not hold a parallel copy
 that the backend re-materialises each dispatch (that would add a per-dispatch
-copy and, on Metal, <em>regress</em> today's zero-copy unified-memory path). Instead:</p>
+copy and, on Metal, <em>regress</em> today’s zero-copy unified-memory path). Instead:</p>
 <ul>
 <li><code>init_schedule(edges: Vec&lt;(StatePrepParams, Vec&lt;BitOp&gt;)&gt;)</code> hands the
 backend-agnostic description to the backend <em>once</em>; the backend materialises
@@ -350,17 +379,17 @@ its native buffers and retains them. The orchestration keeps only scalars
 (<code>edges_per_period</code>, <code>gcd_ps</code>).</li>
 <li><code>edge_ops_mut(edge_idx) -&gt; &amp;mut [BitOp]</code> is how reset / model-driven /
 clock-edge patching mutates ops. <strong>Metal</strong> returns a slice straight over the
-shared <code>MTLBuffer</code> — zero-copy, the write <em>is</em> the upload (exactly today's
+shared <code>MTLBuffer</code> — zero-copy, the write <em>is</em> the upload (exactly today’s
 behaviour). <strong>CUDA/HIP</strong> return a slice over a host mirror and mark the edge
 dirty; <code>run_edges</code> uploads only dirty edges before launch. Ops change rarely
 (reset transitions; only while a CPU-side model is active), so this is near
 zero in practice — and the buffers are KB-scale regardless.</li>
 </ul>
-<p>This replaces the earlier "neutral <code>Vec</code> + backend re-materialises" sketch,
+<p>This replaces the earlier “neutral <code>Vec</code> + backend re-materialises” sketch,
 which risked needless CPU↔GPU traffic and double bookkeeping.</p>
 <ul>
 <li><strong><code>MetalBackend</code></strong> runs N edges in one command buffer with GPU peripherals
-inside (today's <code>encode_and_commit_gpu_batch</code>).</li>
+inside (today’s <code>encode_and_commit_gpu_batch</code>).</li>
 <li><strong><code>CpuBackend</code></strong> runs the per-edge loop via <code>cpu_reference::simulate_block_v1</code>
 — the reference/oracle, and the unlock for <strong>cosim regression on free
 Linux CI</strong> (today Metal-only). N is effectively 1; throughput is not the
@@ -374,8 +403,8 @@ path is the permanent fallback for CPU-side models (e.g. JTAG replay).</li>
 </ul>
 <h3 id="layer-3--the-gpuperipheral-abstraction-3-tier-gpu-peripherals-primary"><a class="header" href="#layer-3--the-gpuperipheral-abstraction-3-tier-gpu-peripherals-primary">Layer 3 — the <code>GpuPeripheral</code> abstraction (3-tier, GPU peripherals primary)</a></h3>
 <p>Batching a <em>reactive</em> design requires the peripheral to run <strong>inside</strong> the
-batch — i.e. on the GPU — because the peripheral consumes each edge's output
-to drive the next edge's input. On Metal this is hidden by unified memory;
+batch — i.e. on the GPU — because the peripheral consumes each edge’s output
+to drive the next edge’s input. On Metal this is hidden by unified memory;
 on a discrete GPU, per-edge means a <strong>PCIe round-trip every edge</strong> (~1–2 µs
 each way), which over millions of edges is likely <em>slower than the CPU
 backend</em>. <strong>Therefore GPU-side peripherals are architecturally required for
@@ -393,7 +422,7 @@ implementations, not three</strong>: one shared <code>*_impl.cuh</code> (CUDA + 
 <code>.metal</code>. Tractable for the small in-core set (flash, UART, bus-trace) and
 matching the existing <code>simulate</code>-kernel precedent.</li>
 <li><strong>Tier 3 — single-source peripheral compilation</strong> (later; the
-user-extensible peripheral API). Hand-written kernels don't scale to
+user-extensible peripheral API). Hand-written kernels don’t scale to
 user-defined peripherals; the endgame is a user writing a peripheral <em>once</em>
 (restricted-Rust subset or a small peripheral-FSM IR) that compiles to CPU
 <ul>
@@ -419,7 +448,7 @@ decoded records.</p>
 </blockquote>
 <p>The CPU <code>PeripheralModel</code> trait (<code>src/sim/models/mod.rs:56</code>) is <em>already</em> this
 contract and <em>already</em> bidirectional:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>fn step_edge(&amp;mut self,
     output_state: &amp;[u32],              // OBSERVE design outputs
@@ -427,67 +456,73 @@ contract and <em>already</em> bidirectional:</p>
     emitted: &amp;mut Vec&lt;EmittedEvent&gt;);  // EMIT decoded records
 fn driven_positions(&amp;self) -&gt; &amp;[u32]; // the input bits it may drive
 fn is_active(&amp;self) -&gt; bool;           // forces batch=1 mid-transmission
-<span class="boring">}</span></code></pre></pre>
+<span class="boring">}</span></code></pre>
 <p>One trait already covers the whole spectrum via <em>optional halves</em>: GPIO is
 input-only (default <code>step_edge</code> just contributes overrides), UART-TX decode /
 bus-trace are output-only (empty <code>driven_positions</code>), SPI flash is
 bidirectional. So a single interface genuinely covers input and output — the
-doubt about "enough commonality" is unfounded: the commonality is the
+doubt about “enough commonality” is unfounded: the commonality is the
 FSM-over-IO-bits shape, and six models already share it.</p>
 <p>The GPU half is <strong>not</strong> yet unified — it is three bespoke kernels with the same
 skeleton but no common trait:</p>
-<div class="table-wrapper"><table><thead><tr><th>Kernel</th><th>reads</th><th>FSM state</th><th>writes</th><th>role</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kernel</th><th>reads</th><th>FSM state</th><th>writes</th><th>role</th></tr>
+</thead>
+<tbody>
 <tr><td><code>gpu_apply_flash_din</code></td><td><code>states</code>, <code>FlashState</code></td><td>—</td><td><code>states</code> (MISO)</td><td><strong>input</strong> inject</td></tr>
 <tr><td><code>gpu_flash_model_step</code></td><td><code>states</code>, <code>flash_data</code></td><td><code>FlashState</code></td><td><code>FlashState</code></td><td><strong>output</strong> observe + FSM</td></tr>
 <tr><td><code>gpu_io_step</code></td><td><code>states</code></td><td><code>UartDecoderState</code></td><td><code>UartChannel</code>/<code>BusTraceChannel</code> rings</td><td><strong>output</strong> decode → ring</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <p>Every kernel is <code>kernel(device u32* states, device FsmState* state, constant Params&amp; params, [device Ring* out], [const Data* in])</code>.</p>
 <p><strong>Target shape — one logical contract, two substrates:</strong></p>
 <ul>
-<li><strong>CPU substrate</strong> = today's <code>step_edge</code> (Rust over <code>&amp;[u32]</code>; drives via
+<li><strong>CPU substrate</strong> = today’s <code>step_edge</code> (Rust over <code>&amp;[u32]</code>; drives via
 <code>ModelOverrides</code>).</li>
 <li><strong>GPU substrate</strong> (<code>GpuPeripheral</code>) = <code>encode_step(encoder, states_buf, fsm_buf, params_buf, ring_buf)</code> running the <em>same FSM</em> over <code>device u32* states</code>.</li>
 <li><strong>Consistency anchor = the shared <code>#[repr(C)]</code> FSM-state + params structs.</strong>
-These already exist on both sides but are <strong>hand-synced</strong> ("<code>must match Metal UartChannel</code>", <code>cosim_metal.rs:178</code>); that duplication is the tax Tier 3
+These already exist on both sides but are <strong>hand-synced</strong> (“<code>must match Metal UartChannel</code>”, <code>cosim_metal.rs:178</code>); that duplication is the tax Tier 3
 removes by generating the Rust <code>step</code>, the GPU kernel, <strong>and</strong> the one struct
 from a single FSM definition.</li>
 </ul>
 <p><strong>The decision that makes it consistent: all input drives are <code>(position, value)</code> pairs applied through the one <code>state_prep</code>/ops path.</strong> Today this is the
 <em>inconsistent</em> part — CPU models drive indirectly (<code>overrides → BitOps → state_prep</code>, so drives land clock-edge-aligned), but <code>gpu_apply_flash_din</code>
 writes <code>states</code> directly. They are the same logical operation done two ways.
-Normalising flash's direct-write into FSM-produced ops applied by <code>state_prep</code>
+Normalising flash’s direct-write into FSM-produced ops applied by <code>state_prep</code>
 makes input application uniform across every peripheral and both substrates, and
-removes flash's special case. (Flash writes directly today only because its MISO
+removes flash’s special case. (Flash writes directly today only because its MISO
 depends on the FSM computed that same edge — expressible as ops the FSM emits.)</p>
 <p><strong>What deliberately does <em>not</em> unify</strong> (substrate detail below the contract):
 output draining (GPU needs ring buffers because the CPU cannot observe
 intra-batch state; CPU models emit immediately — same <code>events out</code> contract,
 different plumbing), and the FSM body itself (Rust vs kernel, single-sourced
-only by Tier 3's IR). These divergences are expected and bounded.</p>
+only by Tier 3’s IR). These divergences are expected and bounded.</p>
 <p><strong>Phase-1 implication:</strong> the CPU UART-TX decoder added in Phase 1 (no GPU
 equivalent exists today — <code>models/uart.rs</code> only has an RX-line <em>receiver</em>
 decode) must be written to this contract, with its FSM state mirroring
-<code>UartDecoderState</code>'s fields, so the Phase-2 <code>GpuPeripheral</code> kernel and the
+<code>UartDecoderState</code>’s fields, so the Phase-2 <code>GpuPeripheral</code> kernel and the
 Tier-3 single source fold into one definition rather than a third parallel one.</p>
 <h3 id="correctness-contract"><a class="header" href="#correctness-contract">Correctness contract</a></h3>
 <p>The CPU <code>PeripheralModel</code> (Tier 1) is ground truth. The cross-backend
 equivalence harness (<a href="https://github.com/gpu-eda/Jacquard/pull/113">#113</a>,
-today sim-only) extends to cosim: every backend's output VCD must be
+today sim-only) extends to cosim: every backend’s output VCD must be
 byte-identical on the same reactive design, and every GPU-peripheral kernel
 (Tier 2) must match its CPU model. This is the backstop for the whole effort.</p>
 <h3 id="considered-alternative-not-adopted-as-primary"><a class="header" href="#considered-alternative-not-adopted-as-primary">Considered alternative (not adopted as primary)</a></h3>
 <p><strong>Speculative batching</strong> — keep peripherals on the CPU, batch optimistically,
-and roll back on divergence (the multi-clock plan's MC.4 island run-ahead /
+and roll back on divergence (the multi-clock plan’s MC.4 island run-ahead /
 MC.5 record-and-replay). It avoids writing GPU kernels but is
 non-deterministic in throughput and substantially more complex. Rejected as
 the primary path; retained as the natural fallback for <em>user</em> CPU
 peripherals that are not GPU-portable. Cross-shader tools (Slang, Ferrox)
-remain rejected for the design kernel; Tier 3's narrow peripheral-FSM IR is
+remain rejected for the design kernel; Tier 3’s narrow peripheral-FSM IR is
 the cross-GPU answer for peripherals.</p>
 <h3 id="relationship-to-the-multi-clock-plan"><a class="header" href="#relationship-to-the-multi-clock-plan">Relationship to the multi-clock plan</a></h3>
-<p>The 102k JTAG single-edge round-trips are exactly the "cosim CPU↔GPU
-round-trip measured as the bottleneck" trigger for <strong>MC.3</strong> (streaming
+<p>The 102k JTAG single-edge round-trips are exactly the “cosim CPU↔GPU
+round-trip measured as the bottleneck” trigger for <strong>MC.3</strong> (streaming
 stimulus) and the motivation for <strong>MC.4</strong> (per-island multi-rate batching).
 Both are <em>orthogonal to and larger than</em> this seam (MC.4 needs the MC.1
 island partitioner) — the long-term fix for the per-edge tail, not a
@@ -509,23 +544,23 @@ batch from the start (Phase 2 lands the backend + GPU peripherals together,
 rather than a per-edge-only intermediate that would be unusably slow). The
 per-edge path remains as the fallback for CPU-side models (e.g. JTAG
 replay), where the per-edge tail is addressed later by the multi-clock
-plan's MC.3/MC.4, not by this seam.</li>
+plan’s MC.3/MC.4, not by this seam.</li>
 </ul>
 <h2 id="amendment-2026-06-19-no-cpu-peripheral-cudahip-variant-stage-on-fixtures"><a class="header" href="#amendment-2026-06-19-no-cpu-peripheral-cudahip-variant-stage-on-fixtures">Amendment 2026-06-19: no CPU-peripheral CUDA/HIP variant; stage on fixtures</a></h2>
 <p>Refines the Layer-2/3 phasing above with an implementation decision (made while
 building Phase 2). There is <strong>exactly one</strong> CUDA/HIP cosim backend, and it
 mirrors <code>MetalBackend</code>: GPU design step + <strong>GPU peripherals</strong> + variable
 batching + managed memory (<code>cudaMallocManaged</code>/<code>hipMallocManaged</code>, the closest
-analog to Metal's unified <code>StorageModeShared</code>).</p>
+analog to Metal’s unified <code>StorageModeShared</code>).</p>
 <ul>
 <li><strong>No CPU-peripheral CUDA/HIP backend.</strong> An earlier plan sketched a bring-up
-"checkpoint 2a" — a CUDA backend running <em>all</em> peripherals on the CPU,
+“checkpoint 2a” — a CUDA backend running <em>all</em> peripherals on the CPU,
 per-edge — as a stepping stone. That is <strong>dropped</strong>: no production backend
 works that way (Metal never runs peripherals on the CPU), so it would
 introduce a backend shape that exists nowhere else and obscure the
 architecture. <code>CpuBackend</code> stays the pure-CPU reference oracle; Metal and
 CUDA/HIP are the GPU backends with the same shape.</li>
-<li><strong>"Per-edge fallback" means <code>batch=1</code> of the GPU backend</strong>, not a
+<li><strong>“Per-edge fallback” means <code>batch=1</code> of the GPU backend</strong>, not a
 CPU-peripheral path. Model-driven-clock designs (JTAG) run the <em>same</em>
 GPU-peripheral backend at <code>batch=1</code>; only a small output read-back per edge
 feeds the CPU-side clock model. The Tier-1 CPU <code>PeripheralModel</code> remains the
@@ -557,13 +592,13 @@ external I/O.</strong> Its <code>step_edge</code> blocks reading the next bitban
 socket; because the client is the clock source, this blocking <em>is</em> the
 synchronisation. <strong><code>is_active()</code> stays <code>true</code> while a client is connected</strong>, so
 the existing <code>force_single_edge</code> gate drives the design at <code>batch=1</code> for the
-session's duration — the same mechanism JTAG <em>replay</em> already uses. <strong>No async
+session’s duration — the same mechanism JTAG <em>replay</em> already uses. <strong>No async
 executor and no background thread are needed for a single connection</strong>; the
 blocking accept happens once before the main loop. The batched fast path is
 unaffected when no client is attached.</p>
 </li>
 <li>
-<p><strong>This makes the contract's "observe" half real.</strong> The Decision section and
+<p><strong>This makes the contract’s “observe” half real.</strong> The Decision section and
 ADR 0013 both note <code>step_edge</code> is handed an <strong>empty <code>output_state</code></strong> today
 (<code>cosim/mod.rs:2987</code> passes <code>&amp;[]</code>) because no CPU-side model yet reads a design
 output. An interactive debugger <em>must</em> answer <code>remote_bitbang</code> <code>R</code> (read-TDO)
@@ -573,7 +608,7 @@ the same wiring the scaffolded I²C/SPI observation models need — so it is a
 closure of the standing TODO, not a JTAG special case.</p>
 </li>
 <li>
-<p><strong>TDO read-back is the contract's "emit" half pointed at an external client.</strong>
+<p><strong>TDO read-back is the contract’s “emit” half pointed at an external client.</strong>
 The peripheral contract is <em>observe → advance FSM → drive and/or emit</em>. A live
 debug server adds one I/O direction: it <strong>emits a response to an external
 socket mid-edge</strong> (the <code>R</code> reply) rather than into a ring buffer or VCD. The
@@ -582,7 +617,7 @@ observe/drive halves (TDO sample, TCK/TMS/TDI drive via the usual
 </li>
 </ul>
 <p>Per-backend: the interactive path is the CPU-side model plus <code>batch=1</code> of the
-GPU backend (the "per-edge fallback" of the 2026-06-19 amendment), so it works
+GPU backend (the “per-edge fallback” of the 2026-06-19 amendment), so it works
 on any cosim backend once the host-side plumbing lands — no kernel work.
 Implementation staging: <a href="../plans/jtag-debug-server.html"><code>docs/plans/jtag-debug-server.md</code></a>.</p>
 <h2 id="amendment-2026-06-26-open-questions--cosim-timing-output"><a class="header" href="#amendment-2026-06-26-open-questions--cosim-timing-output">Amendment 2026-06-26: open questions — cosim timing output</a></h2>
@@ -593,15 +628,15 @@ remaining:</p>
 <li><strong>Timed cosim is Metal-only.</strong> Arrival-annotated VCD output works on the
 Metal backend (<code>metal.rs</code> threads <code>arrival_state_offset</code>; the driver writes
 per-net <code>arrival_ps</code>). The CPU, CUDA, and HIP backends assert
-<code>!script.timing_arrivals_enabled</code> — they don't yet support timed cosim.
+<code>!script.timing_arrivals_enabled</code> — they don’t yet support timed cosim.
 Extending arrival tracking to the other <code>CosimBackend</code> impls is open.</li>
 <li><strong>Cosim <code>--timing-report</code> (structured JSON) is not wired.</strong> The structured
-report is <code>sim</code>-only; see ADR 0008's 2026-06-25 amendment. The cosim path
+report is <code>sim</code>-only; see ADR 0008’s 2026-06-25 amendment. The cosim path
 emits arrival-annotated VCD but not the JSON report.</li>
 </ul>
 <h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
 <ul>
-<li>ADR 0012 — CDC jitter injection (uses the scheduler's edge
+<li>ADR 0012 — CDC jitter injection (uses the scheduler’s edge
 timestamps as the injection point).</li>
 <li>ADR 0013 — Peripheral model architecture (documents GPU-side
 model patterns and ring buffers).</li>
@@ -616,11 +651,11 @@ model patterns and ring buffers).</li>
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                             <a rel="prev" href="../adr/0016-selective-x-propagation.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <i class="fa fa-angle-left"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
                             <a rel="next prefetch" href="../adr/0018-distribution-and-installation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
                         <div style="clear: both"></div>
@@ -630,16 +665,21 @@ model patterns and ring buffers).</li>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                     <a rel="prev" href="../adr/0016-selective-x-propagation.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <i class="fa fa-angle-left"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
                     <a rel="next prefetch" href="../adr/0018-distribution-and-installation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
 
         </div>
 
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
 
 
@@ -648,16 +688,17 @@ model patterns and ring buffers).</li>
         </script>
 
 
-        <script src="../elasticlunr.min.js"></script>
-        <script src="../mark.min.js"></script>
-        <script src="../searcher.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="../clipboard.min.js"></script>
-        <script src="../highlight.js"></script>
-        <script src="../book.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-picker.js"></script>
+        <script src="../theme/version-picker-36db8dd8.js"></script>
+
 
 
     </div>

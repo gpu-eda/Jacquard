@@ -1,0 +1,107 @@
+/* mdbook-d2 emits each rendered diagram as an <svg> wrapped in a bare <pre>, with
+   colours and fonts baked in by D2. Two problems: the code-block chrome boxes the
+   diagram, and the baked palette ignores the reader's mdBook theme (so a light
+   diagram lands on a navy page). This stylesheet strips the chrome and repaints
+   every diagram from the active theme's CSS variables (--fg, --bg), so it tracks
+   light / navy / coal / ayu / rust and follows a live theme switch.
+
+   Specificity note: D2 bakes shape colour into an *embedded* <style> as
+   `.d2-<hash> .fill-B1 { fill: … }` / `.stroke-B1 { stroke: … }` — selector
+   specificity (0,2,0), and the hash is per-diagram so we can't match it directly.
+   Our element-based selectors score lower and lose, so shape fill/stroke colours
+   use !important to win reliably. (Text scores (0,2,2) via `.text`, so it wins
+   without !important.) */
+
+pre:has(> svg[data-d2-version]) {
+  background: none;
+  border: none;
+  padding: 0;
+  overflow-x: auto;
+}
+
+pre > svg[data-d2-version] {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Text: mdBook body font, theme foreground colour. */
+pre > svg[data-d2-version] .text,
+pre > svg[data-d2-version] .text-bold,
+pre > svg[data-d2-version] .text-italic {
+  font-family: inherit;
+  fill: var(--fg);
+  fill-opacity: 1;
+}
+
+/* Shapes (rects): a translucent-foreground surface with a foreground border.
+   Translucent means nested boxes gain depth by stacking (a node inside a
+   container reads slightly stronger), and it works in every theme because it's
+   derived from --fg. Selecting the `rect` element keeps us off <text>, which
+   shares the fill-* classes.
+
+   Critically, match `rect[class]`, NOT bare `rect`: D2's connection <mask>
+   elements contain unclassed <rect>s (a white fill = "visible", black = "hole").
+   Repainting those to --fg turns the mask opaque and clips every masked
+   connection line to nothing — the exact symptom of invisible arrows. Rendered
+   shapes always carry a D2 colour class; mask rects never do. */
+pre > svg[data-d2-version] rect[class] {
+  fill: var(--fg) !important;
+  fill-opacity: 0.05;
+  stroke: var(--fg) !important;
+  stroke-opacity: 0.5;
+}
+
+/* ...but the full-bleed background rect (D2's neutral-7) is also a rect; keep it
+   an opaque page-background so the SVG has no backdrop of its own. */
+pre > svg[data-d2-version] rect.fill-N7 {
+  fill: var(--bg) !important;
+  fill-opacity: 1;
+  stroke: none !important;
+}
+
+/* Region accents. The three top-level containers carry a sentinel fill in the D2
+   source (#4f8bff CPU / #3cbe78 GPU / #aa78f0 rings) purely as a hook. Remap each
+   to a translucent tint — translucency is what makes it theme-adaptive, reading
+   as a soft wash over a light background and a subtle glow over navy/coal — plus
+   a stronger same-hue border. Higher specificity than `rect[class]` above, so
+   these win for the three regions while inner nodes stay the neutral surface.
+   The `i` flag matches regardless of the hex case D2 emits. */
+pre > svg[data-d2-version] rect[fill="#4f8bff" i] {   /* CPU */
+  fill: rgba(80, 140, 255, 0.15) !important;
+  stroke: rgba(90, 150, 255, 0.85) !important;
+  stroke-opacity: 1;
+}
+pre > svg[data-d2-version] rect[fill="#3cbe78" i] {   /* GPU */
+  fill: rgba(60, 190, 120, 0.15) !important;
+  stroke: rgba(70, 200, 130, 0.85) !important;
+  stroke-opacity: 1;
+}
+pre > svg[data-d2-version] rect[fill="#aa78f0" i] {   /* GPU→CPU rings */
+  fill: rgba(170, 120, 240, 0.18) !important;
+  stroke: rgba(180, 130, 245, 0.85) !important;
+  stroke-opacity: 1;
+}
+
+/* Connections: lines at full theme-foreground strength so they read as the active
+   element (box borders are deliberately fainter, at 0.5 above). Colour must beat
+   D2's per-class stroke rule, and width must beat D2's inline
+   `style="stroke-width:2"` — both need !important. Widened so the line survives
+   the fit-to-column downscale instead of thinning to a hairline. */
+pre > svg[data-d2-version] [class*="connection"][class*="stroke-"] {
+  stroke: var(--fg) !important;
+  stroke-opacity: 0.85;
+  stroke-width: 3px !important;
+}
+
+/* Arrowheads. D2 emits them two ways: a classed path on some edges, and a shared
+   <marker><polygon> (baked to D2's blue) referenced via marker-end. Recolour both
+   so heads match their lines instead of staying the baked accent. */
+pre > svg[data-d2-version] [class*="connection"][class*="fill-"],
+pre > svg[data-d2-version] marker polygon,
+pre > svg[data-d2-version] marker path {
+  fill: var(--fg) !important;
+  fill-opacity: 0.85;
+  stroke: none !important;
+}

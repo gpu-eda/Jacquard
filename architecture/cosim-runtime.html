@@ -1,0 +1,498 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Worked example — Cosim runtime - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-5e44e8e6.svg">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-picker-0393021e.css">
+        <link rel="stylesheet" href="../theme/d2-diagrams-d5432d61.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-acf3df94.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="cosim-runtime"><a class="header" href="#cosim-runtime">Cosim runtime</a></h1>
+<p><em>Reference — the current design as it stands in the code. The why lives in the
+decision records linked from each section; the not-yet-built work is under
+<a href="#implementation-status">Implementation status</a>. Present tense means “true
+today”; if a claim here is stale, the code moved and this doc didn’t.</em></p>
+<p>Cosim runs a GPU-simulated design alongside reactive peripheral models that
+drive and observe the design’s pins every clock edge. Unlike <code>sim</code>, which
+replays a fixed input VCD, cosim lets an input depend on a design output
+cycle by cycle: a SPI flash serves firmware in response to the addresses the
+design issues, a UART decodes the bytes it transmits, a JTAG client single-steps
+it. Rationale for the execution model: <a href="../adr/0017-cosim-execution-model.html">ADR 0017</a>.</p>
+<pre><!--?xml version="1.0" encoding="utf-8"?--><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" data-d2-version="v0.7.1" preserveaspectratio="xMinYMin meet" viewbox="0 0 1009 1794"><svg class="d2-7073834 d2-svg" width="1009" height="1794" viewbox="-4 -5 1009 1794"><rect x="-4.000000" y="-5.000000" width="1009.000000" height="1794.000000" rx="0.000000" fill="#FFFFFF" class=" fill-N7" stroke-width="0" /><style type="text/css"><![CDATA[
+.d2-7073834 .text {
+	font-family: "d2-7073834-font-regular";
+}
+@font-face {
+	font-family: d2-7073834-font-regular;
+	src: url("data:application/font-woff;base64,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");
+}
+.d2-7073834 .text-bold {
+	font-family: "d2-7073834-font-bold";
+}
+@font-face {
+	font-family: d2-7073834-font-bold;
+	src: url("data:application/font-woff;base64,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");
+}
+.d2-7073834 .text-italic {
+	font-family: "d2-7073834-font-italic";
+}
+@font-face {
+	font-family: d2-7073834-font-italic;
+	src: url("data:application/font-woff;base64,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");
+}]]></style><style type="text/css"><![CDATA[.shape {
+  shape-rendering: geometricPrecision;
+  stroke-linejoin: round;
+}
+.connection {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.blend {
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+
+		.d2-7073834 .fill-N1{fill:#0A0F25;}
+		.d2-7073834 .fill-N2{fill:#676C7E;}
+		.d2-7073834 .fill-N3{fill:#9499AB;}
+		.d2-7073834 .fill-N4{fill:#CFD2DD;}
+		.d2-7073834 .fill-N5{fill:#DEE1EB;}
+		.d2-7073834 .fill-N6{fill:#EEF1F8;}
+		.d2-7073834 .fill-N7{fill:#FFFFFF;}
+		.d2-7073834 .fill-B1{fill:#0D32B2;}
+		.d2-7073834 .fill-B2{fill:#0D32B2;}
+		.d2-7073834 .fill-B3{fill:#E3E9FD;}
+		.d2-7073834 .fill-B4{fill:#E3E9FD;}
+		.d2-7073834 .fill-B5{fill:#EDF0FD;}
+		.d2-7073834 .fill-B6{fill:#F7F8FE;}
+		.d2-7073834 .fill-AA2{fill:#4A6FF3;}
+		.d2-7073834 .fill-AA4{fill:#EDF0FD;}
+		.d2-7073834 .fill-AA5{fill:#F7F8FE;}
+		.d2-7073834 .fill-AB4{fill:#EDF0FD;}
+		.d2-7073834 .fill-AB5{fill:#F7F8FE;}
+		.d2-7073834 .stroke-N1{stroke:#0A0F25;}
+		.d2-7073834 .stroke-N2{stroke:#676C7E;}
+		.d2-7073834 .stroke-N3{stroke:#9499AB;}
+		.d2-7073834 .stroke-N4{stroke:#CFD2DD;}
+		.d2-7073834 .stroke-N5{stroke:#DEE1EB;}
+		.d2-7073834 .stroke-N6{stroke:#EEF1F8;}
+		.d2-7073834 .stroke-N7{stroke:#FFFFFF;}
+		.d2-7073834 .stroke-B1{stroke:#0D32B2;}
+		.d2-7073834 .stroke-B2{stroke:#0D32B2;}
+		.d2-7073834 .stroke-B3{stroke:#E3E9FD;}
+		.d2-7073834 .stroke-B4{stroke:#E3E9FD;}
+		.d2-7073834 .stroke-B5{stroke:#EDF0FD;}
+		.d2-7073834 .stroke-B6{stroke:#F7F8FE;}
+		.d2-7073834 .stroke-AA2{stroke:#4A6FF3;}
+		.d2-7073834 .stroke-AA4{stroke:#EDF0FD;}
+		.d2-7073834 .stroke-AA5{stroke:#F7F8FE;}
+		.d2-7073834 .stroke-AB4{stroke:#EDF0FD;}
+		.d2-7073834 .stroke-AB5{stroke:#F7F8FE;}
+		.d2-7073834 .background-color-N1{background-color:#0A0F25;}
+		.d2-7073834 .background-color-N2{background-color:#676C7E;}
+		.d2-7073834 .background-color-N3{background-color:#9499AB;}
+		.d2-7073834 .background-color-N4{background-color:#CFD2DD;}
+		.d2-7073834 .background-color-N5{background-color:#DEE1EB;}
+		.d2-7073834 .background-color-N6{background-color:#EEF1F8;}
+		.d2-7073834 .background-color-N7{background-color:#FFFFFF;}
+		.d2-7073834 .background-color-B1{background-color:#0D32B2;}
+		.d2-7073834 .background-color-B2{background-color:#0D32B2;}
+		.d2-7073834 .background-color-B3{background-color:#E3E9FD;}
+		.d2-7073834 .background-color-B4{background-color:#E3E9FD;}
+		.d2-7073834 .background-color-B5{background-color:#EDF0FD;}
+		.d2-7073834 .background-color-B6{background-color:#F7F8FE;}
+		.d2-7073834 .background-color-AA2{background-color:#4A6FF3;}
+		.d2-7073834 .background-color-AA4{background-color:#EDF0FD;}
+		.d2-7073834 .background-color-AA5{background-color:#F7F8FE;}
+		.d2-7073834 .background-color-AB4{background-color:#EDF0FD;}
+		.d2-7073834 .background-color-AB5{background-color:#F7F8FE;}
+		.d2-7073834 .color-N1{color:#0A0F25;}
+		.d2-7073834 .color-N2{color:#676C7E;}
+		.d2-7073834 .color-N3{color:#9499AB;}
+		.d2-7073834 .color-N4{color:#CFD2DD;}
+		.d2-7073834 .color-N5{color:#DEE1EB;}
+		.d2-7073834 .color-N6{color:#EEF1F8;}
+		.d2-7073834 .color-N7{color:#FFFFFF;}
+		.d2-7073834 .color-B1{color:#0D32B2;}
+		.d2-7073834 .color-B2{color:#0D32B2;}
+		.d2-7073834 .color-B3{color:#E3E9FD;}
+		.d2-7073834 .color-B4{color:#E3E9FD;}
+		.d2-7073834 .color-B5{color:#EDF0FD;}
+		.d2-7073834 .color-B6{color:#F7F8FE;}
+		.d2-7073834 .color-AA2{color:#4A6FF3;}
+		.d2-7073834 .color-AA4{color:#EDF0FD;}
+		.d2-7073834 .color-AA5{color:#F7F8FE;}
+		.d2-7073834 .color-AB4{color:#EDF0FD;}
+		.d2-7073834 .color-AB5{color:#F7F8FE;}.appendix text.text{fill:#0A0F25}.md{--color-fg-default:#0A0F25;--color-fg-muted:#676C7E;--color-fg-subtle:#9499AB;--color-canvas-default:#FFFFFF;--color-canvas-subtle:#EEF1F8;--color-border-default:#0D32B2;--color-border-muted:#0D32B2;--color-neutral-muted:#EEF1F8;--color-accent-fg:#0D32B2;--color-accent-emphasis:#0D32B2;--color-attention-subtle:#676C7E;--color-danger-fg:red;}.sketch-overlay-B1{fill:url(#streaks-darker-d2-7073834);mix-blend-mode:lighten}.sketch-overlay-B2{fill:url(#streaks-darker-d2-7073834);mix-blend-mode:lighten}.sketch-overlay-B3{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-B4{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-B5{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-B6{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-AA2{fill:url(#streaks-dark-d2-7073834);mix-blend-mode:overlay}.sketch-overlay-AA4{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-AA5{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-AB4{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-AB5{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-N1{fill:url(#streaks-darker-d2-7073834);mix-blend-mode:lighten}.sketch-overlay-N2{fill:url(#streaks-dark-d2-7073834);mix-blend-mode:overlay}.sketch-overlay-N3{fill:url(#streaks-normal-d2-7073834);mix-blend-mode:color-burn}.sketch-overlay-N4{fill:url(#streaks-normal-d2-7073834);mix-blend-mode:color-burn}.sketch-overlay-N5{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-N6{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.sketch-overlay-N7{fill:url(#streaks-bright-d2-7073834);mix-blend-mode:darken}.light-code{display: block}.dark-code{display: none}]]></style><g class="Y3B1"><g class="shape"><rect x="107.000000" y="57.000000" width="881.000000" height="514.000000" stroke="#0D32B2" fill="#4f8bff" class=" stroke-B1" style="stroke-width:2;" /></g><text x="547.500000" y="90.000000" fill="#0A0F25" class="text fill-N1" style="text-anchor:middle;font-size:28px">CPU (between batches)</text></g><g class="Z3B1"><g class="shape"><rect x="516.000000" y="762.000000" width="356.000000" height="768.000000" stroke="#0D32B2" fill="#3cbe78" class=" stroke-B1" style="stroke-width:2;" /></g><text x="694.000000" y="795.000000" fill="#0A0F25" class="text fill-N1" style="text-anchor:middle;font-size:28px">GPU — one batch, per edge</text></g><g class="cmluZ3M="><g class="shape"><rect x="500.000000" y="1706.000000" width="202.000000" height="66.000000" stroke="#0D32B2" fill="#aa78f0" class=" stroke-B1" style="stroke-width:2;" /></g><text x="601.000000" y="1744.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px">GPU→CPU ring buffers</text></g><g class="Y3B1Lm9yY2g="><g class="shape"><rect x="157.000000" y="334.000000" width="496.000000" height="182.000000" stroke="#0D32B2" fill="#EDF0FD" class=" stroke-B1 fill-B5" style="stroke-width:2;" /></g><text x="405.000000" y="363.000000" fill="#0A0F25" class="text fill-N1" style="text-anchor:middle;font-size:24px">Orchestration driver</text></g><g class="Y3B1Lm1vZGVscw=="><g class="shape"><rect x="673.000000" y="386.000000" width="265.000000" height="82.000000" stroke="#0D32B2" fill="#EDF0FD" class=" stroke-B1 fill-B5" style="stroke-width:2;" /></g><text x="805.500000" y="424.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="805.500000" dy="0.000000">Peripheral models (Tier 1)</tspan><tspan x="805.500000" dy="18.500000">observe → advance FSM → drive</tspan></text></g><g class="Y3B1LmRyYWlu"><g class="shape"><rect x="747.000000" y="107.000000" width="117.000000" height="66.000000" stroke="#0D32B2" fill="#EDF0FD" class=" stroke-B1 fill-B5" style="stroke-width:2;" /></g><text x="805.500000" y="145.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px">Ring drain</text></g><g class="Z3B1LnByZXA="><g class="shape"><rect x="602.000000" y="812.000000" width="122.000000" height="66.000000" stroke="#0D32B2" fill="#EDF0FD" class=" stroke-B1 fill-B5" style="stroke-width:2;" /></g><text x="663.000000" y="850.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px">state_prep</text></g><g class="Z3B1LmluamVjdA=="><g class="shape"><rect x="598.000000" y="948.000000" width="131.000000" height="82.000000" stroke="#0D32B2" fill="#EDF0FD" class=" stroke-B1 fill-B5" style="stroke-width:2;" /></g><text x="663.500000" y="986.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="663.500000" dy="0.000000">inject</tspan><tspan x="663.500000" dy="18.500000">(flash MISO)</tspan></text></g><g class="Z3B1LnNpbQ=="><g class="shape"><rect x="599.000000" y="1100.000000" width="129.000000" height="66.000000" stroke="#0D32B2" fill="#EDF0FD" class=" stroke-B1 fill-B5" style="stroke-width:2;" /></g><text x="663.500000" y="1138.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px">simulate xN</text></g><g class="Z3B1LnNhbXBsZQ=="><g class="shape"><rect x="578.000000" y="1236.000000" width="171.000000" height="82.000000" stroke="#0D32B2" fill="#EDF0FD" class=" stroke-B1 fill-B5" style="stroke-width:2;" /></g><text x="663.500000" y="1274.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="663.500000" dy="0.000000">sample + advance</tspan><tspan x="663.500000" dy="18.500000">(bidirectional)</tspan></text></g><g class="Z3B1Lm9ic2VydmU="><g class="shape"><rect x="642.000000" y="1398.000000" width="168.000000" height="82.000000" stroke="#0D32B2" fill="#EDF0FD" class=" stroke-B1 fill-B5" style="stroke-width:2;" /></g><text x="726.000000" y="1436.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="726.000000" dy="0.000000">observe</tspan><tspan x="726.000000" dy="18.500000">(UART, bus trace)</tspan></text></g><g class="Y3B1Lm9yY2guc2NoZWQ="><g class="shape"><rect x="207.000000" y="392.000000" width="192.000000" height="66.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="303.000000" y="430.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px">MultiClockScheduler</text></g><g class="Y3B1Lm9yY2gucG9saWN5"><g class="shape"><rect x="419.000000" y="384.000000" width="184.000000" height="82.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="511.000000" y="422.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="511.000000" dy="0.000000">Batch policy</tspan><tspan x="511.000000" dy="18.500000">(force_single_edge)</tspan></text></g><g class="Z3B1LihwcmVwIC0mZ3Q7IGluamVjdClbMF0="><marker id="mk-d2-7073834-3488378134" markerwidth="10.000000" markerheight="12.000000" refx="7.000000" refy="6.000000" viewbox="0.000000 0.000000 10.000000 12.000000" orient="auto" markerunits="userSpaceOnUse"> <polygon points="0.000000,0.000000 10.000000,6.000000 0.000000,12.000000" fill="#0D32B2" class="connection fill-B1" stroke-width="2" /> </marker><path d="M 663.750000 880.000000 L 663.750000 944.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /></g><g class="Z3B1LihpbmplY3QgLSZndDsgc2ltKVswXQ=="><path d="M 663.750000 1032.000000 L 663.750000 1096.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /></g><g class="Z3B1LihzaW0gLSZndDsgc2FtcGxlKVswXQ=="><path d="M 663.750000 1168.000000 L 663.750000 1232.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /></g><g class="Z3B1LihzYW1wbGUgLSZndDsgb2JzZXJ2ZSlbMF0="><path d="M 726.250000 1320.000000 L 726.250000 1394.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /></g><g class="KGNwdS5vcmNoLnBvbGljeSAtJmd0OyBncHUpWzBd"><path d="M 524.500000 468.000000 L 524.500000 707.000000 S 524.500000 717.000000 534.500000 717.000000 L 643.750000 717.000000 S 653.750000 717.000000 653.750000 727.000000 L 653.750000 758.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /><text x="525.000000" y="684.000000" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:16px">dispatch batch</text></g><g class="KGNwdS5tb2RlbHMgLSZndDsgZ3B1LnByZXApWzBd"><path d="M 793.000000 470.000000 L 793.000000 707.000000 S 793.000000 717.000000 783.000000 717.000000 L 673.750000 717.000000 S 663.750000 717.000000 663.750000 727.000000 L 663.750000 808.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /><text x="793.000000" y="710.000000" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:16px">pin drives (BitOps)</text></g><g class="KGdwdS5vYnNlcnZlIC0mZ3Q7IHJpbmdzKVswXQ=="><path d="M 726.250000 1482.000000 L 726.250000 1656.000000 S 726.250000 1666.000000 716.250000 1666.000000 L 661.750000 1666.000000 S 651.750000 1666.000000 651.750000 1676.000000 L 651.750000 1702.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /><text x="726.500000" y="1636.000000" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:16px">write</text></g><g class="KGdwdS5zYW1wbGUgLSZndDsgcmluZ3MpWzBd"><path d="M 601.250000 1320.000000 L 601.250000 1702.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /><text x="601.500000" y="1518.000000" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:16px">write</text></g><g class="KHJpbmdzIC0mZ3Q7IGNwdS5kcmFpbilbMF0="><path d="M 550.750000 1704.000000 L 550.750000 1676.000000 S 550.750000 1666.000000 540.750000 1666.000000 L 77.500000 1666.000000 S 67.500000 1666.000000 67.500000 1656.000000 L 67.500000 22.000000 S 67.500000 12.000000 77.500000 12.000000 L 796.000000 12.000000 S 806.000000 12.000000 806.000000 22.000000 L 806.000000 103.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /><text x="67.500000" y="689.000000" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:16px">drain after batch</text></g><g class="Y3B1LihkcmFpbiAtJmd0OyBtb2RlbHMpWzBd"><path d="M 806.000000 174.500000 L 806.000000 382.500000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-7073834-3488378134)" mask="url(#d2-7073834)" /><text x="806.000000" y="285.000000" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:16px">outputs</text></g><mask id="d2-7073834" maskunits="userSpaceOnUse" x="-4" y="-5" width="1009" height="1794">
+<rect x="-4" y="-5" width="1009" height="1794" fill="white"></rect>
+<rect x="474.000000" y="668.000000" width="102" height="21" fill="black"></rect>
+<rect x="731.000000" y="694.000000" width="124" height="21" fill="black"></rect>
+<rect x="708.000000" y="1620.000000" width="37" height="21" fill="black"></rect>
+<rect x="583.000000" y="1502.000000" width="37" height="21" fill="black"></rect>
+<rect x="10.000000" y="673.000000" width="115" height="21" fill="black"></rect>
+<rect x="778.000000" y="269.000000" width="56" height="21" fill="black"></rect>
+</mask></svg></svg>
+</pre>
+
+<h2 id="the-per-edge-pipeline"><a class="header" href="#the-per-edge-pipeline">The per-edge pipeline</a></h2>
+<p>The unit of time is a <strong>scheduler edge</strong>, not a clock cycle (see <a href="#time-edges-not-cycles">Time: edges,
+not cycles</a>). Each edge runs this sequence on the GPU:</p>
+<pre><code>state_prep            apply clock, GPIO, JTAG pin drives via BitOps
+  → inject            bidirectional peripherals write design inputs (flash MISO)
+    → simulate ×N     combinational logic evaluation, N pipeline stages
+  → sample + advance  bidirectional peripherals read outputs, step their FSM
+  → observe           output-only peripherals decode into ring buffers (UART, bus trace)
+</code></pre>
+<p>CPU-side peripheral models run <em>between</em> batches of edges, not within them, so
+they see the design’s output state only at batch boundaries.</p>
+<h2 id="batch-dispatch"><a class="header" href="#batch-dispatch">Batch dispatch</a></h2>
+<p>Consecutive scheduler edges are grouped into <strong>batches</strong> of up to
+<code>BATCH_SIZE = 1024</code> and dispatched as one GPU command buffer. Between batches the
+CPU steps its peripheral models, drains the ring buffers, and patches the next
+batch’s pin drives. A batch runs with no CPU interaction inside it, which is why
+cosim is GPU-bound rather than round-trip-bound.</p>
+<p>The batch collapses to a single edge whenever any peripheral model reports
+<code>is_active()</code>. A JTAG replay mid-transmission, or a connected interactive debug
+client, holds the design at one edge per dispatch for as long as it needs
+per-edge coupling. This is the <code>force_single_edge</code> path; it is correct but slow,
+and it is the exception, not the norm. The why, and the measured batch-utilisation
+that justifies the fixed size, are in <a href="../adr/0017-cosim-execution-model.html">ADR 0017</a>.</p>
+<h2 id="backends"><a class="header" href="#backends">Backends</a></h2>
+<p>One orchestration driver runs above a <code>CosimBackend</code> trait; each backend owns the
+design state and runs N consecutive edges per call.</p>
+<ul>
+<li><strong>CpuBackend</strong> — the per-edge reference model. It is the cross-backend
+equivalence oracle and the reason cosim regressions run on free Linux CI.
+Throughput is not its job.</li>
+<li><strong>MetalBackend</strong> — runs a batch in one command buffer with GPU peripherals
+inside it. Unified memory makes the pin drives zero-copy: the CPU’s write to
+an edge’s ops <em>is</em> the upload.</li>
+<li><strong>CudaBackend / HipBackend</strong> — run the same simulate kernel over managed
+memory, sidestepping the cooperative-launch grid sync that only <code>sim</code> needs.
+They ship with their GPU peripherals so reactive designs batch from the start;
+ops upload only for edges the CPU actually changed.</li>
+</ul>
+<p>Every backend produces a byte-identical output VCD on the same reactive design.
+That equivalence is the correctness contract for the whole runtime, checked in
+CI against CpuBackend goldens.</p>
+<h2 id="peripherals"><a class="header" href="#peripherals">Peripherals</a></h2>
+<p>A peripheral is one shape on either substrate: <strong>observe</strong> some design-output
+bits, <strong>advance an FSM</strong> over persistent state, then <strong>drive</strong> some design-input
+bits and/or <strong>emit</strong> decoded records. Where it runs follows a rule: a model that
+drives inputs each edge (must react to output) can run on the CPU; a model that
+only observes outputs, or exchanges data bidirectionally, runs on the GPU for
+zero-copy access to the state buffer. Rationale and the full contract:
+<a href="../adr/0013-plural-peripheral-configs.html">ADR 0013</a>.</p>
+<p>GPU peripherals come in two patterns:</p>
+<ul>
+<li><strong>Observe-only</strong> — one post-simulate kernel per edge, reading output state into
+a ring buffer. UART TX decode and bus trace.</li>
+<li><strong>Bidirectional</strong> — a pre-simulate kernel injecting into input state plus a
+post-simulate kernel sampling and advancing the FSM. SPI flash and QSPI PSRAM.</li>
+</ul>
+<p>Three tiers back each peripheral. Tier 1 is the CPU <code>PeripheralModel</code> (always
+present, the semantic ground truth). Tier 2 is a hand-written GPU kernel for the
+core set — flash, UART, bus trace — one shared <code>*_impl.cuh</code> for CUDA and HIP plus
+one <code>.metal</code>. Tier 3, single-source peripheral compilation for user-defined
+peripherals, is <a href="#implementation-status">not yet built</a>.</p>
+<p>Config is plural where instances can repeat, following one back-compat pattern
+(a legacy singular key folds into instance 0 of a new <code>Vec</code>):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Peripheral</th><th>Plural</th><th>State</th></tr>
+</thead>
+<tbody>
+<tr><td>Clocks, GPIO, UART</td><td>yes</td><td>built</td></tr>
+<tr><td>QSPI memory (flash + writable PSRAM)</td><td>yes</td><td>built; independent backing stores, CS-gated shared bus</td></tr>
+<tr><td>Bus trace</td><td>yes</td><td>built for APB3; AHB-Lite/AHB5 not yet</td></tr>
+<tr><td>JTAG</td><td>no (TAP daisy-chain suffices)</td><td>replay + interactive server</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="gpucpu-ring-buffers"><a class="header" href="#gpucpu-ring-buffers">GPU→CPU ring buffers</a></h2>
+<p>GPU peripherals write into fixed-size ring buffers in device memory; the CPU
+drains each after a batch completes, from a local <code>read_head</code> up to the
+GPU-written <code>write_head</code>. No synchronisation beyond command-buffer completion is
+needed. This is the only channel out of the batch today, and it is the GPU→CPU
+half of the <a href="#implementation-status">flow-controlled I/O work</a>. When VCD output
+is on, a separate per-edge snapshot ring lets a batch stay larger than one edge
+without a CPU read after every edge.</p>
+<h2 id="time-edges-not-cycles"><a class="header" href="#time-edges-not-cycles">Time: edges, not cycles</a></h2>
+<p>The <code>MultiClockScheduler</code> computes a deterministic interleaving of edges across
+clock domains. The scheduler tick is the GCD of all half-periods and phase
+offsets; the schedule repeats at the LCM of all full periods. A <strong>scheduler
+edge</strong> is one tick; a <strong>clock cycle</strong> is two half-periods of one domain. UART
+baud dividers, reset duration, and the <code>--max-clock-edges</code> flag all count edges,
+not cycles — conflating the two is a real bug class, not a pedantic distinction.
+The schedule length is capped at one million ticks, which rejects
+non-commensurable clock ratios rather than building an unbounded schedule.</p>
+<h2 id="constraints"><a class="header" href="#constraints">Constraints</a></h2>
+<ul>
+<li>Synchronous logic only, inherited from the simulation engine.</li>
+<li>A CPU-side model cannot observe intra-batch state; anything needing per-edge
+visibility must set <code>is_active()</code> and pay the single-edge dispatch.</li>
+<li>The scheduler rejects clock sets that don’t repeat within one million ticks.</li>
+<li>Timed (arrival-annotated) cosim runs on Metal only; the structured
+<code>--timing-report</code> JSON is <code>sim</code>-only.</li>
+</ul>
+<h2 id="implementation-status"><a class="header" href="#implementation-status">Implementation status</a></h2>
+<p>Built and in use: batch dispatch, the multi-clock scheduler, all four backends
+with cross-backend equivalence, the CPU and GPU peripheral tiers (1 and 2), plural
+configs, and the interactive JTAG server. These are the sections above without a
+“not yet.”</p>
+<p>Decided but not yet built:</p>
+<ul>
+<li><strong>Flow-controlled external I/O across the batch boundary</strong> — bounded pipes, an
+adaptive commit window replacing the fixed <code>BATCH_SIZE</code>, per-tap projection, a
+socket reactor, and a CPU→GPU input pipe. Proposed in
+<a href="../adr/0022-flow-controlled-io.html">ADR 0022</a>; nothing built.</li>
+<li><strong>Tier 3 single-source peripherals</strong> — one peripheral definition compiled to
+CPU and every GPU backend. <a href="../adr/0017-cosim-execution-model.html">ADR 0017</a>.</li>
+<li><strong>Bus trace beyond APB3</strong> — AHB-Lite/AHB5 decode and annotated-VCD output;
+migrating the hardcoded Wishbone trace onto the config-driven monitor.
+<a href="../adr/0013-plural-peripheral-configs.html">ADR 0013</a>.</li>
+<li><strong>Timed cosim on CPU/CUDA/HIP</strong>, and the cosim structured timing report.
+<a href="../adr/0017-cosim-execution-model.html">ADR 0017</a>.</li>
+<li><strong>Min-heap scheduler</strong> to remove the one-million-tick cap.
+<a href="../plans/multi-clock-and-stimulus-architecture.html">Multi-clock and stimulus architecture</a>.</li>
+</ul>
+<p>Scheduling for the larger items lives in
+<a href="../plans/cosim-backend-portability.html">cosim backend portability</a> and the
+<a href="../plans/multi-clock-and-stimulus-architecture.html">multi-clock plan</a>.</p>
+<h2 id="decisions-behind-this"><a class="header" href="#decisions-behind-this">Decisions behind this</a></h2>
+<ul>
+<li><a href="../adr/0013-plural-peripheral-configs.html">ADR 0013</a> — peripheral model
+architecture: the CPU/GPU split, the two GPU patterns, ring buffers, plural
+configs.</li>
+<li><a href="../adr/0017-cosim-execution-model.html">ADR 0017</a> — execution model: batch
+dispatch, the multi-clock scheduler, edges versus cycles, the backend seam.</li>
+<li><a href="../adr/0012-cdc-jitter-injection.html">ADR 0012</a> — CDC jitter injection, which
+uses the scheduler’s edge timestamps as its injection point.</li>
+<li><a href="../adr/0022-flow-controlled-io.html">ADR 0022</a> — flow-controlled I/O (proposed;
+the future of the batch boundary).</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../architecture/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../architecture/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-picker-36db8dd8.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

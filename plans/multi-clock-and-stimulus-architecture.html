@@ -12,40 +12,53 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon.svg">
-        <link rel="stylesheet" href="../css/variables.css">
-        <link rel="stylesheet" href="../css/general.css">
-        <link rel="stylesheet" href="../css/chrome.css">
-        <link rel="stylesheet" href="../css/print.css" media="print">
+        <link rel="icon" href="../favicon-5e44e8e6.svg">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../fonts/fonts.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="../highlight.css">
-        <link rel="stylesheet" href="../tomorrow-night.css">
-        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="../theme/version-picker.css">
+        <link rel="stylesheet" href="../theme/version-picker-0393021e.css">
+        <link rel="stylesheet" href="../theme/d2-diagrams-d5432d61.css">
 
 
-        <!-- Provide site root to javascript -->
+        <!-- Provide site root and default themes to javascript -->
         <script>
-            var path_to_root = "../";
-            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc.js"></script>
+        <script src="../toc-acf3df94.js"></script>
     </head>
     <body>
-    <div id="body-container">
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
-                var theme = localStorage.getItem('mdbook-theme');
-                var sidebar = localStorage.getItem('mdbook-sidebar');
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
 
                 if (theme.startsWith('"') && theme.endsWith('"')) {
                     localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
@@ -59,7 +72,8 @@
 
         <!-- Set the theme before any content is loaded, prevents flash -->
         <script>
-            var theme;
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
@@ -68,55 +82,59 @@
             html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var sidebar = null;
-            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
-        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
                 <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
-            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <div id="page-wrapper" class="page-wrapper">
+        <div id="mdbook-page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
-                            <i class="fa fa-bars"></i>
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
                         </label>
-                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
-                            <i class="fa fa-paint-brush"></i>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
                         </button>
-                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
-                            <i class="fa fa-search"></i>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
                         </button>
                     </div>
 
@@ -124,36 +142,41 @@
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
-                            <i id="print-button" class="fa fa-print"></i>
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
-                            <i id="git-repository-button" class="fa fa-github"></i>
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="search-wrapper" class="hidden">
-                    <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
                     </form>
-                    <div id="searchresults-outer" class="searchresults-outer hidden">
-                        <div id="searchresults-header" class="searchresults-header"></div>
-                        <ul id="searchresults">
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="content" class="content">
+                <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="multi-clock-and-stimulus-architecture--exploratory-roadmap"><a class="header" href="#multi-clock-and-stimulus-architecture--exploratory-roadmap">Multi-clock and stimulus architecture — exploratory roadmap</a></h1>
 <p><strong>Status:</strong> Captured architectural thinking. Most phases here are
@@ -174,7 +197,7 @@ audio, DFS). Two observations crystallised the architecture:</p>
 boundaries.</strong> External-clock and DFS scenarios look intractable until you
 notice that &lt;1 % of nets typically cross domains; the bulk of the design is
 batchable inside one island.</li>
-<li><strong>Stimulus generation and stimulus consumption don't have to share a
+<li><strong>Stimulus generation and stimulus consumption don’t have to share a
 loop.</strong> Today cosim couples the testbench tick-by-tick to the GPU dispatch.
 Decoupling them — via streaming or full precompute — turns the GPU from a
 ping-ponging coprocessor into a stream consumer.</li>
@@ -187,10 +210,10 @@ timing-arrival infrastructure.</p>
 <ul>
 <li><strong>Multi-clock-domain functional support.</strong> <code>MultiClockScheduler</code> in
 <code>src/sim/cosim_metal.rs:1347</code> builds a tick-by-tick edge schedule over the
-LCM of all domains' periods (with GCD granularity). DFFs are tagged by clock
+LCM of all domains’ periods (with GCD granularity). DFFs are tagged by clock
 domain via <code>clock_pin2aigpins</code> in <code>src/aig.rs:209</code>. Each scheduler tick
-asserts only the firing domains' posedge/negedge flag bits; the GPU kernel
-gates DFF write-back on those flags, so non-firing domains' DFFs hold.</li>
+asserts only the firing domains’ posedge/negedge flag bits; the GPU kernel
+gates DFF write-back on those flags, so non-firing domains’ DFFs hold.</li>
 <li><strong>LCM constraint.</strong> The scheduler asserts <code>schedule_len &lt;= 1_000_000</code>
 (<code>cosim_metal.rs:1376</code>). Commensurable periods (PLL-derived) work; truly
 non-commensurable external clocks (audio, USB-recovered, DFS-mid-flight) hit
@@ -201,9 +224,9 @@ models (<code>src/sim/models/</code>) drain queued actions per edge and emit eve
 Generation is interleaved with the GPU dispatch loop — every tick (or every
 few ticks) round-trips through the host.</li>
 <li><strong>VCD replay path.</strong> <code>jacquard sim</code> already runs from a precomputed input
-VCD with no host-side reactive logic. This is, in effect, the "Level 1"
-precomputed-edge mode described below; the gap is between cosim's reactive
-loop and sim's flat replay, not in the kernel itself.</li>
+VCD with no host-side reactive logic. This is, in effect, the “Level 1”
+precomputed-edge mode described below; the gap is between cosim’s reactive
+loop and sim’s flat replay, not in the kernel itself.</li>
 <li><strong>CDC checking.</strong> None today. SDF setup/hold checks exist
 (<code>src/timing_report.rs</code>) but are not wired through any CDC-specific path.</li>
 </ul>
@@ -212,12 +235,12 @@ loop and sim's flat replay, not in the kernel itself.</li>
 <h3 id="axis-1--spatial-synchronous-islands-with-thin-boundaries"><a class="header" href="#axis-1--spatial-synchronous-islands-with-thin-boundaries">Axis 1 — Spatial: synchronous islands with thin boundaries</a></h3>
 <p>A static analysis pass partitions the AIG into <strong>islands</strong>: maximal connected
 sets of gates whose transitive fanin/fanout stays inside one clock domain.
-Whatever's left is the <strong>boundary</strong> — combinational gates and DFFs whose data
+Whatever’s left is the <strong>boundary</strong> — combinational gates and DFFs whose data
 cones cross domains. In real designs the boundary is small, dominated by
 synchronizers (2FF), async FIFO control, and handshake glue.</p>
 <p>Per-island execution lets the GPU:</p>
 <ul>
-<li>Skip evaluation of an island whose state hasn't changed.</li>
+<li>Skip evaluation of an island whose state hasn’t changed.</li>
 <li>Batch K consecutive ticks of a fast island into one kernel launch when the
 slow island has no edges in the window.</li>
 <li>Treat the boundary as a small mailbox (source-island outputs read by
@@ -225,14 +248,14 @@ destination-island reads) rather than a global state vector.</li>
 </ul>
 <p>This is essentially <strong>functional partitioning</strong> for parallel discrete-event
 simulation, but the GPU dataflow model gets <em>more</em> benefit than a CPU sim
-because batched dataflow is exactly what a fast island's run-ahead window
+because batched dataflow is exactly what a fast island’s run-ahead window
 wants.</p>
 <h3 id="axis-2--temporal-stimulus-generation-decoupled-from-consumption"><a class="header" href="#axis-2--temporal-stimulus-generation-decoupled-from-consumption">Axis 2 — Temporal: stimulus generation decoupled from consumption</a></h3>
 <p>The cosim host loop is the throughput floor today. Decoupling has three
 levels:</p>
 <ul>
 <li><strong>Replay</strong> — the testbench has already produced a complete input VCD; the
-GPU just plays it back. Today's <code>jacquard sim</code> is this case.</li>
+GPU just plays it back. Today’s <code>jacquard sim</code> is this case.</li>
 <li><strong>Streaming buffer</strong> — testbench runs in a separate thread feeding a ring
 buffer of <code>(tick, input_op)</code> tuples. GPU consumes batches. As long as the
 producer keeps up <em>on average</em>, the GPU never stalls. Works because most
@@ -242,32 +265,38 @@ the kernel.</li>
 records every input transition; pass 2 replays at line-rate while
 checksumming outputs against the recorded run. If outputs diverge, abort and
 fall back. Wins decisively for regression CI where most runs confirm
-"nothing externally observable changed".</li>
+“nothing externally observable changed”.</li>
 </ul>
 <h2 id="phase-breakdown"><a class="header" href="#phase-breakdown">Phase breakdown</a></h2>
 <p>Each phase is independently shippable. The phase numbering here is local to
 this doc and should not be confused with the timing-IR phase numbering in
 <code>post-phase-0-roadmap.md</code>.</p>
-<div class="table-wrapper"><table><thead><tr><th>Phase</th><th>Topic</th><th>Trigger</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Phase</th><th>Topic</th><th>Trigger</th></tr>
+</thead>
+<tbody>
 <tr><td><strong>MC.1</strong></td><td>Static island partitioner (analysis only, emits metadata)</td><td>Standalone-useful for CDC reporting; could land in a future release without further work</td></tr>
 <tr><td><strong>MC.2</strong></td><td>Min-heap multi-clock scheduler (replaces LCM precompute)</td><td>First non-commensurable external clock or DFS use case lands</td></tr>
 <tr><td><strong>MC.3</strong></td><td>Streaming stimulus buffer (decouples testbench thread from kernel)</td><td>First workload where cosim CPU↔GPU round-trip is measured as the bottleneck</td></tr>
 <tr><td><strong>MC.4</strong></td><td>Per-island kernel dispatch + multi-rate batching</td><td>MC.1+MC.2 in place; first multi-domain workload large enough that whole-AIG eval per tick is wasteful</td></tr>
 <tr><td><strong>MC.5</strong></td><td>Record-and-replay with divergence detection</td><td>Regression CI throughput becomes a release blocker</td></tr>
 <tr><td><strong>MC.6+</strong></td><td>Speculation staircase, AOT trace compilation, profile-guided kernel specialization</td><td>Demand-driven; deferred until measurement shows residual sync overhead after MC.4</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <p><strong>MC.3/MC.4 trigger is now measured (2026-06-07).</strong> Instrumenting the cosim
-loop's batch utilisation (see ADR 0017 amendment, <em>Measured batch
+loop’s batch utilisation (see ADR 0017 amendment, <em>Measured batch
 utilisation</em>) shows GPU-peripheral designs run 100% batched, but
 <code>jtag_minimal</code> — CPU-side JTAG replay — emits <strong>102,310 single-edge command
 buffers out of 106,117</strong> (96% of all submits; 2.6% of edges). Those per-edge
 CPU↔GPU round-trips dominate its wall-clock: this is the MC.3
-"round-trip measured as the bottleneck" trigger. The structural fix is
+“round-trip measured as the bottleneck” trigger. The structural fix is
 MC.4 — the fast <code>sys_clk</code> island runs ahead/batched while only the slow
 model-driven <code>tck</code> boundary needs per-edge handover — which is why MC.4
 depends on the MC.1 island partitioner. Both are orthogonal to the #105
-backend-portability seam (which preserves today's batch model unchanged).</p>
+backend-portability seam (which preserves today’s batch model unchanged).</p>
 <h3 id="mc1--static-island-partitioner"><a class="header" href="#mc1--static-island-partitioner">MC.1 — Static island partitioner</a></h3>
 <p>Walk the AIG; for each gate compute the set of clock domains its transitive
 fanin/fanout touches. Tag gates as <strong>island-internal</strong> (fanin and fanout both
@@ -276,11 +305,11 @@ side). Emit per-island gate counts and a list of boundary gates as metadata
 on the existing <code>FlattenedScript</code>.</p>
 <p>What it enables on its own, even with no runtime change:</p>
 <ul>
-<li>Diagnostic: "this design has 14 inter-domain combinational paths from
-<code>audio_clk</code> → <code>core_clk</code> and 2 the other way". Useful for designers
+<li>Diagnostic: “this design has 14 inter-domain combinational paths from
+<code>audio_clk</code> → <code>core_clk</code> and 2 the other way”. Useful for designers
 reviewing CDC structure.</li>
 <li>Data structure that MC.2 / MC.4 / CDC reporting all need.</li>
-<li>Sanity-check on the "&lt;1 %" boundary-surface assumption for the workloads
+<li>Sanity-check on the “&lt;1 %” boundary-surface assumption for the workloads
 that motivate further phases.</li>
 </ul>
 <p>Classification policy for derived signals (e.g. a sync-FIFO read pointer in
@@ -289,26 +318,26 @@ aggressively. Only gates whose <em>direct</em> fanin includes pins from multiple
 domains are boundary; downstream gates fed by a domain-tagged
 pre-synchronizer output inherit that domain. This pushes the boundary in as
 close to the structural CDC crossing as possible and is what makes the
-"&lt;1 %" claim hold on real designs — a lazy classification that propagated
-"multi-domain" forward through every downstream cone would yield a
+“&lt;1 %” claim hold on real designs — a lazy classification that propagated
+“multi-domain” forward through every downstream cone would yield a
 boundary surface that swallowed half the design.</p>
 <p>Code locations: extends <code>aig.rs</code> (domain analysis on <code>DriverType</code>) and
 <code>flatten.rs</code> (metadata on <code>FlattenedScriptV1</code>). No kernel changes.</p>
 <h3 id="mc2--min-heap-multi-clock-scheduler"><a class="header" href="#mc2--min-heap-multi-clock-scheduler">MC.2 — Min-heap multi-clock scheduler</a></h3>
-<p>Replace <code>MultiClockScheduler</code>'s precomputed <code>Vec&lt;TickEdges&gt;</code> with a min-heap
+<p>Replace <code>MultiClockScheduler</code>’s precomputed <code>Vec&lt;TickEdges&gt;</code> with a min-heap
 of <code>(next-edge-time, domain)</code> pairs. Pop the next edge, dispatch, push the
-domain's next edge back. No LCM constraint; non-commensurable periods are
+domain’s next edge back. No LCM constraint; non-commensurable periods are
 free. DFS support falls out: when the DUT writes a clock-control register,
-the host updates the heap entry's period.</p>
+the host updates the heap entry’s period.</p>
 <p>DFS hook design: explicit, not generic signal-watching. The cosim config
 declares <code>(control_signal, period_table)</code> pairs; the host polls the named
 bit each tick (cheap — one bit) and updates the heap. Generic
-"call-back-on-arbitrary-signal" is rejected as too coupled.</p>
+“call-back-on-arbitrary-signal” is rejected as too coupled.</p>
 <p>Code locations: <code>MultiClockScheduler::new</code> and <code>build_edge_ops</code> in
 <code>cosim_metal.rs</code>. Same per-domain flag emission, different scheduling
 backend.</p>
 <h3 id="mc3--streaming-stimulus-buffer"><a class="header" href="#mc3--streaming-stimulus-buffer">MC.3 — Streaming stimulus buffer</a></h3>
-<p><code>InputDispatcher</code> becomes a trait; today's <code>FileDispatcher</code> is one
+<p><code>InputDispatcher</code> becomes a trait; today’s <code>FileDispatcher</code> is one
 implementation. New implementations:</p>
 <ul>
 <li><code>ThreadedDispatcher</code> — runs peripheral models on a separate thread; emits
@@ -321,14 +350,14 @@ testbenches).</li>
 <p>Latency budget: the producer must be at least one tick ahead of the
 consumer. For transaction-level workloads this is easy (peripheral state
 machines run orders of magnitude slower than the GPU). For sub-cycle
-reactive loops it isn't, and those workloads stay on the synchronous path.</p>
+reactive loops it isn’t, and those workloads stay on the synchronous path.</p>
 <p>Code locations: refactor <code>input_stim.rs</code> around a trait; new module for
 ring-buffer plumbing; cosim main loop drains a batch per dispatch instead of
 one tick.</p>
 <h3 id="mc4--per-island-kernel-dispatch--multi-rate-batching"><a class="header" href="#mc4--per-island-kernel-dispatch--multi-rate-batching">MC.4 — Per-island kernel dispatch + multi-rate batching</a></h3>
 <p>Build per-island execution scripts (and one boundary script) from the
 metadata MC.1 produces. Cosim main loop becomes:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>loop {
     let (next_t, domain) = scheduler.peek();
@@ -338,12 +367,12 @@ metadata MC.1 produces. Cosim main loop becomes:</p>
     dispatch(boundary_script);  // only if boundary signals changed
     advance_clock(now + edges_in_window * domain.period);
 }
-<span class="boring">}</span></code></pre></pre>
-<p>Boundary mailbox lives in shared state-buffer slots that the source island's
-script writes and the destination island's script reads. Repcut continues to
-partition each island's script across GPU blocks independently.</p>
+<span class="boring">}</span></code></pre>
+<p>Boundary mailbox lives in shared state-buffer slots that the source island’s
+script writes and the destination island’s script reads. Repcut continues to
+partition each island’s script across GPU blocks independently.</p>
 <p>Tight-boundary gates (combinationally fed by both domains) force a sync
-point on every edge of either side; MC.1's metadata identifies these so the
+point on every edge of either side; MC.1’s metadata identifies these so the
 runtime knows when batching can extend.</p>
 <h3 id="mc5--record-and-replay-with-divergence-detection"><a class="header" href="#mc5--record-and-replay-with-divergence-detection">MC.5 — Record-and-replay with divergence detection</a></h3>
 <p>Add <code>--record-stimulus</code> to cosim that emits a complete tick-by-tick input
@@ -354,19 +383,19 @@ checksum each batch.</p>
 <ul>
 <li>Mismatch in <strong>watched signals</strong> (the existing cosim <code>signals_of_interest</code>
 set, or a <code>--watch</code> CLI argument) → abort and require re-recording. This
-is the genuine "the design's externally observable behaviour changed"
+is the genuine “the design’s externally observable behaviour changed”
 case — the recording is now stale and replay is unsafe.</li>
 <li>Mismatch in <strong>unwatched signals</strong> → warn-and-continue against the
-recorded transitions. Internal microarchitectural changes that don't
+recorded transitions. Internal microarchitectural changes that don’t
 move the observable surface are normal during development; aborting on
 them defeats the purpose of accelerating regression CI, where most runs
-exist to confirm "nothing externally observable changed".</li>
+exist to confirm “nothing externally observable changed”.</li>
 </ul>
 <p>The watchset is the user-visible policy lever — it specifies what
-"externally observable" means for this design. Default to the cosim
+“externally observable” means for this design. Default to the cosim
 output signals (the natural CI invariant) plus any user-declared
 checkpoint signals.</p>
-<p>Useful primarily as a regression-CI accelerator. Doesn't help one-off
+<p>Useful primarily as a regression-CI accelerator. Doesn’t help one-off
 runs.</p>
 <p><strong>Cross-test sharing.</strong> A single design accumulates many test cases. The
 natural extension of record-and-replay is to share the design-side
@@ -374,32 +403,32 @@ specialized kernel across all tests in the suite and vary only the
 stimulus recording. For a suite of N tests against one design, recording
 costs N× pass-1 (one per test, on demand or in parallel) but replay costs
 N× line-rate-kernel-launches sharing the same compiled state-buffer
-layout. That's a multiplicative win on top of per-test record-and-replay
+layout. That’s a multiplicative win on top of per-test record-and-replay
 and is the actual leverage point for full-suite CI throughput.</p>
 <h3 id="mc6--deferred-sophistication"><a class="header" href="#mc6--deferred-sophistication">MC.6+ — Deferred sophistication</a></h3>
 <p>Documented now so the design space is on record:</p>
 <ul>
 <li><strong>Speculation staircase</strong> for hot boundaries: value prediction → protocol
 pattern recognition → control-slice reachable-set enumeration → full
-case enumeration. Each tier larger and cheaper-to-skip. Add a "case"
+case enumeration. Each tier larger and cheaper-to-skip. Add a “case”
 dimension to the kernel dispatch only if measured sync overhead after
 MC.4 justifies it.</li>
 <li><strong>AOT trace compilation</strong>: when stimulus is fully known (replay mode),
 compile the schedule offline — fold constant inputs into AIG constants,
 merge no-op ticks, sort transitions by domain. Profile-guided
-specialization for designs with lots of "configured once at boot" inputs.
+specialization for designs with lots of “configured once at boot” inputs.
 Composes directly with MC.5: a recording <em>is</em> a complete stimulus trace,
 so the AOT compiler can fold every input value into the kernel
 unconditionally. The resulting binary is valid only until either the
-design or the recording changes, so the lifecycle model is "compile per
+design or the recording changes, so the lifecycle model is “compile per
 (design SHA, recording SHA) pair, cache for the test session,
-invalidate on either source changing". Acceptable cost for a 100×-replay
+invalidate on either source changing”. Acceptable cost for a 100×-replay
 regression run; not for one-off interactive sim.</li>
 <li><strong>CDC verification mode</strong>: jitter injection on coincident edges and
-random X-injection on detected async-source paths. Reuses MC.1's
+random X-injection on detected async-source paths. Reuses MC.1’s
 boundary metadata and existing X-prop infrastructure. Distinct from
 static CDC checking (Spyglass, Real Intent), which is <strong>explicitly out
-of scope</strong> — that's a different product. The jitter-injection half is
+of scope</strong> — that’s a different product. The jitter-injection half is
 designed in <a href="../adr/0012-cdc-jitter-injection.html">ADR 0012</a> and partly
 built; remaining work is tracked in
 <a href="https://github.com/gpu-eda/Jacquard/issues/92">issue #92</a> /
@@ -418,7 +447,7 @@ protocols (the natural extension of <code>input.json</code> over a socket) inste
 is structural/formal (Spyglass, JasperGold-CDC, Real Intent) and a
 separate product.</li>
 <li><strong>Structural CDC checking</strong> (synchronizer recognition rules, gray-code
-analysis). Different product. MC.1's boundary metadata enables a <em>light</em>
+analysis). Different product. MC.1’s boundary metadata enables a <em>light</em>
 diagnostic but not a verification flow.</li>
 <li><strong>DUT-internal <code>#delay</code>.</strong> Requires an event-driven kernel; destroys the
 batched dataflow that gives Jacquard its speedup. Permanently
@@ -428,32 +457,38 @@ unsupported.</li>
 </ul>
 <h2 id="implementation-triggers"><a class="header" href="#implementation-triggers">Implementation triggers</a></h2>
 <p>When to revisit and pull which phase off the shelf:</p>
-<div class="table-wrapper"><table><thead><tr><th>Trigger</th><th>Pulls</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Trigger</th><th>Pulls</th></tr>
+</thead>
+<tbody>
 <tr><td>First user workload with non-commensurable external clocks (audio, USB, DFS)</td><td>MC.2</td></tr>
 <tr><td>First UVM/CocoTB integration request reaches engineering scoping</td><td>MC.3</td></tr>
 <tr><td>User-visible CDC reporting requested</td><td>MC.1</td></tr>
 <tr><td>Multi-domain workload measurably bottlenecked on whole-AIG-per-tick eval</td><td>MC.1 + MC.4</td></tr>
 <tr><td>Regression CI total time exceeds release tolerance</td><td>MC.5</td></tr>
 <tr><td>Post-MC.4 measurement shows boundary-sync overhead &gt;10 %</td><td>MC.6 speculation tier 1 (value prediction)</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <h2 id="why-mc1-and-mc2-may-be-worth-doing-standalone"><a class="header" href="#why-mc1-and-mc2-may-be-worth-doing-standalone">Why MC.1 and MC.2 may be worth doing standalone</a></h2>
 <p>The user observation in the originating discussion was that MC.1 and MC.2 are
 worth carrying in a future release on their own merits, ahead of any specific
 workload demand. Rationale:</p>
 <ul>
-<li><strong>MC.1 has standalone diagnostic value.</strong> A "boundary report" for any
+<li><strong>MC.1 has standalone diagnostic value.</strong> A “boundary report” for any
 multi-clock design — count of cross-domain combinational paths, location
 of inter-domain DFF samples — is useful to any user reviewing CDC
 structure, independent of whether the runtime ever uses the partition.</li>
 <li><strong>MC.2 lifts a real correctness limit.</strong> The current LCM cap silently
 fails on legitimate designs (any audio-clock SoC, anything with DFS).
 Replacing precompute with a min-heap is a small, contained change that
-removes a category of "your design doesn't fit" errors.</li>
+removes a category of “your design doesn’t fit” errors.</li>
 <li><strong>Both are foundational</strong> for the rest of the architecture. Doing them
 early means later phases pick up cleanly.</li>
 </ul>
-<p>If MC.1 + MC.2 ship in isolation, they don't commit Jacquard to any of the
+<p>If MC.1 + MC.2 ship in isolation, they don’t commit Jacquard to any of the
 later phases. Each later phase remains demand-driven.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
@@ -465,7 +500,7 @@ following (<code>ClockDomainFlags</code>, <code>MultiClockScheduler</code>).</li
 <li>Existing precomputed-edge path (replay): <code>jacquard sim</code> and
 <code>src/sim/vcd_io.rs</code>.</li>
 <li>Adjacent committed roadmap: <code>docs/plans/post-phase-0-roadmap.md</code>.</li>
-<li>Synchronous-only constraint and rationale: <code>CLAUDE.md</code> "Key limitation".</li>
+<li>Synchronous-only constraint and rationale: <code>CLAUDE.md</code> “Key limitation”.</li>
 </ul>
 
                     </main>
@@ -473,11 +508,11 @@ following (<code>ClockDomainFlags</code>, <code>MultiClockScheduler</code>).</li
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                             <a rel="prev" href="../plans/ws3-cosim-sdf-followup.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <i class="fa fa-angle-left"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
                             <a rel="next prefetch" href="../plans/declarative-cell-metadata.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
                         <div style="clear: both"></div>
@@ -487,16 +522,21 @@ following (<code>ClockDomainFlags</code>, <code>MultiClockScheduler</code>).</li
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                     <a rel="prev" href="../plans/ws3-cosim-sdf-followup.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <i class="fa fa-angle-left"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
                     <a rel="next prefetch" href="../plans/declarative-cell-metadata.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
 
         </div>
 
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
 
 
@@ -505,16 +545,17 @@ following (<code>ClockDomainFlags</code>, <code>MultiClockScheduler</code>).</li
         </script>
 
 
-        <script src="../elasticlunr.min.js"></script>
-        <script src="../mark.min.js"></script>
-        <script src="../searcher.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="../clipboard.min.js"></script>
-        <script src="../highlight.js"></script>
-        <script src="../book.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-picker.js"></script>
+        <script src="../theme/version-picker-36db8dd8.js"></script>
+
 
 
     </div>

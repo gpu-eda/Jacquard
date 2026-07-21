@@ -1,0 +1,563 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Spike — Architecture documentation redesign - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-5e44e8e6.svg">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-picker-0393021e.css">
+        <link rel="stylesheet" href="../theme/d2-diagrams-d5432d61.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-acf3df94.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="spike--architecture-documentation-redesign"><a class="header" href="#spike--architecture-documentation-redesign">Spike — Architecture documentation redesign</a></h1>
+<p><strong>Status:</strong> exploring. This is a throwaway test of a doc structure, not a
+migration. Nothing is renamed until the shape proves out on a real area.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The problem</a></h2>
+<p>Three separate complaints point at the same fix.</p>
+<p>“ADR” is jargon. The phrase “Architecture Decision Record” doesn’t tell a
+newcomer what’s inside, and enough people bounce off the term that it’s worth
+dropping.</p>
+<p>An ADR conflates three kinds of claim that <a href="../adr/README.html#three-kinds-of-claim-aged-differently">age at different
+rates</a>: why a decision
+was made, what the code does now, and what’s decided but unbuilt. Bundling them
+in one document is what makes ADRs go stale. The <em>why</em> is historical and should
+never be rewritten; the <em>what</em> has to track the code; the <em>unbuilt</em> part shrinks
+as things land. One document can’t age all three well.</p>
+<p>There’s no by-area entry point. The ADRs are a numbered pile. A reader who wants
+“how does cosim I/O work today” has to know it’s spread across 0013, 0017 and
+0022 and reconstruct it.</p>
+<h2 id="the-shape"><a class="header" href="#the-shape">The shape</a></h2>
+<p>Split the pile along the seam that already exists in the three-buckets model:
+what the code is now, versus why it got that way.</p>
+<ul>
+<li><strong>Architecture reference — the <em>what</em>.</strong> One document per area, describing the
+current design as it stands in the code. This is the top-level entry point,
+organised by area, and the thing a reader lands on first. It’s living: kept in
+step with the code, rewritten in place when the code moves.</li>
+<li><strong>Decision log — the <em>why</em>.</strong> The rationale and the alternatives rejected,
+each entry tied to the moment it was decided. This is what the ADRs already
+are; they become the decision log, reframed. Historical by nature, written in
+past tense, not rewritten when the code changes.</li>
+<li><strong>Status — the <em>unbuilt</em>.</strong> The gap between a decision and the code. Lives in
+an <code>Implementation status</code> section on the architecture doc (and a <code>plans/</code>
+entry for the work), and drains into the <em>what</em> as each piece lands.</li>
+</ul>
+<p><strong>Spikes stay, as the evidence.</strong> A spike is neither a <em>what</em> nor a <em>why</em>; it’s
+the experiment a decision rested on. They keep their own home and get referenced
+<em>from</em> the decisions they informed, the way <a href="../adr/0003-opentimer-primary-sta.html">ADR
+0003</a> already cites the
+<a href="opentimer-sky130.html">OpenTimer spike</a> that killed it. A decision cites its
+evidence; the spike itself is a dated record and doesn’t get rewritten.</p>
+<p>The link runs both ways. Each architecture section points to the decisions that
+shaped it, so a reader on the current shape can reach the reasoning in one hop.
+Each decision points forward to the architecture doc it produced, so a reader in
+the log can see what became of it, and back to the spikes it rested on. The
+<em>whats</em> point to the <em>whys</em>, and the <em>whys</em> point to their evidence.</p>
+<p>This is deliberately less destructive than renaming every ADR into an area
+document. The decision records keep their numbers and their content; they move
+under a “decision log” heading and get forward-links. The new writing is the
+architecture layer on top.</p>
+<p><a href="https://diataxis.fr/reference-explanation/">Diátaxis</a> gives this split its
+name and its rule. Its <em>reference</em> type (what you consult while working:
+factual, present-tense, structured for lookup) is the architecture layer; its
+<em>explanation</em> type (background, the why, written for study) is the decision log.
+Diátaxis names our exact failure mode too: explanation bleeds into reference,
+dragging time-bound claims into a doc that’s supposed to state what is. The rule
+that follows is the whole anti-staleness law: no rationale, and no dead history,
+in a reference doc.</p>
+<h2 id="what-this-revises-in-the-current-convention"><a class="header" href="#what-this-revises-in-the-current-convention">What this revises in the current convention</a></h2>
+<p>The <a href="../adr/README.html">ADR README</a> currently says ADRs are <em>living documents,
+edited in place to stay current</em>. That rule exists only because the ADR is the
+sole doc, so it has to carry current state, so it has to be edited when the code
+moves. Add a reference layer that carries current state, and the pressure to
+edit the decision record vanishes.</p>
+<p>So the redesign flips the mutability rules by layer, and the flip is the point:</p>
+<ul>
+<li>The <strong>architecture reference</strong> is living and present-tense, edited in place.
+The “keep it current” rule moves here, where it belongs.</li>
+<li>The <strong>decision log</strong> goes back to immutable and past-tense: a decision is a
+record of a choice at a moment, not a description of the system now. A changed
+decision is a new record that supersedes the old, not a rewrite. This is the
+Nygard model, and it’s what stops a decision record from rotting: history
+can’t go stale.</li>
+</ul>
+<p>This does partly reverse the living-ADR convention I committed earlier, and
+that’s worth saying plainly rather than quietly. It doesn’t bring back the thing
+we actually disliked, dated “Amendment” blocks accreting inside one document,
+which both models reject. It changes only what happens when a <em>decision</em> itself
+changes: edit the reference doc to match the code, and write a new decision
+record for the changed why.</p>
+<h2 id="naming-and-titles"><a class="header" href="#naming-and-titles">Naming and titles</a></h2>
+<p>Files use <code>&lt;class&gt;&lt;number&gt;-&lt;name&gt;.md</code>:</p>
+<ul>
+<li><code>arch-3-cosim-runtime.md</code> — an architecture-reference doc.</li>
+<li><code>dec-0022-flow-controlled-io.md</code> — a decision-log entry (was ADR 0022).</li>
+</ul>
+<p>The number is a stable ID, not a reading order. Decision entries keep their
+existing four-digit ADR numbers, so every “ADR 0022” reference already in the
+docs, commits and issues still resolves. Architecture docs get their own short
+sequence per the taxonomy below.</p>
+<p>The filename is for identity and stable links. The <em>title</em> a reader sees is set
+by the <code>SUMMARY.md</code> link text and the document’s <code># H1</code>, both ours to choose, so
+the rendered nav can read “Cosim runtime” while the file stays
+<code>arch-3-cosim-runtime.md</code>.</p>
+<h2 id="the-doc-tree"><a class="header" href="#the-doc-tree">The doc tree</a></h2>
+<p>“Architecture” is the top-level home, chosen over “ADR” precisely because the
+term is opaque to newcomers. Everything hangs under it: the map first, then the
+current-state docs, then the decision log, with spikes nested under the log as
+the evidence decisions rested on.</p>
+<pre><code>docs/architecture/
+  README.md                    # the map — by-area index, the first thing a reader hits
+  arch-1-timing-correctness.md # current state, the "what", one per area
+  arch-3-cosim-runtime.md
+  ...
+  decisions/                   # the decision log — the "why" (today's ADRs, reframed)
+    README.md                  # decision index (today's adr/README.md)
+    dec-0013-...md
+    dec-0022-...md
+    spikes/                    # the evidence a decision rested on
+      spike-amd-laptop-backend.md
+      spike-architecture-doc-redesign.md
+    archive/                   # reversed/dropped decisions (today's adr/archive/)
+</code></pre>
+<p>Rendered nav (<code>SUMMARY.md</code>) mirrors it, with human titles:</p>
+<pre><code># Architecture
+- [Overview](architecture/README.md)      # the map
+  - [Timing correctness](architecture/arch-1-timing-correctness.md)
+  - [Cosim runtime](architecture/arch-3-cosim-runtime.md)
+  - ...
+- [Decisions](architecture/decisions/README.md)
+  - [0013 — Cosim peripheral model architecture](...)
+  - ...
+  - Spikes
+    - [Reaching AMD laptops](...)
+    - ...
+</code></pre>
+<p>Two placement calls in this tree are worth stating rather than defaulting.
+<em>Spikes live under <code>decisions/</code></em> because a spike is the experiment a decision
+rested on, so it belongs beside the decision that cites it, not floating at the
+top level as today. <em>The decision log is a subdirectory of <code>architecture/</code></em>, not
+a sibling, so “Architecture” is genuinely the single top-level home and the why
+sits one level below the what it explains. Both are reversible; neither blocks
+the taxonomy work.</p>
+<h2 id="taxonomy"><a class="header" href="#taxonomy">Taxonomy</a></h2>
+<p>The areas are the load-bearing decision. Six candidates, mapping every current
+ADR to a home:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>#</th><th>Area</th><th>Current-state doc</th><th>Decisions behind it</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>Timing correctness</td><td><code>arch-1-timing-correctness.md</code></td><td>0001, 0002, 0005, 0006, 0008, 0009, 0019; roadmap 0007</td></tr>
+<tr><td>2</td><td>Simulation engine</td><td><code>arch-2-simulation-engine.md</code></td><td>0014, 0015, 0016</td></tr>
+<tr><td>3</td><td>Cosim runtime</td><td><code>arch-3-cosim-runtime.md</code></td><td>0012, 0013, 0017, 0022</td></tr>
+<tr><td>4</td><td>RTL on-ramp</td><td><code>arch-4-rtl-onramp.md</code></td><td>0021</td></tr>
+<tr><td>5</td><td>PDK enablement</td><td><code>arch-5-pdk-enablement.md</code></td><td>0004, 0010, 0011</td></tr>
+<tr><td>6</td><td>Distribution</td><td><code>arch-6-distribution.md</code></td><td>0018, 0020</td></tr>
+</tbody>
+</table>
+</div>
+<p>Two placements are genuinely ambiguous and worth deciding rather than guessing.
+Cell metadata (0010, 0011) is written by PDK enablement but read by timing, so
+it could sit in either. The X-propagation work (0016) spans the engine and
+cosim. Overlaps like these are the real cost of an area split, and where a
+framework’s guidance (below) should earn its keep.</p>
+<h2 id="worked-example-cosim-runtime"><a class="header" href="#worked-example-cosim-runtime">Worked example: cosim runtime</a></h2>
+<p><code>arch-3-cosim-runtime.md</code> would open on the current design and carry the
+cross-links:</p>
+<pre><code class="language-markdown"># Cosim runtime
+
+Cosim runs reactive peripheral models as GPU kernels alongside the design, so
+inputs can depend on design outputs cycle by cycle. [What the code does today,
+in the present tense: the batch dispatch loop, the multi-clock scheduler, the
+peripheral model trait, the GPU→CPU ring buffers.]
+
+The batch is the core constraint: `BATCH_SIZE` scheduler edges run with the CPU
+absent. See [dec-0017](...) for why the loop is shaped this way, and
+[dec-0013](...) for the peripheral model architecture the rings come from.
+
+## External I/O
+
+[Current state once built. Today this links to dec-0022 as decided-but-unbuilt.]
+
+## Implementation status
+
+- Batch dispatch, multi-clock scheduler, peripheral rings — built
+  (dec-0013, dec-0017).
+- Flow-controlled I/O across the batch boundary — decided, unbuilt
+  (dec-0022, plan: ...).
+</code></pre>
+<p>The decision entries lose nothing. <code>dec-0022</code> keeps the full rationale it has
+now and gains one forward-link: “current state: arch-3, External I/O.” This area
+is the sharp test because it exercises all three buckets at once — built
+peripherals, a proposed I/O design, and the why behind both.</p>
+<h2 id="diagrams"><a class="header" href="#diagrams">Diagrams</a></h2>
+<p>No modelling tool. Structurizr, C4-as-code and the like earn their keep when one
+model feeds dozens of views that must stay mutually consistent as it changes,
+which is a system-of-services problem. Jacquard is one binary with a compute
+pipeline; the model fits in a doc, so a modelling tool buys single-source views
+we don’t need at the cost of a DSL and a build step. Same reasoning as rejecting
+arc42’s full apparatus.</p>
+<p>The firm rule is diagrams as text, never checked-in images. A text diagram
+diffs in a PR, lives next to the prose, and is readable by an agent; a PNG rots
+invisibly, hides what changed from a reviewer, and is an opaque blob to a model.
+Keep them sparse and follow C4’s discipline: one abstraction level per diagram,
+and the diagram shows <em>what</em>, never <em>why</em>. A straight pipeline stays as an ASCII
+block (zero-dependency, reads fine); reach for a rendered diagram only where the
+shape is genuinely two-dimensional (the backend/peripheral/ring relationships,
+the three-tier model).</p>
+<p>The format choice is <strong>D2</strong>, decided by rendering the same real diagram (the
+cosim batch boundary) both ways and comparing. Both are declarative text, so the
+AI reader is indifferent; the choice turned on layout quality and the render
+path.</p>
+<ul>
+<li><strong>D2</strong> kept a nested node inside its container box, coloured the three
+containers cleanly, and routed the boundary-crossing edges with few crossings.
+It needs the <code>d2</code> binary wherever docs build (<code>mdbook-d2</code> shells out to it),
+and GitHub won’t render it inline in a PR.</li>
+<li><strong>Mermaid</strong> floated an unconnected node far from its group, its subgraph
+colouring didn’t take, and the layout was more cramped on the same graph.
+It renders client-side with no binary and inline on GitHub.</li>
+</ul>
+<p>The one cost of D2, no inline GitHub render, is minor here: the canonical
+rendered form is the mdBook site on GitHub Pages, not GitHub’s Markdown preview,
+and both render there. The layout gap is real and lands exactly on the 2-D shapes
+that are the only diagrams we’ll draw. <code>mdbook-d2</code> is wired into <code>book.toml</code> (with
+<code>layout = "elk"</code>, which beat dagre on the container shapes) and the docs CI job;
+<code>theme/d2-diagrams.css</code> strips the code-block chrome the preprocessor wraps each
+SVG in. The worked cosim doc carries the first diagram as a live test of the path.</p>
+<p>Two techniques from getting the first diagram to look right, both reusable:</p>
+<p><em>Theme-matching.</em> D2 bakes one palette into the SVG, so a light diagram lands on
+a navy page (mdBook’s default dark theme). <code>theme/d2-diagrams.css</code> repaints every
+shape from the active theme’s CSS variables (<code>--fg</code>, <code>--bg</code>) — author CSS
+overrides D2’s baked <code>fill=</code>/<code>stroke=</code> — so the diagram follows a live theme
+switch. Three gotchas worth knowing before the next diagram: D2 sets shape colour
+via an embedded <code>.d2-&lt;hash&gt; .stroke-B1</code> rule whose specificity (0,2,0) beats
+element selectors, so shape colours need <code>!important</code>; the connection <code>&lt;mask&gt;</code>
+contains unclassed <code>&lt;rect&gt;</code>s, so a bare <code>rect</code> fill rule corrupts the mask and
+clips every line — scope to <code>rect[class]</code>; and per-region accent colour needs a
+hook D2 doesn’t otherwise give, so the three regions carry a <em>sentinel</em> fill in
+the source that CSS remaps to a translucent (hence theme-adaptive) tint.</p>
+<p><em>Verifying style without a live browser.</em> The diagram is an SVG styled by page
+CSS, so a static D2 render can’t show the real result — render the built page in
+headless Chrome instead (<code>--headless --screenshot</code>, or <code>--dump-dom</code> after an
+injected <code>getComputedStyle</code> probe to read the actual applied stroke/fill). Seed
+<code>localStorage['mdbook-theme']</code> before the page’s boot script to force a theme.
+This caught the invisible-lines bug that a D2 PNG render hid completely.</p>
+<p>Legibility has one non-obvious lever: on-screen text size is the native font
+scaled by <code>column_width / diagram_native_width</code>, because the SVG is fit to the
+content column. A wide diagram shrinks its text into the floor. Bumping the D2
+font doesn’t help (boxes grow with it, so the ratio is unchanged) — the fix is to
+keep the diagram <em>narrow</em>, laying regions out vertically and reserving horizontal
+flow for genuine pipelines. The cosim diagram at ~1177px native keeps text near
+two-thirds of body size in the column; a wide left-to-right version of the same
+graph dropped it to a quarter. Prefer tall over wide: vertical scroll is natural
+on the web, horizontal isn’t.</p>
+<h2 id="what-this-tests"><a class="header" href="#what-this-tests">What this tests</a></h2>
+<ul>
+<li>Does the <em>what</em> doc read as a coherent whole, or just a stitched-together
+summary of its decision records?</li>
+<li>Is the taxonomy stable, or do the ambiguous placements (cell metadata,
+X-prop) mean the areas are wrong?</li>
+<li>Does the two-way linking stay maintainable, or does it rot the moment a
+decision moves?</li>
+<li>Is the migration worth it against just renaming the ADR section “Decisions”
+and adding a by-area index?</li>
+</ul>
+<h2 id="what-the-field-does-and-what-to-take-from-it"><a class="header" href="#what-the-field-does-and-what-to-take-from-it">What the field does, and what to take from it</a></h2>
+<p>A survey of the usual frameworks (sources at the end) mostly confirms the
+split and lends a few concrete shapes. The one-line reading of each:</p>
+<ul>
+<li><strong>ADRs (Nygard).</strong> The five-field core (title, status, context, decision,
+consequences) is all a decision record needs; MADR’s option-by-option
+apparatus is worth it only for a genuinely contested call. The staleness
+everyone complains about is a category error: an ADR is point-in-time history,
+and history doesn’t rot if you write it in past tense and supersede rather than
+edit. Link each record to the PR that implemented it. Take the core, the
+immutability, and the PR link.</li>
+<li><strong>Diátaxis.</strong> The reference-versus-explanation cut is the theoretical spine of
+this whole redesign, as above. Take it as the organising rule.</li>
+<li><strong>arc42.</strong> Don’t adopt the 12 sections. Five earn their keep as the skeleton
+for each architecture-reference doc: a building-block view (the pipeline, one
+level deep), crosscutting concepts (the things that span modules: multi-backend
+kernel parity, AIG invariants, the partition resource limits), constraints
+(synchronous logic only), risks and tech debt, and a glossary. The glossary
+matters more than usual here because the domain is jargon-dense (AIG, boomerang
+stage, repcut, endpoint group) and an LLM reader hallucinates undefined terms.
+Skip runtime, deployment, and formal quality-scenario sections.</li>
+<li><strong>C4.</strong> Not as a framework. Two habits only: one abstraction level per diagram
+(a single Level-1 pipeline diagram, then per-stage zoom-ins, never one
+god-diagram), and diagrams show <em>what</em>, never <em>why</em>.</li>
+<li><strong>RFCs / design docs (Rust model).</strong> This is the home for decided-but-unbuilt:
+an accepted-but-unimplemented proposal plus a tracking issue is exactly bucket
+three, and the tracking link is what makes it self-liquidating as work lands.
+We already have <code>docs/plans/</code> reaching for this; formalise the link, skip the
+process ceremony (no voting, no FCP).</li>
+<li><strong>ISO 42010.</strong> Ignore the standard. Steal one idea: every view exists to answer
+a named reader’s concern, and one of our readers is now an LLM coding agent.</li>
+</ul>
+<p>The AI-reader findings are the part with the least settled evidence and the most
+direct payoff, so they’re worth stating as rules rather than aspirations:</p>
+<ul>
+<li><strong>Self-contained sections.</strong> An agent retrieves a chunk, not the tree. Each
+section should stand alone: restate its subject, avoid “as described above.”
+This is the same discipline as Diátaxis reference writing.</li>
+<li><strong>Stable-ID cross-links, never prose pointers.</strong> “See dec-0021” resolves; “see
+the synthesis decision” doesn’t. This is why the decision numbers stay stable.</li>
+<li><strong>No stale present-tense claims in a reference doc.</strong> A human skims past a wrong
+claim; a model repeats it as generated code. That raises the cost of the
+staleness failure and is the strongest reason to keep the reference layer
+ruthlessly current and rationale-free.</li>
+<li><strong>Curate, don’t generate.</strong> One measured study
+(<a href="https://arxiv.org/html/2601.20404v2">arXiv 2601.20404</a>) found LLM-written
+context files <em>reduced</em> task success in most settings. Write only what an agent
+can’t get by reading the code.</li>
+<li><strong>A one-screen map.</strong> A <code>docs/architecture/README.md</code> an agent hits first,
+linking every area doc and its decisions by stable ID.</li>
+</ul>
+<p><code>llms.txt</code> is the one piece to skip unless we publish a docs site; it solves
+HTML-ingestion, which an in-repo Markdown reader doesn’t have. The cross-tool
+<code>AGENTS.md</code> convention (shared agent context, tool-specifics left in <code>CLAUDE.md</code>)
+is worth adopting on its own track, separate from this.</p>
+<p>On naming, the field backs the scheme already chosen, with one refinement:
+encode the class as a <em>directory</em>, not a filename prefix. <code>docs/architecture/</code>,
+<code>docs/adr/</code> and <code>docs/plans/</code> carry the class; the file inside is just
+<code>NNNN-kebab-title.md</code>. Cite by number, keep the number out of the H1 title, and
+assign the number at merge to dodge cross-PR collisions.</p>
+<h2 id="sources"><a class="header" href="#sources">Sources</a></h2>
+<ul>
+<li>Diátaxis, <a href="https://diataxis.fr/reference-explanation/">reference vs explanation</a>.</li>
+<li><a href="https://martinfowler.com/bliki/ArchitectureDecisionRecord.html">Nygard ADRs</a> and <a href="https://adr.github.io/madr/">MADR</a>.</li>
+<li><a href="https://arc42.org/overview">arc42</a>; <a href="https://c4model.com">C4 model</a>.</li>
+<li><a href="https://newsletter.pragmaticengineer.com/p/rfcs-and-design-docs">RFCs vs design docs vs ADRs</a>; <a href="https://github.com/rust-lang/rfcs">Rust RFCs</a>.</li>
+<li>AI-reader: <a href="https://agents.md/">AGENTS.md</a>, <a href="https://llmstxt.org/">llms.txt</a>, and the efficacy study <a href="https://arxiv.org/html/2601.20404v2">arXiv 2601.20404</a> (treat its exact percentages as indicative, one 2026 paper).</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../spikes/video-streaming-tap.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../spikes/video-streaming-tap.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-picker-36db8dd8.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

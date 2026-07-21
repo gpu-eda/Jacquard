@@ -12,40 +12,53 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon.svg">
-        <link rel="stylesheet" href="../css/variables.css">
-        <link rel="stylesheet" href="../css/general.css">
-        <link rel="stylesheet" href="../css/chrome.css">
-        <link rel="stylesheet" href="../css/print.css" media="print">
+        <link rel="icon" href="../favicon-5e44e8e6.svg">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../fonts/fonts.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="../highlight.css">
-        <link rel="stylesheet" href="../tomorrow-night.css">
-        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="../theme/version-picker.css">
+        <link rel="stylesheet" href="../theme/version-picker-0393021e.css">
+        <link rel="stylesheet" href="../theme/d2-diagrams-d5432d61.css">
 
 
-        <!-- Provide site root to javascript -->
+        <!-- Provide site root and default themes to javascript -->
         <script>
-            var path_to_root = "../";
-            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc.js"></script>
+        <script src="../toc-acf3df94.js"></script>
     </head>
     <body>
-    <div id="body-container">
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
-                var theme = localStorage.getItem('mdbook-theme');
-                var sidebar = localStorage.getItem('mdbook-sidebar');
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
 
                 if (theme.startsWith('"') && theme.endsWith('"')) {
                     localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
@@ -59,7 +72,8 @@
 
         <!-- Set the theme before any content is loaded, prevents flash -->
         <script>
-            var theme;
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
@@ -68,55 +82,59 @@
             html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var sidebar = null;
-            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
-        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
                 <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
-            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <div id="page-wrapper" class="page-wrapper">
+        <div id="mdbook-page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
-                            <i class="fa fa-bars"></i>
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
                         </label>
-                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
-                            <i class="fa fa-paint-brush"></i>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
                         </button>
-                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
-                            <i class="fa fa-search"></i>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
                         </button>
                     </div>
 
@@ -124,36 +142,41 @@
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
-                            <i id="print-button" class="fa fa-print"></i>
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
-                            <i id="git-repository-button" class="fa fa-github"></i>
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="search-wrapper" class="hidden">
-                    <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
                     </form>
-                    <div id="searchresults-outer" class="searchresults-outer hidden">
-                        <div id="searchresults-header" class="searchresults-header"></div>
-                        <ul id="searchresults">
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="content" class="content">
+                <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="plan--rtl-source-provenance-adr-0021-phase-2"><a class="header" href="#plan--rtl-source-provenance-adr-0021-phase-2">Plan — RTL-source provenance (ADR 0021 Phase 2)</a></h1>
 <blockquote>
@@ -162,7 +185,7 @@ to its RTL line, in a released binary. <code>src/synth.rs</code> maps via <code>
 emits <code>\src</code>; the provenance fork lives at <strong><code>gpu-eda/yowasp-yosys</code></strong>, whose CI
 builds + validates + <strong>releases</strong> the wheel, and <code>jacquard</code> fetches that pinned
 release on first use (no PAT, no artifact expiry). aigpdk mapping needed two
-fixes the sky130 A0 didn't surface: <code>read_liberty -lib</code> + <code>hierarchy -purge_lib</code>
+fixes the sky130 A0 didn’t surface: <code>read_liberty -lib</code> + <code>hierarchy -purge_lib</code>
 before a single <code>abc_new</code> pass. Verified against third-party RTL (PULP
 common-cells via core-v-mcu): the emitted netlist carries
 <code>(* src = "binary_to_gray.sv:15.8" *)</code>.</p>
@@ -176,15 +199,15 @@ on comb + seq2). A1 (harden/pin) + A2 (distribute) + the <code>src/synth.rs</cod
 <code>abc_new</code> integration all landed (#176).</li>
 <li><strong>WS-B — B0–B3 done</strong> (<code>sverilogparse</code> capture → <code>netlistdb.cell_src</code> →
 <code>AIG::aigpin_src_locations</code>, surfaced in <code>xsources</code> and <code>--trace-signals</code>).
-<strong>Deferred: B3's timing-report surface</strong> — src locations in <code>--timing-report</code>.
-That's the one piece of the original plan not shipped.</li>
+<strong>Deferred: B3’s timing-report surface</strong> — src locations in <code>--timing-report</code>.
+That’s the one piece of the original plan not shipped.</li>
 <li><strong>Known bug in the toolchain this plan adopted:</strong> <code>abc_new</code> hard-traps (wasm
 <code>unreachable</code>) on a design that reaches it with <strong>zero primary I/O</strong> — bisected;
 neither the constant clock nor emptiness is the trigger, one port of either
 direction avoids it, and the failure is inside the <code>ABC9</code> sub-pass. Whether
-<code>&amp;origins</code> causes it or it's stock abc9 is <strong>open</strong>; the A/B is blocked because
-a stock YoWASP wheel won't load under our <code>wasmtime</code> (built with wasm exception
-handling, which we don't enable). Tracking:
+<code>&amp;origins</code> causes it or it’s stock abc9 is <strong>open</strong>; the A/B is blocked because
+a stock YoWASP wheel won’t load under our <code>wasmtime</code> (built with wasm exception
+handling, which we don’t enable). Tracking:
 <a href="https://github.com/robtaylor/origin-shell/issues/1">robtaylor/origin-shell#1</a>
 upstream, <a href="https://github.com/gpu-eda/Jacquard/issues/211">#211</a> here (whose
 reporting half is fixed — a trap now names the pass instead of printing 27 wasm
@@ -198,14 +221,14 @@ distribution).</p>
 behavioral RTL via embedded YoWASP Yosys). This plan makes the <em>results</em> of that
 simulation speak RTL source locations instead of flattened gate names.</p>
 <p><strong>Tracking:</strong> <a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a> Phase 2.</p>
-<hr />
+<hr>
 <h2 id="goal"><a class="header" href="#goal">Goal</a></h2>
-<p>Thread <strong><code>\src</code></strong> (RTL source <code>file:line</code>, Yosys's source-provenance attribute)
-from synthesis all the way to Jacquard's user-facing outputs, so that
+<p>Thread <strong><code>\src</code></strong> (RTL source <code>file:line</code>, Yosys’s source-provenance attribute)
+from synthesis all the way to Jacquard’s user-facing outputs, so that
 <code>--trace-signals</code>, timing-violation reports, and X-debugging (<code>xsources</code>/<code>xroots</code>)
 report <strong>RTL source locations</strong> rather than post-synthesis flattened gate names.
-"Why is <code>spiflash.ctrl.\$auto$…$1234</code> X?" becomes "<code>spiflash.v:88</code>".</p>
-<h2 id="why-its-two-independent-problems"><a class="header" href="#why-its-two-independent-problems">Why it's two independent problems</a></h2>
+“Why is <code>spiflash.ctrl.\$auto$…$1234</code> X?” becomes “<code>spiflash.v:88</code>”.</p>
+<h2 id="why-its-two-independent-problems"><a class="header" href="#why-its-two-independent-problems">Why it’s two independent problems</a></h2>
 <ol>
 <li><strong>The toolchain must <em>emit</em> <code>\src</code>.</strong> Stock YoWASP Yosys drops source
 provenance through std-cell mapping (abc). Carrying it needs a patched
@@ -214,25 +237,25 @@ toolchain — the <a href="https://github.com/robtaylor/origin-shell">origin-she
 <code>robtaylor/yosys@src-retention-y-ext</code>.</li>
 <li><strong>Jacquard must <em>ingest</em> <code>\src</code>.</strong> Even with a perfect provenance netlist,
 Jacquard throws it away today: <code>sverilogparse</code> <strong>discards all attributes</strong>
-(<code>vendor/eda-infra-rs/sverilogparse/src/sverilognom.rs:44</code> — <em>"we regard
-attributes as comments"</em>), and <code>netlistdb</code> has no source-location field.</li>
+(<code>vendor/eda-infra-rs/sverilogparse/src/sverilognom.rs:44</code> — <em>“we regard
+attributes as comments”</em>), and <code>netlistdb</code> has no source-location field.</li>
 </ol>
 <p>These are <strong>independent</strong> and should be de-risked <strong>in parallel</strong>: WS-B (ingestion)
 can be prototyped end-to-end against a <strong>hand-annotated</strong> <code>(* src=… *)</code> netlist
 before the real toolchain (WS-A) exists. Only invest in the heavy wasm build
 (A1) once <em>both</em> the A0 spike passes and WS-B is proven.</p>
-<hr />
+<hr>
 <h2 id="ws-a--provenance-carrying-toolchain"><a class="header" href="#ws-a--provenance-carrying-toolchain">WS-A — Provenance-carrying toolchain</a></h2>
 <blockquote>
 <p><strong>Reframed after reading origin-shell (2026-07-04).</strong> The gate is <strong>not</strong>
-"does <code>\src</code> survive <em>in-process</em> abc" — origins ride the <strong>XAIGER <code>"y"</code>
+“does <code>\src</code> survive <em>in-process</em> abc” — origins ride the <strong>XAIGER <code>"y"</code>
 channel</strong> (an in-memory AIGER round-trip via the <code>aiger2</code> reader/writer, keyed
 by object id), so external-vs-in-process abc is irrelevant to the channel.
-origin-shell's real lesson: <strong>provenance cannot survive the classic
+origin-shell’s real lesson: <strong>provenance cannot survive the classic
 <code>abc</code>/BLIF path at all</strong> (BLIF has no object identity), so the std-cell flow
 must move to <code>abc9</code>/<code>abc_new</code>. Data path (origin-shell POC):
 <code>abc_new: write_xaiger2 → ABC (&amp;read; &amp;origins; &amp;dch -f; &amp;nf) → read_xaiger2</code>.</p>
-<p><strong>This means two things Jacquard's own <code>synth.rs</code> must change</strong>, independent of
+<p><strong>This means two things Jacquard’s own <code>synth.rs</code> must change</strong>, independent of
 the patched wasm:</p>
 <ul>
 <li><code>src/synth.rs</code> maps with <strong>classic <code>abc -liberty</code></strong> (lines 241/244) → must
@@ -240,7 +263,7 @@ become the <strong><code>abc_new</code></strong> flow (<code>&amp;dch -f; &amp;n
 <li>It writes with <strong><code>write_verilog -noattr</code></strong> (line 247) — <code>-noattr</code> <strong>strips
 <code>\src</code></strong>. Must drop it (attribute-selective if needed).</li>
 </ul>
-<p><strong>QoR caveat:</strong> <code>abc9</code> std-cell mapping is "the road less travelled" upstream
+<p><strong>QoR caveat:</strong> <code>abc9</code> std-cell mapping is “the road less travelled” upstream
 (<code>YosysHQ/yosys#5679</code> removed <code>abc9 -liberty</code>; the yosys fork carries the
 <code>aiger2</code> std-cell path). Bare <code>&amp;nf</code> is 9–22% worse area than classic <code>abc</code>;
 <code>&amp;dch -f; &amp;nf</code> recovers to parity. So the flow change carries a <strong>QoR
@@ -249,7 +272,7 @@ validation obligation</strong>, not just a wiring change.</p>
 <h3 id="a--de-risk-the-abc_new-flow-on-the-stock-wasm-first-no-patched-toolchain"><a class="header" href="#a--de-risk-the-abc_new-flow-on-the-stock-wasm-first-no-patched-toolchain">A′ — De-risk the <code>abc_new</code> flow on the <strong>stock</strong> wasm first (no patched toolchain)</a></h3>
 <p><code>abc_new</code>/<code>&amp;nf</code> exists in the <strong>stock</strong> <code>yosys.wasm</code> we already ship (just without
 the <code>&amp;origins</code> patch). So the flow migration + its QoR risk can be proven <strong>before</strong>
-any fork/build work, moving the "road less travelled" risk off the patched-wasm
+any fork/build work, moving the “road less travelled” risk off the patched-wasm
 critical path.</p>
 <ul>
 <li>In <code>src/synth.rs</code>, switch the two <code>abc -liberty aigpdk_nomem.lib</code> passes to the
@@ -265,13 +288,13 @@ fired.</strong> Ran <code>abc_new -script +&amp;dch,-f;&amp;nf -liberty aigpdk_n
 design (scratchpad <code>/tmp/claude/aprime</code>):</p>
 <ul>
 <li><strong>Combinational-only</strong> (adder) → <strong>works</strong> (maps to <code>$_NAND_</code>/<code>$_XNOR_</code>/…).</li>
-<li><strong>Sequential</strong> (a <code>posedge</code> flop) → <strong>FAILS</strong>: <code>ERROR: Bad connection $auto$ff.cc:337:slice$150/D ~ \d [1]</code> (abc_new marked "experimental").</li>
+<li><strong>Sequential</strong> (a <code>posedge</code> flop) → <strong>FAILS</strong>: <code>ERROR: Bad connection $auto$ff.cc:337:slice$150/D ~ \d [1]</code> (abc_new marked “experimental”).</li>
 <li>classic <code>abc</code> baseline on the same design → works, <strong>33 cells</strong> (23 AND2 + 4
 DFF + 6 INV).</li>
 </ul>
 <p>The <code>ff.cc</code> error is precisely the flop-handling that
-<code>robtaylor/yosys@src-retention-y-ext</code> fixes (origin-shell lists "the
-<code>ff.cc</code>/<code>memory_map</code>/<code>mem.cc</code> fixes"). <strong>So A′ cannot be fully de-risked on the
+<code>robtaylor/yosys@src-retention-y-ext</code> fixes (origin-shell lists “the
+<code>ff.cc</code>/<code>memory_map</code>/<code>mem.cc</code> fixes”). <strong>So A′ cannot be fully de-risked on the
 stock wasm</strong> — the yosys fork is required even to make <code>abc_new</code> <em>function</em> on
 sequential logic, not just to carry origins. Consequence: <strong>A′ folds into A0</strong> —
 the first real test is building the forked wasm and running the <code>abc_new</code> flow
@@ -293,22 +316,22 @@ done; recon was against Codeberg <code>YoWASP/yosys</code>, 2026-07-04). Chain:<
 <li>✅ <strong><code>yowasp</code> overlay:</strong> created <code>robtaylor/yowasp-yosys</code> (full mirror; default
 <code>develop</code> = clean mirror, <code>yowasp-yosys-integration</code> carries the repoint), repointed
 <code>yosys-src</code> → <code>robtaylor/yosys@src-retention-y-ext</code>.</li>
-<li>✅ <strong>Inside the yosys fork:</strong> repointed <code>robtaylor/yosys@src-retention-y-ext</code>'s <code>abc</code>
+<li>✅ <strong>Inside the yosys fork:</strong> repointed <code>robtaylor/yosys@src-retention-y-ext</code>’s <code>abc</code>
 submodule <code>YosysHQ/abc</code> → <code>robtaylor/abc@origin-tracking-clean</code> (commit <code>bcc5698</code>).
 Without this the build would have yosys-side <code>\src</code> retention but stock abc, and
 provenance would die at mapping.</li>
 </ol>
-<p><strong>Build mechanics — ⚠️ CORRECTED 2026-07-06 (supersedes the "CMake + wasi-sdk 33"
+<p><strong>Build mechanics — ⚠️ CORRECTED 2026-07-06 (supersedes the “CMake + wasi-sdk 33”
 recon; that was <code>develop</code> HEAD, the WRONG base for our fork).</strong> Two hard constraints
-force the <strong><code>develop-0.64</code> Makefile recipe</strong>, not <code>develop</code>'s CMake:</p>
+force the <strong><code>develop-0.64</code> Makefile recipe</strong>, not <code>develop</code>’s CMake:</p>
 <ol>
 <li><code>robtaylor/yosys@src-retention-y-ext</code> is <strong>Makefile-only (no <code>CMakeLists.txt</code>)</strong> —
-<code>develop</code>'s <code>cmake -S yosys-src</code> cannot build the patched fork at all.</li>
-<li><code>develop</code>'s CMake migration (<code>61073ed "CI: switch to CMake based builds"</code>)
+<code>develop</code>’s <code>cmake -S yosys-src</code> cannot build the patched fork at all.</li>
+<li><code>develop</code>’s CMake migration (<code>61073ed "CI: switch to CMake based builds"</code>)
 <strong>dropped yosys-slang</strong> — its wasm has <strong>no <code>read_slang</code></strong>, the SV frontend the
 on-ramp depends on. <code>develop</code> also moved to wasi-sdk 33.</li>
 </ol>
-<p>So base the overlay's integration branch on <strong><code>develop-0.64</code></strong>: <code>build.sh</code> is the
+<p>So base the overlay’s integration branch on <strong><code>develop-0.64</code></strong>: <code>build.sh</code> is the
 <strong>Makefile</strong> flow (<code>make -f yosys-src/Makefile CONFIG=wasi</code>, <code>-flto</code>, <code>-Wl,-z,stack-size=8M</code>)</p>
 <ul>
 <li><strong>wasi-sdk 27</strong> + <strong>flex-2.6.4 built from source</strong> + <strong>yosys-slang built via cmake
@@ -319,37 +342,41 @@ pinned <code>yowasp-yosys 0.64</code> the on-ramp uses. It hardcodes <strong>x86
 <p><strong>A0 CI (authored 2026-07-06):</strong> <code>robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml</code>
 — <code>build</code> (compile → WASI, link slang, smoke <code>read_slang</code>/<code>abc_new</code>, upload wasm+wheel)</p>
 <ul>
-<li><code>provenance-check</code> (origin-shell's <code>abc_new</code> origins flow on <code>comb</code>+<code>seq2</code> vs sky130,
-<code>\src</code> coverage; seq2@0% fails). <strong>Residual risk CI will surface:</strong> develop-0.64's
-yosys-slang pin <code>4e53d772</code> targets yosys 0.64 (Apr); our fork's yosys is ~Jun 2026, so
-slang may need a newer pin to compile.</li>
-</ul>
-<ul>
-<li>Repoint (steps 1–2 above), run <code>build.sh</code>, and run the A′ <code>abc_new</code> synth flow
+<li>
+<p><code>provenance-check</code> (origin-shell’s <code>abc_new</code> origins flow on <code>comb</code>+<code>seq2</code> vs sky130,
+<code>\src</code> coverage; seq2@0% fails). <strong>Residual risk CI will surface:</strong> develop-0.64’s
+yosys-slang pin <code>4e53d772</code> targets yosys 0.64 (Apr); our fork’s yosys is ~Jun 2026, so
+slang may need a newer pin to compile.</p>
+</li>
+<li>
+<p>Repoint (steps 1–2 above), run <code>build.sh</code>, and run the A′ <code>abc_new</code> synth flow
 <strong>with <code>origins_max</code> set and <code>-noattr</code> dropped</strong> on a small multi-module design;
 measure the <strong><code>\src</code> coverage</strong> — the % of mapped cells carrying a <code>src</code>
-attribute. Crib origin-shell's <code>test/src_coverage.sh</code> harness (loads <code>write_json</code>
+attribute. Crib origin-shell’s <code>test/src_coverage.sh</code> harness (loads <code>write_json</code>
 output, counts <code>'src' in cell['attributes']</code> over mapped cells) — reuse it near
-verbatim.</li>
-<li><strong>Go/no-go:</strong> high <code>\src</code> coverage on mapped cells → <strong>you already hold the
+verbatim.</p>
+</li>
+<li>
+<p><strong>Go/no-go:</strong> high <code>\src</code> coverage on mapped cells → <strong>you already hold the
 provenance wasm</strong> (A1 done); proceed to harden (A1) + distribute (A2). Low/zero →
-the <code>aiger2</code> <code>"y"</code> channel or abc <code>&amp;origins</code> isn't functioning in the wasm build;
-diagnose before investing further.</li>
+the <code>aiger2</code> <code>"y"</code> channel or abc <code>&amp;origins</code> isn’t functioning in the wasm build;
+diagnose before investing further.</p>
+</li>
 </ul>
 <blockquote>
 <p><strong>✅ A0 GO (2026-07-06, CI run <code>28779240456</code>).</strong> The provenance wasm builds and
 carries origins: <code>comb 4/4 = 100%</code>, <strong><code>seq2 88/88 = 100%</code></strong> <code>\src</code> coverage on
 mapped sky130 cells. Origins survive the <strong>in-process WASI <code>abc_new</code></strong> round-trip
-(including sequential logic) — the ADR's key open risk is resolved. Getting here
+(including sequential logic) — the ADR’s key open risk is resolved. Getting here
 also required rebasing <code>robtaylor/abc@origin-tracking-clean</code> onto current
 <code>berkeley-abc/master</code> (it was 97 commits behind, missing the <code>#ifdef __wasm</code> guards
-around abc's <code>system()</code> calls → <code>wasm-ld: undefined symbol: system</code>). CI:
+around abc’s <code>system()</code> calls → <code>wasm-ld: undefined symbol: system</code>). CI:
 <code>robtaylor/yowasp-yosys/.github/workflows/provenance-wasm.yml</code>.</p>
 </blockquote>
 <ul>
 <li><strong>Fallbacks if it fails:</strong> (a) debug the <code>aiger2</code>/<code>&amp;origins</code> path in the wasm
 build (the channel is XAIGER round-trip, not exec, so the failure is in the
-reader/writer or the patch, not "in-process abc" per se); (b) <strong>Nix native
+reader/writer or the patch, not “in-process abc” per se); (b) <strong>Nix native
 toolchain</strong> — origin-shell is already a Nix flake with the <em>validated</em> flow, so a
 native back-end for <code>jacquard sim --synth-backend nix</code> is the lowest-risk way to
 ship provenance if the wasm path proves stubborn; (c) native-only provenance,
@@ -357,23 +384,23 @@ on-ramp wasm stays provenance-free.</li>
 </ul>
 <h3 id="a1--harden--pin-the-provenance-build"><a class="header" href="#a1--harden--pin-the-provenance-build">A1 — Harden &amp; pin the provenance build</a></h3>
 <p>The A0 build, productionized. <strong>Thin harness fork, not our own build recipe:</strong>
-YoWASP/yosys is just a build harness, so the overlay's whole delta is the two
+YoWASP/yosys is just a build harness, so the overlay’s whole delta is the two
 submodule repoints — trivial to rebase when upstream moves, and it beats
 hand-rolling a WASI/LTO build (where subtle divergence bites hardest). The durable
 maintenance is keeping the <em>existing</em> <code>yosys</code>/<code>abc</code> patch branches rebased on
 upstream — unavoidable in any approach, already owned. Per
 [<code>~/.claude/FORKED_DEPS_WORKFLOW.md</code>], carry each of the three on an
 <code>-integration</code> branch.</p>
-<p><strong>Pinning — track our branches, don't freeze SHAs.</strong> These are <em>our</em> actively
-developed branches (we'll tweak the <code>\src</code> patches, and want to fold in upstream
+<p><strong>Pinning — track our branches, don’t freeze SHAs.</strong> These are <em>our</em> actively
+developed branches (we’ll tweak the <code>\src</code> patches, and want to fold in upstream
 review of abc#487), so pinning them to frozen SHAs would fight normal development.
 Instead:</p>
 <ul>
 <li><strong>Track by branch</strong>, not SHA, for the three forks we own (<code>yosys</code>/<code>abc</code>/<code>yowasp</code>
 overlay) — new patches and upstream-review changes flow through automatically;
 when a patch merges upstream, retarget the branch to upstream.</li>
-<li><strong>Pin only genuinely-third-party build inputs</strong> we don't control and need
-reproducible: <strong>wasi-sdk version</strong>, flex, and the rest of <code>build.sh</code>'s toolchain.</li>
+<li><strong>Pin only genuinely-third-party build inputs</strong> we don’t control and need
+reproducible: <strong>wasi-sdk version</strong>, flex, and the rest of <code>build.sh</code>’s toolchain.</li>
 <li><strong>Stamp provenance into each built artifact</strong>, not the source: when CI builds a
 released wasm, record the exact <code>yosys</code>/<code>abc</code>/<code>yowasp</code> SHAs (release notes /
 asset metadata). That gives <em>release-level</em> reproducibility — any shipped wasm
@@ -394,7 +421,7 @@ reimplement a minimal pinned WASI build in-repo. Default is the thin fork.</li>
 <p>Publish as a Jacquard release asset (shares the Phase-4 fetch-from-release
 mechanism). Decide: is provenance the <em>default</em> on-ramp wasm, or an opt-in
 (<code>--yosys-wasm</code>/a <code>provenance</code> flag) larger asset? Recommend opt-in first.</p>
-<hr />
+<hr>
 <h2 id="ws-b--jacquard-src-ingestion-startable-now-with-a-synthetic-netlist"><a class="header" href="#ws-b--jacquard-src-ingestion-startable-now-with-a-synthetic-netlist">WS-B — Jacquard <code>\src</code> ingestion (startable <strong>now</strong> with a synthetic netlist)</a></h2>
 <h3 id="b0--capture-attributes-in-sverilogparse"><a class="header" href="#b0--capture-attributes-in-sverilogparse">B0 — Capture attributes in <code>sverilogparse</code></a></h3>
 <p>Stop discarding <code>(* … *)</code> (<code>sverilognom.rs:44</code>). Parse <code>src</code> (and keep the door
@@ -412,7 +439,7 @@ no longer treats <code>(* ... *)</code> as whitespace; <code>leading_attributes<
 at the 3 grammar leading edges (module / port / module-body item). Proven by
 <code>sverilogparse</code> <code>test_src_attribute</code> (+ <code>tests/attributes.v</code>): parse + round-trip.
 <strong>Caveat:</strong> attributes are now only accepted at those leading edges (narrows vs
-the old "ignored anywhere" — fine for structural netlists).</p>
+the old “ignored anywhere” — fine for structural netlists).</p>
 </blockquote>
 <h3 id="b1--carry-source-location-through-netlistdb"><a class="header" href="#b1--carry-source-location-through-netlistdb">B1 — Carry source location through <code>netlistdb</code></a></h3>
 <p>Add an optional per-cell (and where meaningful, per-net) <code>source_loc</code> on
@@ -440,7 +467,7 @@ source location(s) through the built <code>FlattenedScript</code>.</li>
 </ul>
 <blockquote>
 <p><strong>✅ B2 DONE (2026-07-06, Jacquard <code>68cc938b</code>).</strong> <code>AIG::aigpin_src_locations</code>
-composes the AIG's existing per-pin cell-origin map (<code>aigpin_cell_origins</code>, built
+composes the AIG’s existing per-pin cell-origin map (<code>aigpin_cell_origins</code>, built
 for SDF back-annotation) with <code>netlistdb.cell_src</code> (B1) — <strong>no new state threaded
 through the AIG builder.</strong> Returns 0/1/many de-duplicated locations; a primary
 output resolves directly. The resolver is AIG-level (the AIG is retained alongside
@@ -448,7 +475,7 @@ the FlattenedScript). Proven by <code>aig::path_mapping_tests</code> + <code>pro
 </blockquote>
 <h3 id="b3--surface-src-in-the-user-facing-outputs"><a class="header" href="#b3--surface-src-in-the-user-facing-outputs">B3 — Surface <code>\src</code> in the user-facing outputs</a></h3>
 <p>Add source locations to the three consumers, gated on availability (fall back to
-today's hierarchical gate name when absent):</p>
+today’s hierarchical gate name when absent):</p>
 <ul>
 <li>
 <p><code>--trace-signals</code> (<code>docs/signal-tracing.md</code>) — annotate traced signals.</p>
@@ -471,7 +498,7 @@ locations in all three; a design with no provenance is unchanged.</p>
 <li>✅ <code>xsources</code> (<code>ec7b648f</code>): optional <code>src</code> on the <code>XSource</code> record from
 <code>cell_src[cell_id]</code>; schema <code>1.0</code>→<code>1.1</code>. (<code>xprop_demo_synth.gv</code> already carried
 <code>(* src *)</code> → provenance flows through the real pipeline.)</li>
-<li>✅ <code>--trace-signals</code> (<code>ca55c786</code>): logs each traced net's RTL <code>src</code> via the B2
+<li>✅ <code>--trace-signals</code> (<code>ca55c786</code>): logs each traced net’s RTL <code>src</code> via the B2
 resolver at registration.</li>
 <li>⏳ <strong>timing-violation reports</strong> — deferred (largest; governed schema). Path:
 <code>word_id → cell_id</code> via <code>dff_constraints</code>; add <code>src</code> to <code>DffSiteName</code> →
@@ -479,7 +506,7 @@ resolver at registration.</li>
 additive</strong> → bump <code>SCHEMA_VERSION</code> <code>1.2.0</code>→<code>1.3.0</code> + ADR note.</li>
 </ul>
 </blockquote>
-<hr />
+<hr>
 <h2 id="sequencing"><a class="header" href="#sequencing">Sequencing</a></h2>
 <pre><code>A′ abc_new on STOCK wasm (flow+QoR) ─► A0 patched wasm + \src coverage ─(go)─► A1 harden/pin ─► A2 distribute ─┐
                                                                                                            ├─► integrate: on-ramp emits + surfaces \src
@@ -489,13 +516,13 @@ B0 parser ─► B1 netlistdb ─► B2 AIG ─► B3 outputs ──────
 <li><strong>Parallel:</strong> the whole A-track and B0–B3 have no dependency; B is provable
 against a hand-written annotated netlist, and A′ against the stock wasm.</li>
 <li><strong>A′ first within WS-A:</strong> proves the <code>abc_new</code> flow + QoR on the stock wasm
-before any fork/build, moving the "road less travelled" QoR risk off the
+before any fork/build, moving the “road less travelled” QoR risk off the
 patched-build critical path.</li>
 <li><strong>Barrier:</strong> full end-to-end (RTL → provenance wasm → surfaced source lines)
 needs A1+A2 <em>and</em> B0–B3.</li>
 <li><strong>Kill-switch:</strong> if A0 fails, WS-B still delivers value for any <em>externally</em>
 produced provenance netlist (DC/native Yosys with origins); the on-ramp just
-doesn't auto-generate it until a fallback toolchain lands.</li>
+doesn’t auto-generate it until a fallback toolchain lands.</li>
 </ul>
 <h2 id="risks--open-questions"><a class="header" href="#risks--open-questions">Risks / open questions</a></h2>
 <ul>
@@ -503,7 +530,7 @@ doesn't auto-generate it until a fallback toolchain lands.</li>
 does the XAIGER origins round-trip function in the WASI-built yosys+abc?</li>
 <li><strong>QoR of the <code>abc_new</code> std-cell flow</strong> — abc9 std-cell mapping is unofficial
 upstream; <code>&amp;nf</code> alone is 9–22% worse area, <code>&amp;dch -f; &amp;nf</code> recovers to parity.
-A′ must confirm parity on Jacquard's designs before committing the flow change.</li>
+A′ must confirm parity on Jacquard’s designs before committing the flow change.</li>
 <li><strong><code>sverilogparse</code> fork maintenance</strong> — vendored submodule; carry the patch on a
 <code>-integration</code> branch per FORKED_DEPS_WORKFLOW; upstreamable (attribute capture
 is generally useful).</li>
@@ -512,7 +539,7 @@ targets the full flow, but confirm in A′/A0, since the on-ramp flattens.</li>
 <li><strong>Provenance granularity</strong> — post-optimization a gate may map to 0/1/many source
 lines; the reporting (B3) and IR (B2) must not assume 1:1.</li>
 <li><strong>Asset size</strong> — a second (provenance) wasm ~doubles the fetched-asset story;
-A2's opt-in-vs-default call interacts with Phase-4 distribution.</li>
+A2’s opt-in-vs-default call interacts with Phase-4 distribution.</li>
 </ul>
 <h2 id="non-goals"><a class="header" href="#non-goals">Non-goals</a></h2>
 <ul>
@@ -527,11 +554,11 @@ open-source toolchain).</li>
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                             <a rel="prev" href="../plans/rtl-onramp-sim-integration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <i class="fa fa-angle-left"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
                             <a rel="next prefetch" href="../spikes/opentimer-sky130.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
                         <div style="clear: both"></div>
@@ -541,16 +568,21 @@ open-source toolchain).</li>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                     <a rel="prev" href="../plans/rtl-onramp-sim-integration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <i class="fa fa-angle-left"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
                     <a rel="next prefetch" href="../spikes/opentimer-sky130.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
 
         </div>
 
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
 
 
@@ -559,16 +591,17 @@ open-source toolchain).</li>
         </script>
 
 
-        <script src="../elasticlunr.min.js"></script>
-        <script src="../mark.min.js"></script>
-        <script src="../searcher.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="../clipboard.min.js"></script>
-        <script src="../highlight.js"></script>
-        <script src="../book.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-picker.js"></script>
+        <script src="../theme/version-picker-36db8dd8.js"></script>
+
 
 
     </div>

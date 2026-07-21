@@ -12,40 +12,53 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon.svg">
-        <link rel="stylesheet" href="../css/variables.css">
-        <link rel="stylesheet" href="../css/general.css">
-        <link rel="stylesheet" href="../css/chrome.css">
-        <link rel="stylesheet" href="../css/print.css" media="print">
+        <link rel="icon" href="../favicon-5e44e8e6.svg">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../fonts/fonts.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="../highlight.css">
-        <link rel="stylesheet" href="../tomorrow-night.css">
-        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="../theme/version-picker.css">
+        <link rel="stylesheet" href="../theme/version-picker-0393021e.css">
+        <link rel="stylesheet" href="../theme/d2-diagrams-d5432d61.css">
 
 
-        <!-- Provide site root to javascript -->
+        <!-- Provide site root and default themes to javascript -->
         <script>
-            var path_to_root = "../";
-            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc.js"></script>
+        <script src="../toc-acf3df94.js"></script>
     </head>
     <body>
-    <div id="body-container">
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
-                var theme = localStorage.getItem('mdbook-theme');
-                var sidebar = localStorage.getItem('mdbook-sidebar');
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
 
                 if (theme.startsWith('"') && theme.endsWith('"')) {
                     localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
@@ -59,7 +72,8 @@
 
         <!-- Set the theme before any content is loaded, prevents flash -->
         <script>
-            var theme;
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
@@ -68,55 +82,59 @@
             html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var sidebar = null;
-            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
-        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
                 <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
-            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <div id="page-wrapper" class="page-wrapper">
+        <div id="mdbook-page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
-                            <i class="fa fa-bars"></i>
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
                         </label>
-                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
-                            <i class="fa fa-paint-brush"></i>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
                         </button>
-                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
-                            <i class="fa fa-search"></i>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
                         </button>
                     </div>
 
@@ -124,36 +142,41 @@
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
-                            <i id="print-button" class="fa fa-print"></i>
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
-                            <i id="git-repository-button" class="fa fa-github"></i>
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="search-wrapper" class="hidden">
-                    <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
                     </form>
-                    <div id="searchresults-outer" class="searchresults-outer hidden">
-                        <div id="searchresults-header" class="searchresults-header"></div>
-                        <ul id="searchresults">
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="content" class="content">
+                <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="roadmap--post-phase-0-work-scheduling"><a class="header" href="#roadmap--post-phase-0-work-scheduling">Roadmap — Post-Phase-0 work scheduling</a></h1>
 <p><strong>Status:</strong> Active. Phase 1 (structured timing output, ADR 0008 — Accepted 2026-06-25) and release hardening (WS-RH.1) shipped; Pillar B Stages 1+2 (ADR 0007) landed early. Phase 2 (Pillar C Tier 1 — per-receiver wire delay) remains gated on ADR 0007 acceptance, which is still <strong>Proposed</strong> as of 2026-06-26.</p>
@@ -161,21 +184,27 @@
 <h2 id="where-things-stand-2026-05-02"><a class="header" href="#where-things-stand-2026-05-02">Where things stand (2026-05-02)</a></h2>
 <ul>
 <li><strong>Phase 0 (<code>phase-0-ir-and-oracle.md</code>)</strong>: WS1–WS5 + WS2.2 + WS2.4 all landed. WS2.4 multi-corner shipped 2026-05-02 across four commits (<code>5822343</code> consumer, <code>530bb36</code> builder, <code>59fde04</code> producer, plus the integration test). Open items: <strong>sky130-based corpus entries</strong> (gated on a CI sky130-Liberty install strategy) and <strong>peripheral wiring</strong> for I²C/SPI when a fuller mcu_soc fixture lands.</li>
-<li><strong>OpenTimer spike (<code>spikes/opentimer-sky130.md</code>)</strong>: <strong>resolved 2026-05-01 — Superseded.</strong> Q1 (Liberty parse) passed cleanly on SKY130; Q2 (arrival computation) failed on the canonical OpenSTA-bundled GCD example after eight input-pipeline workarounds (bus ports, OpenROAD-emitted SPEF, modern TCL, tap cells). Per the spike's decision matrix, ADR 0003 is now Superseded (commit <code>d002bde</code>). <strong>OpenSTA out-of-process is committed as Jacquard's sole STA path</strong> — <code>opensta-to-ir</code> is the canonical preprocessor; no in-process reference STA is planned. A future ADR may revisit libreda-sta or an in-house walker if an in-process reference is wanted later, but not on this roadmap.</li>
-<li><strong>Pillar B Stages 1+2 (per <code>adr/0007</code>)</strong>: <strong>landed.</strong> <code>ClockArrival</code> IR table + <code>opensta-to-ir</code> Tcl emission in commit <code>c403cc8</code>; <code>DFFConstraint.clock_arrival_ps</code> + skew-aware fold-in in <code>build_timing_constraint_buffer</code> in <code>6767c3e</code>. Closed Pillar B's main accuracy lever ahead of this roadmap's original Phase 2 schedule.</li>
+<li><strong>OpenTimer spike (<code>spikes/opentimer-sky130.md</code>)</strong>: <strong>resolved 2026-05-01 — Superseded.</strong> Q1 (Liberty parse) passed cleanly on SKY130; Q2 (arrival computation) failed on the canonical OpenSTA-bundled GCD example after eight input-pipeline workarounds (bus ports, OpenROAD-emitted SPEF, modern TCL, tap cells). Per the spike’s decision matrix, ADR 0003 is now Superseded (commit <code>d002bde</code>). <strong>OpenSTA out-of-process is committed as Jacquard’s sole STA path</strong> — <code>opensta-to-ir</code> is the canonical preprocessor; no in-process reference STA is planned. A future ADR may revisit libreda-sta or an in-house walker if an in-process reference is wanted later, but not on this roadmap.</li>
+<li><strong>Pillar B Stages 1+2 (per <code>adr/0007</code>)</strong>: <strong>landed.</strong> <code>ClockArrival</code> IR table + <code>opensta-to-ir</code> Tcl emission in commit <code>c403cc8</code>; <code>DFFConstraint.clock_arrival_ps</code> + skew-aware fold-in in <code>build_timing_constraint_buffer</code> in <code>6767c3e</code>. Closed Pillar B’s main accuracy lever ahead of this roadmap’s original Phase 2 schedule.</li>
 <li><strong>ADR 0006 amended 2026-05-02</strong>: subprocess invocation of user-installed OpenSTA from the shipped runtime is now permitted (no linking, no bundling). Phase 3 (native Rust SDF→IR) is <strong>no longer release-gating</strong> — see § Phase 3 below. New release-hardening workstream <strong>WS-RH.1</strong> (OpenSTA detection + version check) is required before first release; see § Release hardening.</li>
 <li><strong>ADRs 0007 / 0008</strong>: ADR 0008 accepted 2026-05-02; ADR 0007 still pending review.</li>
 </ul>
 <h2 id="phase-boundaries"><a class="header" href="#phase-boundaries">Phase boundaries</a></h2>
 <p>The phase numbering established by Phase 0 and ADR 0006 continues:</p>
-<div class="table-wrapper"><table><thead><tr><th>Phase</th><th>Topic</th><th>Trigger</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Phase</th><th>Topic</th><th>Trigger</th></tr>
+</thead>
+<tbody>
 <tr><td><strong>0</strong></td><td>Timing IR + OpenSTA preprocessor</td><td>In flight, near close</td></tr>
 <tr><td><strong>1</strong></td><td>Structured timing output (ADR 0008 required items) + Phase 0 carryover</td><td>ADR 0008 accepted ✓</td></tr>
 <tr><td><strong>2</strong></td><td>Timing model fidelity Pillar C Tier 1 + Pillar B Stage 3 if needed (ADR 0007)</td><td>Phase 1 lands; ADR 0007 accepted</td></tr>
 <tr><td><strong>RH</strong></td><td>Release hardening (OpenSTA detection + version check, see § Release hardening)</td><td>WS-RH.1 shipped ✓; no other items currently scoped</td></tr>
 <tr><td><strong>3</strong></td><td>Native Rust SDF→IR parser (ADR 0006)</td><td><strong>Deferred indefinitely</strong> — no longer release-gating per amended ADR 0006. Picks up when bandwidth allows or commercial demand appears.</td></tr>
 <tr><td><strong>4+</strong></td><td>Pillar A Stage 1 (static IDM); Pillar C Tier 2; ADR 0008 optional outputs</td><td>Demand-driven; not committed</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <p><strong>Parked (require new ADR to revive):</strong> in-process reference STA (ADR 0003 superseded), Pillar A Stage 2 (dynamic δ(T)), Pillar A Stage 3 (sub-cycle ticks), NoC-aware partitioning hints (Pillar C Tier 3).</p>
 <h2 id="phase-1--structured-timing-output-and-phase-0-wrap-up"><a class="header" href="#phase-1--structured-timing-output-and-phase-0-wrap-up">Phase 1 — Structured timing output and Phase 0 wrap-up</a></h2>
@@ -184,19 +213,19 @@
 <li>ADR 0008 accepted.</li>
 <li>Phase 0 exit criteria met (per <code>phase-0-ir-and-oracle.md</code>).</li>
 </ul>
-<p>OpenTimer integration was originally Phase 1's centrepiece (former WS-P1.1) but was retired when the spike Superseded ADR 0003. With OpenSTA-out-of-process as the sole STA path, Phase 1 is now anchored on user-visible output rather than a second STA tool.</p>
+<p>OpenTimer integration was originally Phase 1’s centrepiece (former WS-P1.1) but was retired when the spike Superseded ADR 0003. With OpenSTA-out-of-process as the sole STA path, Phase 1 is now anchored on user-visible output rather than a second STA tool.</p>
 <p><strong>Workstreams (parallel where independent):</strong></p>
 <h3 id="ws-p11--structured-timing-output-adr-0008-required-items"><a class="header" href="#ws-p11--structured-timing-output-adr-0008-required-items">WS-P1.1 — Structured timing output (ADR 0008 required items)</a></h3>
 <p>The four required items from ADR 0008. Single workstream because they share infrastructure.</p>
 <ul>
-<li><strong>WS-P1.1.a — Symbolic violation messages.</strong> <strong>Shipped 2026-05-02 in commit <code>0432d9a</code>.</strong> New <code>WordSymbolMap</code> in <code>src/flatten.rs</code> built once at sim startup; <code>process_events</code> gained an optional resolver closure; <code>sim_metal</code> threads it through. Setup/hold violation messages now name DFFs as <code>top/cpu/regs[7][bit 22] [word=42]</code> instead of bare <code>word 42</code>. CUDA/HIP sim paths don't currently route runtime violations through <code>process_events</code> (separate plumbing gap, not blocked on this format change).</li>
-<li><strong>WS-P1.1.b — <code>--timing-report &lt;path.json&gt;</code>.</strong> <strong>Shipped 2026-05-02 in commit <code>58a7a04</code>.</strong> New <code>src/timing_report.rs</code> module with serde-derived <code>TimingReport</code> (schema_version 1.0.0); <code>process_events</code> takes a <code>ReportingCtx</code> bundling the optional resolver + violation observer (signature back to 5 args); <code>sim_metal</code> builds the report end-to-end. Sample fixture at <code>tests/timing_ir/sample_reports/two_violations.json</code>; schema documented in <code>docs/timing-violations.md</code>. WS-P1.1.d's worst-slack ranking is included (top-10 per kind from violation events). Caveats: closest-to-violation tracking in non-violating runs needs GPU near-miss instrumentation (deferred); violations array is unbounded (opt-in cap is the natural follow-up); CUDA/HIP/cosim paths don't route runtime violations through <code>process_events</code> yet.</li>
-<li><strong>WS-P1.1.c — <code>--timing-summary</code> text output.</strong> <strong>Shipped 2026-05-02 in commit <code>44e70a0</code>.</strong> New <code>TimingReport::format_summary()</code> formatter; <code>--timing-summary</code> CLI flag; <code>TimingReportConfig</code> refactored to support either / both / neither output. Text writes to stdout. Deferred from ADR 0008's wishlist: "corner" (metadata struct doesn't carry it yet) and "margin percentage" (derivable from existing fields). Both are documented in code as known gaps.</li>
+<li><strong>WS-P1.1.a — Symbolic violation messages.</strong> <strong>Shipped 2026-05-02 in commit <code>0432d9a</code>.</strong> New <code>WordSymbolMap</code> in <code>src/flatten.rs</code> built once at sim startup; <code>process_events</code> gained an optional resolver closure; <code>sim_metal</code> threads it through. Setup/hold violation messages now name DFFs as <code>top/cpu/regs[7][bit 22] [word=42]</code> instead of bare <code>word 42</code>. CUDA/HIP sim paths don’t currently route runtime violations through <code>process_events</code> (separate plumbing gap, not blocked on this format change).</li>
+<li><strong>WS-P1.1.b — <code>--timing-report &lt;path.json&gt;</code>.</strong> <strong>Shipped 2026-05-02 in commit <code>58a7a04</code>.</strong> New <code>src/timing_report.rs</code> module with serde-derived <code>TimingReport</code> (schema_version 1.0.0); <code>process_events</code> takes a <code>ReportingCtx</code> bundling the optional resolver + violation observer (signature back to 5 args); <code>sim_metal</code> builds the report end-to-end. Sample fixture at <code>tests/timing_ir/sample_reports/two_violations.json</code>; schema documented in <code>docs/timing-violations.md</code>. WS-P1.1.d’s worst-slack ranking is included (top-10 per kind from violation events). Caveats: closest-to-violation tracking in non-violating runs needs GPU near-miss instrumentation (deferred); violations array is unbounded (opt-in cap is the natural follow-up); CUDA/HIP/cosim paths don’t route runtime violations through <code>process_events</code> yet.</li>
+<li><strong>WS-P1.1.c — <code>--timing-summary</code> text output.</strong> <strong>Shipped 2026-05-02 in commit <code>44e70a0</code>.</strong> New <code>TimingReport::format_summary()</code> formatter; <code>--timing-summary</code> CLI flag; <code>TimingReportConfig</code> refactored to support either / both / neither output. Text writes to stdout. Deferred from ADR 0008’s wishlist: “corner” (metadata struct doesn’t carry it yet) and “margin percentage” (derivable from existing fields). Both are documented in code as known gaps.</li>
 <li><strong>WS-P1.1.d — Per-DFF worst-slack ranking.</strong> Partially shipped in <code>58a7a04</code> alongside WS-P1.1.b: top-10 per kind from observed violation events. Remaining: closest-to-violation tracking when no violation occurred — needs GPU near-miss instrumentation, deferred to a separate workstream.</li>
 </ul>
 <p>Total ~2 weeks.</p>
 <h3 id="ws-p12--phase-0-follow-ups-carryover"><a class="header" href="#ws-p12--phase-0-follow-ups-carryover">WS-P1.2 — Phase 0 follow-ups (carryover)</a></h3>
-<p>Tail of Phase 0 work that didn't gate WS3 completion. Listed for completeness.</p>
+<p>Tail of Phase 0 work that didn’t gate WS3 completion. Listed for completeness.</p>
 <ul>
 <li><del>WS2.4: multi-corner CLI flag in <code>opensta-to-ir</code>.</del> <strong>Shipped 2026-05-02</strong> (commits <code>5822343</code> / <code>530bb36</code> / <code>59fde04</code>).</li>
 <li>WS4: corpus + runner + regen helper + CI hookup shipped 2026-05-02 with the seed entry <code>aigpdk_dff_chain</code> (covers all four IR record types). One follow-up: add sky130-based corpus entries (<code>inv_chain_pnr</code>, mcu_soc subset) once a CI sky130-Liberty install strategy is decided.</li>
@@ -210,7 +239,7 @@
 <li>✅ <code>--timing-report</code> JSON shipping; sample fixture at <code>tests/timing_ir/sample_reports/two_violations.json</code> (commit <code>58a7a04</code>).</li>
 <li>✅ <code>--timing-summary</code> available (commit <code>44e70a0</code>).</li>
 <li>✅ Worst-slack ranking included in both report and summary (top-10 from violations; non-violating-run tracking still requires GPU near-miss instrumentation, separate workstream).</li>
-<li>✅ <code>why-jacquard.md</code> updated; old "Output interface" section now describes the shipped surface, "Still on the wishlist" carries the deferred items.</li>
+<li>✅ <code>why-jacquard.md</code> updated; old “Output interface” section now describes the shipped surface, “Still on the wishlist” carries the deferred items.</li>
 </ul>
 <p><strong>Phase 1 closed.</strong> Phase 2 entry now blocked only on ADR 0007 acceptance.</p>
 <h2 id="phase-2--timing-model-fidelity"><a class="header" href="#phase-2--timing-model-fidelity">Phase 2 — Timing model fidelity</a></h2>
@@ -231,7 +260,7 @@
 <p>Total ~1 week.</p>
 <h3 id="ws-p22--pillar-b-stage-3-bucketed-per-dff-constraint-packing-conditional"><a class="header" href="#ws-p22--pillar-b-stage-3-bucketed-per-dff-constraint-packing-conditional">WS-P2.2 — Pillar B Stage 3: Bucketed per-DFF constraint packing (conditional)</a></h3>
 <p>Stages 1+2 collapsed all DFFs in a 32-bit state word to <code>min(setup), min(hold)</code> after folding the per-DFF clock arrival in. For most current designs the per-word collapse pessimism is small relative to clock period; for designs running close to the period boundary, splitting each word into clock-arrival buckets eliminates the collapse loss without disturbing the partitioner. See Stage 3 in <code>docs/timing-model-extensions.md</code> Part B.</p>
-<p>Land <strong>only if</strong> Stage 1+2 measurement on a representative design shows the per-word collapse materially over-reports violations; otherwise defer indefinitely. Effort if pursued: ~3–5 days, touches <code>src/flatten.rs:1722-1761</code> and the kernel's constraint indexing.</p>
+<p>Land <strong>only if</strong> Stage 1+2 measurement on a representative design shows the per-word collapse materially over-reports violations; otherwise defer indefinitely. Effort if pursued: ~3–5 days, touches <code>src/flatten.rs:1722-1761</code> and the kernel’s constraint indexing.</p>
 <h3 id="ws-p23--output-adjustments-for-fidelity-work"><a class="header" href="#ws-p23--output-adjustments-for-fidelity-work">WS-P2.3 — Output adjustments for fidelity work</a></h3>
 <p>Small touch-ups to ensure Phase 1 outputs continue to work as model fidelity changes. JSON report fields, summary metrics, etc. Folded into WS-P2.1 / WS-P2.2 PRs as needed.</p>
 <p><strong>Exit criteria for Phase 2:</strong></p>
@@ -242,10 +271,10 @@
 <li>No regression on existing corpus.</li>
 </ul>
 <h2 id="phase-3--native-rust-sdfir-parser"><a class="header" href="#phase-3--native-rust-sdfir-parser">Phase 3 — Native Rust SDF→IR parser</a></h2>
-<p><strong>Deferred indefinitely as of 2026-05-02 per amended ADR 0006.</strong> No longer release-gating: shipped Jacquard binaries may subprocess user-installed OpenSTA via <code>opensta-to-ir</code>, provided OpenSTA is not bundled and not linked. The user-facing capability gap is "OpenSTA must be on PATH for <code>jacquard sim input.sdf</code>," surfaced by <strong>WS-RH.1</strong> below with a clear error message.</p>
+<p><strong>Deferred indefinitely as of 2026-05-02 per amended ADR 0006.</strong> No longer release-gating: shipped Jacquard binaries may subprocess user-installed OpenSTA via <code>opensta-to-ir</code>, provided OpenSTA is not bundled and not linked. The user-facing capability gap is “OpenSTA must be on PATH for <code>jacquard sim input.sdf</code>,” surfaced by <strong>WS-RH.1</strong> below with a clear error message.</p>
 <p>Reasons to revive:</p>
 <ul>
-<li>A downstream commercial integrator's legal team rejects subprocess-of-GPL-tool even with no bundling/linking.</li>
+<li>A downstream commercial integrator’s legal team rejects subprocess-of-GPL-tool even with no bundling/linking.</li>
 <li>OpenSTA dialect coverage gaps appear that are easier to fix in our own parser than via <code>opensta-to-ir</code> post-processing.</li>
 <li>Bandwidth opens up and the team wants the zero-runtime-dependency story for its own ergonomics.</li>
 </ul>
@@ -257,28 +286,28 @@
 <p><strong>Why:</strong> With the shipped runtime now allowed to subprocess <code>opensta-to-ir</code>, a user invoking <code>jacquard sim input.sdf</code> on a machine without OpenSTA — or with an untested OpenSTA version — must get an actionable error rather than silent timing-data loss. Pre-WS-RH.1, missing OpenSTA only emitted a <code>warn!</code> and the simulation proceeded with no timing information loaded. That was acceptable during development but shipped as a UX bug.</p>
 <p><strong>Scope:</strong></p>
 <ul>
-<li><strong>Promote missing-OpenSTA from warning to hard error</strong> when <code>--sdf</code> is provided. Today's silent-fallback behaviour is fine for <code>--liberty</code>-only runs but wrong when SDF was explicitly requested. Error message must name the env var (<code>JACQUARD_OPENSTA_BIN</code>), the PATH lookup, and link to install instructions. ~0.5 day.</li>
-<li><strong>Pin a tested OpenSTA version range.</strong> Record the version we test against in <code>vendor/opensta/</code> (already pinned via submodule per ADR 0005) and surface that as a <code>MIN_TESTED_OPENSTA_VERSION</code> / <code>MAX_TESTED_OPENSTA_VERSION</code> constant in <code>crates/opensta-to-ir/src/opensta.rs</code>. Need to choose a version-detection mechanism — OpenSTA's <code>-version</code> flag output format is the obvious target; check whether it's stable across the versions we care about. ~0.5 day.</li>
+<li><strong>Promote missing-OpenSTA from warning to hard error</strong> when <code>--sdf</code> is provided. Today’s silent-fallback behaviour is fine for <code>--liberty</code>-only runs but wrong when SDF was explicitly requested. Error message must name the env var (<code>JACQUARD_OPENSTA_BIN</code>), the PATH lookup, and link to install instructions. ~0.5 day.</li>
+<li><strong>Pin a tested OpenSTA version range.</strong> Record the version we test against in <code>vendor/opensta/</code> (already pinned via submodule per ADR 0005) and surface that as a <code>MIN_TESTED_OPENSTA_VERSION</code> / <code>MAX_TESTED_OPENSTA_VERSION</code> constant in <code>crates/opensta-to-ir/src/opensta.rs</code>. Need to choose a version-detection mechanism — OpenSTA’s <code>-version</code> flag output format is the obvious target; check whether it’s stable across the versions we care about. ~0.5 day.</li>
 <li><strong>Version probe at first invocation.</strong> On first call to <code>find_opensta()</code> per process, run <code>&lt;binary&gt; -version</code>, parse the version, and:
 <ul>
-<li>If older than min-tested → hard error with remediation message ("rebuild via <code>scripts/build-opensta.sh</code> or upgrade your system OpenSTA").</li>
-<li>If newer than max-tested → warn but proceed ("untested OpenSTA version vN.M; please report any timing discrepancies").</li>
+<li>If older than min-tested → hard error with remediation message (“rebuild via <code>scripts/build-opensta.sh</code> or upgrade your system OpenSTA”).</li>
+<li>If newer than max-tested → warn but proceed (“untested OpenSTA version vN.M; please report any timing discrepancies”).</li>
 <li>Cache the result for the rest of the process. ~1 day.</li>
 </ul>
 </li>
-<li><strong>Document the dependency in <code>docs/synthesis-flow.md</code>.</strong> Single section: required tooling, install paths, version range, what <code>jacquard sim</code> does and doesn't need OpenSTA for. ~0.5 day.</li>
+<li><strong>Document the dependency in <code>docs/synthesis-flow.md</code>.</strong> Single section: required tooling, install paths, version range, what <code>jacquard sim</code> does and doesn’t need OpenSTA for. ~0.5 day.</li>
 <li><strong>Test coverage:</strong> unit tests for the version-string parser (with sample <code>-version</code> outputs from the pinned version and a synthetic too-old version); an integration test that points <code>JACQUARD_OPENSTA_BIN</code> at a stub script and confirms the error path. ~0.5 day.</li>
 <li><strong>Stale-framing cleanup</strong> (folded in here per 2026-05-02 decision rather than spun out separately):
 <ul>
-<li>Reword <code>INTERIM per ADR 0006</code> / <code>Pre-release only</code> markers in source: <code>src/sim/setup.rs:176,228,286</code>, <code>src/bin/jacquard.rs:187</code>, <code>src/sim/cosim_metal.rs:2053</code>, <code>src/testbench.rs:255-257</code>. Replace with "subprocess wrapper per ADR 0006 § Amendment" or similar — these paths are no longer interim.</li>
-<li>Update <code>docs/plans/phase-0-ir-and-oracle.md</code> lines 152, 161, 172 — drop "tagged for pre-release removal" framing; the subprocess wrapper is now the shipping mechanism, not a temporary bridge.</li>
+<li>Reword <code>INTERIM per ADR 0006</code> / <code>Pre-release only</code> markers in source: <code>src/sim/setup.rs:176,228,286</code>, <code>src/bin/jacquard.rs:187</code>, <code>src/sim/cosim_metal.rs:2053</code>, <code>src/testbench.rs:255-257</code>. Replace with “subprocess wrapper per ADR 0006 § Amendment” or similar — these paths are no longer interim.</li>
+<li>Update <code>docs/plans/phase-0-ir-and-oracle.md</code> lines 152, 161, 172 — drop “tagged for pre-release removal” framing; the subprocess wrapper is now the shipping mechanism, not a temporary bridge.</li>
 <li>Audit <code>docs/plans/ws3-delete-sdf-parser.md</code> for the same stale framing and update.</li>
 <li>~0.5 day total for the cleanup.</li>
 </ul>
 </li>
 </ul>
 <p><strong>Total:</strong> ~3.5 days. Single PR, owned by whoever picks up release prep.</p>
-<p><strong>Open question:</strong> does OpenSTA emit a stable <code>-version</code> string, or do we need to scrape <code>git describe</code> from a build-time-recorded commit? If <code>-version</code> is unreliable, fall back to recording the submodule commit at <code>crates/opensta-to-ir</code> build time and comparing — this is cheaper than version-string sniffing and avoids the "user has a custom build" problem.</p>
+<p><strong>Open question:</strong> does OpenSTA emit a stable <code>-version</code> string, or do we need to scrape <code>git describe</code> from a build-time-recorded commit? If <code>-version</code> is unreliable, fall back to recording the submodule commit at <code>crates/opensta-to-ir</code> build time and comparing — this is cheaper than version-string sniffing and avoids the “user has a custom build” problem.</p>
 <h2 id="phase-4--demand-driven"><a class="header" href="#phase-4--demand-driven">Phase 4+ — Demand-driven</a></h2>
 <p>Items below land when (a) a real use case appears that demands them, and (b) bandwidth is available. Each gets its own ADR amendment / new ADR before scheduling, since the cost is non-trivial.</p>
 <h3 id="pillar-a-stage-1-static-idm"><a class="header" href="#pillar-a-stage-1-static-idm">Pillar A Stage 1 (static IDM)</a></h3>
@@ -293,9 +322,9 @@
 <p>Optional optimisation that makes Tier 2 cheap on tile-decomposed designs. Lands only if Tier 2 lands and partitioning quality on tile designs proves measurably suboptimal.</p>
 <h2 id="risks-and-walk-back"><a class="header" href="#risks-and-walk-back">Risks and walk-back</a></h2>
 <ul>
-<li><strong>Pillar measurement shows smaller-than-expected gain.</strong> Each pillar's later stages are deferred or abandoned per ADR 0007's walk-back clause. Pillar B Stage 3 is explicitly conditional on this signal.</li>
+<li><strong>Pillar measurement shows smaller-than-expected gain.</strong> Each pillar’s later stages are deferred or abandoned per ADR 0007’s walk-back clause. Pillar B Stage 3 is explicitly conditional on this signal.</li>
 <li><strong>JSON report schema design wastes time in bikeshedding.</strong> Mitigation: ship v1 quickly, additive-only changes thereafter, breaking changes require explicit ADR-level decision.</li>
-<li><strong>OpenSTA upstream regressions.</strong> With OpenSTA as the sole STA path, an upstream behaviour change reaches us through <code>opensta-to-ir</code>'s output. Mitigation: pin OpenSTA in CI (per ADR 0001) and rely on the regression corpus to surface drift.</li>
+<li><strong>OpenSTA upstream regressions.</strong> With OpenSTA as the sole STA path, an upstream behaviour change reaches us through <code>opensta-to-ir</code>’s output. Mitigation: pin OpenSTA in CI (per ADR 0001) and rely on the regression corpus to surface drift.</li>
 <li><strong>CRPR pessimism on tight designs.</strong> Stage 1+2 fold-in treats launch=0; a design with very heterogeneous launch arrivals will see pessimism on paths whose launch DFF also has a long clock path. Stage 3 is the lever if this matters; otherwise live with it.</li>
 </ul>
 <h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
@@ -317,11 +346,11 @@
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                             <a rel="prev" href="../plans/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <i class="fa fa-angle-left"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
                             <a rel="next prefetch" href="../plans/gf180mcu-enablement.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
                         <div style="clear: both"></div>
@@ -331,16 +360,21 @@
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                     <a rel="prev" href="../plans/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <i class="fa fa-angle-left"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
                     <a rel="next prefetch" href="../plans/gf180mcu-enablement.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
 
         </div>
 
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
 
 
@@ -349,16 +383,17 @@
         </script>
 
 
-        <script src="../elasticlunr.min.js"></script>
-        <script src="../mark.min.js"></script>
-        <script src="../searcher.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="../clipboard.min.js"></script>
-        <script src="../highlight.js"></script>
-        <script src="../book.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-picker.js"></script>
+        <script src="../theme/version-picker-36db8dd8.js"></script>
+
 
 
     </div>
