@@ -104,18 +104,29 @@ jobs:
       - name: Cache cargo
         uses: actions/cache@v5
         with:
+          # Registry/git only — sccache (below) owns compiled artifacts, so
+          # caching target/ too would double-store and fight sccache for the
+          # 10 GB repo cache budget. Key bumped (-sccache) to start a fresh,
+          # target-less cache rather than restore an old target/-laden one.
           path: |
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
           # Per-config key so the divergent dependency trees (wasmtime for synth,
           # cust for cuda, …) don't thrash a shared cache. LLVM_VERSION is only
           # set for the metal build; empty elsewhere.
-          key: ${{ runner.os }}-cargo-build-${{ matrix.config }}-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-build-sccache-${{ matrix.config }}-llvm${{ env.LLVM_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-build-${{ matrix.config }}-
+            ${{ runner.os }}-cargo-build-sccache-${{ matrix.config }}-
+
+      # sccache caches rustc + the heavy mt-kahypar/TBB/boost C++ (cc-rs) and
+      # nvcc; the nproc/2 cap bounds cold-build C++ memory. multiarch for the
+      # all-major CUDA device code so nvcc objects still cache.
+      - name: Setup sccache
+        uses: ./.github/actions/setup-sccache
+        with:
+          multiarch: ${{ matrix.config == 'cuda' }}
 
       - name: Build jacquard
         env:

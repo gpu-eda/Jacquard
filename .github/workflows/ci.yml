@@ -119,15 +119,21 @@ jobs:
       - name: Cache cargo
         uses: actions/cache@v5
         with:
+          # Registry/git + the installed tool binaries (mdbook/d2 land in
+          # ~/.cargo/bin). sccache owns compiled artifacts, so target/ is not
+          # cached here — see setup-sccache.
           path: |
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-docs-sccache-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-docs-
+            ${{ runner.os }}-cargo-docs-sccache-
+
+      # cargo doc compiles the dependency graph, including mt-kahypar's -O3 C++.
+      - name: Setup sccache
+        uses: ./.github/actions/setup-sccache
 
       - name: Build cargo docs
         run: cargo doc --no-deps --lib
