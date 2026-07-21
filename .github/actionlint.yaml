@@ -26,3 +26,16 @@ self-hosted-runner:
     - amd
     - rocm
     - gfx1036
+
+# Suppress two shellcheck patterns in test.yml that are intentional, not bugs.
+# Scoped to this one file so every other workflow keeps full shellcheck coverage
+# (SC2086 in particular catches real unquoted-variable bugs elsewhere).
+#   SC2046: `make -j$(nproc)` — nproc emits a single integer, so the flagged
+#           word-splitting can't happen; this is the idiomatic parallel-make form.
+#   SC2086: unquoted `$TIMING_ARGS` — deliberately word-split so an empty value
+#           passes no args and a set value passes the flag+path as two args.
+paths:
+  .github/workflows/test.yml:
+    ignore:
+      - 'shellcheck reported issue in this script: SC2046'
+      - 'shellcheck reported issue in this script: SC2086'
