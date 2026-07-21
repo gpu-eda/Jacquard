@@ -3169,7 +3169,11 @@ fn run_cosim_generic<B: CosimBackend>(
         let resolve = |name: &str| {
             crate::sim::trace_signals::resolve_to_state_pos(aig, netlistdb, script, name)
         };
-        let Some(positions) = cfg.signals.iter().map(|s| resolve(s)).collect::<Option<Vec<u32>>>()
+        let Some(positions) = cfg
+            .signals
+            .iter()
+            .map(|s| resolve(s))
+            .collect::<Option<Vec<u32>>>()
         else {
             clilog::warn!(
                 "signal-stream `{}`: one or more signals did not resolve; tap disabled",

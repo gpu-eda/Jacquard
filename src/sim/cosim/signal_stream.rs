@@ -194,7 +194,10 @@ impl SignalStreamTap {
                 .write_all(&header)
                 .and_then(|_| stream.write_all(&self.batch_buf));
             if wrote.is_err() {
-                clilog::debug!("signal-stream `{}`: client write failed, dropping", self.name);
+                clilog::debug!(
+                    "signal-stream `{}`: client write failed, dropping",
+                    self.name
+                );
                 self.client = None;
             }
         }
