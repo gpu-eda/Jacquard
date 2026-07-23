@@ -5,6 +5,9 @@ crates/*/Cargo.lock
 /compile_commands.json
 .cache
 
+# Local environment / secrets — never commit
+.env
+
 # Python
 __pycache__/
 *.pyc
@@ -36,6 +39,11 @@ __pycache__/
 debug_trace.csv
 # Per-run CDC-jitter seed dump written next to the fixture goldens.
 run_params.json
+# Generated Metal test dumps — produced by the Metal test run and uploaded as
+# the `metal-outputs` CI artifact, never committed (see that step in
+# .github/workflows/test.yml). The .vcd outputs are already covered by *.vcd.
+/metal_*.txt
+timing_report_metal.json
 *_watchlist.json
 api_artifacts/
 tb_verify_sim
