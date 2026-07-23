@@ -1,133 +1,134 @@
-# Handoff — Architecture docs migration (execute the redesign spike)
+# Handoff — Architecture docs migration (Part 2: the ADR→Decisions rename + move)
 
-**Created:** 2026-07-20
-**Working tree:** clean after the final commit below (diagram doc + spike structure + this handoff still to commit at handoff time)
-**Branch:** `signal-stream-rebase2` → pushed to `feat/cosim-signal-stream-tap`
+**Updated:** 2026-07-23
+**Branch:** `docs/architecture-migration-part2` (off `main`; worktree `~/Code/jacquard-migration-part2`)
+**Status of the redesign:** Part 1 (the foundation) is **merged to `main`**. This
+handoff is Part 2 — the actual migration — which is **not started**.
 
 ## Goal & next-up
 
-**Goal of this session:** spike a redesign of the architecture docs (split
-what/why/unbuilt into a reference layer + decision log, organised by area under a
-top-level "Architecture") and build the D2 diagram system that supports it. Both
-are done and pushed. The user has approved *executing* the redesign — this handoff
-carries that execution.
+Execute the migration that turns today's `docs/adr/` into the top-level
+**Architecture** structure the spike designed and Part 1 laid the foundation for.
+The design is settled and ratified (below); this is mechanical-but-wide execution
+that must not be done as a partial rename.
 
-**Next session should pick up:** the migration itself, but **only after the user
-ratifies the two open decisions below** (§ Open follow-up 1). Do not start moving
-files before those are settled — the taxonomy determines where everything lands,
-and the immutable-vs-living call changes how each decision doc gets rewritten.
+**Next session should start with step 1 (the cross-reference audit)** — do not
+`git mv` anything before the full reference surface is enumerated.
 
-**Verification command:**
+**Verification command (run continuously during the migration):**
 ```sh
-cd <worktree> && mdbook build && python3 docs/scripts/check_doc_links.py
+cd ~/Code/jacquard-migration-part2 && mdbook build && python3 docs/scripts/check_doc_links.py
 # Expect: build succeeds; "All rendered-page links resolve to rendered pages."
-grep -rnE "docs/adr/|ADR [0-9]{4}" docs/ CLAUDE.md | wc -l
-# During migration this count drops to 0 as refs move to the new paths/names.
+grep -rnE "docs/adr/|ADR [0-9]{4}" docs/ CLAUDE.md .github/ crates/ | wc -l
+# This count starts high (~the reference surface) and must reach 0 as refs move
+# to docs/architecture/decisions/ and the "ADR" term is dropped for "Decision".
 ```
 
-## What's decided and built (don't redo)
+## What is DONE and on `main` (Part 1 — do not redo)
 
-The full design is in [`docs/spikes/architecture-doc-redesign.md`](../spikes/architecture-doc-redesign.md).
-Load-bearing decisions already made:
+Merged 2026-07-21 via the merge queue (PRs #227 foundation, #228 ADR 0022, #229
+CI sccache, #184 the signal-stream feature — all landed):
 
-- **The split.** Three claim types age differently — why / current-what /
-  decided-but-unbuilt — and get three artifact classes. Diátaxis
-  reference-vs-explanation is the spine. The three-bucket model is already written
-  into [`docs/adr/README.md`](../adr/README.md) ("Three kinds of claim, aged
-  differently").
-- **The doc tree.** Top-level `docs/architecture/`: a `README.md` map, `arch-N-*.md`
-  area docs (the *what*), and `decisions/` (the *why* — today's ADRs, reframed),
-  with `decisions/spikes/` and `decisions/archive/` under it. Full tree in the
-  spike's "The doc tree" section.
-- **Naming.** `<class><number>-<name>.md`. Decision docs keep their existing
-  4-digit ADR numbers (so "ADR 0022" references still resolve conceptually);
-  rendered titles come from `SUMMARY.md` link text and the `# H1`, not the
-  filename.
-- **Worked example exists.** [`docs/architecture/README.md`](../architecture/README.md)
-  (the map) and [`docs/architecture/cosim-runtime.md`](../architecture/cosim-runtime.md)
-  (one area's *what*), written against ADRs 0013/0017/0022. Read these as the
-  template for the other five area docs.
-- **The D2 diagram system is complete.** Wired into `book.toml` (elk layout) and
-  CI; theme-adaptive via `theme/d2-diagrams.css`; documented in
-  [`docs/architecture-diagrams.md`](../architecture-diagrams.md). Do not revisit
-  it — just reuse it in the new area docs.
+- **`docs/adr/README.md`** carries the **three-kinds-of-claim** model (why /
+  current-what / decided-but-unbuilt age differently). It does **not** carry the
+  living-ADR edit-in-place convention (that was deliberately left off — see the
+  immutable ratification below).
+- **`docs/spikes/architecture-doc-redesign.md`** — the full design: the split, the
+  Diátaxis spine, the six-area taxonomy, naming, the doc tree, and the field survey.
+  This is the spec for Part 2. Read it first.
+- **Worked examples**: `docs/architecture/README.md` (the by-area map) and
+  `docs/architecture/cosim-runtime.md` (one area's "what" doc with a live D2
+  diagram). **Mirror `cosim-runtime.md` when writing the other five area docs.**
+- **D2 diagram system** (built, CI-green, warm-cache-validated): `mdbook-d2` (elk)
+  in `book.toml` + the docs CI job, theme-adaptive via `theme/d2-diagrams.css`,
+  how-to in `docs/architecture-diagrams.md`. Reuse it; don't revisit it.
+- **`docs/scripts/check_doc_links.py`** skips fenced code blocks (so illustrative
+  markdown — e.g. a future `SUMMARY.md` sample — doesn't false-404).
+- **ADR 0022** exists (`docs/adr/0022-flow-controlled-io.md`, Proposed).
+- **CI**: mdbook is 0.5.2 (mdbook-d2 0.3.8 needs it); sccache + `CARGO_BUILD_JOBS=nproc/2`
+  are wired into the compile jobs (`.github/actions/setup-sccache`), warm C/C++
+  cache-hit rate measured at 100%.
 
-## Open follow-ups (priority-ordered)
+## Ratified decisions (source of truth — apply these in Part 2)
 
-### 1. Get the two open decisions ratified (blocks everything else)
+1. **Immutable / past-tense decision log.** This *reverses* the living-ADR rule from
+   commit `0704c2f0`: once the reference layer carries current state, a decision is a
+   point-in-time record; a changed decision is a **new superseding record**, not an
+   in-place rewrite. Does **not** revive dated "Amendment" blocks (both models reject
+   those). Part 2 rewrites the decision docs to this model and updates the convention
+   prose in the decisions README accordingly.
+2. **Drop the term "ADR" → "Decisions".** The section, the directory
+   (`docs/architecture/decisions/`), and the nav all use "Decision"/"Decisions".
+   Rendered titles come from `SUMMARY.md` link text + the `# H1`.
+3. **Structure by directory, not filename prefix.** Keep `NNNN-kebab-title.md`
+   filenames (NOT `dec-NNNN-*`/`arch-N-*`). The directory (`architecture/` vs
+   `architecture/decisions/`) encodes the class. The 4-digit number is a stable ID
+   and must survive so every "ADR 0022"/`0022-*` reference still resolves conceptually.
+4. **Everything nests under `docs/architecture/`**: the area docs, `decisions/`, and
+   `decisions/spikes/` (spikes are a decision's evidence → nested under decisions;
+   sibling `architecture/spikes/` is the rejected alternative).
+5. **Six-area taxonomy** (full ADR→area table in the spike's "Taxonomy" section):
+   Timing correctness / Simulation engine / Cosim runtime / RTL on-ramp / PDK
+   enablement / Distribution. Two placements settled: **cell metadata (0010, 0011) →
+   PDK enablement**; **X-propagation (0016) → Simulation engine** *(this was my default,
+   never explicitly confirmed by Rob — reconfirm before relying on it)*.
+6. **0003 is NOT archived.** An earlier plan moved it to `adr/archive/`; that was
+   reverted. Part 2 decides how the new design records superseded decisions (0003 is
+   the one Superseded decision) — likely a `decisions/` status, not the old archival.
 
-- **Immutable vs living decision log.** The redesign *reverses* part of the
-  living-ADR convention committed earlier this session (`0704c2f0`): once the
-  reference layer carries current state, the decision log reverts to
-  immutable/past-tense (a changed decision is a new record that supersedes, not an
-  in-place rewrite). The user helped set the living rule, so this needs an explicit
-  yes. It does **not** revive dated "Amendment" blocks — both models reject those.
-- **The six-area taxonomy**, and specifically the two ambiguous placements: cell
-  metadata (0010, 0011) sits between PDK enablement and timing; X-propagation
-  (0016) spans the engine and cosim. Pick a home for each. Table of all 22 ADRs →
-  6 areas is in the spike's "Taxonomy" section.
+## Part 2 steps (large; do in reviewable slices, on this branch)
 
-### 2. Execute the migration (large; do in reviewable slices)
+1. **Audit the cross-reference surface FIRST.** Enumerate every `docs/adr/` path and
+   "ADR NNNN" prose mention across `docs/`, `CLAUDE.md`, `SUMMARY.md`, `docs/plans/`,
+   `.github/` (CI + `check_doc_links.py` assumptions), `crates/` (e.g. the opensta
+   integration test references ADRs), and commit-message conventions. A scout/grep
+   pass producing the full list is the right first step. **Never partial-rename.**
+2. **Create the tree** and move: `git mv docs/adr/ docs/architecture/decisions/`,
+   `git mv docs/spikes/ docs/architecture/decisions/spikes/`. Keep `NNNN-*.md` names.
+   Rename `adr/README.md` → `decisions/README.md`.
+3. **Write the five remaining `arch-*` area docs**, mirroring `cosim-runtime.md`:
+   present-tense current state, each section forward-linking to its decision(s) by
+   number, an `## Implementation status` for the decided-but-unbuilt, a D2 diagram
+   only where a shape is genuinely 2-D.
+4. **Reframe the decision docs** to immutable/past-tense: strip current-state prose
+   that now lives in the arch docs, past-tense the rationale, add a forward-link to
+   the arch doc, decide 0003's superseded representation.
+5. **Rewrite `SUMMARY.md`** to the tree in the spike (Architecture: map → area docs →
+   Decisions → spikes). Note `SUMMARY.md` currently has BOTH the video-tap spike and
+   the redesign spike (kept both when #184 + #227 merged) — preserve/relocate both.
+6. **Fix every reference** from step 1's audit (paths + prose "ADR NNNN" → "Decision
+   NNNN" or the new path), and **update `CLAUDE.md`** (points at `docs/adr/` in several
+   places) and any CI path assumptions.
+7. **Resolve this handoff**: fold anything durable into the migrated docs, then
+   `git rm` this file (per `docs/handoff-discipline.md`). Open the PR.
 
-Suggested order once §1 is settled:
+## Critical context / gotchas
 
-1. **Audit the cross-reference surface first.** 74 files reference `docs/adr/` or
-   "ADR NNNN" (per the verification grep). Per the global renaming rule, enumerate
-   every location — docs, `CLAUDE.md`, `SUMMARY.md`, plan docs, CI, commit-message
-   conventions — *before* moving anything. A scout/grep pass producing the full
-   list is the right first step.
-2. **Create `docs/architecture/`** and `git mv docs/adr/ docs/architecture/decisions/`,
-   `git mv docs/spikes/ docs/architecture/decisions/spikes/`. Decide the
-   filename form (`dec-0022-*.md` vs keeping `0022-*.md`) — the spike proposes the
-   `dec-` prefix but it multiplies the link churn, so this is a real cost/benefit
-   call.
-3. **Write the five remaining `arch-N-*.md` area docs**, mirroring
-   `cosim-runtime.md`: present-tense current state, each section forward-linking to
-   its decision doc, an `## Implementation status` for the unbuilt, a `d2` diagram
-   where a 2-D shape earns one.
-4. **Reframe the decision docs** per the ratified immutable-vs-living call: strip
-   current-state prose that now lives in the arch doc, past-tense the rationale,
-   add a forward-link to the arch doc, fold or archive dated amendments.
-5. **Rewrite the nav** (`SUMMARY.md`) to the tree in the spike, and fix all 74
-   cross-references.
-6. **Update `CLAUDE.md`** (it points at `docs/adr/` in several places) and any CI
-   path assumptions (`check_doc_links.py`, the docs job).
-
-### 3. Housekeeping
-
-- Move [`docs/architecture-diagrams.md`](../architecture-diagrams.md) under the new
-  structure if it fits better there (it's currently top-level).
-- Consider whether this migration wants its **own branch off `main`** rather than
-  riding `feat/cosim-signal-stream-tap` — it's orthogonal to the signal-stream
-  feature, and the branch has accumulated a lot of doc-only work already.
-
-## Critical context
-
-- **Never do a partial rename.** 74 files is past the point where a missed
-  reference is easy to spot; the link check catches rendered-page links but not
-  prose "ADR 0022" mentions or `CLAUDE.md`. Audit-then-move.
-- **Decision numbers are stable IDs.** Whatever the filename becomes, the 4-digit
-  number must survive so historical references stay meaningful.
-- **The `git log` outage.** GitHub's Actions API was in a sustained 503 outage
-  through this session, so the docs-job CI result for the D2 changes was never
-  confirmed green (local `mdbook build` + link check + actionlint all pass). First
-  thing worth doing next session: confirm the latest run on
-  `feat/cosim-signal-stream-tap` is green, now that the API should be back.
-- **Diagram styling is verified via headless Chrome, not D2 PNGs** — a PNG shows
-  the baked palette, not the themed result. Recipe is in
-  `docs/architecture-diagrams.md`.
+- **Never do a partial rename.** The reference surface is wide; the link check catches
+  rendered-page links but NOT prose "ADR 0022" mentions or `CLAUDE.md`/CI. Audit-then-move.
+- **Decision numbers are stable IDs** — whatever the filename/section becomes, the
+  4-digit number survives so historical references stay meaningful.
+- **Diagram styling is verified via headless Chrome, not D2 PNGs** (a PNG shows the
+  baked palette, not the themed result). Recipe in `docs/architecture-diagrams.md`.
+- **`main` is protected** (merge queue, linear history) — land Part 2 via a PR to the
+  queue, not a direct push. Merges are **rebase-only**.
+- **CI compile jobs OOM-guard**: `mt-kahypar` C++ builds at `-O3`; the `nproc/2` cap +
+  sccache handle it. If a job flakes with bare "compilation terminated", it's a
+  transient runner OOM — `gh run rerun --failed`, don't chase it as a real error.
 
 ## References
 
-- [`docs/spikes/architecture-doc-redesign.md`](../spikes/architecture-doc-redesign.md) — the full design, taxonomy, doc tree, and the field survey behind it
-- [`docs/architecture/cosim-runtime.md`](../architecture/cosim-runtime.md) — the worked example to mirror
-- [`docs/architecture-diagrams.md`](../architecture-diagrams.md) — the diagram system how-to
-- [`docs/adr/README.md`](../adr/README.md) — where the three-bucket claim model currently lives (moves to `decisions/README.md`)
-- [`docs/handoff-discipline.md`](../handoff-discipline.md) — how to resolve this handoff (fold into the migrated docs, then delete)
+- [`docs/spikes/architecture-doc-redesign.md`](../spikes/architecture-doc-redesign.md) — THE spec (taxonomy, tree, naming, field survey)
+- [`docs/architecture/cosim-runtime.md`](../architecture/cosim-runtime.md) — the worked "what" doc to mirror for the other five areas
+- [`docs/architecture/README.md`](../architecture/README.md) — the by-area map
+- [`docs/adr/README.md`](../adr/README.md) — three-kinds model lives here; becomes `decisions/README.md`
+- [`docs/architecture-diagrams.md`](../architecture-diagrams.md) — the D2 how-to
+- [`docs/handoff-discipline.md`](../handoff-discipline.md) — how to resolve this handoff (fold in, then delete)
 
 ---
 
 **Resume in a new session with:**
 ```
+git checkout docs/architecture-migration-part2   # this branch carries the current handoff
 /resume_handoff docs/handoffs/architecture-docs-migration-handoff.md
 ```
