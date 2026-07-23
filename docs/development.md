@@ -12,6 +12,19 @@ for the backend you're building. Nothing else.
 git submodule update --init --recursive
 ```
 
+> **The submodule init is load-bearing, not boilerplate — and its failure is
+> silent.** `build.rs` bakes the standard-cell pin tables into the binary by
+> reading the vendored PDK cell libraries (`vendor/sky130_fd_sc_hd`,
+> `vendor/gf180mcu_fd_sc_mcu7t5v0`, `vendor/gf180mcu_fd_sc_mcu9t5v0`). If one of
+> those submodules is absent, `build.rs` skips it and the build **succeeds** —
+> but the resulting binary carries an incomplete pin table and **panics at
+> runtime** on any netlist using an omitted cell (`Unknown SKY130 cell (no
+> pin-table entry for type '…')`), which looks like a Jacquard bug rather than a
+> missing checkout. So the `--recursive` above is required, and any script that
+> inits submodules *selectively* — a CI matrix that only needs
+> `vendor/eda-infra-rs`, or a historical-build / bisect harness — must also init
+> the PDK cell submodules, or it will silently produce a crippled binary.
+
 The GPU backend is a feature, and you pick exactly one:
 
 ```sh
