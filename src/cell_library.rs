@@ -1,7 +1,7 @@
 //! Runtime cell-library loading for third-party IP and user-supplied
 //! cells outside Jacquard's vendored PDKs.
 //!
-//! See [ADR 0010](../../docs/adr/0010-declarative-cell-metadata.md)
+//! See [ADR 0010](../../docs/architecture/decisions/0010-declarative-cell-metadata.md)
 //! and `docs/plans/declarative-cell-metadata.md`. This module is the
 //! Tier 1 + minimal Tier 2 slice:
 //!
@@ -90,7 +90,7 @@ pub enum CellKind {
 /// ```
 ///
 /// v1.1 adds the optional `ram` sub-table on `kind = "ram"` cells —
-/// see [`RamPortMap`] and [ADR 0011](../../docs/adr/0011-ram-port-mapping-schema.md).
+/// see [`RamPortMap`] and [ADR 0011](../../docs/architecture/decisions/0011-ram-port-mapping-schema.md).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ManifestFile {
     pub schema_version: String,

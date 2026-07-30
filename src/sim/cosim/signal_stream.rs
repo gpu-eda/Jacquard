@@ -8,7 +8,7 @@
 //! `vcd_snapshot` ring — no GPU code — and never drives design inputs, so
 //! it stays out of the reactive path and imposes no `batch=1` penalty.
 //!
-//! Design: `docs/spikes/video-streaming-tap.md`.
+//! Design: `docs/architecture/decisions/spikes/video-streaming-tap.md`.
 //!
 //! ## Wire format
 //!

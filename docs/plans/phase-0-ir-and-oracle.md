@@ -23,8 +23,8 @@ After phase 0, Jacquard's timing pipeline has an enforced external reference. Si
 ## Prerequisites
 
 - Requirements doc (`../timing-correctness.md`) accepted.
-- ADR 0001 (OpenSTA oracle) accepted.
-- ADR 0002 (timing IR) accepted.
+- Decision 0001 (OpenSTA oracle) accepted.
+- Decision 0002 (timing IR) accepted.
 - A representative test design committed to the repo with inputs needed for both Jacquard and OpenSTA (`.v` + `.lib` + `.sdf` minimum; `.spef` if available). Candidate: `tests/timing_test/inv_chain_pnr` or the MCU SoC subset, whichever is smaller for first-pass iteration.
 - OpenSTA available on developer machines and CI runners (installation documented).
 
@@ -59,11 +59,11 @@ Deliverables:
 - A tiny `timing-ir` crate exposing read/write helpers.
 - JSON round-trip via `flatc --json` verified in a unit test.
 
-Scope guard: if you find yourself adding fields that represent computed timing graphs, cell electrical characterisation, or netlist structure, stop and re-read ADR 0002.
+Scope guard: if you find yourself adding fields that represent computed timing graphs, cell electrical characterisation, or netlist structure, stop and re-read Decision 0002.
 
 ### WS2 — `opensta-to-ir` production tool
 
-Per ADR 0006, `opensta-to-ir` is a shipped preprocessing tool, not merely a validation helper. Post-release it remains as an alternative preprocessing path for users who want OpenSTA-computed timing.
+Per Decision 0006, `opensta-to-ir` is a shipped preprocessing tool, not merely a validation helper. Post-release it remains as an alternative preprocessing path for users who want OpenSTA-computed timing.
 
 Detailed design and phased implementation: [`ws2-opensta-to-ir.md`](ws2-opensta-to-ir.md).
 
@@ -103,7 +103,7 @@ Land in this order: fixture probe (~hour, verifies the OpenSTA Tcl `-corner` fla
 
 ### WS3 — Remove hand-rolled SDF parser; wire interim runtime hook
 
-Per ADR 0006, Jacquard's hand-rolled SDF parser is deleted in Phase 0 rather than maintained through later phases. The runtime gains a new IR input path; the old SDF input path becomes an interim convenience wrapper over WS2.
+Per Decision 0006, Jacquard's hand-rolled SDF parser is deleted in Phase 0 rather than maintained through later phases. The runtime gains a new IR input path; the old SDF input path becomes an interim convenience wrapper over WS2.
 
 Detailed design and phased implementation: [`ws3-delete-sdf-parser.md`](ws3-delete-sdf-parser.md).
 
@@ -111,18 +111,18 @@ Deliverables:
 
 - Delete `src/sdf_parser.rs` and the SDF→Jacquard-internal-types code path. Remove all direct consumers.
 - Add `jacquard sim --timing-ir <path>` as the canonical post-release timing input. Loads a pre-converted timing IR file, consumes it into the simulator's internal structures.
-- Retarget the existing `--timing-sdf` / `--enable-timing` CLI behaviour: when SDF is provided, `jacquard sim` subprocesses `opensta-to-ir` internally to produce IR on the fly, then consumes it. Code site tagged **"INTERIM per ADR 0006; removed before first release."**
+- Retarget the existing `--timing-sdf` / `--enable-timing` CLI behaviour: when SDF is provided, `jacquard sim` subprocesses `opensta-to-ir` internally to produce IR on the fly, then consumes it. Code site tagged **"INTERIM per Decision 0006; removed before first release."**
 - Verify no remaining imports of the deleted module. Verify all existing tests that previously used the hand-rolled parser now pass via the interim hook or via checked-in IR fixtures.
 - No runtime behaviour regression on Jacquard's timing-related regression suite; any design that currently works must still work after WS3.
 
 ### WS4 — Diff harness and CI integration
 
-> **Reframed 2026-05-02; corpus + runner shipped 2026-05-02.** The original WS4 was framed as "WS2 vs WS3 IR diff" (OpenSTA-derived against Jacquard's hand-rolled SDF parser-derived). WS3 deleted that parser; the diff has only one side now. Three reframings were considered: Option A (golden-IR regression corpus for `opensta-to-ir`) was chosen as the Phase 0 closure; Option B (end-to-end behavioural diff cxxrtl/CVC vs Jacquard cosim event traces) belongs in `timing-validation.md` as a Phase 1+ extension; Option C (cross-tool diff vs a future native Rust SDF→IR parser) is Phase 3 work per ADR 0006.
+> **Reframed 2026-05-02; corpus + runner shipped 2026-05-02.** The original WS4 was framed as "WS2 vs WS3 IR diff" (OpenSTA-derived against Jacquard's hand-rolled SDF parser-derived). WS3 deleted that parser; the diff has only one side now. Three reframings were considered: Option A (golden-IR regression corpus for `opensta-to-ir`) was chosen as the Phase 0 closure; Option B (end-to-end behavioural diff cxxrtl/CVC vs Jacquard cosim event traces) belongs in `timing-validation.md` as a Phase 1+ extension; Option C (cross-tool diff vs a future native Rust SDF→IR parser) is Phase 3 work per Decision 0006.
 
 Deliverables:
 
 - A test binary `timing-ir-diff` that reads two IR files and produces a structured diff (missing arcs, mismatched delays past tolerance, mismatched provenance). **Shipped** in `crates/timing-ir/src/bin/timing-ir-diff.rs`.
-- OpenSTA vendored as a git submodule at `vendor/opensta/`. Not built from Jacquard's build at runtime; present for CI version pinning, the `opensta-to-ir` integration tests, and stress-corpus access (see ADR 0005). **Shipped.**
+- OpenSTA vendored as a git submodule at `vendor/opensta/`. Not built from Jacquard's build at runtime; present for CI version pinning, the `opensta-to-ir` integration tests, and stress-corpus access (see Decision 0005). **Shipped.**
 - A primary regression corpus at `tests/timing_ir/corpus/` — Jacquard-specific designs with checked-in `expected.jtir` (and a `expected.json` sidecar via `flatc --json` for human-readable diffs). **Shipped 2026-05-02** with the seed entry `aigpdk_dff_chain` (a minimal aigpdk DFF + AND with back-annotated wire delay; covers ARC + SETUP_HOLD + CLOCK_ARRIVAL + INTERCONNECT in a self-contained fixture). Sky130 entries (`inv_chain_pnr`, mcu_soc subset) remain to be added — the inputs exist under `tests/timing_test/`, but a CI strategy for installing the sky130 Liberty (likely volare) lands with them.
 - A stress corpus at `tests/timing_ir/stress/` — a manifest file listing paths into `vendor/opensta/<test-tree-subdir>/`. Run nightly or pre-release. Exit criterion: no crashes, no hangs, no malformed IR; numerical agreement with OpenSTA not required. **Manifest format specced in `tests/timing_ir/stress/README.md`; entries pending.**
 - A regression test that, for each design in the primary corpus, runs `opensta-to-ir` on its inputs and diffs against `expected.jtir` via `timing_ir::diff::diff_irs` with the per-design tolerance from `manifest.toml`. **Shipped** as `crates/opensta-to-ir/tests/corpus.rs::corpus_designs_match_golden_ir`. Skips gracefully when OpenSTA isn't built; fails loud with a structured diff when there's a mismatch.
@@ -170,8 +170,8 @@ Phase 0 is complete when **all** of the following hold:
 
 1. ✅ `schemas/timing_ir.fbs` checked in (`crates/timing-ir/schemas/timing_ir.fbs`); round-trip unit tests in `crates/timing-ir/tests/`.
 2. ✅ `opensta-to-ir` binary production-quality with stable CLI, documented exit codes, primary-corpus support. See `ws2-opensta-to-ir.md` (Implemented).
-3. ✅ `src/sdf_parser.rs` deleted; `--timing-ir <path>` canonical; `--timing-sdf` is a subprocess wrapper over `opensta-to-ir` (per ADR 0006 § Amendment, the shipping mechanism — Phase 3 native Rust parser deferred indefinitely). See `ws3-delete-sdf-parser.md` (Implemented).
-4. ✅ OpenSTA vendored at `vendor/opensta/` (ADR 0005).
+3. ✅ `src/sdf_parser.rs` deleted; `--timing-ir <path>` canonical; `--timing-sdf` is a subprocess wrapper over `opensta-to-ir` (per Decision 0006 § Amendment, the shipping mechanism — Phase 3 native Rust parser deferred indefinitely). See `ws3-delete-sdf-parser.md` (Implemented).
+4. ✅ OpenSTA vendored at `vendor/opensta/` (Decision 0005).
 5. ✅ `timing-ir-diff` runs in CI on the primary corpus (`opensta-to-ir-tests` job), passes cleanly, fails loud on regressions. Mutation tests in `crates/timing-ir/tests/diff.rs`.
 6. ✅ Parser-success assertions live on both halves: `TimingLibrary::parse` and `opensta-to-ir --min-arcs`. See WS5 above.
 7. ✅ No regression observed in Jacquard's timing-related tests after WS3 cutover.
@@ -179,10 +179,10 @@ Phase 0 is complete when **all** of the following hold:
 
 ## Out of scope (deferred to later phases)
 
-- Native Rust SDF→IR converter. The hand-rolled parser is **removed** in Phase 0 WS3 (per ADR 0006); the native Rust replacement is Phase 3 work, **deferred indefinitely** per ADR 0006 § Amendment (no longer release-gating). SDF input ships via the `opensta-to-ir` subprocess wrapper. See `post-phase-0-roadmap.md` § Phase 3 for revival triggers.
-- OpenTimer integration. Depends on the spike; tracked in `../spikes/opentimer-sky130.md` and its resulting phase-1 plan.
-- Private PDK test track. Tracked in ADR 0004; plumbing deferred to its own phase.
-- SPEF IR. Separate from timing-annotation IR per ADR 0002.
+- Native Rust SDF→IR converter. The hand-rolled parser is **removed** in Phase 0 WS3 (per Decision 0006); the native Rust replacement is Phase 3 work, **deferred indefinitely** per Decision 0006 § Amendment (no longer release-gating). SDF input ships via the `opensta-to-ir` subprocess wrapper. See `post-phase-0-roadmap.md` § Phase 3 for revival triggers.
+- OpenTimer integration. Depends on the spike; tracked in `../architecture/decisions/spikes/opentimer-sky130.md` and its resulting phase-1 plan.
+- Private PDK test track. Tracked in Decision 0004; plumbing deferred to its own phase.
+- SPEF IR. Separate from timing-annotation IR per Decision 0002.
 - Runtime violation reporting improvements (R4 critical-path refinement JSON). Phase 1 or 2.
 
 ## Risks
@@ -190,13 +190,13 @@ Phase 0 is complete when **all** of the following hold:
 - **Licensing verification on vendored OpenSTA corpus.** Per-file check needed before inclusion. May reduce corpus size if restrictive; acceptable.
 - **FlatBuffers build integration friction.** If `build.rs` codegen causes cross-compilation or CI issues, fall back to checked-in generated code with a documented `flatc` version. Pick one approach and stick to it; flip-flopping is worse than either option.
 - **Tolerance tuning.** Initial ±5% may prove too loose (hides bugs) or too tight (false positives from numerical differences). Plan to re-tune after first real-design data arrives.
-- **WS3 cutover risk.** Deleting the hand-rolled SDF parser risks regressing designs that depend on behaviour it currently provides. Exit criterion 7 requires a clean regression run before WS3 is considered complete. If coverage gaps emerge, walk-back options per ADR 0006 apply: add dialect shims to `opensta-to-ir`, or (now that Phase 3 is deferred) keep the hand-rolled parser available behind a feature flag until dialect parity is reached.
-- **OpenSTA dialect coverage.** OpenSTA may not accept every SDF dialect Jacquard's hand-rolled parser has been patched to handle. Such cases are tracked as either `opensta-to-ir` post-processing fixes or upstream OpenSTA contributions. Under no condition is the fix to reinstate the hand-rolled parser unless walk-back per ADR 0006 is formally triggered.
+- **WS3 cutover risk.** Deleting the hand-rolled SDF parser risks regressing designs that depend on behaviour it currently provides. Exit criterion 7 requires a clean regression run before WS3 is considered complete. If coverage gaps emerge, walk-back options per Decision 0006 apply: add dialect shims to `opensta-to-ir`, or (now that Phase 3 is deferred) keep the hand-rolled parser available behind a feature flag until dialect parity is reached.
+- **OpenSTA dialect coverage.** OpenSTA may not accept every SDF dialect Jacquard's hand-rolled parser has been patched to handle. Such cases are tracked as either `opensta-to-ir` post-processing fixes or upstream OpenSTA contributions. Under no condition is the fix to reinstate the hand-rolled parser unless walk-back per Decision 0006 is formally triggered.
 
 ## Links
 
 - `../project-scope.md`
 - `../timing-correctness.md` — acceptance criteria this plan satisfies.
-- `../adr/0001-opensta-as-oracle.md`
-- `../adr/0002-timing-ir.md`
-- `../spikes/opentimer-sky130.md` — runs in parallel; no dependency either way.
+- `../architecture/decisions/0001-opensta-as-oracle.md`
+- `../architecture/decisions/0002-timing-ir.md`
+- `../architecture/decisions/spikes/opentimer-sky130.md` — runs in parallel; no dependency either way.

@@ -1,6 +1,6 @@
 //! Cell-model IR — a generated, JSON-first, per-cell-type library descriptor.
 //!
-//! Realises [ADR 0019](../../../docs/adr/0019-cell-model-ir.md). One
+//! Realises [Decision 0019](../../../docs/architecture/decisions/0019-cell-model-ir.md). One
 //! descriptor carries *everything per-cell-type about a library*; Jacquard
 //! core consumes it as its only source of cell semantics, so the per-PDK Rust
 //! classifiers, the `build.rs` pin-table generation, the runtime
@@ -18,7 +18,7 @@
 //! - **L4 — timing characterization** ([`CellTiming`], decision D5):
 //!   per-cell-type combinational / clock→Q delays and setup/hold constraints,
 //!   plus SRAM/macro timing, **keyed by corner** ([`Corner`] / [`TimingValue`])
-//!   exactly as the timing IR (ADR 0002, `crates/timing-ir`) does — corner is
+//!   exactly as the timing IR (Decision 0002, `crates/timing-ir`) does — corner is
 //!   the outer key, `min`/`typ`/`max` is the orthogonal within-corner derate.
 //!
 //! The schema is explicitly versioned ([`SCHEMA_MAJOR`] / [`SCHEMA_MINOR`]).
@@ -42,7 +42,7 @@
 //!
 //! Cells are keyed by their **full netlist cell-type name** (e.g.
 //! `gf180mcu_fd_sc_mcu9t5v0__nand2_1`) and pins by their **netlistdb pin-name
-//! string** (`A1`, `Y`, `ZN`). This is the same join the timing IR (ADR 0002)
+//! string** (`A1`, `Y`, `ZN`). This is the same join the timing IR (Decision 0002)
 //! uses, so the two IRs co-reference a design purely through the netlist with
 //! no shared-schema join to maintain.
 //!
@@ -60,7 +60,7 @@
 //! A [`Ref`] names any node plus an inversion bit. Each AND node is the
 //! conjunction of two refs to *earlier* nodes; each output pin maps to a ref.
 //! This is the same and-inverter shape Jacquard's design AIG uses
-//! ([ADR 0014](../../../docs/adr/0014-aig-as-simulation-ir.md)), so splicing is
+//! ([Decision 0014](../../../docs/architecture/decisions/0014-aig-as-simulation-ir.md)), so splicing is
 //! a direct node-id remap at load.
 
 use std::collections::HashMap;
@@ -95,7 +95,7 @@ pub struct CellModelIr {
     /// descriptor names a corner by its index into this list. Empty for a
     /// descriptor that carries no L4 timing (e.g. a logic-only C1 descriptor);
     /// the single-corner common flow has exactly one entry. Mirrors the timing
-    /// IR's `corners` (ADR 0002).
+    /// IR's `corners` (Decision 0002).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub corners: Vec<Corner>,
     /// Name of the corner selected when the user passes no `--corner` (D5).
@@ -293,7 +293,7 @@ impl CombLogic {
     /// Evaluate every output pin for a given assignment of input pin -> bool.
     ///
     /// Pure 2-state evaluation over the AIG; used by round-trip tests and by
-    /// the converter's Liberty-vs-`.v` cross-check (ADR 0019 D6). Returns a
+    /// the converter's Liberty-vs-`.v` cross-check (Decision 0019 D6). Returns a
     /// map from output pin name to value. Returns `Err` if an input pin named
     /// in [`Self::inputs`] is missing from `input_values`.
     pub fn eval(
@@ -570,7 +570,7 @@ pub struct SeqOutput {
 // L4 — timing characterization, corner-keyed (decision D5)
 // ---------------------------------------------------------------------------
 
-/// A PVT corner. Mirrors the timing IR's `Corner` (ADR 0002): every
+/// A PVT corner. Mirrors the timing IR's `Corner` (Decision 0002): every
 /// [`TimingValue`] names one of these by its index into
 /// [`CellModelIr::corners`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

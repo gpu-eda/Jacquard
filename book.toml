@@ -7,7 +7,7 @@ src = "docs"
 # Renders ```d2 fenced blocks to inline SVG at build time by shelling out to the
 # `d2` binary (must be on PATH in the docs CI job). Chosen over mermaid for
 # noticeably better auto-layout on 2-D architecture diagrams; see
-# docs/spikes/architecture-doc-redesign.md.
+# docs/architecture/decisions/spikes/architecture-doc-redesign.md.
 path = "d2"
 layout = "elk"
 

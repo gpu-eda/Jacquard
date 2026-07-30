@@ -115,7 +115,7 @@ this doc and should not be confused with the timing-IR phase numbering in
 | **MC.6+** | Speculation staircase, AOT trace compilation, profile-guided kernel specialization | Demand-driven; deferred until measurement shows residual sync overhead after MC.4 |
 
 **MC.3/MC.4 trigger is now measured (2026-06-07).** Instrumenting the cosim
-loop's batch utilisation (see ADR 0017 amendment, *Measured batch
+loop's batch utilisation (see Decision 0017 amendment, *Measured batch
 utilisation*) shows GPU-peripheral designs run 100% batched, but
 `jtag_minimal` — CPU-side JTAG replay — emits **102,310 single-edge command
 buffers out of 106,117** (96% of all submits; 2.6% of edges). Those per-edge
@@ -279,7 +279,7 @@ Documented now so the design space is on record:
   boundary metadata and existing X-prop infrastructure. Distinct from
   static CDC checking (Spyglass, Real Intent), which is **explicitly out
   of scope** — that's a different product. The jitter-injection half is
-  designed in [ADR 0012](../adr/0012-cdc-jitter-injection.md) and partly
+  designed in [Decision 0012](../architecture/decisions/0012-cdc-jitter-injection.md) and partly
   built; remaining work is tracked in
   [issue #92](https://github.com/gpu-eda/Jacquard/issues/92) /
   [`cdc-jitter-completion.md`](cdc-jitter-completion.md). X-injection

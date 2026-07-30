@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! `liberty-to-cellir`: generate a cell-model-IR descriptor from a Liberty
-//! library (ADR 0019 D6 — the converter crate).
+//! library (Decision 0019 D6 — the converter crate).
 //!
 //! Build/CI-time tool, mirroring `opensta-to-ir`. Not depended on by
 //! jacquard core. Three modules:

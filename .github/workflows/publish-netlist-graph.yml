@@ -1,6 +1,6 @@
 name: Publish netlist-graph
 
-# Publishes the `netlist-graph` Python companion tool to PyPI (ADR 0018).
+# Publishes the `netlist-graph` Python companion tool to PyPI (Decision 0018).
 #
 # - Tagging `netlist-graph-v<X.Y.Z>` builds and publishes to PyPI via
 #   trusted publishing (OIDC — no stored token).

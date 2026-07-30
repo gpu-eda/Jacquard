@@ -2,7 +2,7 @@
 
 **Status:** Draft — under review.
 
-This document is the contract for Jacquard's timing correctness story. It defines *what* must be true; ADRs under `docs/adr/` define *how*; plans under `docs/plans/` execute them.
+This document is the contract for Jacquard's timing correctness story. It defines *what* must be true; ADRs under `docs/architecture/decisions/` define *how*; plans under `docs/plans/` execute them.
 
 ## Scope
 
@@ -20,7 +20,7 @@ Out of scope (tracked elsewhere, addressed later): hard schema limits (no latche
 
 ### P1 — OpenSTA is the oracle
 
-When Jacquard's results disagree with OpenSTA, Jacquard is wrong until demonstrated otherwise. In the shipped release, OpenSTA is never invoked from the `jacquard` runtime binary, and never linked (it is GPL; Jacquard stays permissive). Subprocess invocation from CI, test harnesses, and the standalone `opensta-to-ir` preprocessing tool is acceptable. During development before first release, a runtime subprocess invocation may exist as a contributor-ergonomics convenience (see ADR 0006) — this is explicitly interim and is removed before release. Divergence is never accepted silently: it is fixed, explicitly justified in-doc, or filed as a bug.
+When Jacquard's results disagree with OpenSTA, Jacquard is wrong until demonstrated otherwise. In the shipped release, OpenSTA is never invoked from the `jacquard` runtime binary, and never linked (it is GPL; Jacquard stays permissive). Subprocess invocation from CI, test harnesses, and the standalone `opensta-to-ir` preprocessing tool is acceptable. During development before first release, a runtime subprocess invocation may exist as a contributor-ergonomics convenience (see Decision 0006) — this is explicitly interim and is removed before release. Divergence is never accepted silently: it is fixed, explicitly justified in-doc, or filed as a bug.
 
 ### P2 — No single parse path is its own reference
 
@@ -46,13 +46,13 @@ A canonical intermediate representation (IR) for SDF-equivalent timing annotatio
 - Multi-corner by default.
 - Tags each arc with provenance: source tool, source file, and origin category (asserted / computed / defaulted).
 
-Details: `docs/adr/0002-timing-ir.md`.
+Details: `docs/architecture/decisions/0002-timing-ir.md`.
 
 ### R2 — In-process reference STA — *deferred*
 
 The original requirement was an in-process STA engine that computes per-endpoint arrival/slack from Liberty + SPEF, linked directly (subject to the permissive-license constraint in `project-scope.md`), cross-checking Jacquard's SDF-derived timing at load time and on demand during sim.
 
-Preferred implementation was OpenTimer; the SKY130 spike (`docs/spikes/opentimer-sky130.md`) found OpenTimer's input pipeline unfit for OpenROAD-flow outputs, and ADR 0003 was Superseded (commit `d002bde`). The cross-check role is now performed out of process by OpenSTA via `opensta-to-ir` (ADR 0001 — sole STA path); the in-process variant is parked until a fit-for-purpose permissive option appears (libreda-sta or in-house walker, both behind a future ADR).
+Preferred implementation was OpenTimer; the SKY130 spike (`docs/architecture/decisions/spikes/opentimer-sky130.md`) found OpenTimer's input pipeline unfit for OpenROAD-flow outputs, and Decision 0003 was Superseded (commit `d002bde`). The cross-check role is now performed out of process by OpenSTA via `opensta-to-ir` (Decision 0001 — sole STA path); the in-process variant is parked until a fit-for-purpose permissive option appears (libreda-sta or in-house walker, both behind a future ADR).
 
 ### R3 — Oracle-backed CI
 
@@ -70,7 +70,7 @@ For any sim run that reports timing violations, or for any user-requested critic
 
 ### R5 — Private PDK testing
 
-A private test track for commercial PDKs exists, gated on per-PDK environment variables (e.g. `<VENDOR>_PDK_PATH`). Tests skip cleanly when PDK files are unavailable; CI runs with PDK access execute them. No PDK-derived artifacts are committed. Details: `docs/adr/0004-private-pdk-testing.md`.
+A private test track for commercial PDKs exists, gated on per-PDK environment variables (e.g. `<VENDOR>_PDK_PATH`). Tests skip cleanly when PDK files are unavailable; CI runs with PDK access execute them. No PDK-derived artifacts are committed. Details: `docs/architecture/decisions/0004-private-pdk-testing.md`.
 
 ## Non-functional requirements
 
@@ -103,8 +103,8 @@ Phases 1 and beyond are planned at the start of each phase, not all up front.
 
 Items not settled by this document; they resolve in ADRs, spike outcomes, or phase plans:
 
-- Exact IR schema format (FlatBuffers / Cap'n Proto / other). Tracked in ADR 0002.
-- ~~Whether OpenTimer handles SKY130 Liberty robustly.~~ Resolved: spike failed Q2 on SKY130; ADR 0003 Superseded.
+- Exact IR schema format (FlatBuffers / Cap'n Proto / other). Tracked in Decision 0002.
+- ~~Whether OpenTimer handles SKY130 Liberty robustly.~~ Resolved: spike failed Q2 on SKY130; Decision 0003 Superseded.
 - Whether SPEF gets its own IR or is embedded in the timing IR. Deferred; likely separate.
 - Whether the IR is Jacquard-local or shared across a broader tooling ecosystem. External decision; answer affects investment level and schema stability requirements.
 
@@ -117,9 +117,9 @@ This document supersedes the "±5% arrival tolerance" convention from `docs/timi
 - `docs/simulation-architecture.md` — current pipeline.
 - `docs/timing-simulation.md` — current timing-sim usage.
 - `docs/timing-validation.md` — current validation methodology (to be superseded).
-- `docs/adr/` — decisions executed through this document.
+- `docs/architecture/decisions/` — decisions executed through this document.
 - `docs/plans/` — phased implementation.
-- `docs/spikes/` — time-boxed experiments.
+- `docs/architecture/decisions/spikes/` — time-boxed experiments.
 
 ---
 

@@ -1,6 +1,6 @@
 // Jacquard Timing IR — SDF-equivalent timing annotations.
 //
-// Design rationale: docs/adr/0002-timing-ir.md.
+// Design rationale: docs/architecture/decisions/0002-timing-ir.md.
 // Scope boundary: this schema represents timing annotation data ONLY.
 // It is not a netlist representation, not a timing graph, and not cell
 // characterisation. Extensions toward those adjacent formats are rejected
@@ -164,7 +164,7 @@ enum VendorSource : byte {
 }
 
 // A vendor-specific annotation, preserved rather than silently dropped.
-// Per ADR 0002 principle: vendor extensions are lossless passthrough.
+// Per Decision 0002 principle: vendor extensions are lossless passthrough.
 // Consumers opt in to understanding a given extension kind; unknowns
 // travel through as opaque bytes.
 table VendorExtension {

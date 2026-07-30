@@ -4,7 +4,7 @@
 
 Jacquard is a gate-level **emulator** — it maps a *synthesized* and-inverter
 graph onto a virtual manycore GPU processor (see
-[ADR 0014](adr/0014-aig-as-simulation-ir.md)). So the direct input to
+[Decision 0014](architecture/decisions/0014-aig-as-simulation-ir.md)). So the direct input to
 `jacquard sim` / `cosim` is a **gate-level Verilog netlist**: structural
 Verilog whose leaf cells are `aigpdk`, SKY130, or GF180MCU standard cells.
 
@@ -18,7 +18,7 @@ a commercial tool like DC gives better QoR).
 
 > **Roadmap:** an integrated `jacquard build design.v` on-ramp (Yosys via
 > YoWASP, no manual synthesis) is planned — see
-> [ADR 0021](adr/0021-behavioral-rtl-support.md) and
+> [Decision 0021](architecture/decisions/0021-behavioral-rtl-support.md) and
 > [#162](https://github.com/gpu-eda/Jacquard/issues/162). Until then, synthesize
 > first, then `sim`.
 
@@ -106,11 +106,11 @@ the parser does **not** accept:
   check against the X-mask ([#106](https://github.com/gpu-eda/Jacquard/issues/106))
   and lowering an `$isunknown` SVA subset from RTL to that spec
   ([#107](https://github.com/gpu-eda/Jacquard/issues/107)), building on selective
-  X-propagation ([ADR 0016](adr/0016-selective-x-propagation.md)).
+  X-propagation ([Decision 0016](architecture/decisions/0016-selective-x-propagation.md)).
 
 ## See also
 
 - [Synthesis Flow](synthesis-flow.md) — RTL → gate-level netlist (the step above).
 - [Testbench Interop](interop.md) — UVM / cocotb / SVA, and record-and-replay.
-- [ADR 0014](adr/0014-aig-as-simulation-ir.md) — why the input is a synthesized AIG.
-- [ADR 0021](adr/0021-behavioral-rtl-support.md) — the planned integrated RTL on-ramp.
+- [Decision 0014](architecture/decisions/0014-aig-as-simulation-ir.md) — why the input is a synthesized AIG.
+- [Decision 0021](architecture/decisions/0021-behavioral-rtl-support.md) — the planned integrated RTL on-ramp.

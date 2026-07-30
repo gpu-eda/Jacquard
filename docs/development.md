@@ -63,7 +63,7 @@ submodule. NVDLA is the smallest and the usual first thing to try.
 | `src/pe.rs` | maps a partition onto one block's resources; the limits below live here |
 | `src/flatten.rs` | emits `FlattenedScriptV1`, the packed instruction stream the kernel runs |
 | `src/aigpdk.rs` | the AIGPDK standard-cell interface (AND, DFF, clock gate, SRAM) |
-| `src/synth.rs` | the embedded Yosys on-ramp (ADR 0021), behind `synth` |
+| `src/synth.rs` | the embedded Yosys on-ramp (Decision 0021), behind `synth` |
 | `csrc/kernel_v1.metal` | the Metal kernel |
 | `csrc/kernel_v1.cu`, `kernel_v1.hip.cpp` | CUDA and HIP, sharing `kernel_v1_impl.cuh` |
 | `crates/` | `timing-ir`, `opensta-to-ir`, `cell-model-ir`, `liberty-parse`, `liberty-to-cellir`, `cell-decomp` |
@@ -77,8 +77,8 @@ NetlistDB → AIG → StagedAIG → Partitions → FlattenedScript → GPU kerne
 ```
 
 [Simulation Architecture](simulation-architecture.md) walks each stage. For
-*why* it is shaped this way, [ADR 0014](adr/0014-aig-as-simulation-ir.md)
-explains the AIG choice and [ADR 0015](adr/0015-boomerang-execution-model.md)
+*why* it is shaped this way, [Decision 0014](architecture/decisions/0014-aig-as-simulation-ir.md)
+explains the AIG choice and [Decision 0015](architecture/decisions/0015-boomerang-execution-model.md)
 the boomerang execution model.
 
 ## The constraint that shapes everything
@@ -153,7 +153,7 @@ to the pinned copy, so a link in an old release keeps meaning what it meant. See
 
 ## Conventions
 
-- **[ADRs](adr/README.md)** record decisions worth understanding later, and are
+- **[ADRs](architecture/decisions/README.md)** record decisions worth understanding later, and are
   append-only: when reality moves past one, amend it rather than rewriting it.
   An ADR's status is a claim about the code, so check it against the code.
 - **[Plans](plans/README.md)** hold work in progress; deferred work gets a plan

@@ -10,7 +10,7 @@ use tempfile::TempDir;
 use crate::dump::{parse_dump, DumpDocument, ParseError};
 
 /// Minimum OpenSTA version Jacquard has been tested with. Matches the
-/// commit pinned at `vendor/opensta/` (per ADR 0005). Older versions are
+/// commit pinned at `vendor/opensta/` (per Decision 0005). Older versions are
 /// rejected with a hard error in `locate_and_check`.
 pub const MIN_TESTED_OPENSTA_VERSION: OpenstaVersion = OpenstaVersion {
     major: 3,
@@ -382,7 +382,7 @@ pub fn run(
     // — including offending wrappers — behind. Files that don't
     // contain a `module <top>` declaration are passed through
     // unchanged so hierarchical designs with sub-modules split across
-    // multiple files still link cleanly. See ADR 0009.
+    // multiple files still link cleanly. See Decision 0009.
     let filtered_verilog_paths = filter_verilog_inputs(inv.verilog, inv.top, dir.path())?;
     let verilog_arg = paths_to_lines(&filtered_verilog_paths);
 
@@ -448,7 +448,7 @@ fn paths_to_lines(paths: &[PathBuf]) -> String {
 /// wrappers. Files that don't contain `module <top>` are passed
 /// through unchanged. Filtered outputs are written into `tmp_dir`
 /// with unique names; the returned paths replace the original
-/// `--verilog` paths in the OpenSTA invocation. See ADR 0009.
+/// `--verilog` paths in the OpenSTA invocation. See Decision 0009.
 fn filter_verilog_inputs(
     inputs: &[PathBuf],
     top: &str,

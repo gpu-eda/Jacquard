@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! `liberty-to-cellir` CLI (ADR 0019 D6).
+//! `liberty-to-cellir` CLI (Decision 0019 D6).
 //!
 //! ```text
 //! liberty-to-cellir <input.lib> [-o out.json] [--functional-v <dir>] [--prefix <p>]...
@@ -32,7 +32,7 @@ use liberty_to_cellir::sequential::SeqNote;
 #[derive(ClapParser, Debug)]
 #[command(
     name = "liberty-to-cellir",
-    about = "Generate a cell-model-IR descriptor from a Liberty library (ADR 0019 D6)."
+    about = "Generate a cell-model-IR descriptor from a Liberty library (Decision 0019 D6)."
 )]
 struct Cli {
     /// Input Liberty library (.lib). If it carries no `cell` groups, per-cell

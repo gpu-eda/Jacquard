@@ -2,7 +2,7 @@
 
 Jacquard's timing intermediate representation — SDF-equivalent timing annotation data in a schema-versioned, zero-copy FlatBuffers format.
 
-Design rationale: [`docs/adr/0002-timing-ir.md`](../../docs/adr/0002-timing-ir.md).
+Design rationale: [`docs/architecture/decisions/0002-timing-ir.md`](../../docs/architecture/decisions/0002-timing-ir.md).
 Requirements: [`docs/timing-correctness.md`](../../docs/timing-correctness.md) R1.
 
 ## Scope

@@ -520,7 +520,7 @@ pub fn load_design(args: &DesignArgs) -> LoadedDesign {
         );
     }
 
-    // Load timing IR if provided (preferred path, per docs/adr/0006-sdf-preprocessing-model.md).
+    // Load timing IR if provided (preferred path, per docs/architecture/decisions/0006-sdf-preprocessing-model.md).
     if let Some(ref ir_path) = args.timing_ir {
         load_timing_ir(
             &mut script,
