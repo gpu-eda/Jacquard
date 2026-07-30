@@ -492,4 +492,4 @@ grep '\$var' safe_flat.vcd
 
 **Document Version**: 1.0
 **Last Updated**: 2025-01-08
-**Related**: simulation-architecture.md
+**Related**: architecture/simulation-engine.md

@@ -178,14 +178,14 @@ opcode dispatch, no conditional branching, maximum SIMT utilisation.
   > supported (it lowers to an AIG overlay, `wire_dff_reset_set_overlay`);
   > "async reset" was never the restriction. What remains unsupported is
   > raw level-sensitive latches in the logic and asynchronous *sequential*
-  > (self-timed) feedback. See `docs/simulation-architecture.md`
+  > (self-timed) feedback. See `docs/architecture/simulation-engine.md`
   > § "No Latch or Asynchronous Sequential Logic Support".
 
   *Original decision:* The AIG assumes clean register
   boundaries: DFFs capture on clock edges, combinational logic is
   acyclic between registers.  Level-sensitive latches and
   combinational loops would require iterative evaluation that the
-  current pipeline doesn't support (see `docs/simulation-architecture.md`
+  current pipeline doesn't support (see `docs/architecture/simulation-engine.md`
   § "Known Issues").
 - **Decomposition quality matters.** A poor decomposition of a
   complex cell (e.g., a mux-heavy datapath cell) can produce a deep
