@@ -155,7 +155,11 @@ jobs:
           curl -sSL https://github.com/terrastruct/d2/releases/download/v0.7.1/d2-v0.7.1-linux-amd64.tar.gz \
             | tar -xz -C /tmp
           install /tmp/d2-v0.7.1/bin/d2 ~/.cargo/bin/d2
-          cargo install mdbook-d2 --version 0.3.8 --locked
+          # mdbook-d2 may already sit in the restored ~/.cargo/bin cache; a plain
+          # `cargo install` then fails "binary already exists". Reinstall only when
+          # it's missing or the wrong version, so a warm cache stays a fast no-op.
+          mdbook-d2 --version 2>/dev/null | grep -q '0\.3\.8' \
+            || cargo install mdbook-d2 --version 0.3.8 --locked --force
 
       - name: Build mdbook
         run: mdbook build
