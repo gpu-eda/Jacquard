@@ -30,9 +30,9 @@ Stable contracts (additive-only, breaking changes require a major
 bump and a deprecation window):
 
 - `--timing-report` JSON schema — `src/timing_report.rs::SCHEMA_VERSION`,
-  governed by ADR 0008.
+  governed by Decision 0008.
 - Timing IR FlatBuffers schema — `crates/timing-ir/schemas/timing_ir.fbs`,
-  governed by ADR 0002.
+  governed by Decision 0002.
 
 CLI flags, log message formats, and `--timing-summary` text output are
 **not** stable parseable contracts; consumers that need to script
@@ -183,7 +183,7 @@ versions independently of the Rust crates.
 These items are tracked in [`docs/plans/post-phase-0-roadmap.md`](plans/post-phase-0-roadmap.md)
 § Release hardening; this section is the visible punch-list:
 
-- [x] Phase 1 (ADR 0008 required outputs) closed.
+- [x] Phase 1 (Decision 0008 required outputs) closed.
 - [x] WS-RH.1 (OpenSTA detection + version check) shipped.
 - [x] Metal CI on `macos-runner-1` green (re-enabled in commit `12e98df`,
       2026-05-12).
@@ -193,7 +193,7 @@ These items are tracked in [`docs/plans/post-phase-0-roadmap.md`](plans/post-pha
 - [ ] **HIP CI** on the AMD runner green on main. Currently disabled
       in `.github/workflows/ci.yml` (`if: ${{ false }}`, ~line 357).
       Re-enable when the AMD runner is online.
-- [ ] **Prebuilt CUDA/HIP binaries** (ADR 0018 Phase 4), when produced, must
+- [ ] **Prebuilt CUDA/HIP binaries** (Decision 0018 Phase 4), when produced, must
       build with `JACQUARD_CUDA_ARCH=all-major` so the kernel ships portable
       SASS for every major arch (`sm_50`…`sm_120` on CUDA ≥ 12.8, Blackwell
       included) plus PTX for the newest — see the README § CUDA target
@@ -240,17 +240,17 @@ enumerated in `NOTICE`. Summary:
   governed by the workspace LICENSE. Submodule pin will be bumped when
   upstream pushes the correction.
 - `vendor/sky130_fd_sc_hd/` — Apache-2.0.
-- `vendor/opensta/` — GPL-3 (subprocess only per ADR 0001 + ADR 0006
+- `vendor/opensta/` — GPL-3 (subprocess only per Decision 0001 + Decision 0006
   § Amendment; never linked, never bundled).
 
 ## Cross-references
 
 - [`CHANGELOG.md`](https://github.com/gpu-eda/Jacquard/blob/main/CHANGELOG.md) — release log.
-- [`docs/adr/0008-structured-timing-output.md`](adr/0008-structured-timing-output.md)
+- [`docs/architecture/decisions/0008-structured-timing-output.md`](architecture/decisions/0008-structured-timing-output.md)
   — `--timing-report` stability contract.
-- [`docs/adr/0002-timing-ir.md`](adr/0002-timing-ir.md) — IR schema
+- [`docs/architecture/decisions/0002-timing-ir.md`](architecture/decisions/0002-timing-ir.md) — IR schema
   versioning.
-- [`docs/adr/0006-sdf-preprocessing-model.md`](adr/0006-sdf-preprocessing-model.md)
+- [`docs/architecture/decisions/0006-sdf-preprocessing-model.md`](architecture/decisions/0006-sdf-preprocessing-model.md)
   — OpenSTA bundling rules.
 - [`docs/project-scope.md`](project-scope.md) — license posture
   contract.

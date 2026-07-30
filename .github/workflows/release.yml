@@ -1,7 +1,7 @@
 name: Release
 
 # Builds prebuilt binaries and attaches them to a GitHub Release.
-# See ADR 0018 and docs/plans/distribution.md.
+# See Decision 0018 and docs/plans/distribution.md.
 #
 # - Tagging `v<X.Y.Z>` builds, smoke-tests, and publishes the release with the
 #   macOS/Metal binary attached (or attaches it to an existing release of that
@@ -86,7 +86,7 @@ jobs:
           # binstall requires every non-optional package bin to be in the
           # archive, so it must ship alongside jacquard (it builds without the
           # metal feature, but one invocation keeps the build cache shared).
-          # `synth` (ADR 0021): embeds YoWASP Yosys so the shipped binary accepts
+          # `synth` (Decision 0021): embeds YoWASP Yosys so the shipped binary accepts
           # behavioral RTL directly (`jacquard sim design.v`). The ~39 MB yosys.wasm
           # is not bundled yet — auto-fetch is Phase 4; until then the on-ramp needs
           # `--yosys-wasm` / an installed `yowasp-yosys`. A pre-synthesized netlist

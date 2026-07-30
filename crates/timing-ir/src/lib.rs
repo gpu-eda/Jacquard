@@ -1,10 +1,10 @@
 //! Jacquard timing intermediate representation.
 //!
 //! SDF-equivalent timing annotation data in a schema-versioned, zero-copy
-//! FlatBuffers format. See [`docs/adr/0002-timing-ir.md`] for design
+//! FlatBuffers format. See [`docs/architecture/decisions/0002-timing-ir.md`] for design
 //! rationale and [`docs/timing-correctness.md`] R1 for requirements.
 //!
-//! [`docs/adr/0002-timing-ir.md`]: https://github.com/chipflow/Jacquard/blob/main/docs/adr/0002-timing-ir.md
+//! [`docs/architecture/decisions/0002-timing-ir.md`]: https://github.com/chipflow/Jacquard/blob/main/docs/architecture/decisions/0002-timing-ir.md
 //! [`docs/timing-correctness.md`]: https://github.com/chipflow/Jacquard/blob/main/docs/timing-correctness.md
 //!
 //! The IR schema lives in `schemas/timing_ir.fbs` (source of truth).

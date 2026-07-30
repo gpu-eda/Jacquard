@@ -1,6 +1,6 @@
-# Plan: complete ADR 0012 CDC jitter injection
+# Plan: complete Decision 0012 CDC jitter injection
 
-Tracks the deferred half of [ADR 0012](../adr/0012-cdc-jitter-injection.md).
+Tracks the deferred half of [Decision 0012](../architecture/decisions/0012-cdc-jitter-injection.md).
 Issue: [#92](https://github.com/gpu-eda/Jacquard/issues/92).
 
 ## Where it stands
@@ -14,7 +14,7 @@ else — it does not reach the setup/hold checker, model-driven clocks,
 or coincident-edge ordering.
 
 The goal of this plan is to make jitter actually stress CDC paths, then
-extend it to model-driven clocks and tidy the loose ends, so ADR 0012's
+extend it to model-driven clocks and tidy the loose ends, so Decision 0012's
 present-tense design fully matches the code.
 
 ## Phase 1 — Jitter reaches the timing checker (the core value)
@@ -78,7 +78,7 @@ appears. Gives every PR a cheap CDC regression.
 
 ## Out of scope (separate ADRs / plans)
 
-- X-injection on CDC paths (needs MC.1 island partitioner — ADR 0012
+- X-injection on CDC paths (needs MC.1 island partitioner — Decision 0012
   "Deferred").
 - Non-uniform jitter distributions (Gaussian period jitter, etc.) — the
   seed+budget interface is distribution-agnostic, add later.

@@ -5,7 +5,7 @@ inline SVG at build time. They are theme-adaptive: colours and fonts come from t
 active mdBook theme, so a diagram reads correctly in light, navy, coal, ayu, and
 rust, and recolours on a live theme switch. This page is the how-to; the *why*
 (D2 over mermaid, the layout choices) is in
-[the redesign spike](spikes/architecture-doc-redesign.md).
+[the redesign spike](architecture/decisions/spikes/architecture-doc-redesign.md).
 
 ## Adding a diagram
 

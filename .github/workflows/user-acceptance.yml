@@ -8,7 +8,7 @@ name: User Acceptance (Metal)
 # The same script gates the release in release.yml. This standalone workflow is
 # for validating the user-install experience on demand (e.g. after touching the
 # Metal kernel, packaging, or the install docs) without cutting a release.
-# ADR 0018 / docs/plans/distribution.md.
+# Decision 0018 / docs/plans/distribution.md.
 
 on:
   workflow_dispatch:
@@ -42,7 +42,7 @@ jobs:
 
       - name: Build jacquard (Metal) + opensta-to-ir
         run: |
-          # synth (ADR 0021): shipped binary accepts behavioral RTL (yosys.wasm
+          # synth (Decision 0021): shipped binary accepts behavioral RTL (yosys.wasm
           # auto-fetch is Phase 4; on-ramp needs --yosys-wasm until then).
           cargo build --release --features metal,synth --bin jacquard
           cargo build --release --manifest-path crates/opensta-to-ir/Cargo.toml --bin opensta-to-ir

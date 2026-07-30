@@ -1,6 +1,6 @@
 # Plan: selective X-propagation in cosim
 
-Extends [ADR 0016](../adr/0016-selective-x-propagation.md) (selective
+Extends [Decision 0016](../architecture/decisions/0016-selective-x-propagation.md) (selective
 X-propagation, today `sim`-only) to the reactive `cosim` path. Issue:
 [#95](https://github.com/gpu-eda/Jacquard/issues/95).
 
@@ -54,7 +54,7 @@ X originates from four places; cosim must model all four:
 | **Undriven input pad** | no model / constant / clock / reset drives it | input X-mask = X for every primary-input bit *not* in the driven set |
 | **Bidir pad input side** | `OE` deasserted and nothing external drives it | per-edge: input X-mask = `OE ? known : X`, reading `OE` (the `__oe` observable) |
 
-The first two are sequential power-up X (ADR 0016's original scope). The
+The first two are sequential power-up X (Decision 0016's original scope). The
 **last two are new** — input/IO X-sources the `sim` static-VCD path never
 had to model, and the reason this is more than "carry the sim machinery
 over."
@@ -142,7 +142,7 @@ within the primary inputs is X.
 
 ## ADR / docs impact
 
-- **Amend ADR 0016**: record the cosim extension and broaden the
+- **Amend Decision 0016**: record the cosim extension and broaden the
   X-source taxonomy to include undriven input pads + bidir-OE (the
   original ADR covered only sequential power-up X).
 - Fold the IO X-source rules into `docs/selective-x-propagation.md`.

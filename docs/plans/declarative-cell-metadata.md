@@ -3,10 +3,10 @@
 **Status:** Implemented — historical record. Tier 1, minimal Tier 2,
 and the port-mapping schema have all landed.
 **ADRs:**
-- [0010 — Declarative cell metadata for PDK enablement](../adr/0010-declarative-cell-metadata.md)
+- [0010 — Declarative cell metadata for PDK enablement](../architecture/decisions/0010-declarative-cell-metadata.md)
   (Tier 1 + minimal Tier 2)
-- [0011 — RAM port-mapping schema](../adr/0011-ram-port-mapping-schema.md)
-  (the port-mapping extension originally deferred by ADR 0010)
+- [0011 — RAM port-mapping schema](../architecture/decisions/0011-ram-port-mapping-schema.md)
+  (the port-mapping extension originally deferred by Decision 0010)
 **Issues:** [#67](https://github.com/gpu-eda/Jacquard/issues/67),
 [#80](https://github.com/gpu-eda/Jacquard/issues/80).
 **Driving designs:** the wafer.space `chip_top.pnl.v` blocked on
@@ -24,7 +24,7 @@ RAMs with real backing storage:
   (landed 2026-05-19 in PR #65/#68).
 - **Tier 2 minimal**: `kind` discriminator in TOML, opaque-RAM
   mode (landed alongside Tier 1).
-- **Port-mapping schema** (ADR 0011, v1.1): `[cells.NAME.ram]`
+- **Port-mapping schema** (Decision 0011, v1.1): `[cells.NAME.ram]`
   sub-table for explicit-port RAMs with backing storage. Landed
   in this PR alongside `SramInitConfig` ELF preload (closes #80).
 
@@ -35,7 +35,7 @@ RAMs with real backing storage:
    `sverilogparse` at startup; results merged into a runtime
    `LeafPinProvider` extension.
 2. **`<PATH>.cells.toml` autoload + `--cell-manifest <PATH>`
-   override.** TOML schema as in ADR 0010 § Tier 2. Required
+   override.** TOML schema as in Decision 0010 § Tier 2. Required
    field `schema_version = "1.0"`. Per-cell `kind` discriminator,
    v1.0 vocabulary.
 3. **New code path in `aig.rs`**: after `PdkVariant::classify` falls
@@ -81,7 +81,7 @@ loop confirms shape.
   `--cell-manifest` flag still wins for users who want a single
   consolidated file.
 - **Conflict policy**: if a cell name appears both in a built-in
-  classifier AND in a manifest, built-in wins (per ADR 0010
+  classifier AND in a manifest, built-in wins (per Decision 0010
   integration ordering). Warn on conflict to surface accidental
   collisions.
 - **Empty-library noise**: parsing a `.v` file containing only
@@ -91,7 +91,7 @@ loop confirms shape.
 ## Not promised
 
 - Memory contents simulation for `kind = "ram"` in v1.0. Documented
-  in ADR 0010 § "kind = ram semantics in v1.0".
+  in Decision 0010 § "kind = ram semantics in v1.0".
 - Stable opaque-RAM port routing beyond "outputs are X-source
   slots". The set of outputs is what `sverilogparse` reports; if a
   cell's port list changes, the routing follows.

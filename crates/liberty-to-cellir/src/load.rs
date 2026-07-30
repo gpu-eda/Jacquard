@@ -2,7 +2,7 @@
 
 //! Liberty library loading — shared by the `liberty-to-cellir` CLI and by
 //! callers that drive the converter as a library (e.g. Jacquard's `build.rs`
-//! build-time descriptor generation, ADR 0019 D7).
+//! build-time descriptor generation, Decision 0019 D7).
 //!
 //! ## Split-library handling
 //!
@@ -14,7 +14,7 @@
 //!
 //! File discovery is deterministic (`files.sort()` before merge) so the
 //! resulting [`cell_model_ir::CellModelIr`] — and its serialized JSON — is
-//! byte-identical across repeated runs (ADR 0019 D7 determinism requirement).
+//! byte-identical across repeated runs (Decision 0019 D7 determinism requirement).
 
 use std::path::{Path, PathBuf};
 

@@ -219,4 +219,4 @@ Then either set `JACQUARD_OPENSTA_BIN` to the path printed by `./scripts/build-o
 | `Detected OpenSTA v3.2.0, newer than the latest tested version v3.1.0.` (warning) | OpenSTA version is newer than what Jacquard's test corpus has been validated against. Simulation proceeds. | Report any timing discrepancies as bugs; we'll bump the tested-version range when CI catches up. |
 | `--sdf requires --liberty <PATH>.` | OpenSTA needs the Liberty library to link the design. | Pass `--liberty <PATH>` alongside `--sdf`. |
 
-For licensing context (Jacquard is permissively-licensed, OpenSTA is GPL-3, and Jacquard's runtime subprocess invocation is permitted but bundling is not), see [`adr/0006-sdf-preprocessing-model.md`](adr/0006-sdf-preprocessing-model.md).
+For licensing context (Jacquard is permissively-licensed, OpenSTA is GPL-3, and Jacquard's runtime subprocess invocation is permitted but bundling is not), see [`architecture/decisions/0006-sdf-preprocessing-model.md`](architecture/decisions/0006-sdf-preprocessing-model.md).

@@ -2,7 +2,7 @@
 
 //! Liberty `function` expression -> [`cell_model_ir::CombLogic`] (single output).
 //!
-//! This is the crux of the converter (ADR 0019 D3/D6): it turns a Liberty
+//! This is the crux of the converter (Decision 0019 D3/D6): it turns a Liberty
 //! boolean function string into a pre-built and-inverter graph that the
 //! runtime splices into the design AIG with no further decomposition.
 //!

@@ -3163,7 +3163,7 @@ fn run_cosim_generic<B: CosimBackend>(
     // Each tap samples a bundle of design output nets per triggered edge and
     // streams packed bytes out a UNIX socket. Reuses the per-edge vcd_snapshot
     // ring below; drives nothing, so no batch=1 penalty. See
-    // docs/spikes/video-streaming-tap.md.
+    // docs/architecture/decisions/spikes/video-streaming-tap.md.
     let mut stream_taps: Vec<signal_stream::SignalStreamTap> = Vec::new();
     for cfg in config.effective_signal_streams() {
         let resolve = |name: &str| {

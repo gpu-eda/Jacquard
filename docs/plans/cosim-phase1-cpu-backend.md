@@ -2,7 +2,7 @@
 
 **Status:** Proposed (implementation plan for Phase 1 of #105).
 **Parent plan:** [`cosim-backend-portability.md`](./cosim-backend-portability.md) (staging).
-**Architecture:** [ADR 0017 — Amendment 2026-06-07](../adr/0017-cosim-execution-model.md).
+**Architecture:** [Decision 0017 — Amendment 2026-06-07](../architecture/decisions/0017-cosim-execution-model.md).
 **Base:** stacks on Phase 0 (branch `cosim-backend-seam-phase0`, PR #118 —
 `CosimBackend` trait + `MetalBackend` extracted, Metal bit-identical).
 
@@ -138,7 +138,7 @@ shift-register baud FSM).
      `states_buffer`/`sram_data_buffer` loop-body reads through `state()`/
      `sram()`. `run_cosim` stays concrete-typed.
    - **3b-i** — route the remaining concrete-field reads (groups C+D) off
-     `MetalBackend` fields, **decoded-records seam** (ADR 0017 Layer 3):
+     `MetalBackend` fields, **decoded-records seam** (Decision 0017 Layer 3):
      - *Flash diagnostics (C):* `FlashModelParams`/`FlashDinParams` reads become
        agnostic locals (derived from `config`+`gpio_map`, as `build_flash_buffers`
        does). `FlashState` reads → `flash_d_i() -> u8` (functional, for

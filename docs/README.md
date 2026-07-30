@@ -18,9 +18,9 @@ Start here if you're considering a feature contribution or want to understand Ja
 - **[Project Scope & Guarantees](project-scope.md)**: Top-level contract — what Jacquard is for, what it isn't, licensing and architecture constraints, stability tiers.
 - **[Why Jacquard](why-jacquard.md)**: Honest positioning vs. STA tools and event-driven simulators; what's unique, what isn't, and what output interface would let users extract the value.
 - **[Timing Correctness](timing-correctness.md)**: Scoped requirements for timing accuracy, validation, and the forthcoming timing IR.
-- **[Timing Model Extensions](timing-model-extensions.md)**: Pre-spike design notes for δ(T) dynamic delay, clock-tree skew, and wire delay at scale. Formalised in ADR 0007.
-- **[Post-Phase-0 Roadmap](plans/post-phase-0-roadmap.md)**: Sequencing of Phase 1+ work covering structured timing output (ADR 0008) and timing model fidelity (ADR 0007). (OpenTimer integration was originally Phase 1's centrepiece; ADR 0003 was Superseded by the spike — OpenSTA out of process is now the sole STA path per ADR 0001.)
-- **[Architecture Decision Records](adr/README.md)**: Design decisions and their rationale (numbered, per-decision). See the index for status and how the ADRs relate.
+- **[Timing Model Extensions](timing-model-extensions.md)**: Pre-spike design notes for δ(T) dynamic delay, clock-tree skew, and wire delay at scale. Formalised in Decision 0007.
+- **[Post-Phase-0 Roadmap](plans/post-phase-0-roadmap.md)**: Sequencing of Phase 1+ work covering structured timing output (Decision 0008) and timing model fidelity (Decision 0007). (OpenTimer integration was originally Phase 1's centrepiece; Decision 0003 was Superseded by the spike — OpenSTA out of process is now the sole STA path per Decision 0001.)
+- **[Architecture Decision Records](architecture/decisions/README.md)**: Design decisions and their rationale (numbered, per-decision). See the index for status and how the ADRs relate.
 - **[Implementation Plans](plans/README.md)**: Phased implementation plans with entry and exit criteria. See the index for status and reading order.
 - **[Spikes](spikes/)**: Time-boxed experiments and their outcomes.
 
@@ -161,7 +161,7 @@ reference docs):
 - [ ] GPU kernel optimization internals (profiling, backend-specific tuning)
 
 Now covered: custom cell libraries → [Adding a New PDK](adding-a-pdk.md) +
-ADR 0010/0011; VCD scope behaviour → [Troubleshooting VCD](troubleshooting-vcd.md).
+Decision 0010/0011; VCD scope behaviour → [Troubleshooting VCD](troubleshooting-vcd.md).
 
 ## Related Resources
 

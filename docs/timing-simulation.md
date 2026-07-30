@@ -20,7 +20,7 @@ Phase 1 closed 2026-05-02; see [`plans/post-phase-0-roadmap.md`](plans/post-phas
 | OpenSTA detection + version check | ✅ |
 | Multi-corner timing IR (`--timing-corner <name>`) | ✅ |
 | `--sdf-corner` (min/typ/max selection from one SDF) | ⚠ One corner at a time |
-| Per-receiver wire delay (Pillar C Tier 1) | ❌ Phase 2 (blocked on ADR 0007) |
+| Per-receiver wire delay (Pillar C Tier 1) | ❌ Phase 2 (blocked on Decision 0007) |
 
 **What "HIP" means above.** HIP is two quite different things, and for most of
 this project's life the table only ever meant the first:
@@ -33,7 +33,7 @@ this project's life the table only ever meant the first:
   there at all until the non-cooperative fallback landed: the device has no
   cooperative launch, so the grid-wide barrier `sim` relies on is unavailable
   and the host drives one launch per (cycle, stage) instead. See
-  [`spikes/amd-laptop-backend.md`](spikes/amd-laptop-backend.md).
+  [`architecture/decisions/spikes/amd-laptop-backend.md`](architecture/decisions/spikes/amd-laptop-backend.md).
 
 Both are now covered by CI and both pass, so the ✅s above are accurate for
 each. The distinction still matters when reading a green tick: it is what hid

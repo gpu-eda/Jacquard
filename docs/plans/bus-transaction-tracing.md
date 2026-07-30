@@ -163,7 +163,7 @@ Yosys/scalar/structural naming conventions.
 `tests/apb_trace/` — a dedicated synthesized APB3 design (the Hazard3
 JTAG-DM post-PnR netlist drops the APB addr/data nets during flattening,
 so a names-preserved design was built instead). CI step:
-`Run APB3 bus-trace cosim (ADR 0013)`. Phases 2–3 remain.
+`Run APB3 bus-trace cosim (Decision 0013)`. Phases 2–3 remain.
 
 ## Phasing
 

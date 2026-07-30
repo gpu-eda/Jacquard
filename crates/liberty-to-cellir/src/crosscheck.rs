@@ -5,7 +5,7 @@
 //! For a combinational cell that has BOTH a Liberty-derived [`CombLogic`]
 //! AND a discoverable `functional.v` model, evaluate both over every input
 //! assignment and surface any disagreement. This is the eval-based check
-//! ADR 0019 D6 calls for — it reuses `cell_decomp`'s `.v` evaluator as the
+//! Decision 0019 D6 calls for — it reuses `cell_decomp`'s `.v` evaluator as the
 //! oracle rather than rebuilding an AIG from the `.v`.
 //!
 //! Wide cells (input count above [`MAX_EXHAUSTIVE_INPUTS`]) are skipped from
@@ -236,7 +236,7 @@ pub fn check_cell(cell: &CellModel, index: &ModelIndex) -> CellCheck {
     }
 }
 
-/// Outcome of the L4 **arc-set agreement** check for one cell (ADR 0019 D6):
+/// Outcome of the L4 **arc-set agreement** check for one cell (Decision 0019 D6):
 /// does the Liberty-derived delay-arc set match the `.v` `specify` delay-path
 /// set?
 #[derive(Debug, Clone, PartialEq, Eq)]

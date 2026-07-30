@@ -8,7 +8,7 @@ This document defines what a handoff is, what it isn't, when to write one, and e
 
 Decision rationale, technical context, and project state all have natural homes:
 
-- **ADRs** (`docs/adr/`) capture architectural decisions and their *why*.
+- **ADRs** (`docs/architecture/decisions/`) capture architectural decisions and their *why*.
 - **Design docs** (`docs/timing-model-extensions.md`, etc.) capture *how* things work.
 - **Plan docs** (`docs/plans/phase-0-ir-and-oracle.md`, `post-phase-0-roadmap.md`) capture *what's left* and the next workstream slices.
 
@@ -63,7 +63,7 @@ If the session ended at a clean stopping point (everything merged, all decisions
 
 ## Resolution: fold, then delete
 
-The two-location split is deliberate: handoffs *live* at `docs/handoffs/<topic>-handoff.md` while in flight; their *content* migrates into the persistent docs (`docs/adr/`, `docs/plans/`, design docs under `docs/`) at resolution. The handoff file then gets removed; nothing about the work is lost because everything load-bearing has a permanent home elsewhere.
+The two-location split is deliberate: handoffs *live* at `docs/handoffs/<topic>-handoff.md` while in flight; their *content* migrates into the persistent docs (`docs/architecture/decisions/`, `docs/plans/`, design docs under `docs/`) at resolution. The handoff file then gets removed; nothing about the work is lost because everything load-bearing has a permanent home elsewhere.
 
 When a handoff's work is done — whether in the next session or several sessions later — every load-bearing piece of it must be migrated to its proper home **before the handoff file is deleted**:
 

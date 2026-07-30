@@ -2,7 +2,7 @@ name: Validate install (staging)
 
 # Runs the *documented* end-user install commands against an already-published
 # release (or release candidate) and is the promotion gate for the staging
-# flow (ADR 0018, docs/release-process.md § Staging validation).
+# flow (Decision 0018, docs/release-process.md § Staging validation).
 #
 # Cut an RC: `bump_version.py X.Y.Z-rc.N`, commit, tag `vX.Y.Z-rc.N` —
 # release.yml publishes a GitHub *prerelease* with the Metal tarball. Then

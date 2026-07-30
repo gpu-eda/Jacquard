@@ -62,7 +62,7 @@ change, no `PeripheralModel` trait change.
   No executor or background thread is required for a single connection.
 
 - **D2 — Wire `output_state` into `step_edge` (resolve the standing TODO).**
-  Both ADR 0017 and ADR 0013 note `step_edge` is handed an empty `output_state`
+  Both Decision 0017 and Decision 0013 note `step_edge` is handed an empty `output_state`
   "until I²C/SPI observation needs it." The interactive server is the first CPU
   model that *must* read a design output (TDO). Replace the `&[]` at
   `cosim/mod.rs:2987` with the real output slice. This also unblocks the
@@ -120,7 +120,7 @@ self-contained loopback test**, with manual OpenOCD as a documented recipe:
 | J5 (later) | Single-step / breakpoints via DM `step`/triggers; X-aware debug under `--xprop` | follows from attach; see open questions | ⏳ deferred |
 
 CUDA/HIP note: the interactive path is the CPU-side model + `batch=1` of the
-GPU backend (per ADR 0017's "per-edge fallback"), so it works on any cosim
+GPU backend (per Decision 0017's "per-edge fallback"), so it works on any cosim
 backend once J1–J3 land; no per-backend kernel work.
 
 ## Risks / open questions
@@ -146,9 +146,9 @@ backend once J1–J3 land; no per-backend kernel work.
 ## References
 
 - Issue [#124](https://github.com/gpu-eda/Jacquard/issues/124).
-- ADR 0017 (cosim execution model) — Amendment 2026-06-21 (interactive,
+- Decision 0017 (cosim execution model) — Amendment 2026-06-21 (interactive,
   externally-paced peripheral models; `output_state` wiring).
-- ADR 0013 (peripheral model architecture) — Amendment 2026-06-21 (`tdo_gpio`
+- Decision 0013 (peripheral model architecture) — Amendment 2026-06-21 (`tdo_gpio`
   config surface; `--jtag-server` as the interactive sibling of `--jtag-replay`).
 - Existing replay path: `src/sim/models/jtag.rs`, `tests/jtag_minimal/`
   (`bitbang.rec`, `sim_config.json`, the `jtag-minimal-cosim` CI gate).

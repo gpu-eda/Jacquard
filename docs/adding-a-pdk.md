@@ -24,20 +24,20 @@ you're adding:
   proprietary library you cannot vendor is simulated (`--cell-descriptor`).
   See **"Pathway A"** below. This supersedes the legacy Rust workflow
   (Steps 1–8) for all combinational logic today, with sequential
-  consumption completing across the built-in PDKs in the ADR 0019 C3
+  consumption completing across the built-in PDKs in the Decision 0019 C3
   series.
 - **Runtime cell library** (`--cell-library` + `.cells.toml`
   manifest). For third-party IP, hard macros, foundry memories, and
   any other cells that *don't* need new AIG decomposition rules — i.e.
   cells that act as opaque outputs (RAM macros), filler/cap blocks,
-  or IO pads. See **ADR 0010** and `docs/plans/declarative-cell-metadata.md`
+  or IO pads. See **Decision 0010** and `docs/plans/declarative-cell-metadata.md`
   for the recipe. **No Jacquard PR required** — users ship a manifest
   alongside their netlist. See **"Adding third-party IP via runtime
   manifest"** at the end.
 - **Legacy per-PDK Rust** (Steps 1–8 below). The original pathway: pin
   tables, classifiers, decomposition functions, and AIG builder hooks
   hand-written in Rust. **Being retired** by the cell-model IR cutover
-  (ADR 0019) — retained here as reference for the machinery the
+  (Decision 0019) — retained here as reference for the machinery the
   descriptor replaces. Do not add a new PDK this way; use Pathway A.
 
 If you're adding just a memory macro or other behaviourally-opaque IP,
@@ -53,7 +53,7 @@ file carrying *everything per-cell-type* about a library — L1 pin
 directions, L2 combinational logic (as a pre-decomposed AIG), L3
 sequential roles/classification, and L4 timing characterization — from
 one source: the library's Liberty. Adding a PDK is no longer a Jacquard
-code change; it is a *data* generation step. (ADR 0019.)
+code change; it is a *data* generation step. (Decision 0019.)
 
 ### Generate a descriptor from Liberty
 
@@ -140,14 +140,14 @@ descriptor's `default_corner`.)
   (GF180, SKY130, AIGPDK, IHP) and for proprietary libraries via
   `--cell-descriptor`.
 - **Sequential** consumption is descriptor-driven for GF180 today and is
-  being wired for the other PDKs in the ADR 0019 C3 series; the descriptor
+  being wired for the other PDKs in the Decision 0019 C3 series; the descriptor
   already *carries* the L3 sequential data for all of them.
 - A library whose functional `.v` is a single flat-module file (common for
   commercial PDKs) skips the optional `.v` logic cross-check at generation
   (the descriptor is still emitted; validate via simulation) — improving the
   flat-`.v` indexer is tracked follow-up.
 - RAM/SRAM macros are **not** covered by the descriptor — they use the
-  runtime manifest (ADR 0011), below.
+  runtime manifest (Decision 0011), below.
 
 ---
 
@@ -164,7 +164,7 @@ For SKY130, the PDK data lives in `vendor/sky130_fd_sc_hd/` as a git submodule.
 ## Legacy pathway: per-PDK Rust (Steps 1–8)
 
 > **This section documents the original hand-written-Rust workflow, which the
-> cell-model IR (Pathway A, above) is retiring under ADR 0019.** It is kept as
+> cell-model IR (Pathway A, above) is retiring under Decision 0019.** It is kept as
 > a reference for the machinery the descriptor replaces and for the
 > still-live paths during the cutover. **To add a new PDK, use Pathway A —
 > do not write per-PDK Rust.** The RAM/macro manifest section that follows
@@ -484,7 +484,7 @@ For a complete PDK integration, you need:
 
 If you're adding a memory macro, IO pad, hard block, or filler library
 — anything that doesn't need new AIG decomposition rules — the runtime
-cell-library pathway (ADR 0010) is the right route. **No Jacquard PR
+cell-library pathway (Decision 0010) is the right route. **No Jacquard PR
 required.** Ship a Verilog blackbox file plus a TOML manifest alongside
 your design.
 
@@ -571,7 +571,7 @@ data_out     = "Q"
 
 Field semantics, defaults, and the multi-port-SRAM/async/wider-than-32-bit
 out-of-scope items are documented in
-[ADR 0011](adr/0011-ram-port-mapping-schema.md). Polarity defaults
+[Decision 0011](architecture/decisions/0011-ram-port-mapping-schema.md). Polarity defaults
 to `low`; clock edge defaults to `pos`; mask granularity defaults
 to `bit`. All three control pins (`chip_enable` / `write_enable` /
 `write_mask`) are optional — omit them for sync SRAMs without
