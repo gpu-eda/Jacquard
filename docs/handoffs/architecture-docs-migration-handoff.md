@@ -1,28 +1,66 @@
 # Handoff — Architecture docs migration (Part 2: the ADR→Decisions rename + move)
 
-**Updated:** 2026-07-23
+**Updated:** 2026-07-30
 **Branch:** `docs/architecture-migration-part2` (off `main`; worktree `~/Code/jacquard-migration-part2`)
-**Status of the redesign:** Part 1 (the foundation) is **merged to `main`**. This
-handoff is Part 2 — the actual migration — which is **not started**.
+**Status of the redesign:** Part 1 (foundation) is **merged to `main`**. Part 2 is
+split into **PR A (the mechanical move) — DONE, committed on this branch**, and
+**PR B (the five area docs + per-decision-body reframe) — not started**.
 
-## Goal & next-up
+## PR A — DONE (committed on this branch, not yet pushed)
 
-Execute the migration that turns today's `docs/adr/` into the top-level
-**Architecture** structure the spike designed and Part 1 laid the foundation for.
-The design is settled and ratified (below); this is mechanical-but-wide execution
-that must not be done as a partial rename.
+Two commits on `docs/architecture-migration-part2`:
+- `f9792e1d` — the move + all references + `SUMMARY.md`
+- `8b9b4df5` — the `decisions/README.md` immutable-log convention rewrite
 
-**Next session should start with step 1 (the cross-reference audit)** — do not
-`git mv` anything before the full reference surface is enumerated.
+What landed:
+- `git mv docs/adr/*.md → docs/architecture/decisions/` (numbers kept as stable
+  IDs); **0003 → `decisions/archive/`**; `docs/spikes/* → decisions/spikes/`.
+- The full cross-reference surface rewritten, each path resolved relative to its
+  source file (a resolve-relative migration script, not blind sed — the two
+  scripts are in this session's scratchpad if a re-run is needed). Watch item:
+  the trap here is that a file which *itself* moved deeper also needs its links to
+  *non-moved* targets re-depthed (`../plans/` → `../../plans/`); a second pass
+  fixed 33 such links. The link checker is the completeness gate for this.
+- `ADR NNNN` → `Decision NNNN` across the metric surface (docs, CLAUDE.md,
+  `.github/`, `crates/`); stale `docs/adr/` **paths** fixed everywhere incl.
+  `src/`, `tests/`.
+- `SUMMARY.md` → the Architecture tree; `decisions/README.md` → the immutable /
+  past-tense convention (drops the "ADR" term + the dated-Amendment mechanism,
+  points current-state at the reference layer, documents `archive/`).
 
-**Verification command (run continuously during the migration):**
+**Verification (all green at HEAD):**
 ```sh
 cd ~/Code/jacquard-migration-part2 && mdbook build && python3 docs/scripts/check_doc_links.py
-# Expect: build succeeds; "All rendered-page links resolve to rendered pages."
-grep -rnE "docs/adr/|ADR [0-9]{4}" docs/ CLAUDE.md .github/ crates/ | wc -l
-# This count starts high (~the reference surface) and must reach 0 as refs move
-# to docs/architecture/decisions/ and the "ADR" term is dropped for "Decision".
+# build exit 0; "All rendered-page links resolve to rendered pages."
+grep -rnE "docs/adr/|ADR [0-9]{4}" docs/ CLAUDE.md .github/ crates/ | grep -v architecture-docs-migration-handoff | wc -l
+# 0  (this handoff still holds old refs on purpose; it is git rm'd at resolution)
 ```
+
+## Settled since the original handoff (apply in PR B)
+
+- **0016 (X-propagation) → Simulation engine** (confirmed; was the unconfirmed default).
+- **0003 → `decisions/archive/`** (confirmed; done in PR A).
+
+## Remaining — PR B and a follow-up
+
+1. **Five area reference docs**, mirroring `../architecture/cosim-runtime.md`
+   (`../architecture/README.md` still marks itself a spike and lists them "not yet
+   written"): Timing correctness, Simulation engine, RTL on-ramp, PDK enablement,
+   Distribution. Present-tense; each section forward-links its decision(s);
+   `## Implementation status` for decided-but-unbuilt; a D2 diagram only where the
+   shape is genuinely 2-D.
+2. **Per-decision-body reframe** to immutable/past-tense: strip current-state prose
+   that now lives in the arch docs, past-tense the rationale, add a forward-link to
+   the arch doc, retire each `(amended …)` status annotation (the `decisions/README`
+   index still mirrors the un-reframed bodies, deliberately).
+3. **Bare-term "ADR" → "decision" prose sweep** — ~122 mentions in ~15 living docs
+   (`handoff-discipline.md`, `development.md`, `docs/README.md`, `release-process.md`,
+   several `plans/*`). The numbered refs are already done and the metric is 0, so
+   this is terminology polish; do it with the PR-B body reframe (which drops "ADR"
+   from bodies too) so the term-drop lands in one coherent pass. Exclude the
+   redesign spike (immutable evidence) and this handoff (deleted at resolution).
+4. **Resolve this handoff**: fold anything durable into the migrated docs, then
+   `git rm` this file. Open the PR(s) to the merge queue (rebase-only).
 
 ## What is DONE and on `main` (Part 1 — do not redo)
 
@@ -76,31 +114,8 @@ CI sccache, #184 the signal-stream feature — all landed):
    reverted. Part 2 decides how the new design records superseded decisions (0003 is
    the one Superseded decision) — likely a `decisions/` status, not the old archival.
 
-## Part 2 steps (large; do in reviewable slices, on this branch)
-
-1. **Audit the cross-reference surface FIRST.** Enumerate every `docs/adr/` path and
-   "ADR NNNN" prose mention across `docs/`, `CLAUDE.md`, `SUMMARY.md`, `docs/plans/`,
-   `.github/` (CI + `check_doc_links.py` assumptions), `crates/` (e.g. the opensta
-   integration test references ADRs), and commit-message conventions. A scout/grep
-   pass producing the full list is the right first step. **Never partial-rename.**
-2. **Create the tree** and move: `git mv docs/adr/ docs/architecture/decisions/`,
-   `git mv docs/spikes/ docs/architecture/decisions/spikes/`. Keep `NNNN-*.md` names.
-   Rename `adr/README.md` → `decisions/README.md`.
-3. **Write the five remaining `arch-*` area docs**, mirroring `cosim-runtime.md`:
-   present-tense current state, each section forward-linking to its decision(s) by
-   number, an `## Implementation status` for the decided-but-unbuilt, a D2 diagram
-   only where a shape is genuinely 2-D.
-4. **Reframe the decision docs** to immutable/past-tense: strip current-state prose
-   that now lives in the arch docs, past-tense the rationale, add a forward-link to
-   the arch doc, decide 0003's superseded representation.
-5. **Rewrite `SUMMARY.md`** to the tree in the spike (Architecture: map → area docs →
-   Decisions → spikes). Note `SUMMARY.md` currently has BOTH the video-tap spike and
-   the redesign spike (kept both when #184 + #227 merged) — preserve/relocate both.
-6. **Fix every reference** from step 1's audit (paths + prose "ADR NNNN" → "Decision
-   NNNN" or the new path), and **update `CLAUDE.md`** (points at `docs/adr/` in several
-   places) and any CI path assumptions.
-7. **Resolve this handoff**: fold anything durable into the migrated docs, then
-   `git rm` this file (per `docs/handoff-discipline.md`). Open the PR.
+(The original seven Part-2 steps lived here; steps 1, 2, 5, 6 landed in PR A —
+see the PR A and Remaining sections above. Steps 3, 4, 7 are the PR-B remainder.)
 
 ## Critical context / gotchas
 
