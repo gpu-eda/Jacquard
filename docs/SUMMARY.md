@@ -9,7 +9,6 @@
 - [Synthesis Flow](synthesis-flow.md)
 - [Testbench Interop](interop.md)
 - [Why Jacquard](why-jacquard.md)
-- [Simulation Architecture](simulation-architecture.md)
 - [Timing Correctness](timing-correctness.md)
 - [Timing Simulation](timing-simulation.md)
 - [Timing Violations](timing-violations.md)
@@ -32,6 +31,7 @@
 # Architecture
 
 - [Overview — by area](architecture/README.md)
+  - [Simulation engine](architecture/simulation-engine.md)
   - [Cosim runtime](architecture/cosim-runtime.md)
 - [Decisions](architecture/decisions/README.md)
   - [0001 — OpenSTA as the timing correctness oracle](architecture/decisions/0001-opensta-as-oracle.md)

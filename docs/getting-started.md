@@ -152,4 +152,4 @@ run `jacquard sim` exactly as in 3a.
 | Add **timing** (Liberty / SDF / violation checks) | [Timing Simulation](timing-simulation.md) |
 | Use **UVM / cocotb / SVA**, or understand interop limits | [Testbench Interop](interop.md) |
 | Add support for a **new PDK** | [Adding a New PDK](adding-a-pdk.md) |
-| Understand **how it works** | [Simulation Architecture](simulation-architecture.md) |
+| Understand **how it works** | [Simulation engine](architecture/simulation-engine.md) |

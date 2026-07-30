@@ -26,7 +26,7 @@ Start here if you're considering a feature contribution or want to understand Ja
 
 ### Core Documentation
 
-- **[Simulation Architecture](simulation-architecture.md)**: Detailed explanation of Jacquard's internal architecture
+- **[Simulation engine](architecture/simulation-engine.md)**: Detailed explanation of Jacquard's internal architecture
   - Pipeline stages (NetlistDB → AIG → StagedAIG → Partitions → FlattenedScript → GPU)
   - Data structures and representations
   - VCD input/output format requirements
