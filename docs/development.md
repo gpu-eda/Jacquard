@@ -76,7 +76,7 @@ The pipeline reads left to right:
 NetlistDB → AIG → StagedAIG → Partitions → FlattenedScript → GPU kernel
 ```
 
-[Simulation Architecture](simulation-architecture.md) walks each stage. For
+[Simulation engine](architecture/simulation-engine.md) walks each stage. For
 *why* it is shaped this way, [Decision 0014](architecture/decisions/0014-aig-as-simulation-ir.md)
 explains the AIG choice and [Decision 0015](architecture/decisions/0015-boomerang-execution-model.md)
 the boomerang execution model.

@@ -114,7 +114,7 @@ This document supersedes the "±5% arrival tolerance" convention from `docs/timi
 
 ## References
 
-- `docs/simulation-architecture.md` — current pipeline.
+- `docs/architecture/simulation-engine.md` — current pipeline.
 - `docs/timing-simulation.md` — current timing-sim usage.
 - `docs/timing-validation.md` — current validation methodology (to be superseded).
 - `docs/architecture/decisions/` — decisions executed through this document.

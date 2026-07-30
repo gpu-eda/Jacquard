@@ -46,7 +46,7 @@ Jacquard commits to three GPU backends: CUDA, HIP, and Metal. A change that land
 
 These are structural properties of the current GPU schema:
 
-- Sequential logic is currently edge-triggered and synchronous: a raw latch in the logic, and asynchronous *sequential* (self-timed) logic, are not modelled today — the GPU schema's scheduling assumes synchronous clocking. (Async set/reset on flip-flops *is* supported; so are clock gating via `CKLNQD` and latch-based memory mapped to RAM — see the latch note in `simulation-architecture.md`.) Extending it to support async sequential approaches is open territory; contributions with a viable approach are welcome.
+- Sequential logic is currently edge-triggered and synchronous: a raw latch in the logic, and asynchronous *sequential* (self-timed) logic, are not modelled today — the GPU schema's scheduling assumes synchronous clocking. (Async set/reset on flip-flops *is* supported; so are clock gating via `CKLNQD` and latch-based memory mapped to RAM — see the latch note in `architecture/simulation-engine.md`.) Extending it to support async sequential approaches is open territory; contributions with a viable approach are welcome.
 - Circuits fit the boomerang block shape: 8191-signal input/output and 4095 intermediate-pin limits per partition, 64 SRAM output groups. Very wide designs may require manual `--level-split` tuning.
 - Numerics are 4-state at partition granularity (X-capable or not), not per-bit.
 
@@ -80,7 +80,7 @@ When scope conflicts arise:
 
 - `README.md` — project overview, quick start.
 - `CLAUDE.md` — repository conventions and architecture overview for contributors working with AI assistance.
-- `docs/simulation-architecture.md` — internal pipeline and data structures.
+- `docs/architecture/simulation-engine.md` — internal pipeline and data structures.
 - `docs/timing-correctness.md` — scoped contract for timing accuracy, validation, and IR requirements.
 - `docs/architecture/decisions/` — architectural decision records.
 - `docs/plans/` — phased implementation plans.
