@@ -1,6 +1,6 @@
 //! Structural diff between two cell-model-IR descriptors.
 //!
-//! This is the [ADR 0019 D7](../../../docs/adr/0019-cell-model-ir.md) provenance
+//! This is the [Decision 0019 D7](../../../docs/architecture/decisions/0019-cell-model-ir.md) provenance
 //! check in tool form: descriptors are regenerated in CI rather than committed,
 //! so the gate is that regeneration is **deterministic** — a freshly generated
 //! descriptor must structurally equal the previous one. It also helps debug

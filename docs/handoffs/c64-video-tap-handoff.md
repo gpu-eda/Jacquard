@@ -44,9 +44,9 @@ All three PRs stack on `fix/cosim-vcd-time-axis` (#196), which lands first:
 ## Next step — #184 video-tap e2e
 
 Branch `feat/cosim-signal-stream-tap` (rebased on main), draft. Feature plus the
-C64 renderer/config live in `docs/spikes/video-streaming-tap/`. Run cosim with
+C64 renderer/config live in `docs/architecture/decisions/spikes/video-streaming-tap/`. Run cosim with
 the `signal_streams` block
-(`docs/spikes/video-streaming-tap/example-signal-streams.json`) and the pygame
+(`docs/architecture/decisions/spikes/video-streaming-tap/example-signal-streams.json`) and the pygame
 renderer; runbook is in the video-tap README.
 
 Verified net names: strobe `\i_chip_core.c64_u.enablepixel`, video pads

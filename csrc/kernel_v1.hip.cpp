@@ -43,7 +43,7 @@ static void validate_warp_size() {
 // reports 0 here, and a trivial grid.sync kernel fails on it even at 1 block.
 // A device reporting 0 must take the fallback in launch_noninteractive_scan();
 // launching cooperatively anyway fails with "unspecified launch failure".
-// See docs/spikes/amd-laptop-backend.md.
+// See docs/architecture/decisions/spikes/amd-laptop-backend.md.
 static bool device_supports_cooperative_launch() {
   // Queried once per process; hipDeviceGetAttribute failure counts as "no",
   // which selects the path that works everywhere.

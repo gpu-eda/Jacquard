@@ -12,7 +12,7 @@ Jacquard is a GPU-accelerated gate-level simulator for synthesized digital circu
 
 It is a descendant of NVIDIA Research's GEM project, maintained by Rob Taylor and community contributors.
 
-Jacquard ships with **AIGPDK**, a simple and-inverter standard cell library aligned to the GPU schema's internal representation. It also accepts Liberty-described cells from open-source PDKs (SKY130) and commercial PDKs (under a private test track; see ADR 0004).
+Jacquard ships with **AIGPDK**, a simple and-inverter standard cell library aligned to the GPU schema's internal representation. It also accepts Liberty-described cells from open-source PDKs (SKY130) and commercial PDKs (under a private test track; see Decision 0004).
 
 ## In scope
 
@@ -60,9 +60,9 @@ Treat the following as honest characterisations, not marketing claims:
 
 - **Stable.** Core GPU simulation of AIGPDK designs. NVDLA / Rocket / Gemmini regression path.
 - **Stable with caveats.** SKY130 flow; known to work on the MCU SoC reference design, with a history of PDK-specific issues resolved over time.
-- **Evolving.** Timing simulation: `sim`-path arrival tracking and setup/hold violation detection now work across Metal, CUDA, and HIP (ADR 0008), with per-DFF clock-arrival skew folded in (ADR 0007 Pillar B); `cosim`-path timing output (`--timing-report`) is not yet wired. Multi-clock scheduling. X-propagation semantics. SDF parser is hand-rolled and has received multiple reactive fixes.
+- **Evolving.** Timing simulation: `sim`-path arrival tracking and setup/hold violation detection now work across Metal, CUDA, and HIP (Decision 0008), with per-DFF clock-arrival skew folded in (Decision 0007 Pillar B); `cosim`-path timing output (`--timing-report`) is not yet wired. Multi-clock scheduling. X-propagation semantics. SDF parser is hand-rolled and has received multiple reactive fixes.
 - **Experimental.** GPU-resident peripheral models. HIP-on-NVIDIA path exists primarily to unblock CI.
-- **Planned.** Private commercial-PDK test track (see ADR 0004).
+- **Planned.** Private commercial-PDK test track (see Decision 0004).
 
 Contributors can expect stable-tier behaviour to remain stable across releases. Evolving and experimental tiers may change shape between releases; reasonable migration notes will be provided.
 
@@ -82,9 +82,9 @@ When scope conflicts arise:
 - `CLAUDE.md` — repository conventions and architecture overview for contributors working with AI assistance.
 - `docs/simulation-architecture.md` — internal pipeline and data structures.
 - `docs/timing-correctness.md` — scoped contract for timing accuracy, validation, and IR requirements.
-- `docs/adr/` — architectural decision records.
+- `docs/architecture/decisions/` — architectural decision records.
 - `docs/plans/` — phased implementation plans.
 
 ---
 
-**Last updated:** 2026-06-26 (v0.2.x; CUDA/HIP sim-timing + cosim backends shipped; reflects ADR 0007/0008/0013/0017/0018 amendments).
+**Last updated:** 2026-06-26 (v0.2.x; CUDA/HIP sim-timing + cosim backends shipped; reflects Decision 0007/0008/0013/0017/0018 amendments).

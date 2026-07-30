@@ -22,7 +22,7 @@ self-hosted-runner:
     # it is the report that is spoofed, not the label.
     #
     # So the runner is an APU rather than a discrete card, which makes it a
-    # closer proxy for an AMD laptop. See docs/spikes/amd-laptop-backend.md.
+    # closer proxy for an AMD laptop. See docs/architecture/decisions/spikes/amd-laptop-backend.md.
     - amd
     - rocm
     - gfx1036

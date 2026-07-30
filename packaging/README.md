@@ -1,6 +1,6 @@
 # Packaging & distribution
 
-How Jacquard's artifacts reach users. Design rationale: [ADR 0018](../docs/adr/0018-distribution-and-installation.md);
+How Jacquard's artifacts reach users. Design rationale: [ADR 0018](../docs/architecture/decisions/0018-distribution-and-installation.md);
 phasing: [`docs/plans/distribution.md`](../docs/plans/distribution.md).
 
 | Artifact | Channel | Built by |

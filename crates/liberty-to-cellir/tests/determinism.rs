@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! Determinism gate for build-time descriptor generation (ADR 0019 D7).
+//! Determinism gate for build-time descriptor generation (Decision 0019 D7).
 //!
 //! D7 requires bundled descriptors to be **regenerated at build time and
 //! byte-identical across repeated builds**. The generator emits no `HashMap`
@@ -25,7 +25,7 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// The top-level GF180 7t typical-corner Liberty the build embeds (ADR 0019
+/// The top-level GF180 7t typical-corner Liberty the build embeds (Decision 0019
 /// D7). Matches `build.rs`'s `gf180mcu_7t` generation input.
 fn gf180_7t_tt_lib() -> PathBuf {
     repo_root()
@@ -69,7 +69,7 @@ fn gf180_7t_descriptor_is_byte_deterministic() {
     assert!(
         a == b,
         "regenerated GF180 7t descriptor is not byte-identical — a HashMap \
-         likely leaked into the emitted collections (ADR 0019 D7 determinism)"
+         likely leaked into the emitted collections (Decision 0019 D7 determinism)"
     );
 
     // Sanity: a real, non-empty descriptor (not the empty-library fallback).

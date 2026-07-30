@@ -12,7 +12,7 @@ Jacquard is three tools; install only what your task needs:
 > live with the **first tagged release (`v0.1.0`)**. Until then, build the
 > simulator [from source](#from-source-any-backend) and run `netlist-graph`
 > from the repo with `uv run`. The design behind this layout is
-> [ADR 0018](adr/0018-distribution-and-installation.md).
+> [Decision 0018](architecture/decisions/0018-distribution-and-installation.md).
 
 ## The simulator (`jacquard` + `opensta-to-ir`)
 

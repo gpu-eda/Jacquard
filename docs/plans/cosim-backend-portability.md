@@ -2,13 +2,13 @@
 
 **Status:** Active — design captured, not yet scheduled.
 **Issue:** [#105](https://github.com/gpu-eda/Jacquard/issues/105).
-**Architecture:** [ADR 0017 — Cosim execution model](../adr/0017-cosim-execution-model.md)
+**Architecture:** [Decision 0017 — Cosim execution model](../architecture/decisions/0017-cosim-execution-model.md)
 (see *Amendment 2026-06-07: backend-portable cosim — target architecture*).
 
 cosim is Metal-only today: `run_cosim` lives in `src/sim/cosim_metal.rs`
 (gated `#[cfg(feature = "metal")]`) and `cmd_cosim` hard-errors on other
 backends. This plan is the **staging** to reach the target architecture in
-ADR 0017: a backend-agnostic orchestration layer, a batch-granular
+Decision 0017: a backend-agnostic orchestration layer, a batch-granular
 `CosimBackend` trait, and a 3-tier `GpuPeripheral` model — then CPU and
 CUDA/HIP backends.
 
@@ -19,7 +19,7 @@ CUDA/HIP backends.
 peripheral models, and VCD machinery.
 
 **Non-goals:**
-- Changing the batch/scheduler execution model of ADR 0017 (untouched; the
+- Changing the batch/scheduler execution model of Decision 0017 (untouched; the
   trait is made batch-granular to *preserve* it, not change it).
 - Matching Metal cosim throughput on the **CPU** path (it's a
   reference/oracle).
@@ -47,7 +47,7 @@ peripheral models, and VCD machinery.
 /// Design execution + state ownership. One impl per backend. The
 /// orchestration layer (scheduler, models, VCD, drains) calls this.
 ///
-/// Batch-granular by construction: measurements (ADR 0017) show Metal runs
+/// Batch-granular by construction: measurements (Decision 0017) show Metal runs
 /// 100% batched on GPU-peripheral designs, so a single-edge method would
 /// regress it ~1000×. The orchestration decides N (`force_single_edge`);
 /// the backend runs N edges however it likes.
@@ -102,7 +102,7 @@ run on the GPU inside the batch. On a discrete GPU, going per-command-buffer
 means a PCIe round-trip every edge, which is why batching (hence GPU
 peripherals) is *required* for CUDA/HIP perf, not optional — so the CUDA/HIP
 backend ships *with* its GPU peripherals (Phase 2), not as a later add-on.
-See ADR 0017, *Layer 3* and *Consequences*.
+See Decision 0017, *Layer 3* and *Consequences*.
 
 ## Phases
 
@@ -154,7 +154,7 @@ existing cosim fixtures on Linux CI and passes their checkers.
 
 ### Phase 2 — Path B: `Cuda`/`HipBackend` mirroring Metal (GPU peripherals, batched)
 
-> **Refined 2026-06-19** (see ADR 0017 *Amendment 2026-06-19* and the detail doc
+> **Refined 2026-06-19** (see Decision 0017 *Amendment 2026-06-19* and the detail doc
 > [`cosim-phase2-cuda-hip.md`](cosim-phase2-cuda-hip.md)): there is **one**
 > CUDA/HIP cosim backend, mirroring `MetalBackend` (GPU design step + GPU
 > peripherals + variable batching + managed memory). The earlier

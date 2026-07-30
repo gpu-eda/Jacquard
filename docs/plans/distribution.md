@@ -1,10 +1,10 @@
 # Plan: distribution & easy install
 
-Implements [ADR 0018](../adr/0018-distribution-and-installation.md). Goal:
+Implements [Decision 0018](../architecture/decisions/0018-distribution-and-installation.md). Goal:
 a fresh user (or a docs-dogfooding agent) can install Jacquard in one
 line on macOS/Metal, with CUDA/HIP following as runners land.
 
-## Artifacts & channels (from ADR 0018)
+## Artifacts & channels (from Decision 0018)
 
 | Artifact | Channel | Blocked on |
 |----------|---------|------------|
@@ -114,14 +114,14 @@ package metadata. Remaining (needs maintainer action):
 ## Phase 6 — Container image (optional, deferred)
 
 - `ghcr.io/gpu-eda/jacquard:cuda` for reproducible Linux/CUDA runs.
-  Deferred per ADR 0018; revisit if CUDA release binaries prove awkward.
+  Deferred per Decision 0018; revisit if CUDA release binaries prove awkward.
 
 ## Phase 7 — Upstream the `eda-infra-rs` fork (de-fork prerequisite)
 
 The simulator can't be published to crates.io while its core deps are a
 **vendored fork** (`vendor/eda-infra-rs` → `ChipFlow/eda-infra-rs`) carrying
 patches not on the registry (the path deps declare a version but resolve to the
-fork's patched code; ADR 0018). De-forking — getting every fork change
+fork's patched code; Decision 0018). De-forking — getting every fork change
 upstreamed + released so jacquard can depend on published
 `gzz2000/eda-infra-rs` crates — is the long-term unblock. **Not** required for
 the binary-distribution channels (those work today); tracked here as the path to

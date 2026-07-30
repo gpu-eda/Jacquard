@@ -6,7 +6,7 @@ for the `opensta-to-ir` converter and the timing-ir reader / diff tooling.
 Run **nightly or pre-release**, not per-PR, because the corpus is large and
 the run is exploratory rather than regression-oriented.
 
-See [`docs/adr/0005-opensta-vendoring-and-corpus.md`](../../../docs/adr/0005-opensta-vendoring-and-corpus.md)
+See [`docs/architecture/decisions/0005-opensta-vendoring-and-corpus.md`](../../../docs/architecture/decisions/0005-opensta-vendoring-and-corpus.md)
 for the rationale behind the corpus split.
 
 ## Exit criterion (stress runs only)

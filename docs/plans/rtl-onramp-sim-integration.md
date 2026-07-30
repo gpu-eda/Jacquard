@@ -2,10 +2,10 @@
 
 **Status:** Active — reworks draft PR [#167](https://github.com/gpu-eda/Jacquard/pull/167)
 
-**ADRs:** [0021](../adr/0021-behavioral-rtl-support.md) (Revised 2026-07-03 —
+**ADRs:** [0021](../architecture/decisions/0021-behavioral-rtl-support.md) (Revised 2026-07-03 —
 synth folds into `sim`/`cosim`, no `build` command), aligns with
-[0019](../adr/0019-cell-model-ir.md) (descriptor-supplied logic + timing) and
-[0018](../adr/0018-distribution-and-installation.md) (wasm distribution).
+[0019](../architecture/decisions/0019-cell-model-ir.md) (descriptor-supplied logic + timing) and
+[0018](../architecture/decisions/0018-distribution-and-installation.md) (wasm distribution).
 
 **Predecessors:** #167 shipped the `src/synth.rs` embedded-Yosys engine and a
 `jacquard build` subcommand + `synth` feature (CI green, draft). This plan keeps
@@ -24,18 +24,18 @@ behavioral RTL, synthesizes it transparently to an aigpdk netlist (cached), and
 simulates — no separate `build` step, no Python, no external toolchain. A
 pre-synthesized netlist continues to simulate unchanged.
 
-## Input dispatch (the core behaviour — ADR 0021 §1)
+## Input dispatch (the core behaviour — Decision 0021 §1)
 
 On the netlist-input path of `sim`/`cosim`:
 
 1. Attempt structural parse (`NetlistDB::from_sverilog_file`).
 2. **Parse succeeds** → enumerate instantiated cells, test against the built-in
-   stdcell recognizers (the `is_*_stdcell` helpers introduced by #160 / ADR 0019):
+   stdcell recognizers (the `is_*_stdcell` helpers introduced by #160 / Decision 0019):
    - **All recognized** → gate-level, built-in PDK → **simulate directly.**
      Logic + timing come from the embedded descriptor (`--corner`); no `.lib`.
    - **Any unrecognized** → gate-level, unknown PDK → **error**, listing the
      unrecognized cell types: *"gate-level netlist with unrecognized cells —
-     pass `--cell-descriptor <path>`"* (ADR 0019 D8). **Do not synthesize.**
+     pass `--cell-descriptor <path>`"* (Decision 0019 D8). **Do not synthesize.**
 3. **Parse fails** → treat as behavioral → **synthesize** (embedded Yosys) →
    parse the result → simulate. If synthesis *also* fails, surface **both** the
    structural parse error and the Yosys diagnostics (a genuine netlist syntax
@@ -148,7 +148,7 @@ ceremony; `map`/`build` stale refs gone.
   but is `#[cfg(feature = "gc")]`, so it needs the `gc` feature **and** a spike
   confirming wasm-EH actually *runs* yosys (not just parses). Until then CI + docs
   pin `yowasp-yosys==0.64.0.0.post1131`. Removing that pin is the exit criterion.
-- **Fetch `yosys.wasm` from GitHub release** (increment 2, ADR 0018): publish the
+- **Fetch `yosys.wasm` from GitHub release** (increment 2, Decision 0018): publish the
   pinned wasm as a Jacquard release asset; first behavioral run fetches to cache
   + sha256-verifies.
 - **`--synth-target sky130|gf180`** — synthesize to a real PDK (uses #160
@@ -162,7 +162,7 @@ ceremony; `map`/`build` stale refs gone.
   list). Publish the table into `docs/accepted-rtl.md`; automatable as a CI job
   so the coverage claim stays current as the pinned `yosys.wasm` moves.
 - ~~**Wire L4-from-descriptor onto the runtime timing path**~~ — **landed on
-  `main`** (`de8255f3`, ADR 0019 D5): all runtime timing paths now source L4 from
+  `main`** (`de8255f3`, Decision 0019 D5): all runtime timing paths now source L4 from
   the cell-model-IR descriptor, so `--corner` on-ramp timing for built-in PDKs is
   live. No longer a follow-up.
 - **Project manifest (`Jacquard.toml`)** — collapse the positional
@@ -174,5 +174,5 @@ ceremony; `map`/`build` stale refs gone.
 ## Non-goals
 
 - No config/manifest format this pass (Phase 4).
-- No Phase-2 `\src`-provenance work (ADR 0021 Phase 2 roadmap, unchanged).
-- No change to the AIG/boomerang core or `sverilogparse` (ADR 0021 §4).
+- No Phase-2 `\src`-provenance work (Decision 0021 Phase 2 roadmap, unchanged).
+- No change to the AIG/boomerang core or `sverilogparse` (Decision 0021 §4).

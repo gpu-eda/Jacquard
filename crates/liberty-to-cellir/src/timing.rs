@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! L4 — timing characterization, corner-keyed (ADR 0019 D5).
+//! L4 — timing characterization, corner-keyed (Decision 0019 D5).
 //!
 //! Projects a cell's Liberty `timing()` groups onto
 //! [`cell_model_ir::CellTiming`]: combinational + clock→output delay arcs
@@ -85,7 +85,7 @@ pub fn corner_from_library_name(lib_name: &str) -> Option<Corner> {
 }
 
 /// Derive a single [`Corner`] from a Liberty `library` group's PVT metadata
-/// (ADR 0019 D5, C3.1b): the `operating_conditions` group named by
+/// (Decision 0019 D5, C3.1b): the `operating_conditions` group named by
 /// `default_operating_conditions` (or the sole one present) gives the corner
 /// name + process/voltage/temperature; `nom_process`/`nom_voltage`/
 /// `nom_temperature` are per-field fallbacks. If neither source yields a

@@ -20,7 +20,7 @@ overhead when no buses are configured.
 | AHB5     | Planned (AHB-Lite + security / exclusive signals) |
 
 The design rationale lives in
-[ADR 0013](adr/0013-plural-peripheral-configs.md); the roadmap is in
+[Decision 0013](architecture/decisions/0013-plural-peripheral-configs.md); the roadmap is in
 [`plans/bus-transaction-tracing.md`](plans/bus-transaction-tracing.md).
 
 Bus tracing is the structured, protocol-aware counterpart to

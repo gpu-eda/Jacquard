@@ -56,7 +56,7 @@ module). It is located in this order:
    ```sh
    pip install yowasp-yosys          # or: uvx yowasp-yosys
    ```
-4. **Fetch from release** — a planned follow-up (ADR 0021 / #162 Phase 4); not
+4. **Fetch from release** — a planned follow-up (Decision 0021 / #162 Phase 4); not
    yet implemented. Until then, one of the three methods above is required.
 
 > **Version caveat.** Pin to **`yowasp-yosys==0.64.0.0.post1131`** (the version in
@@ -190,5 +190,5 @@ coverage table when it ships.
 
 - [Getting Started](getting-started.md) — run bundled designs to verify your build first.
 - [Synthesis Flow](synthesis-flow.md) — the performance path (DC / native Yosys, peak QoR).
-- [ADR 0021](adr/0021-behavioral-rtl-support.md) — the design decision behind the on-ramp.
+- [Decision 0021](architecture/decisions/0021-behavioral-rtl-support.md) — the design decision behind the on-ramp.
 - `docs/plans/rtl-onramp-sim-integration.md` — implementation plan and Phase 4 roadmap.

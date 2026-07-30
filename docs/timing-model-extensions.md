@@ -135,7 +135,7 @@ Yes, in three places, in increasing fidelity:
 
 1. **TimingIR arcs on clock cells** (`.jtir` already contains them; we just don't consume them).
 2. **The AIG clock walk** in `aig.rs:495–560` already iterates the clock-side cells of each DFF in order. It just doesn't accumulate their delays. Adding a `dff_clock_origins: Vec<Vec<cellid>>` parallel structure costs O(num_dffs × clock_depth) memory — negligible.
-3. **OpenSTA** can compute per-DFF clock arrival end-to-end. (OpenTimer was the original primary STA candidate per ADR 0003 but the spike Superseded it; ADR 0001 makes OpenSTA the sole STA path, called out of process via `opensta-to-ir`.) Per-pair common-path-pessimism removal (CRPR) is fundamentally a launch/capture credit, not a per-DFF property — so what shipped is per-DFF capture-side arrival, treating launch as a 0-reference. This is the form in the IR today:
+3. **OpenSTA** can compute per-DFF clock arrival end-to-end. (OpenTimer was the original primary STA candidate per Decision 0003 but the spike Superseded it; Decision 0001 makes OpenSTA the sole STA path, called out of process via `opensta-to-ir`.) Per-pair common-path-pessimism removal (CRPR) is fundamentally a launch/capture credit, not a per-DFF property — so what shipped is per-DFF capture-side arrival, treating launch as a 0-reference. This is the form in the IR today:
 
    ```fbs
    table ClockArrival {
@@ -332,7 +332,7 @@ For a sky130 use case Stage 1+2 likely covers everything you'd notice. For 22nm 
 1. **δ(T) characterisation cost.** One-off SPICE per cell-type per corner. Cheaper if we lean on existing ECSM/CCSM data already in vendor Liberty rather than re-running SPICE. Worth investigating before committing to Stage 2.
 2. **Whose clock arrival is authoritative?** Resolved by Pillar B Stage 1+2: OpenSTA-computed per-DFF arrival via `opensta-to-ir`, treating launch as 0-reference. Per-pair CRPR credit is intentionally not modelled at this stage (see Stage 3 in the staged plan above).
 3. **Interaction.** Does δ(T) on clock-tree buffers matter? Probably not enough to model — clock buffers are sized for fast edges and operate far from their pulse-degradation regime. But the framework should be able to express "ignore δ(T) on clock domain" cleanly.
-4. **Validation oracle.** CVC and Icarus already serve as functional oracles; for skew-aware and wire-aware reporting OpenSTA's slack report (via `opensta-to-ir` / direct subprocess) is the ground truth for unit tests. (ADR 0003 originally nominated OpenTimer for this role; superseded by the spike outcome — OpenSTA carries the role end-to-end now.)
+4. **Validation oracle.** CVC and Icarus already serve as functional oracles; for skew-aware and wire-aware reporting OpenSTA's slack report (via `opensta-to-ir` / direct subprocess) is the ground truth for unit tests. (Decision 0003 originally nominated OpenTimer for this role; superseded by the spike outcome — OpenSTA carries the role end-to-end now.)
 5. **IR size at 22nm scale.** Open question whether `.jtir` for a representative many-core NoC fits in available memory under the current eager-load model. Needs measurement before committing to streaming mitigations.
 6. **Edge-attributed AIG.** Per-receiver wire delay wants delay attached to AIG *edges*, not nodes. Today the AIG is node-attributed (`gate_delays: Vec<PackedDelay>` indexed by aigpin). A clean Tier-1 implementation may push toward edge attribution, with downstream effects on the boomerang reduction script layout. Worth a small spike before the main implementation.
 7. **Partition-crossing format.** Adding per-edge wire delay to `cosim_metal.rs` inter-partition transfers needs a precise place in the existing pipeline. Currently the shuffle moves Boolean state words without arrival; the natural place is alongside the writeout-arrival path that already exists for setup/hold checking, but the alignment isn't 1:1 because partition crossings happen at logic boundaries, not capture-DFF boundaries.
@@ -342,6 +342,6 @@ For a sky130 use case Stage 1+2 likely covers everything you'd notice. For 22nm 
 - `docs/timing-correctness.md` — forward-looking validation contract; this doc extends rather than replaces.
 - `docs/timing-simulation.md` — boomerang architecture; the kernel-side context.
 - `docs/timing-validation.md` — current ±5% acceptance criteria; would tighten under δ(T).
-- `docs/adr/0002-timing-ir.md` — IR design rationale; schema additions here follow the "lossless extension" principle.
-- `docs/adr/0001-opensta-as-oracle.md` — STA path; OpenSTA out of process is committed (post-supersedure of ADR 0003).
-- `docs/adr/0003-opentimer-primary-sta.md` — **Superseded.** Original in-process STA proposal; spike Q2 fail moved Jacquard to OpenSTA-only. See `docs/spikes/opentimer-sky130.md`.
+- `docs/architecture/decisions/0002-timing-ir.md` — IR design rationale; schema additions here follow the "lossless extension" principle.
+- `docs/architecture/decisions/0001-opensta-as-oracle.md` — STA path; OpenSTA out of process is committed (post-supersedure of Decision 0003).
+- `docs/architecture/decisions/archive/0003-opentimer-primary-sta.md` — **Superseded.** Original in-process STA proposal; spike Q2 fail moved Jacquard to OpenSTA-only. See `docs/architecture/decisions/spikes/opentimer-sky130.md`.

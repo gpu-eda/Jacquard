@@ -3,8 +3,8 @@
 //! Runs YoWASP's Yosys (a single self-contained `yosys.wasm`, abc compiled
 //! in-tree and called in-process) directly from Rust via `wasmtime` — no Python
 //! interpreter and no external toolchain. See
-//! [ADR 0021](../docs/adr/0021-behavioral-rtl-support.md) and the proving spike
-//! at `docs/spikes/rust-wasmtime-yosys/`.
+//! [ADR 0021](../docs/architecture/decisions/0021-behavioral-rtl-support.md) and the proving spike
+//! at `docs/architecture/decisions/spikes/rust-wasmtime-yosys/`.
 //!
 //! This is a *pre-processor* invoked transparently by `jacquard sim`/`cosim`
 //! when handed behavioral RTL (ADR 0021 §1): it produces the same structural
