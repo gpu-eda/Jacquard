@@ -153,16 +153,19 @@ to the pinned copy, so a link in an old release keeps meaning what it meant. See
 
 ## Conventions
 
-- **[ADRs](architecture/decisions/README.md)** record decisions worth understanding later, and are
-  append-only: when reality moves past one, amend it rather than rewriting it.
-  An ADR's status is a claim about the code, so check it against the code.
+- **[Decisions](architecture/decisions/README.md)** record choices worth
+  understanding later. A record is immutable and past-tense: when a decision
+  changes, a new record supersedes the old rather than rewriting it. A record's
+  status is a claim about the code, so check it against the code. Current state
+  lives in the [architecture reference](architecture/README.md), not the record.
 - **[Plans](plans/README.md)** hold work in progress; deferred work gets a plan
   and an issue rather than being lost.
 - **[Handoffs](handoff-discipline.md)** are working memory, not history. One per
-  active thread, folded into the ADRs or plans and deleted when resolved.
+  active thread, folded into the decisions or plans and deleted when resolved.
+- **[Prose style](prose-style.md)** is the house style for the docs' writing.
 - **[Release Process](release-process.md)** covers cutting a release, the RC-first
   flow, and what's automated.
 
 The through-line: a sentence that says how the tool behaves is a verifiable
-claim. That applies to docs, `--help` text, and ADR status alike — check it
+claim. That applies to docs, `--help` text, and a decision's status alike; check it
 against the code before writing it.

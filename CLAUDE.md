@@ -258,6 +258,13 @@ items before the first numbered release) is in
 schema, timing IR FlatBuffers schema) are governed by their own ADRs
 and bump separately from the binary version.
 
+## Writing docs
+
+Prose for the docs, decision records, and plans follows the house style in
+`docs/prose-style.md`: direct voice, no AI-marker words, no mid-sentence
+interjections, and present-tense claims that track the code. Read it before writing
+or reframing a doc.
+
 ## Handoffs
 
 This project treats handoffs as ephemeral working memory, not historical record. When you write one, follow `docs/handoff-discipline.md` — markdown at `docs/handoffs/<topic>-handoff.md` (sibling to `docs/plans/`, deliberately separate so the persistent plan docs aren't mixed with in-flight working memory). At resolution, fold the content into ADRs / design docs / plan docs, then delete the handoff file. Keep **one handoff per active thread of work** (not one globally); resolved ones are removed, not archived. If the live handoff count outruns ~2× the people actively working, treat that as a WIP signal to resolve/consolidate threads, not to open more. The `git log -- docs/handoffs/` history is the audit trail.
