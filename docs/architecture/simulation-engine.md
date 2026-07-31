@@ -18,17 +18,23 @@ behind `jacquard sim` (static-input replay) and the substrate the
 Compilation is a fixed sequence of lowering stages, each narrowing the design
 toward the GPU's fixed shape:
 
-```
-Verilog netlist → NetlistDB → AIG → StagedAIG → Partitions → FlattenedScriptV1 → GPU kernel
-   (structural     (cells,     (uniform  (deep-cone   (one per     (packed u32       (one block
-    .gv / .v)       pins,       AND-inv   split at      GPU block,   instruction        per
-                    nets, CSR)  graph)    --level-split) resource-    stream)           partition)
-                                                         bounded)
+```d2
+vars: { d2-config: { pad: 16 } }
+direction: down
+netlist: "Verilog netlist\n(.gv / .v)"
+db: "NetlistDB\ncells, pins, nets (CSR)"
+aig: "AIG\nuniform AND-invert graph"
+staged: "StagedAIG\ndeep cones split at --level-split"
+parts: "Partitions\none per GPU block, resource-bounded"
+script: "FlattenedScriptV1\npacked u32 instruction stream"
+kernel: "GPU kernel\none block per partition"
+netlist -> db -> aig -> staged -> parts -> script -> kernel
 ```
 
-- **NetlistDB** parses structural Verilog (`sverilogparse`) into a flattened
-  database of cells, pins, and nets with CSR connectivity. Behavioural RTL is
-  synthesised to this form first — see the [accepted RTL surface](../accepted-rtl.md).
+- **NetlistDB** parses structural (gate-level) Verilog (`sverilogparse`) into a
+  flattened database of cells, pins, and nets with CSR connectivity. Behavioural
+  RTL is synthesised to this form first; see the
+  [accepted RTL surface](../accepted-rtl.md).
 - **AIG** rewrites all combinational logic to one uniform AND-with-invert node
   type, so the kernel needs no opcode decode ([Decision 0014](decisions/0014-aig-as-simulation-ir.md)).
 - **StagedAIG** splits combinational cones too deep for one boomerang tree into
@@ -65,12 +71,17 @@ same `(a XOR xa) AND (b XOR xb)` operation, the boomerang tree evaluates them al
 with a single instruction pattern. Rationale, and why AIG over BDDs / LUTs / MIG /
 direct netlist execution: [Decision 0014](decisions/0014-aig-as-simulation-ir.md).
 
-Construction (`src/aig.rs`, `AIG::from_netlistdb`) is technology-independent. Native
-AIGPDK cells map directly; SKY130 and GF180MCU cells are decomposed into AND gates
-from their vendored behavioural models; cells outside the vendored PDKs use
-user-supplied metadata ([Decision 0010](decisions/0010-declarative-cell-metadata.md)).
-A structural cache deduplicates identical sub-expressions, and AIG pins come out in
-topological order, which the downstream level computation and scheduling rely on.
+Construction (`src/aig.rs`, `AIG::from_netlistdb`) is technology-independent and
+descriptor-driven. Every cell type is looked up in a cell-model-IR descriptor that
+carries its pre-decomposed AIG, and that AIG is spliced straight in
+([Decision 0019](decisions/0019-cell-model-ir.md)). The built-in PDKs (AIGPDK,
+SKY130, GF180MCU) ship generated descriptors, and cells outside them supply the same
+kind of declarative metadata ([Decision 0010](decisions/0010-declarative-cell-metadata.md));
+both take the one descriptor path. A legacy per-PDK behavioural-model decomposition
+(`decompose_with_pdk`) survives only as a fallback for cell types no descriptor
+covers. A structural cache deduplicates identical sub-expressions, and AIG pins come
+out in topological order, which the downstream level computation and scheduling rely
+on.
 
 The AIG's outputs are grouped into **endpoint groups** — the units of work a
 partition must realise: a primary output, a DFF (data + clock-enable), a RAM block
@@ -144,56 +155,57 @@ gate-delay picoseconds for timing runs); and the **global write-out** that commi
 results, SRAM ports, and output duplicates back to the state buffer. The metadata
 index layout is the load-bearing contract between `flatten.rs` and every kernel.
 
-One field in the global-read permutation is a **cross-backend wire format** worth
-calling out: bit 31 of a read's word index flags an inter-stage intermediate (versus
-previous-cycle state). One encoder sets it; four independent decoders (`flatten.rs`,
-the CPU reference, the shared CUDA/HIP `kernel_v1_impl.cuh`, and `kernel_v1.metal`)
-must each clear it *from the index*, never by biasing the base pointer — the pointer
-trick forms an out-of-bounds address that put staged reads 2^32 words past the buffer
-on ROCm, the one backend that computes the address exactly ([#203](https://github.com/gpu-eda/Jacquard/issues/203)).
+The global-read permutation carries one subtle cross-backend detail. A read's word
+index has bit 31 set when the value is an inter-stage intermediate rather than
+previous-cycle state. Every decoder must strip that flag from the *index* before
+indexing: `flatten.rs`, the CPU reference, the shared CUDA/HIP `kernel_v1_impl.cuh`,
+and `kernel_v1.metal`. Cancelling the flag by offsetting the base pointer instead
+forms an out-of-bounds address. That bug placed staged reads 2^32 words past the
+buffer on ROCm, the one backend that computes the full address rather than
+truncating it to 32 bits ([#203](https://github.com/gpu-eda/Jacquard/issues/203)).
 
 ## Backends and the reference model
 
-The same script runs on four backends behind one seam. The GPU kernels —
-`csrc/kernel_v1.cu` and `csrc/kernel_v1.hip.cpp` sharing `kernel_v1_impl.cuh`, and
-`csrc/kernel_v1.metal` — each evaluate one partition per block. `sim` takes a
-grid-wide barrier between stages, which needs cooperative launch; the
+The same `FlattenedScriptV1` runs on four backends behind one seam. The GPU kernels
+each evaluate one partition per block: `csrc/kernel_v1.cu` and `csrc/kernel_v1.hip.cpp`
+share `kernel_v1_impl.cuh`, and `csrc/kernel_v1.metal` is the Metal port. `sim` takes
+a grid-wide barrier between stages, which needs cooperative launch; the
 [cosim runtime](cosim-runtime.md) sidesteps that so its CUDA/HIP backends run without
-it. A CPU reference kernel (`--check-with-cpu`) evaluates the same script
-bit-for-bit and is the cross-backend equivalence oracle. Every backend is expected to
-produce identical results on the same design; that equivalence is checked in CI.
+it. A CPU reference kernel (`--check-with-cpu`) evaluates the same script bit-for-bit
+and is the cross-backend equivalence oracle. Every backend is expected to produce
+identical results on the same design, and that equivalence is checked in CI.
 
 ## Selective X-propagation
 
 By default the engine is two-state: uninitialised DFF and SRAM outputs resolve to 0,
 which hides init bugs and causes false mismatches against four-state RTL simulators.
 `--xprop` turns on **selective** four-state simulation. Static analysis identifies
-X-source signals (uninitialised DFFs, SRAM reads); forward-cone analysis marks each
-partition X-capable or X-free; only X-capable partitions — typically under ~5% after
-reset — run the X-aware kernel variant and pay the ~2× storage/ALU cost, stored in
-X-mask words appended to the state buffer. The rest keep the fast two-state path.
-Output VCD then carries `x` values, and `--check-with-cpu` has an X-aware reference.
-Design choices and the seven-phase implementation:
-[Decision 0016](decisions/0016-selective-x-propagation.md) and
+X-source signals (uninitialised DFFs, SRAM reads), and forward-cone analysis marks
+each partition X-capable or X-free. Only X-capable partitions run the X-aware kernel
+variant and pay its ~2× storage and ALU cost, held in X-mask words appended to the
+state buffer; the rest keep the fast two-state path. In a typical SoC after reset,
+under ~5% of partitions are X-capable. Output VCD then carries `x` values, and
+`--check-with-cpu` has an X-aware reference. Design choices and the seven-phase
+implementation are in [Decision 0016](decisions/0016-selective-x-propagation.md) and
 [`docs/selective-x-propagation.md`](../selective-x-propagation.md). The reactive
-extension — undriven input pads as a third X-source, and per-edge X-mask maintenance
-— belongs to the [cosim runtime](cosim-runtime.md).
+extension belongs to the [cosim runtime](cosim-runtime.md): it adds undriven input
+pads as a third X-source and maintains the X-mask per edge.
 
 ## Assertions and display
 
 `assert()` and `$display`/`$write` survive synthesis as `GEM_ASSERT` / `GEM_DISPLAY`
 cells (via the `gem_formal.v` techmap over Yosys `$check`/`$print` cells). The AIG
 records their bit positions in the script; after each GPU step the CPU reads those
-positions and acts — an assertion fires a configurable action (log, pause, or
-terminate, bounded by `max_failures`), and a display reconstructs its message from
-format strings held in JSON metadata and argument bits read from the state buffer.
+positions and acts on them. An assertion fires a configurable action (log, pause, or
+terminate, bounded by `max_failures`). A display reconstructs its message from format
+strings held in JSON metadata and argument bits read from the state buffer.
 
 ## Constraints
 
 - **Synchronous, edge-triggered logic only.** Sequential state is D flip-flops
   capturing on clock edges. What is *not* modelled is a raw level-sensitive latch
-  left in the logic and asynchronous *sequential* (self-timed) feedback. Three
-  things often mistaken for exceptions are supported: asynchronous set/reset on
+  left in the logic, and asynchronous *sequential* (self-timed) feedback. Three
+  common latch-derived structures are supported: asynchronous set/reset on
   flip-flops (it lowers to an AIG overlay), clock gating via the `CKLNQD` integrated
   clock-gating cell, and latch-based register files mapped to `$__RAMGEM_SYNC_` SRAM
   cells by memory synthesis. See the latch note in
@@ -204,8 +216,12 @@ format strings held in JSON metadata and argument bits read from the state buffe
 - **4095 intermediate pins alive per stage**, and **64 SRAM output groups per
   partition** (each SRAM consumes 4 of the 256 write-out slots). SRAM-heavy designs
   may need finer partitioning than gate count alone implies.
-- **Fixed 256-thread block.** The boomerang geometry is hardcoded; there is no
-  occupancy-tuning knob without redesigning the hierarchy and the script packing.
+- **Fixed boomerang geometry.** The 8192-leaf, 256-thread, 13-stage tree is one
+  hardcoded design, uniform across CUDA, HIP, and Metal rather than tuned per GPU
+  architecture. It assumes 32-bit lanes and a 32-wide SIMD reduction at the shuffle
+  tier (levels 4–7). There is no occupancy-tuning knob; retargeting the geometry to a
+  different architecture would mean redesigning the hierarchy depth and the script
+  bit-packing.
 
 When a single endpoint cannot be mapped, `--level-split` forces stage splits.
 
