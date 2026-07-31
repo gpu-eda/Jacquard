@@ -33,8 +33,7 @@ netlist -> db -> aig -> staged -> parts -> script -> kernel
 
 - **NetlistDB** parses structural (gate-level) Verilog (`sverilogparse`) into a
   flattened database of cells, pins, and nets with CSR connectivity. Behavioural
-  RTL is synthesised to this form first; see the
-  [accepted RTL surface](../accepted-rtl.md).
+  RTL is synthesised to this form first; see the [RTL on-ramp](rtl-onramp.md).
 - **AIG** rewrites all combinational logic to one uniform AND-with-invert node
   type, so the kernel needs no opcode decode ([Decision 0014](decisions/0014-aig-as-simulation-ir.md)).
 - **StagedAIG** splits combinational cones too deep for one boomerang tree into
@@ -75,9 +74,10 @@ Construction (`src/aig.rs`, `AIG::from_netlistdb`) is technology-independent and
 descriptor-driven. Every cell type is looked up in a cell-model-IR descriptor that
 carries its pre-decomposed AIG, and that AIG is spliced straight in
 ([Decision 0019](decisions/0019-cell-model-ir.md)). The built-in PDKs (AIGPDK,
-SKY130, GF180MCU) ship generated descriptors, and cells outside them supply the same
-kind of declarative metadata ([Decision 0010](decisions/0010-declarative-cell-metadata.md));
-both take the one descriptor path. A legacy per-PDK behavioural-model decomposition
+SKY130, GF180MCU, IHP SG13G2) ship generated descriptors, and cells outside them
+supply the same kind of declarative metadata
+([Decision 0010](decisions/0010-declarative-cell-metadata.md)); both take the one
+descriptor path. How a PDK is onboarded: [PDK enablement](pdk-enablement.md). A legacy per-PDK behavioural-model decomposition
 (`decompose_with_pdk`) survives only as a fallback for cell types no descriptor
 covers. A structural cache deduplicates identical sub-expressions, and AIG pins come
 out in topological order, which the downstream level computation and scheduling rely
