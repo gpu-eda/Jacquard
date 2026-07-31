@@ -25,6 +25,7 @@
 - [Troubleshooting VCD](troubleshooting-vcd.md)
 - [Authoring Architecture Diagrams](architecture-diagrams.md)
 - [Development](development.md)
+- [Prose Style](prose-style.md)
 - [Release Process](release-process.md)
 - [Handoff Discipline](handoff-discipline.md)
 
