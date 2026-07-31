@@ -11,14 +11,14 @@ current-state doc and the decisions behind it.
 
 | Area | Reference | Decisions behind it |
 |---|---|---|
-| Timing correctness | *not yet written* | 0001, 0002, 0005, 0006, 0008, 0009, 0019; roadmap 0007 |
+| Timing correctness | [timing-correctness](timing-correctness.md) | 0001, 0002, 0005, 0006, 0008, 0009, 0019; roadmap 0007 |
 | Simulation engine | [simulation-engine](simulation-engine.md) | 0014, 0015, 0016 |
 | Cosim runtime | [cosim-runtime](cosim-runtime.md) | 0012, 0013, 0017, 0022 |
-| RTL on-ramp | *not yet written* | 0021 |
-| PDK enablement | *not yet written* | 0004, 0010, 0011 |
-| Distribution | *not yet written* | 0018, 0020 |
+| RTL on-ramp | [rtl-onramp](rtl-onramp.md) | 0021 |
+| PDK enablement | [pdk-enablement](pdk-enablement.md) | 0004, 0010, 0011, 0019 |
+| Distribution | [distribution](distribution.md) | 0018, 0020 |
 
-*The reference layer is being filled in area by area, mirroring the two written
-docs; the remaining rows land as each area is reframed from its existing guide.
-See [the redesign spike](decisions/spikes/architecture-doc-redesign.md) for the
-design.*
+*Decision 0019 (cell-model IR) is cross-cutting: it supplies both a cell's logic
+(PDK enablement) and its timing characterization (timing correctness), so both
+rows list it. See [the redesign spike](decisions/spikes/architecture-doc-redesign.md)
+for the design.*
