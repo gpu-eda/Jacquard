@@ -2,6 +2,8 @@
 
 **Status:** Proposed
 
+**Current architecture:** [Cosim runtime](../cosim-runtime.md).
+
 **Relates to:** [Decision 0013](0013-plural-peripheral-configs.md) (peripheral models and the GPU→CPU ring buffers, which are half of this channel already), [Decision 0017](0017-cosim-execution-model.md) (batch dispatch, where `BATCH_SIZE` lives), [Decision 0021](0021-behavioral-rtl-support.md) (the RTL on-ramp that makes a synthesizable transactor possible), and [Testbench Interop](../../interop.md).
 
 ## Implementation status

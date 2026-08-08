@@ -1,6 +1,8 @@
 # Decision 0012 — Reproducible CDC jitter injection for multi-clock cosim
 
 **Status:** Accepted — design accepted and partially implemented. The
+
+**Current architecture:** [Cosim runtime](../cosim-runtime.md).
 reproducibility core (§1) and scheduler-domain jitter on the VCD
 timeline (§2, partial) are built; model-driven jitter (§3), setup/hold
 integration (§5), the `gcd_ps/2` guard, and true coincident-edge

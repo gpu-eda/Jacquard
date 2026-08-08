@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25).
 
+**Current architecture:** [PDK enablement](../pdk-enablement.md).
+
 > **Amendment (2026-06-25):** Phase 0 shipped (2026-05-02), so the
 > "plumbing tracked in the phase-0 plan" rider no longer points at anything
 > in flight. What actually landed is the **open-source** GF180MCU path

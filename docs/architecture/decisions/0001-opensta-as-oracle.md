@@ -1,6 +1,8 @@
 # Decision 0001 — OpenSTA as the timing correctness oracle and sole STA path
 
 **Status:** Accepted (amended 2026-06-25). Scope expanded 2026-05-01 — see
+
+**Current architecture:** [Timing correctness](../timing-correctness.md).
 Decision §3 below.
 
 > **Amendment (2026-06-25):** Decision §1's claim that "OpenSTA is never

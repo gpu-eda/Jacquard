@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25).
 
+**Current architecture:** [PDK enablement](../pdk-enablement.md).
+
 > **Amendment (2026-06-25):** The work this ADR "deferred to a future ADR"
 > (explicit RAM port mapping) was delivered as **[Decision 0011](0011-ram-port-mapping-schema.md)**
 > — schema v1.1 (`src/cell_library.rs` accepts `"1.0"` and `"1.1"`). The

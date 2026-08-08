@@ -2,6 +2,8 @@
 
 **Status:** Accepted 2026-04; amended 2026-05-02 (see § Amendment).
 
+**Current architecture:** [Timing correctness](../timing-correctness.md).
+
 ## Amendment (2026-05-02)
 
 The original Decision treated subprocess invocation of OpenSTA from the shipped Jacquard runtime as license-incompatible, requiring Phase 3 (native Rust SDF→IR converter) to land before first release. On review of GPL-3 § 5 ("aggregate") and the FSF interpretation of subprocess/IPC boundaries, this restriction is more conservative than necessary. The relevant facts:
