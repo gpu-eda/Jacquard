@@ -45,15 +45,15 @@ If you want to understand how the timing stack got to where it is:
    per-work-stream detail for the IR producer and the SDF parser
    removal.
 3. [`post-phase-0-roadmap.md`](post-phase-0-roadmap.md) — what comes
-   next, sequenced against the ADRs.
+   next, sequenced against the decisions.
 
 ## Adding a new plan
 
 1. Filename: short kebab-case (`<topic>.md` or
    `<ws-or-phase>-<topic>.md`).
 2. Start with `# Plan — <title>` and a `**Status:**` line.
-3. Where the plan executes a specific ADR or work stream, name them
-   in a `**Predecessors:**` / `**ADRs:**` block near the top so the
+3. Where the plan executes a specific decision or work stream, name them
+   in a `**Predecessors:**` / `**decisions:**` block near the top so the
    dependency graph is explicit.
 4. Add the row to the table above. When the plan ships, change the
    status in the file and here in the same commit.

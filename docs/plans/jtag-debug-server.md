@@ -116,7 +116,7 @@ self-contained loopback test**, with manual OpenOCD as a documented recipe:
 | J1 | Wire `output_state` into `step_edge` (D2); add `JtagConfig.tdo_gpio` + resolve `tdo_pos`; unit-test TDO sampling in the replay model | replay fixtures still byte-identical; TDO-sample unit test green | ✅ done |
 | J2 | Byte-source abstraction (D3): `JtagSource` enum; replay path refactored onto it | `jtag_minimal` replay unchanged; model unit tests green | ✅ done |
 | J3 | `--jtag-server` (D5) + live byte source + `R` write-back (D4) + `TcpListener` accept | **V1 loopback test**: live run == replay golden (`data0_obs==0xCAFEBABE`) | ✅ done (model loopback unit test + `jtag-minimal-cosim-server` CI gate; verified locally on Metal) |
-| J4 | `docs/jtag-debug.md` (V2 recipe); `--help` text; cross-link ADRs | docs build; manual OpenOCD/gdb smoke (local) | ✅ done (guide + `--help`; manual OpenOCD/gdb left to operators) |
+| J4 | `docs/jtag-debug.md` (V2 recipe); `--help` text; cross-link decisions | docs build; manual OpenOCD/gdb smoke (local) | ✅ done (guide + `--help`; manual OpenOCD/gdb left to operators) |
 | J5 (later) | Single-step / breakpoints via DM `step`/triggers; X-aware debug under `--xprop` | follows from attach; see open questions | ⏳ deferred |
 
 CUDA/HIP note: the interactive path is the CPU-side model + `batch=1` of the

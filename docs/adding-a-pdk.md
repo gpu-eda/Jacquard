@@ -14,7 +14,7 @@ function, and which ones are sequential.
 There are **three pathways** for enabling new cells; pick based on what
 you're adding:
 
-- **Cell-model IR descriptor** (**recommended — the modern path**, ADR
+- **Cell-model IR descriptor** (**recommended — the modern path**, decision
   0019). A standard-cell library — pin directions, boolean functions,
   sequential roles, and timing — is captured in one **generated JSON
   descriptor** produced from the library's Liberty by the
@@ -542,7 +542,7 @@ memory behaviour is **not** modelled. Sufficient for designs whose
 CPU executes from boot ROM / register file and never reads SRAM
 contents at the timescales Jacquard simulates.
 
-**Explicit-port mode** (with `ram` sub-table, schema v1.1+, ADR
+**Explicit-port mode** (with `ram` sub-table, schema v1.1+, decision
 0011): outputs are wired to a real AIG-backed RAMBlock, writes
 populate per-entry storage, reads return what was written. Real
 memory modelling end-to-end. Use this when the CPU reads its own
@@ -603,5 +603,5 @@ instance-targeting is a future schema extension (issue #80).
 - `dff`, `latch`, `clock_gate`, `delay`, `multi_output` — recognised
   but the v1.0 schema doesn't yet expose enough port semantics to
   drive AIG construction for these. Coming in the port-mapping
-  schema (future ADR). For now, declaring these kinds documents
+  schema (future decision). For now, declaring these kinds documents
   intent without changing behaviour.

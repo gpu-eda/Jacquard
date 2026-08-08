@@ -4,7 +4,7 @@
 
 **Phase:** 0 (executes WS3 from `phase-0-ir-and-oracle.md`).
 **Predecessors:** WS2 phases 2.1 + 2.3-minimum (delay arcs + setup/hold checks landed). Sufficient IR coverage for runtime cutover.
-**ADRs:** 0002 (IR), 0006 (SDF preprocessing model + interim cutover; amended 2026-05-02).
+**Decisions:** 0002 (IR), 0006 (SDF preprocessing model + interim cutover; amended 2026-05-02).
 
 ## Goal
 

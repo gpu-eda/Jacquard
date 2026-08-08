@@ -24,7 +24,7 @@ There is no fixed cadence.
 release ships. Pre-1.0 versions (`0.x.0`) carry the standard SemVer
 caveat: minor bumps may include breaking changes; the public
 contracts (`--timing-report` schema, IR layout) are documented in their
-own ADRs and follow stricter rules.
+own decisions and follow stricter rules.
 
 Stable contracts (additive-only, breaking changes require a major
 bump and a deprecation window):

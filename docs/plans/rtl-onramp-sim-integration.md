@@ -2,7 +2,7 @@
 
 **Status:** Active — reworks draft PR [#167](https://github.com/gpu-eda/Jacquard/pull/167)
 
-**ADRs:** [0021](../architecture/decisions/0021-behavioral-rtl-support.md) (Revised 2026-07-03 —
+**Decisions:** [0021](../architecture/decisions/0021-behavioral-rtl-support.md) (Revised 2026-07-03 —
 synth folds into `sim`/`cosim`, no `build` command), aligns with
 [0019](../architecture/decisions/0019-cell-model-ir.md) (descriptor-supplied logic + timing) and
 [0018](../architecture/decisions/0018-distribution-and-installation.md) (wasm distribution).
@@ -167,7 +167,7 @@ ceremony; `map`/`build` stale refs gone.
   live. No longer a follow-up.
 - **Project manifest (`Jacquard.toml`)** — collapse the positional
   `sim netlist in.vcd out.vcd N` arg soup and hold synth-target/top/sources,
-  referencing the existing `sim_config.json`. Its own ADR when scheduled.
+  referencing the existing `sim_config.json`. Its own decision when scheduled.
 
 ---
 
