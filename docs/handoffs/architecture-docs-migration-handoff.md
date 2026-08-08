@@ -41,26 +41,39 @@ grep -rnE "docs/adr/|ADR [0-9]{4}" docs/ CLAUDE.md .github/ crates/ | grep -v ar
 - **0016 (X-propagation) → Simulation engine** (confirmed; was the unconfirmed default).
 - **0003 → `decisions/archive/`** (confirmed; done in PR A).
 
-## Remaining — PR B and a follow-up
+## PR B — DONE on this branch (PR #232)
 
-1. **Five area reference docs**, mirroring `../architecture/cosim-runtime.md`
-   (`../architecture/README.md` still marks itself a spike and lists them "not yet
-   written"): Timing correctness, Simulation engine, RTL on-ramp, PDK enablement,
-   Distribution. Present-tense; each section forward-links its decision(s);
-   `## Implementation status` for decided-but-unbuilt; a D2 diagram only where the
-   shape is genuinely 2-D.
-2. **Per-decision-body reframe** to immutable/past-tense: strip current-state prose
-   that now lives in the arch docs, past-tense the rationale, add a forward-link to
-   the arch doc, retire each `(amended …)` status annotation (the `decisions/README`
-   index still mirrors the un-reframed bodies, deliberately).
-3. **Bare-term "ADR" → "decision" prose sweep** — ~122 mentions in ~15 living docs
-   (`handoff-discipline.md`, `development.md`, `docs/README.md`, `release-process.md`,
-   several `plans/*`). The numbered refs are already done and the metric is 0, so
-   this is terminology polish; do it with the PR-B body reframe (which drops "ADR"
-   from bodies too) so the term-drop lands in one coherent pass. Exclude the
-   redesign spike (immutable evidence) and this handoff (deleted at resolution).
+- **All six area reference docs** written and wired (Timing correctness, Simulation
+  engine, Cosim runtime, RTL on-ramp, PDK enablement, Distribution). Move-vs-new was
+  decided per area: `simulation-engine` absorbed the old `simulation-architecture.md`;
+  the other new docs link to their how-to/surface/contract guides rather than
+  duplicating them. `architecture/README.md` map marks all six written. A **fourth
+  built-in PDK, IHP SG13G2**, surfaced during drafting and is now recorded.
+- **Two-way linking done**: each decision carries a `**Current architecture:**`
+  forward-link to its area doc (all 21 active; 0003 archived is skipped). 0019 is
+  cross-cutting (PDK + timing).
+- **Bare-term "ADR" → "decision" sweep** done for the reader-facing docs
+  (`docs/*.md`, `docs/plans/*.md`); metric stays 0.
+- **Plans nav** split into active "Implementation Plans" and "Completed plans".
+- **House prose style** added (`docs/prose-style.md`, wired into CLAUDE.md +
+  development.md); global `~/.claude/PROSE_STYLE.md` gained the interjection rule.
+
+## Remaining — optional polish + resolution
+
+1. **Aggressive per-decision-body reframe** (deliberately NOT done): stripping
+   current-state prose from the decision bodies and retiring each `(amended …)`
+   status. Skipped as risky on cited, near-immutable records for modest gain now
+   that the area docs carry the "what". Revisit only if the redundancy grates.
+2. **Inline-code path-depth gap** (PR-A residue): backtick prose refs like
+   `` `../timing-correctness.md` `` inside moved decision/spike/archive files should
+   be `` `../../` ``. They're prose, not links, so nothing 404s. Not auto-fixed
+   because `timing-correctness.md` now exists at two depths (area doc + contract), so
+   a naive "does it resolve" fix can land on the wrong same-named file. Fix by hand.
+3. **`accepted-rtl.md` "Providing yosys.wasm"** wants a fuller refresh against the
+   current `src/synth.rs` resolution order (the one clearly-false line is already
+   fixed; `rtl-onramp.md` is now the authoritative source).
 4. **Resolve this handoff**: fold anything durable into the migrated docs, then
-   `git rm` this file. Open the PR(s) to the merge queue (rebase-only).
+   `git rm` this file once PR #232 merges (merge queue, rebase-only).
 
 ## What is DONE and on `main` (Part 1 — do not redo)
 
