@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25).
 
+**Current architecture:** [PDK enablement](../pdk-enablement.md).
+
 > **Amendment (2026-06-25):** The "SRAM preload" consequence is now wired
 > (`TestbenchConfig::sram_init`, `src/sim/cosim/mod.rs`), but the shipped
 > path handles only the **single-SRAM** case (the design must have exactly

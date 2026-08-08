@@ -2,6 +2,8 @@
 
 **Status:** Accepted
 
+**Current architecture:** [Simulation engine](../simulation-engine.md).
+
 ## Context
 
 Once the design is converted to an AIG (Decision 0014), the combinational

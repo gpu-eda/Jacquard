@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25).
 
+**Current architecture:** [Timing correctness](../timing-correctness.md).
+
 > **Amendment (2026-06-25):** The vendor-extension type names in the
 > Decision are stale. The schema uses a `VendorSource` enum with variants
 > `Cadence` / `Synopsys` / `Mentor` / `Other` (`timing_ir.fbs`), not the

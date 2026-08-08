@@ -1,6 +1,8 @@
 # Decision 0018 — Distribution and installation model
 
 **Status:** Accepted (amended 2026-06-25). Phase 4 (CUDA/HIP prebuilt
+
+**Current architecture:** [Distribution](../distribution.md).
 binaries) and Phase 7 (eda-infra-rs upstreaming) remain open — see the
 amendment below.
 

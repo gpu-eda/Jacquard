@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25 — see the latch constraint below)
 
+**Current architecture:** [Simulation engine](../simulation-engine.md).
+
 ## Context
 
 Jacquard simulates gate-level RTL designs on GPUs by converting

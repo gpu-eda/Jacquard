@@ -2,6 +2,8 @@
 
 **Status:** Proposed
 
+**Current architecture:** [RTL on-ramp](../rtl-onramp.md).
+
 > **Revised 2026-07-03 (pre-ratification, still Proposed):** the entry point
 > moved from a standalone **`jacquard build`** command to **folding synthesis
 > into `sim`/`cosim`** — RTL is simulated with one command, no separate build
