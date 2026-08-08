@@ -2,12 +2,12 @@
 
 **Status:** Active. Phase 1 (structured timing output, Decision 0008 — Accepted 2026-06-25) and release hardening (WS-RH.1) shipped; Pillar B Stages 1+2 (Decision 0007) landed early. Phase 2 (Pillar C Tier 1 — per-receiver wire delay) remains gated on Decision 0007 acceptance, which is still **Proposed** as of 2026-06-26.
 
-This document orders the work captured in those two ADRs alongside the in-flight tail of Phase 0. It is a **scheduling** doc, not a design doc — design lives in the ADRs and in `docs/timing-model-extensions.md` / `docs/why-jacquard.md`.
+This document orders the work captured in those two decisions alongside the in-flight tail of Phase 0. It is a **scheduling** doc, not a design doc — design lives in the decisions and in `docs/timing-model-extensions.md` / `docs/why-jacquard.md`.
 
 ## Where things stand (2026-05-02)
 
 - **Phase 0 (`phase-0-ir-and-oracle.md`)**: WS1–WS5 + WS2.2 + WS2.4 all landed. WS2.4 multi-corner shipped 2026-05-02 across four commits (`5822343` consumer, `530bb36` builder, `59fde04` producer, plus the integration test). Open items: **sky130-based corpus entries** (gated on a CI sky130-Liberty install strategy) and **peripheral wiring** for I²C/SPI when a fuller mcu_soc fixture lands.
-- **OpenTimer spike (`../architecture/decisions/spikes/opentimer-sky130.md`)**: **resolved 2026-05-01 — Superseded.** Q1 (Liberty parse) passed cleanly on SKY130; Q2 (arrival computation) failed on the canonical OpenSTA-bundled GCD example after eight input-pipeline workarounds (bus ports, OpenROAD-emitted SPEF, modern TCL, tap cells). Per the spike's decision matrix, Decision 0003 is now Superseded (commit `d002bde`). **OpenSTA out-of-process is committed as Jacquard's sole STA path** — `opensta-to-ir` is the canonical preprocessor; no in-process reference STA is planned. A future ADR may revisit libreda-sta or an in-house walker if an in-process reference is wanted later, but not on this roadmap.
+- **OpenTimer spike (`../architecture/decisions/spikes/opentimer-sky130.md`)**: **resolved 2026-05-01 — Superseded.** Q1 (Liberty parse) passed cleanly on SKY130; Q2 (arrival computation) failed on the canonical OpenSTA-bundled GCD example after eight input-pipeline workarounds (bus ports, OpenROAD-emitted SPEF, modern TCL, tap cells). Per the spike's decision matrix, Decision 0003 is now Superseded (commit `d002bde`). **OpenSTA out-of-process is committed as Jacquard's sole STA path** — `opensta-to-ir` is the canonical preprocessor; no in-process reference STA is planned. A future decision may revisit libreda-sta or an in-house walker if an in-process reference is wanted later, but not on this roadmap.
 - **Pillar B Stages 1+2 (per Decision 0007)**: **landed.** `ClockArrival` IR table + `opensta-to-ir` Tcl emission in commit `c403cc8`; `DFFConstraint.clock_arrival_ps` + skew-aware fold-in in `build_timing_constraint_buffer` in `6767c3e`. Closed Pillar B's main accuracy lever ahead of this roadmap's original Phase 2 schedule.
 - **Decision 0006 amended 2026-05-02**: subprocess invocation of user-installed OpenSTA from the shipped runtime is now permitted (no linking, no bundling). Phase 3 (native Rust SDF→IR) is **no longer release-gating** — see § Phase 3 below. New release-hardening workstream **WS-RH.1** (OpenSTA detection + version check) is required before first release; see § Release hardening.
 - **Decisions 0007 / 0008**: Decision 0008 accepted 2026-05-02; Decision 0007 still pending review.
@@ -25,7 +25,7 @@ The phase numbering established by Phase 0 and Decision 0006 continues:
 | **3** | Native Rust SDF→IR parser (Decision 0006) | **Deferred indefinitely** — no longer release-gating per amended Decision 0006. Picks up when bandwidth allows or commercial demand appears. |
 | **4+** | Pillar A Stage 1 (static IDM); Pillar C Tier 2; Decision 0008 optional outputs | Demand-driven; not committed |
 
-**Parked (require new ADR to revive):** in-process reference STA (Decision 0003 superseded), Pillar A Stage 2 (dynamic δ(T)), Pillar A Stage 3 (sub-cycle ticks), NoC-aware partitioning hints (Pillar C Tier 3).
+**Parked (require new decision to revive):** in-process reference STA (Decision 0003 superseded), Pillar A Stage 2 (dynamic δ(T)), Pillar A Stage 3 (sub-cycle ticks), NoC-aware partitioning hints (Pillar C Tier 3).
 
 ## Phase 1 — Structured timing output and Phase 0 wrap-up
 
@@ -56,7 +56,7 @@ Tail of Phase 0 work that didn't gate WS3 completion. Listed for completeness.
 
 (WS5 — parser-success assertions on the Liberty parser path and on `opensta-to-ir` — was already shipped; see `phase-0-ir-and-oracle.md` § WS5.)
 
-These are not gated by any new ADR; pick them up as bandwidth allows.
+These are not gated by any new decision; pick them up as bandwidth allows.
 
 **Exit criteria for Phase 1:**
 - ✅ Symbolic violation messages live; old state-word-index format gone (commit `0432d9a`).
@@ -143,7 +143,7 @@ Pre-first-release work that became necessary when Decision 0006 § Amendment rel
 
 ## Phase 4+ — Demand-driven
 
-Items below land when (a) a real use case appears that demands them, and (b) bandwidth is available. Each gets its own ADR amendment / new ADR before scheduling, since the cost is non-trivial.
+Items below land when (a) a real use case appears that demands them, and (b) bandwidth is available. Each gets its own decision amendment / new decision before scheduling, since the cost is non-trivial.
 
 ### Pillar A Stage 1 (static IDM)
 Cheapest δ(T) entry point. Lands only after Pillars B and C confirm the wire/skew baseline is correct — characterisation work done before that risks chasing wire-delay error masquerading as δ(T) error.
@@ -164,7 +164,7 @@ Optional optimisation that makes Tier 2 cheap on tile-decomposed designs. Lands 
 ## Risks and walk-back
 
 - **Pillar measurement shows smaller-than-expected gain.** Each pillar's later stages are deferred or abandoned per Decision 0007's walk-back clause. Pillar B Stage 3 is explicitly conditional on this signal.
-- **JSON report schema design wastes time in bikeshedding.** Mitigation: ship v1 quickly, additive-only changes thereafter, breaking changes require explicit ADR-level decision.
+- **JSON report schema design wastes time in bikeshedding.** Mitigation: ship v1 quickly, additive-only changes thereafter, breaking changes require explicit decision-level decision.
 - **OpenSTA upstream regressions.** With OpenSTA as the sole STA path, an upstream behaviour change reaches us through `opensta-to-ir`'s output. Mitigation: pin OpenSTA in CI (per Decision 0001) and rely on the regression corpus to surface drift.
 - **CRPR pessimism on tight designs.** Stage 1+2 fold-in treats launch=0; a design with very heterogeneous launch arrivals will see pessimism on paths whose launch DFF also has a long clock path. Stage 3 is the lever if this matters; otherwise live with it.
 
@@ -172,7 +172,7 @@ Optional optimisation that makes Tier 2 cheap on tile-decomposed designs. Lands 
 
 - `../architecture/decisions/0007-timing-model-fidelity-roadmap.md` — Pillar definitions for Phase 2.
 - `../architecture/decisions/0008-structured-timing-output.md` — Output items for Phase 1.
-- `../architecture/decisions/0001-opensta-as-oracle.md` — OpenSTA out-of-process commitment (post-ADR-0003 supersedure).
+- `../architecture/decisions/0001-opensta-as-oracle.md` — OpenSTA out-of-process commitment (post-decision-0003 supersedure).
 - `../architecture/decisions/archive/0003-opentimer-primary-sta.md` — **Superseded.** Spike fail outcome documented in `../architecture/decisions/spikes/opentimer-sky130.md`.
 - `../architecture/decisions/0006-sdf-preprocessing-model.md` — Phase 3.
 - `../why-jacquard.md` — User-facing positioning that this roadmap delivers.

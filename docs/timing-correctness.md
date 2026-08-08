@@ -2,7 +2,7 @@
 
 **Status:** Draft — under review.
 
-This document is the contract for Jacquard's timing correctness story. It defines *what* must be true; ADRs under `docs/architecture/decisions/` define *how*; plans under `docs/plans/` execute them.
+This document is the contract for Jacquard's timing correctness story. It defines *what* must be true; decisions under `docs/architecture/decisions/` define *how*; plans under `docs/plans/` execute them.
 
 ## Scope
 
@@ -52,7 +52,7 @@ Details: `docs/architecture/decisions/0002-timing-ir.md`.
 
 The original requirement was an in-process STA engine that computes per-endpoint arrival/slack from Liberty + SPEF, linked directly (subject to the permissive-license constraint in `project-scope.md`), cross-checking Jacquard's SDF-derived timing at load time and on demand during sim.
 
-Preferred implementation was OpenTimer; the SKY130 spike (`docs/architecture/decisions/spikes/opentimer-sky130.md`) found OpenTimer's input pipeline unfit for OpenROAD-flow outputs, and Decision 0003 was Superseded (commit `d002bde`). The cross-check role is now performed out of process by OpenSTA via `opensta-to-ir` (Decision 0001 — sole STA path); the in-process variant is parked until a fit-for-purpose permissive option appears (libreda-sta or in-house walker, both behind a future ADR).
+Preferred implementation was OpenTimer; the SKY130 spike (`docs/architecture/decisions/spikes/opentimer-sky130.md`) found OpenTimer's input pipeline unfit for OpenROAD-flow outputs, and Decision 0003 was Superseded (commit `d002bde`). The cross-check role is now performed out of process by OpenSTA via `opensta-to-ir` (Decision 0001 — sole STA path); the in-process variant is parked until a fit-for-purpose permissive option appears (libreda-sta or in-house walker, both behind a future decision).
 
 ### R3 — Oracle-backed CI
 
@@ -101,7 +101,7 @@ Phases 1 and beyond are planned at the start of each phase, not all up front.
 
 ## Open questions
 
-Items not settled by this document; they resolve in ADRs, spike outcomes, or phase plans:
+Items not settled by this document; they resolve in decisions, spike outcomes, or phase plans:
 
 - Exact IR schema format (FlatBuffers / Cap'n Proto / other). Tracked in Decision 0002.
 - ~~Whether OpenTimer handles SKY130 Liberty robustly.~~ Resolved: spike failed Q2 on SKY130; Decision 0003 Superseded.

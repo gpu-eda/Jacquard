@@ -2,7 +2,7 @@
 
 **Status:** Implemented — historical record. Tier 1, minimal Tier 2,
 and the port-mapping schema have all landed.
-**ADRs:**
+**Decisions:**
 - [0010 — Declarative cell metadata for PDK enablement](../architecture/decisions/0010-declarative-cell-metadata.md)
   (Tier 1 + minimal Tier 2)
 - [0011 — RAM port-mapping schema](../architecture/decisions/0011-ram-port-mapping-schema.md)
@@ -51,7 +51,7 @@ RAMs with real backing storage:
 
 ## Out of scope (deferred)
 
-- Port-mapping schema (`[cells.NAME.ports]`). Future ADR.
+- Port-mapping schema (`[cells.NAME.ports]`). Future decision.
 - Other `kind` values beyond what the tapeout fixture exercises
   end-to-end (`ram`, plus `filler` if cheap parity demo). Adding
   other kinds is data-only and can land per-need.

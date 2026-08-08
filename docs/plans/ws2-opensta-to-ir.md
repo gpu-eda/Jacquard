@@ -203,7 +203,7 @@ Still open / deferred:
 
 - A general SDF parser. (The whole point: avoid that.)
 - Wire-level reactivity or feedback to OpenSTA mid-run (this is a one-shot extract).
-- Comparison against OpenTimer (that's a separate ADR-0003-spike concern).
+- Comparison against OpenTimer (that's a separate decision-0003-spike concern).
 - Replacing OpenSTA's role as oracle in CI — `opensta-to-ir` is a producer, not a checker.
 
 ## References

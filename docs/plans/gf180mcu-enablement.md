@@ -20,7 +20,7 @@ bottom.
   integration test (`crates/opensta-to-ir/tests/opensta_integration.rs`),
   shipped 2026-05-12.
 
-**ADRs:** None new shipped. `docs/adding-a-pdk.md` is the canonical
+**Decisions:** None new shipped. `docs/adding-a-pdk.md` is the canonical
 integration-points checklist; this plan applied that recipe to
 GF180MCU with both 7-track (`gf180mcu_fd_sc_mcu7t5v0`) and 9-track
 (`gf180mcu_fd_sc_mcu9t5v0`) standard-cell libraries.
@@ -213,7 +213,7 @@ out of code as part of the migration to manifest-as-source-of-truth"
 — happens once, gets all three at once.
 
 1. **~~`build.rs` pin-table generator for SKY130 too.~~** Subsumed by
-   Decision 0010 § "Deferred to a future ADR — `build.rs` pin-table
+   Decision 0010 § "Deferred to a future decision — `build.rs` pin-table
    scanner removal." Removed LAST in the manifest migration, after
    manifests cover the built-in PDKs.
 

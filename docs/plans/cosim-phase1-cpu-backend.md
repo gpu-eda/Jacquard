@@ -28,7 +28,7 @@ seam.
 Site categories (run_cosim body): flash ~38, sram ~22, bus/wb-trace ~21,
 states ~13, uart ~12, vcd-ring 3.
 
-## Chosen interface approach — "fat backend constructor" (ADR Layer 1/2 split)
+## Chosen interface approach — "fat backend constructor" (decision Layer 1/2 split)
 
 The backend **owns its allocation and initialisation**. `run_cosim` becomes
 generic over `B: CosimBackend` and only: builds the backend-agnostic
