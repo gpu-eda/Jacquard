@@ -45,7 +45,7 @@ Adopt PR #53 as a uv workspace member; ship nothing to PyPI yet.
 
 ## P1 — macOS/arm64 + Metal binary wheel (the spike + the crux)
 
-The whole ADR rests on "embed the binary + vendor its dylibs into a wheel that
+The whole decision rests on "embed the binary + vendor its dylibs into a wheel that
 launches with no Homebrew LLVM." Prove it here on the platform we already
 release for.
 
@@ -98,7 +98,7 @@ Make `pip install jacquard` work in a plain Linux CI container (no GPU).
 - Extend `docs/installation.md` (a `pip install jacquard` path) and
   `docs/release-process.md` (the wheel channel + its staging-validation gate).
 
-## Open questions (from the ADR)
+## Open questions (from the decision)
 
 - **PyPI name** `jacquard` — confirm availability; fall back to `jacquard-eda`
   with an aliased import name if taken. Blocks only the first real publish.

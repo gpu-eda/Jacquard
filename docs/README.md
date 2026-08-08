@@ -20,7 +20,7 @@ Start here if you're considering a feature contribution or want to understand Ja
 - **[Timing Correctness](timing-correctness.md)**: Scoped requirements for timing accuracy, validation, and the forthcoming timing IR.
 - **[Timing Model Extensions](timing-model-extensions.md)**: Pre-spike design notes for δ(T) dynamic delay, clock-tree skew, and wire delay at scale. Formalised in Decision 0007.
 - **[Post-Phase-0 Roadmap](plans/post-phase-0-roadmap.md)**: Sequencing of Phase 1+ work covering structured timing output (Decision 0008) and timing model fidelity (Decision 0007). (OpenTimer integration was originally Phase 1's centrepiece; Decision 0003 was Superseded by the spike — OpenSTA out of process is now the sole STA path per Decision 0001.)
-- **[Architecture Decision Records](architecture/decisions/README.md)**: Design decisions and their rationale (numbered, per-decision). See the index for status and how the ADRs relate.
+- **[Decisions](architecture/decisions/README.md)**: Design decisions and their rationale (numbered, per-decision). See the index for status and how the decisions relate.
 - **[Implementation Plans](plans/README.md)**: Phased implementation plans with entry and exit criteria. See the index for status and reading order.
 - **[Spikes](spikes/)**: Time-boxed experiments and their outcomes.
 
@@ -152,7 +152,7 @@ When adding documentation:
 
 ## Future Documentation Needs
 
-Dedicated guides not yet written (coverage today is scattered across ADRs and
+Dedicated guides not yet written (coverage today is scattered across decisions and
 reference docs):
 
 - [ ] Performance tuning guide (choosing `NUM_BLOCKS`, `--level-split`)
