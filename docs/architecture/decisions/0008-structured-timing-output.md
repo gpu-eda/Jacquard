@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25).
 
+**Current architecture:** [Timing correctness](../timing-correctness.md).
+
 > **Amendment (2026-06-25):** Two refinements to claims below.
 > (1) The structured outputs (`--timing-report <json>`, `--timing-summary`,
 > symbolic violation messages) are no longer Metal-only — CUDA and HIP

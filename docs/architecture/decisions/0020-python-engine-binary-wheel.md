@@ -2,6 +2,8 @@
 
 **Status:** Draft — decision deferred (2026-07-01). Not ratified; not scheduled.
 
+**Current architecture:** [Distribution](../distribution.md).
+
 > **Direction note (2026-07-01).** This ADR drafts a *subprocess-bundled binary
 > wheel* (embed the CLI, keep PR #53's subprocess API). On review, a **native
 > PyO3 binding** is the preferred long-term direction — an in-process engine is

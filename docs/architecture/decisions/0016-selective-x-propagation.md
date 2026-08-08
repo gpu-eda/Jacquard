@@ -1,6 +1,8 @@
 # Decision 0016 — Selective X-propagation
 
 **Status:** Accepted (2026-05; amended 2026-06-25). Extension to cosim
+
+**Current architecture:** [Simulation engine](../simulation-engine.md).
 proposed 2026-06-03 — see [Amendment](#amendment-2026-06-03-cosim-and-io-x-sources).
 
 > **Amendment (2026-06-25):** Stage-count correction. The body says

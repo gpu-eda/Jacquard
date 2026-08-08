@@ -2,6 +2,8 @@
 
 **Status:** Proposed. (Line references amended 2026-06-25.)
 
+**Current architecture:** [Timing correctness](../timing-correctness.md).
+
 > **Amendment (2026-06-25):** The roadmap is still Proposed/unbuilt, but
 > several `src/` line references below have drifted as the code moved — most
 > notably the wire-delay lumping code, cited as `flatten.rs:1850-1872`, now

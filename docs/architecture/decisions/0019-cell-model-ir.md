@@ -1,6 +1,8 @@
 # Decision 0019 — Cell-model IR: a complete per-cell-type library descriptor
 
 **Status:** Proposed — all four design open questions resolved (see below);
+
+**Current architecture:** [PDK enablement](../pdk-enablement.md) and [Timing correctness](../timing-correctness.md).
 pending maintainer approval to start implementation (plan C1).
 
 ## Context

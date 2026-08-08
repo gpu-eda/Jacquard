@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25).
 
+**Current architecture:** [Timing correctness](../timing-correctness.md).
+
 > **Amendment (2026-06-25):** The claim that the filter has "integration
 > test coverage in `tests/opensta_integration.rs`" is imprecise — the
 > module-filtering tests are **unit** tests in `src/verilog_filter.rs`

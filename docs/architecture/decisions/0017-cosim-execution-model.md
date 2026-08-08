@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25).
 
+**Current architecture:** [Cosim runtime](../cosim-runtime.md).
+
 > **Amendment (2026-06-25):** The original body describes cosim as
 > Metal-only (`run_cosim` in `cosim_metal.rs`, `cmd_cosim` hard-erroring on
 > other backends) and `step_edge` receiving an empty `output_state`. Both

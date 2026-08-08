@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amended 2026-06-25).
 
+**Current architecture:** [Timing correctness](../timing-correctness.md).
+
 > **Amendment (2026-06-25):** The corpus contents described below
 > (SKY130 MCU SoC, NVDLA, AIGPDK examples, representative SDFs) are
 > aspirational, not current. As shipped, the primary corpus contains a
