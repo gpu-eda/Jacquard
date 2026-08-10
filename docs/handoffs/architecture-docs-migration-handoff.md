@@ -1,12 +1,14 @@
 # Handoff — Architecture docs migration (Part 2: the ADR→Decisions rename + move)
 
-**Updated:** 2026-07-30
+**Updated:** 2026-08-10
 **Branch:** `docs/architecture-migration-part2` (off `main`; worktree `~/Code/jacquard-migration-part2`)
-**Status of the redesign:** Part 1 (foundation) is **merged to `main`**. Part 2 is
-split into **PR A (the mechanical move) — DONE, committed on this branch**, and
-**PR B (the five area docs + per-decision-body reframe) — not started**.
+**PR:** [gpu-eda/Jacquard#232](https://github.com/gpu-eda/Jacquard/pull/232) — open, CI green.
+**Status of the redesign:** Part 1 (foundation) is **merged to `main`**. Part 2 —
+both **PR A (the mechanical move)** and **PR B (the six-area reference layer)** — is
+**DONE and pushed on #232**. Only optional polish and handoff resolution remain
+(see [Remaining](#remaining--optional-polish--resolution)).
 
-## PR A — DONE (committed on this branch, not yet pushed)
+## PR A — DONE (committed and pushed on #232)
 
 Two commits on `docs/architecture-migration-part2`:
 - `f9792e1d` — the move + all references + `SUMMARY.md`
@@ -118,17 +120,16 @@ CI sccache, #184 the signal-stream feature — all landed):
 4. **Everything nests under `docs/architecture/`**: the area docs, `decisions/`, and
    `decisions/spikes/` (spikes are a decision's evidence → nested under decisions;
    sibling `architecture/spikes/` is the rejected alternative).
-5. **Six-area taxonomy** (full ADR→area table in the spike's "Taxonomy" section):
-   Timing correctness / Simulation engine / Cosim runtime / RTL on-ramp / PDK
-   enablement / Distribution. Two placements settled: **cell metadata (0010, 0011) →
-   PDK enablement**; **X-propagation (0016) → Simulation engine** *(this was my default,
-   never explicitly confirmed by Rob — reconfirm before relying on it)*.
-6. **0003 is NOT archived.** An earlier plan moved it to `adr/archive/`; that was
-   reverted. Part 2 decides how the new design records superseded decisions (0003 is
-   the one Superseded decision) — likely a `decisions/` status, not the old archival.
+5. **Six-area taxonomy**: Timing correctness / Simulation engine / Cosim runtime /
+   RTL on-ramp / PDK enablement / Distribution. Placements confirmed and shipped:
+   cell metadata (0010, 0011) and cell-model IR (0019) → PDK enablement; **0016
+   (X-propagation) → Simulation engine** (confirmed by Rob); 0019 is cross-cutting
+   and also appears under Timing correctness.
+6. **0003 → `decisions/archive/`** (confirmed and done in PR A). A superseded decision
+   moves to `archive/` with `Status: Superseded`.
 
-(The original seven Part-2 steps lived here; steps 1, 2, 5, 6 landed in PR A —
-see the PR A and Remaining sections above. Steps 3, 4, 7 are the PR-B remainder.)
+(The original seven Part-2 steps are all done — see the PR A / PR B DONE sections
+above. Only the optional-polish tail in Remaining is left.)
 
 ## Critical context / gotchas
 
@@ -146,10 +147,11 @@ see the PR A and Remaining sections above. Steps 3, 4, 7 are the PR-B remainder.
 
 ## References
 
-- [`docs/spikes/architecture-doc-redesign.md`](../spikes/architecture-doc-redesign.md) — THE spec (taxonomy, tree, naming, field survey)
-- [`docs/architecture/cosim-runtime.md`](../architecture/cosim-runtime.md) — the worked "what" doc to mirror for the other five areas
-- [`docs/architecture/README.md`](../architecture/README.md) — the by-area map
-- [`docs/adr/README.md`](../adr/README.md) — three-kinds model lives here; becomes `decisions/README.md`
+- [`docs/architecture/decisions/spikes/architecture-doc-redesign.md`](../architecture/decisions/spikes/architecture-doc-redesign.md) — THE spec (taxonomy, tree, naming, field survey)
+- [`docs/architecture/README.md`](../architecture/README.md) — the by-area map (all six rows now written)
+- [`docs/architecture/cosim-runtime.md`](../architecture/cosim-runtime.md) and [`simulation-engine.md`](../architecture/simulation-engine.md) — the pattern the other four area docs follow
+- [`docs/architecture/decisions/README.md`](../architecture/decisions/README.md) — the immutable-log convention + three-kinds model
+- [`docs/prose-style.md`](../prose-style.md) — the house writing style (no mid-sentence interjections)
 - [`docs/architecture-diagrams.md`](../architecture-diagrams.md) — the D2 how-to
 - [`docs/handoff-discipline.md`](../handoff-discipline.md) — how to resolve this handoff (fold in, then delete)
 
@@ -157,6 +159,11 @@ see the PR A and Remaining sections above. Steps 3, 4, 7 are the PR-B remainder.
 
 **Resume in a new session with:**
 ```
-git checkout docs/architecture-migration-part2   # this branch carries the current handoff
+cd ~/Code/jacquard-migration-part2   # this worktree/branch carries the current handoff
 /resume_handoff docs/handoffs/architecture-docs-migration-handoff.md
 ```
+
+The migration is functionally complete on #232. A resuming session's job is the
+optional-polish tail above (or none of it), then — once #232 merges via the queue —
+fold anything durable into the docs and `git rm` this handoff per
+`docs/handoff-discipline.md`.
