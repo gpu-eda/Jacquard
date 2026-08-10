@@ -6,7 +6,7 @@
 //! SKY130 (`vendor/sky130_fd_sc_hd/`) ships its Liberty exclusively as
 //! `.lib.json` (6848 per-cell-per-corner cell files + a small per-corner
 //! library header), never as `.lib` text. To give SKY130 a generated
-//! cell-model-IR descriptor (ADR 0019), the converter needs a `LibertyGroup`
+//! cell-model-IR descriptor (Decision 0019), the converter needs a `LibertyGroup`
 //! tree — this module decodes the JSON encoding into exactly that tree so the
 //! `liberty-to-cellir` converter consumes it unchanged.
 //!

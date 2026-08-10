@@ -90,7 +90,7 @@ python3 tests/dual_uart/check_pass.py target/test-out/dual_uart_events.json
 
 The peripherals, pin mapping, baud rates, and clock are all declared in
 [`tests/dual_uart/sim_config.json`](https://github.com/gpu-eda/Jacquard/blob/main/tests/dual_uart/sim_config.json).
-See [Cosim execution model](adr/0017-cosim-execution-model.md) and
+See [Cosim execution model](architecture/decisions/0017-cosim-execution-model.md) and
 [Bus Transaction Tracing](bus-tracing.md) for the full peripheral set.
 
 ---
@@ -152,4 +152,4 @@ run `jacquard sim` exactly as in 3a.
 | Add **timing** (Liberty / SDF / violation checks) | [Timing Simulation](timing-simulation.md) |
 | Use **UVM / cocotb / SVA**, or understand interop limits | [Testbench Interop](interop.md) |
 | Add support for a **new PDK** | [Adding a New PDK](adding-a-pdk.md) |
-| Understand **how it works** | [Simulation Architecture](simulation-architecture.md) |
+| Understand **how it works** | [Simulation engine](architecture/simulation-engine.md) |

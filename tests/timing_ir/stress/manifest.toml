@@ -1,6 +1,6 @@
 # Stress / robustness corpus manifest.
 #
-# See ./README.md for format details and docs/adr/0005-opensta-vendoring-and-corpus.md
+# See ./README.md for format details and docs/architecture/decisions/0005-opensta-vendoring-and-corpus.md
 # for the primary-vs-stress corpus split rationale.
 #
 # Paths are relative to the Jacquard repository root and should point into

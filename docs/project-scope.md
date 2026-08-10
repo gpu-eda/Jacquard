@@ -12,7 +12,7 @@ Jacquard is a GPU-accelerated gate-level simulator for synthesized digital circu
 
 It is a descendant of NVIDIA Research's GEM project, maintained by Rob Taylor and community contributors.
 
-Jacquard ships with **AIGPDK**, a simple and-inverter standard cell library aligned to the GPU schema's internal representation. It also accepts Liberty-described cells from open-source PDKs (SKY130) and commercial PDKs (under a private test track; see ADR 0004).
+Jacquard ships with **AIGPDK**, a simple and-inverter standard cell library aligned to the GPU schema's internal representation. It also accepts Liberty-described cells from open-source PDKs (SKY130) and commercial PDKs (under a private test track; see Decision 0004).
 
 ## In scope
 
@@ -46,7 +46,7 @@ Jacquard commits to three GPU backends: CUDA, HIP, and Metal. A change that land
 
 These are structural properties of the current GPU schema:
 
-- Sequential logic is currently edge-triggered and synchronous: a raw latch in the logic, and asynchronous *sequential* (self-timed) logic, are not modelled today — the GPU schema's scheduling assumes synchronous clocking. (Async set/reset on flip-flops *is* supported; so are clock gating via `CKLNQD` and latch-based memory mapped to RAM — see the latch note in `simulation-architecture.md`.) Extending it to support async sequential approaches is open territory; contributions with a viable approach are welcome.
+- Sequential logic is currently edge-triggered and synchronous: a raw latch in the logic, and asynchronous *sequential* (self-timed) logic, are not modelled today — the GPU schema's scheduling assumes synchronous clocking. (Async set/reset on flip-flops *is* supported; so are clock gating via `CKLNQD` and latch-based memory mapped to RAM — see the latch note in `architecture/simulation-engine.md`.) Extending it to support async sequential approaches is open territory; contributions with a viable approach are welcome.
 - Circuits fit the boomerang block shape: 8191-signal input/output and 4095 intermediate-pin limits per partition, 64 SRAM output groups. Very wide designs may require manual `--level-split` tuning.
 - Numerics are 4-state at partition granularity (X-capable or not), not per-bit.
 
@@ -60,9 +60,9 @@ Treat the following as honest characterisations, not marketing claims:
 
 - **Stable.** Core GPU simulation of AIGPDK designs. NVDLA / Rocket / Gemmini regression path.
 - **Stable with caveats.** SKY130 flow; known to work on the MCU SoC reference design, with a history of PDK-specific issues resolved over time.
-- **Evolving.** Timing simulation: `sim`-path arrival tracking and setup/hold violation detection now work across Metal, CUDA, and HIP (ADR 0008), with per-DFF clock-arrival skew folded in (ADR 0007 Pillar B); `cosim`-path timing output (`--timing-report`) is not yet wired. Multi-clock scheduling. X-propagation semantics. SDF parser is hand-rolled and has received multiple reactive fixes.
+- **Evolving.** Timing simulation: `sim`-path arrival tracking and setup/hold violation detection now work across Metal, CUDA, and HIP (Decision 0008), with per-DFF clock-arrival skew folded in (Decision 0007 Pillar B); `cosim`-path timing output (`--timing-report`) is not yet wired. Multi-clock scheduling. X-propagation semantics. SDF parser is hand-rolled and has received multiple reactive fixes.
 - **Experimental.** GPU-resident peripheral models. HIP-on-NVIDIA path exists primarily to unblock CI.
-- **Planned.** Private commercial-PDK test track (see ADR 0004).
+- **Planned.** Private commercial-PDK test track (see Decision 0004).
 
 Contributors can expect stable-tier behaviour to remain stable across releases. Evolving and experimental tiers may change shape between releases; reasonable migration notes will be provided.
 
@@ -80,11 +80,11 @@ When scope conflicts arise:
 
 - `README.md` — project overview, quick start.
 - `CLAUDE.md` — repository conventions and architecture overview for contributors working with AI assistance.
-- `docs/simulation-architecture.md` — internal pipeline and data structures.
+- `docs/architecture/simulation-engine.md` — internal pipeline and data structures.
 - `docs/timing-correctness.md` — scoped contract for timing accuracy, validation, and IR requirements.
-- `docs/adr/` — architectural decision records.
+- `docs/architecture/decisions/` — architectural decision records.
 - `docs/plans/` — phased implementation plans.
 
 ---
 
-**Last updated:** 2026-06-26 (v0.2.x; CUDA/HIP sim-timing + cosim backends shipped; reflects ADR 0007/0008/0013/0017/0018 amendments).
+**Last updated:** 2026-06-26 (v0.2.x; CUDA/HIP sim-timing + cosim backends shipped; reflects Decision 0007/0008/0013/0017/0018 amendments).

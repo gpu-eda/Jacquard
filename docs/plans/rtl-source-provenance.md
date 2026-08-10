@@ -1,4 +1,4 @@
-# Plan — RTL-source provenance (ADR 0021 Phase 2)
+# Plan — RTL-source provenance (Decision 0021 Phase 2)
 
 > **2026-07-15 — shipped in v0.3.0.** Behavioral RTL → `sim` → a signal resolves
 > to its RTL line, in a released binary. `src/synth.rs` maps via `abc_new` and
@@ -33,12 +33,12 @@ bug. Per-section ✅ markers below remain authoritative for detail.
   reporting half is fixed — a trap now names the pass instead of printing 27 wasm
   frames). Low impact for real designs: a portless module is testbench-shaped.
 
-**ADRs:** [0021](../adr/0021-behavioral-rtl-support.md) Phase 2 (the roadmap this
-realises), [0014](../adr/0014-aig-as-simulation-ir.md) (AIG core the provenance
-rides through), [0018](../adr/0018-distribution-and-installation.md) (wasm
+**Decisions:** [0021](../architecture/decisions/0021-behavioral-rtl-support.md) Phase 2 (the roadmap this
+realises), [0014](../architecture/decisions/0014-aig-as-simulation-ir.md) (AIG core the provenance
+rides through), [0018](../architecture/decisions/0018-distribution-and-installation.md) (wasm
 distribution).
 
-**Predecessors:** ADR 0021 Phase 1 (the on-ramp — `sim`/`cosim` synthesize
+**Predecessors:** Decision 0021 Phase 1 (the on-ramp — `sim`/`cosim` synthesize
 behavioral RTL via embedded YoWASP Yosys). This plan makes the *results* of that
 simulation speak RTL source locations instead of flattened gate names.
 
@@ -189,7 +189,7 @@ slang may need a newer pin to compile.
 > **✅ A0 GO (2026-07-06, CI run `28779240456`).** The provenance wasm builds and
 > carries origins: `comb 4/4 = 100%`, **`seq2 88/88 = 100%`** `\src` coverage on
 > mapped sky130 cells. Origins survive the **in-process WASI `abc_new`** round-trip
-> (including sequential logic) — the ADR's key open risk is resolved. Getting here
+> (including sequential logic) — the decision's key open risk is resolved. Getting here
 > also required rebasing `robtaylor/abc@origin-tracking-clean` onto current
 > `berkeley-abc/master` (it was 97 commits behind, missing the `#ifdef __wasm` guards
 > around abc's `system()` calls → `wasm-ld: undefined symbol: system`). CI:
@@ -318,8 +318,8 @@ today's hierarchical gate name when absent):
 >   resolver at registration.
 > - ⏳ **timing-violation reports** — deferred (largest; governed schema). Path:
 >   `word_id → cell_id` via `dff_constraints`; add `src` to `DffSiteName` →
->   `ViolationRecord`. A word packs many DFFs → 0/1/many. **ADR 0008 permits
->   additive** → bump `SCHEMA_VERSION` `1.2.0`→`1.3.0` + ADR note.
+>   `ViolationRecord`. A word packs many DFFs → 0/1/many. **Decision 0008 permits
+>   additive** → bump `SCHEMA_VERSION` `1.2.0`→`1.3.0` + decision note.
 
 ---
 
@@ -361,7 +361,7 @@ B0 parser ─► B1 netlistdb ─► B2 AIG ─► B3 outputs ──────
 
 ## Non-goals
 
-- No change to the emulator AIG/boomerang core (ADR 0014/0015).
+- No change to the emulator AIG/boomerang core (Decision 0014/0015).
 - Not blocked on upstream YoWASP adopting the patches (we build our own wasm).
 - Full SVA / Verific-grade provenance is out of scope (bounded by the patched
   open-source toolchain).

@@ -203,9 +203,9 @@ leaves the JTAG inputs floating and runs at full throughput.
 This works on any cosim backend (CPU / Metal / CUDA / HIP) — it is the
 CPU-side model plus `batch=1` of the GPU backend, with no per-backend
 kernel work. See
-[ADR 0017 (Amendment 2026-06-21)](adr/0017-cosim-execution-model.md) for
+[Decision 0017 (Amendment 2026-06-21)](architecture/decisions/0017-cosim-execution-model.md) for
 the execution-model rationale and
-[ADR 0013 (Amendment 2026-06-21)](adr/0013-plural-peripheral-configs.md)
+[Decision 0013 (Amendment 2026-06-21)](architecture/decisions/0013-plural-peripheral-configs.md)
 for the `tdo_gpio` config surface.
 
 ## Caveats and limitations
@@ -263,9 +263,9 @@ Three layers, increasing in fidelity:
 - Issue [#124](https://github.com/gpu-eda/Jacquard/issues/124).
 - Implementation staging:
   [`docs/plans/jtag-debug-server.md`](plans/jtag-debug-server.md).
-- [ADR 0017 — Cosim execution model](adr/0017-cosim-execution-model.md)
+- [Decision 0017 — Cosim execution model](architecture/decisions/0017-cosim-execution-model.md)
   (interactive, externally-paced peripheral models; `output_state`
   wiring).
-- [ADR 0013 — Cosim peripheral model architecture](adr/0013-plural-peripheral-configs.md)
+- [Decision 0013 — Cosim peripheral model architecture](architecture/decisions/0013-plural-peripheral-configs.md)
   (`tdo_gpio` config surface).
 - Replay path & fixture: `src/sim/models/jtag.rs`, `tests/jtag_minimal/`.

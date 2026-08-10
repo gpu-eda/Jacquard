@@ -22,17 +22,17 @@ persistent plans here.
 
 | Plan | Status |
 |---|---|
-| [Post-Phase-0 Roadmap](post-phase-0-roadmap.md) | Active — scheduling doc for ADRs 0007 and 0008 |
+| [Post-Phase-0 Roadmap](post-phase-0-roadmap.md) | Active — scheduling doc for Decisions 0007 and 0008 |
 | [GF180MCU PDK enablement](gf180mcu-enablement.md) | Mostly implemented — Phases 0–6 shipped; Phase 7 deferred |
 | [Phase 0: Timing IR and OpenSTA oracle](phase-0-ir-and-oracle.md) | Implemented — historical record |
 | [WS2: `opensta-to-ir`](ws2-opensta-to-ir.md) | Implemented — historical record |
-| [WS3: delete SDF parser + interim runtime hook](ws3-delete-sdf-parser.md) | Implemented — historical record (see ADR 0006 Amendment) |
+| [WS3: delete SDF parser + interim runtime hook](ws3-delete-sdf-parser.md) | Implemented — historical record (see Decision 0006 Amendment) |
 | [WS3 follow-up: re-add cosim `--sdf` via `opensta-to-ir`](ws3-cosim-sdf-followup.md) | Deferred |
 | [Multi-clock and stimulus architecture](multi-clock-and-stimulus-architecture.md) | Exploratory — demand-driven |
-| [Cosim backend portability](cosim-backend-portability.md) | Active — design captured (#105); see ADR 0017 amendment |
-| [Cell-model IR](cell-model-ir.md) | Proposed — realises ADR 0019 (#130, #67) |
-| [RTL on-ramp folded into `sim`/`cosim`](rtl-onramp-sim-integration.md) | Active — reworks #167, realises ADR 0021 (#162) |
-| [RTL-source provenance](rtl-source-provenance.md) | Active — design captured; ADR 0021 Phase 2 (#162), gated on A0 (build forked wasm, check `\src` survives) |
+| [Cosim backend portability](cosim-backend-portability.md) | Active — design captured (#105); see Decision 0017 amendment |
+| [Cell-model IR](cell-model-ir.md) | Proposed — realises Decision 0019 (#130, #67) |
+| [RTL on-ramp folded into `sim`/`cosim`](rtl-onramp-sim-integration.md) | Active — reworks #167, realises Decision 0021 (#162) |
+| [RTL-source provenance](rtl-source-provenance.md) | Active — design captured; Decision 0021 Phase 2 (#162), gated on A0 (build forked wasm, check `\src` survives) |
 
 ## Reading order for new contributors
 
@@ -45,15 +45,15 @@ If you want to understand how the timing stack got to where it is:
    per-work-stream detail for the IR producer and the SDF parser
    removal.
 3. [`post-phase-0-roadmap.md`](post-phase-0-roadmap.md) — what comes
-   next, sequenced against the ADRs.
+   next, sequenced against the decisions.
 
 ## Adding a new plan
 
 1. Filename: short kebab-case (`<topic>.md` or
    `<ws-or-phase>-<topic>.md`).
 2. Start with `# Plan — <title>` and a `**Status:**` line.
-3. Where the plan executes a specific ADR or work stream, name them
-   in a `**Predecessors:**` / `**ADRs:**` block near the top so the
+3. Where the plan executes a specific decision or work stream, name them
+   in a `**Predecessors:**` / `**decisions:**` block near the top so the
    dependency graph is explicit.
 4. Add the row to the table above. When the plan ships, change the
    status in the file and here in the same commit.

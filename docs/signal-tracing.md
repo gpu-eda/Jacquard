@@ -171,4 +171,4 @@ why the list must be supplied via the CLI flag (not a runtime env var).
 The mechanism lives in `src/sim/trace_signals.rs`; emission piggybacks on
 `emit_extra_observables` in `src/sim/vcd_io.rs`. The same multi-candidate
 resolver backs bus-trace pin binding (see
-[bus tracing](bus-tracing.md) and ADR 0013).
+[bus tracing](bus-tracing.md) and Decision 0013).

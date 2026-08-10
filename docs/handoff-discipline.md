@@ -8,16 +8,16 @@ This document defines what a handoff is, what it isn't, when to write one, and e
 
 Decision rationale, technical context, and project state all have natural homes:
 
-- **ADRs** (`docs/adr/`) capture architectural decisions and their *why*.
+- **Decisions** (`docs/architecture/decisions/`) capture architectural choices and their *why*.
 - **Design docs** (`docs/timing-model-extensions.md`, etc.) capture *how* things work.
 - **Plan docs** (`docs/plans/phase-0-ir-and-oracle.md`, `post-phase-0-roadmap.md`) capture *what's left* and the next workstream slices.
 
 When that content lives in a handoff instead, two things go wrong:
 
-1. **It's not where contributors look.** A new contributor reading the README → SUMMARY → ADR chain shouldn't have to dig through a stack of resolved handoff docs to find load-bearing decisions or the current state of a workstream.
+1. **It's not where contributors look.** A new contributor reading the README → SUMMARY → decision chain shouldn't have to dig through a stack of resolved handoff docs to find load-bearing decisions or the current state of a workstream.
 2. **It rots out of sync with reality.** Handoffs are point-in-time snapshots. A "STATUS: RESOLVED" banner doesn't help when the thing referenced has moved or changed; the canonical doc is what should hold the current truth.
 
-The discipline closes this gap by **forcing migration before deletion**. Every load-bearing piece of a handoff lands in its proper home (ADR / design doc / plan doc) before the handoff file is removed.
+The discipline closes this gap by **forcing migration before deletion**. Every load-bearing piece of a handoff lands in its proper home (decision / design doc / plan doc) before the handoff file is removed.
 
 ## What a handoff IS
 
@@ -46,7 +46,7 @@ once. The per-thread rule plus the WIP heuristic replaces it.)
 
 ## What a handoff IS NOT
 
-- **Not a decision log.** Decisions go in ADRs. If you find yourself writing "we chose X over Y because Z" in a handoff, that paragraph belongs in an ADR (or an existing ADR's "Consequences" / "Walk-back" section).
+- **Not a decision log.** Decisions go in decision records. If you find yourself writing "we chose X over Y because Z" in a handoff, that paragraph belongs in a decision record (or an existing record's "Consequences" / "Walk-back" section).
 - **Not a design doc.** "How clock arrival flows from OpenSTA Tcl through the IR into the GPU constraint buffer" is a design topic; it lives in `docs/timing-model-extensions.md` Part B, not in a handoff's "Critical context" section.
 - **Not a status dashboard for the project.** Workstream status lives in plan docs — `phase-0-ir-and-oracle.md` for current-phase WS state, `post-phase-0-roadmap.md` for forward-looking sequencing. A handoff cites those, doesn't reproduce them.
 - **Not a historical record.** `git log` is the historical record. Handoffs that survive past their resolution turn into noise that misleads new contributors.
@@ -59,21 +59,21 @@ Write a handoff at the end of any session that:
 2. **Captures non-obvious context** the next session needs (e.g. "the OpenSTA Tcl `find_timing` proc rejects `-full_update`; use `::sta::find_timing_cmd 1` directly").
 3. **Documents the next concrete step** with enough scope to start without re-discovering it.
 
-If the session ended at a clean stopping point (everything merged, all decisions documented in ADRs/plans, nothing surprising), don't write a handoff. The plan doc already says what's next.
+If the session ended at a clean stopping point (everything merged, all decisions documented in decision records or plans, nothing surprising), don't write a handoff. The plan doc already says what's next.
 
 ## Resolution: fold, then delete
 
-The two-location split is deliberate: handoffs *live* at `docs/handoffs/<topic>-handoff.md` while in flight; their *content* migrates into the persistent docs (`docs/adr/`, `docs/plans/`, design docs under `docs/`) at resolution. The handoff file then gets removed; nothing about the work is lost because everything load-bearing has a permanent home elsewhere.
+The two-location split is deliberate: handoffs *live* at `docs/handoffs/<topic>-handoff.md` while in flight; their *content* migrates into the persistent docs (`docs/architecture/decisions/`, `docs/plans/`, design docs under `docs/`) at resolution. The handoff file then gets removed; nothing about the work is lost because everything load-bearing has a permanent home elsewhere.
 
 When a handoff's work is done — whether in the next session or several sessions later — every load-bearing piece of it must be migrated to its proper home **before the handoff file is deleted**:
 
 | If the handoff says... | It belongs in... |
 |---|---|
-| "We chose approach X over Y because Z" | The relevant ADR's Decision/Consequences section, or a new ADR if no fit exists |
+| "We chose approach X over Y because Z" | The relevant decision's Decision/Consequences section, or a new decision if no fit exists |
 | "Future scope for WS-N: do A then B then C" | The plan doc's WS-N section (`phase-0-ir-and-oracle.md` or successor) |
 | "Gotcha: OpenSTA's Tcl X behaves Y" | A code comment near the Tcl call site, or a design doc if the gotcha cuts across files |
 | "Build dep Z is required on Linux" | The build script's apt-suggestion / Brewfile / README install section |
-| "Subsystem A doesn't yet do B" | Plan doc as a new open item, or an ADR-tracked walk-back if it's a deferred design choice |
+| "Subsystem A doesn't yet do B" | Plan doc as a new open item, or a decision-tracked walk-back if it's a deferred design choice |
 | "Run `cargo test --feature foo` to verify" | The verification block in the relevant plan doc, or a test-running section in `CLAUDE.md` |
 
 After migration, the handoff file is removed in the same commit as the migration:
@@ -126,7 +126,7 @@ When you do need to write one, use this skeleton. Replace placeholders inline; d
 
 ### 1. <Item name> (<rough size>)
 
-<Concrete scope. Enough detail to start cold. Link to existing plan/ADR/design-doc sections rather than reproducing them.>
+<Concrete scope. Enough detail to start cold. Link to existing plan/decision/design-doc sections rather than reproducing them.>
 
 ### 2. ...
 
@@ -138,7 +138,7 @@ When you do need to write one, use this skeleton. Replace placeholders inline; d
 
 - [`<predecessor-handoff if any>`](<path>) — predecessor (if relevant)
 - [`<plan doc>`](<path>) — current workstream state
-- [`<ADR>`](<path>) — relevant decision
+- [`<decision>`](<path>) — relevant decision
 
 ---
 

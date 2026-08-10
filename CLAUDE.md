@@ -68,7 +68,7 @@ NetlistDB (Verilog) → AIG → StagedAIG → Partitions → FlattenedScript →
 - **`repcut.rs`**: Hypergraph partitioning using mt-kahypar for mapping to GPU blocks
 - **`pe.rs`**: Partition executor - builds BoomerangStage structures (hierarchical 8192→1 reduction) that map to GPU block resources
 - **`flatten.rs`**: Generates FlattenedScriptV1 - the final GPU execution script with packed instructions
-- **`synth.rs`**: Embedded Yosys synthesis engine (ADR 0021) — behavioral RTL on-ramp, behind the `synth` feature
+- **`synth.rs`**: Embedded Yosys synthesis engine (Decision 0021) — behavioral RTL on-ramp, behind the `synth` feature
 
 ### GPU Kernels (`csrc/`)
 
@@ -130,7 +130,7 @@ cargo run -r --features metal --bin jacquard -- sim ... --max-clock-edges 1000
 `sim` on AMD needs no special flags, but note it runs differently there: on a
 device without cooperative-launch support the kernel cannot take a grid-wide
 barrier, so the host drives one launch per (cycle, stage) instead of one launch
-per run. Correct, and slower. See `docs/spikes/amd-laptop-backend.md`.
+per run. Correct, and slower. See `docs/architecture/decisions/spikes/amd-laptop-backend.md`.
 
 ## Benchmarks
 
@@ -214,7 +214,7 @@ transaction records (`WR 0x10 <= 0xCAFEBABE`). Buses are declared via
 `bus_traces` in `sim_config.json`; cosim observes the pins on the GPU and
 runs the protocol FSM on the CPU. **APB3** is supported; AHB-Lite/AHB5
 are planned. See `docs/bus-tracing.md` for the full guide,
-`docs/adr/0013-plural-peripheral-configs.md` for the architecture, and
+`docs/architecture/decisions/0013-plural-peripheral-configs.md` for the architecture, and
 `tests/apb_trace/` for a worked example.
 
 ### Timing Violation Detection
@@ -257,6 +257,13 @@ items before the first numbered release) is in
 `docs/release-process.md`. Stable contracts (`--timing-report` JSON
 schema, timing IR FlatBuffers schema) are governed by their own ADRs
 and bump separately from the binary version.
+
+## Writing docs
+
+Prose for the docs, decision records, and plans follows the house style in
+`docs/prose-style.md`: direct voice, no AI-marker words, no mid-sentence
+interjections, and present-tense claims that track the code. Read it before writing
+or reframing a doc.
 
 ## Handoffs
 

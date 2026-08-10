@@ -40,7 +40,7 @@ is missing the bulk of the design's timing. The "28162 matched /
 2090 unmatched" verification log we celebrated at the time measured
 jtir records against the cosim-loaded netlist, not SDF coverage
 against the jtir — high surface match rate, materially incomplete
-IR. See **ADR 0009** (OpenSTA Verilog reader input constraints) for
+IR. See **Decision 0009** (OpenSTA Verilog reader input constraints) for
 the broader rule.
 
 `opensta-to-ir` now transparently extracts `module <--top>` from each
@@ -173,7 +173,7 @@ When this becomes a priority, mirror the `jacquard sim` surface:
 
 ### Out of scope for Option A
 
-- Rebuilding a hand-rolled SDF parser. (See ADR 0006 — the durable
+- Rebuilding a hand-rolled SDF parser. (See Decision 0006 — the durable
   replacement is the native Rust SDF→IR converter, tracked separately as
   Phase 3 in the original phasing.)
 - Adding cosim-specific corner-selection beyond what `jacquard sim`

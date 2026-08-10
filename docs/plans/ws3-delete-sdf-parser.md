@@ -1,14 +1,14 @@
 # Plan — WS3: delete SDF parser, wire IR consumer + interim runtime hook
 
-**Status:** Implemented — kept as historical record. Note: the "interim" / "pre-release-only" framing throughout this document describes the original ADR 0006 model. Per ADR 0006 § Amendment (2026-05-02), the runtime subprocess wrapper is now the shipping mechanism — Phase 3 (native Rust SDF→IR) is no longer release-gating. This document is preserved for the implementation phasing record; for current shipping intent see ADR 0006 § Amendment and `post-phase-0-roadmap.md` § Phase 3.
+**Status:** Implemented — kept as historical record. Note: the "interim" / "pre-release-only" framing throughout this document describes the original Decision 0006 model. Per Decision 0006 § Amendment (2026-05-02), the runtime subprocess wrapper is now the shipping mechanism — Phase 3 (native Rust SDF→IR) is no longer release-gating. This document is preserved for the implementation phasing record; for current shipping intent see Decision 0006 § Amendment and `post-phase-0-roadmap.md` § Phase 3.
 
 **Phase:** 0 (executes WS3 from `phase-0-ir-and-oracle.md`).
 **Predecessors:** WS2 phases 2.1 + 2.3-minimum (delay arcs + setup/hold checks landed). Sufficient IR coverage for runtime cutover.
-**ADRs:** 0002 (IR), 0006 (SDF preprocessing model + interim cutover; amended 2026-05-02).
+**Decisions:** 0002 (IR), 0006 (SDF preprocessing model + interim cutover; amended 2026-05-02).
 
 ## Goal
 
-Delete `src/sdf_parser.rs` and migrate `src/flatten.rs`'s timing-loading to consume the timing IR directly. Wire `jacquard sim --timing-ir <PATH>` as the canonical input path, and (per ADR 0006) keep `--timing-sdf <PATH>` working pre-release as a contributor-ergonomics convenience that internally subprocesses `opensta-to-ir`.
+Delete `src/sdf_parser.rs` and migrate `src/flatten.rs`'s timing-loading to consume the timing IR directly. Wire `jacquard sim --timing-ir <PATH>` as the canonical input path, and (per Decision 0006) keep `--timing-sdf <PATH>` working pre-release as a contributor-ergonomics convenience that internally subprocesses `opensta-to-ir`.
 
 End state:
 
@@ -80,7 +80,7 @@ The hierarchy-prefix detection (lines 1793-1820 of current flatten.rs) is indepe
 ### Modified: CLI surface (`src/bin/jacquard.rs`, `src/sim/setup.rs`)
 
 - Add `--timing-ir <PATH>` flag that loads IR directly via `TimingIrFile::from_path`.
-- Retarget `--timing-sdf <PATH>` (and the existing `--sdf-corner`) to: spawn `opensta-to-ir` as a subprocess, capture its IR output, call `load_timing_from_ir`. Mark the code site `INTERIM per ADR 0006`.
+- Retarget `--timing-sdf <PATH>` (and the existing `--sdf-corner`) to: spawn `opensta-to-ir` as a subprocess, capture its IR output, call `load_timing_from_ir`. Mark the code site `INTERIM per Decision 0006`.
 - The interim hook needs Liberty + Verilog paths to feed `opensta-to-ir`; the `jacquard sim` CLI already takes those, so plumb them through.
 - Keep `--sdf-corner` for backward compat — the interim wrapper passes it as `--corner` to `opensta-to-ir`.
 
@@ -120,7 +120,7 @@ A `build_test_ir` helper in `flatten.rs::tests` mirrors `build_ir_with_arcs` fro
 |---|---|---|
 | 3.1 | Add `src/sim/timing_ir_loader.rs` and `flatten.rs::load_timing_from_ir` (parallel to `_from_sdf`). No CLI surface, no deletions. Unit-test the new function with a small synthetic IR. | New function compiles + passes unit test; existing `_from_sdf` path still works. |
 | 3.2 | Add `jacquard sim --timing-ir <PATH>` CLI flag wired to `load_timing_from_ir`. End-to-end test: pre-generate IR via `opensta-to-ir`, run `jacquard sim --timing-ir`, compare against the existing `--timing-sdf` baseline. | A representative timing test (e.g., one of the existing `tests/timing_test/`) produces matching VCD output via both paths. |
-| 3.3 | Retarget `--timing-sdf` to subprocess `opensta-to-ir` internally, then consume IR. Tag the code site `INTERIM per ADR 0006`. | Existing `--timing-sdf` regression tests pass through the new path. |
+| 3.3 | Retarget `--timing-sdf` to subprocess `opensta-to-ir` internally, then consume IR. Tag the code site `INTERIM per Decision 0006`. | Existing `--timing-sdf` regression tests pass through the new path. |
 | 3.4 | Delete `src/sdf_parser.rs`. Migrate flatten.rs test fixtures from SDF strings to IR builders. Migrate aig.rs test imports. | All `cargo test --lib` tests pass; `src/sdf_parser.rs` is gone; the only `crate::sdf_parser::` reference is `git log`. |
 
 Each phase exits cleanly. Phase 3.4 is the irreversible deletion — gates on phases 3.1-3.3 having green CI on the migration tests.
@@ -142,18 +142,18 @@ Each phase exits cleanly. Phase 3.4 is the irreversible deletion — gates on ph
 
 ## Walk-back
 
-If 3.4 surfaces blocking issues, ADR 0006 already permits deferring deletion: keep `src/sdf_parser.rs` alive but tagged `LEGACY — superseded by IR consumer; remove before first release`, and ship preprocessing-only for the interim. The runtime SDF subprocess wrapper covers the contributor ergonomics. The native Rust SDF parser rewrite (Phase 3 in the original phasing) is the durable replacement.
+If 3.4 surfaces blocking issues, Decision 0006 already permits deferring deletion: keep `src/sdf_parser.rs` alive but tagged `LEGACY — superseded by IR consumer; remove before first release`, and ship preprocessing-only for the interim. The runtime SDF subprocess wrapper covers the contributor ergonomics. The native Rust SDF parser rewrite (Phase 3 in the original phasing) is the durable replacement.
 
 ## Non-goals
 
-- A native Rust SDF parser. (Original ADR 0006 Phase 3; not part of WS3.)
+- A native Rust SDF parser. (Original Decision 0006 Phase 3; not part of WS3.)
 - Validating SDF round-trip equivalence between the old parser and OpenSTA. (CI corpus test in WS4/WS2.5 covers this when fixtures exist.)
 - Refactoring the broader `flatten.rs` structure beyond what migration requires.
 
 ## References
 
-- `../adr/0002-timing-ir.md` — IR contract.
-- `../adr/0006-sdf-preprocessing-model.md` — interim runtime subprocess + release-time cutover.
+- `../architecture/decisions/0002-timing-ir.md` — IR contract.
+- `../architecture/decisions/0006-sdf-preprocessing-model.md` — interim runtime subprocess + release-time cutover.
 - `phase-0-ir-and-oracle.md` — WS3 row.
 - `ws2-opensta-to-ir.md` — produces the IR this consumer reads.
 - `crates/opensta-to-ir/` — subprocess target for the interim `--timing-sdf` hook.

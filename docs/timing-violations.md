@@ -65,7 +65,7 @@ Setup and hold violations occur when data arrives too late (setup) or too early 
 | `--enable-timing` | `jacquard sim` | Enable timing analysis (arrival + violation checks) |
 | `--timing-clock-period <ps>` | `jacquard sim` | Clock period in picoseconds (default: 1000) |
 | `--timing-report-violations` | `jacquard sim` | Report all violations, not just summary |
-| `--timing-report <path.json>` | `jacquard sim` | Write a structured end-of-run JSON report (schema in `src/timing_report.rs`, ADR 0008). |
+| `--timing-report <path.json>` | `jacquard sim` | Write a structured end-of-run JSON report (schema in `src/timing_report.rs`, Decision 0008). |
 | `--timing-summary` | `jacquard sim` | Print a human-readable text summary at end of run. Independent of `--timing-report`; both can be combined. |
 | `--timing-report-max-violations <N>` | `jacquard sim` | Cap on the per-cycle violations list in `--timing-report`. Default 100k. `0` = unbounded. Totals + worst-slack always reflect every event. |
 | `--liberty <path>` | `jacquard sim` | Liberty library for timing data (optional, falls back to AIGPDK defaults) |
@@ -173,7 +173,7 @@ use `--timing-report` JSON.
 ### Structured JSON Report (`--timing-report <path.json>`)
 
 For CI integration and downstream tooling, pass `--timing-report <path>`
-to get an end-of-run JSON document. The schema is versioned (ADR 0008's
+to get an end-of-run JSON document. The schema is versioned (Decision 0008's
 stability contract: additive-only extensions, breaking changes bump
 the major). Sample at `tests/timing_ir/sample_reports/two_violations.json`;
 authoritative type definitions in `src/timing_report.rs`.

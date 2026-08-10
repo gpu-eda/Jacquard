@@ -1,16 +1,16 @@
 # Cosim Peripheral Models
 
-Architecture: [ADR 0013](../adr/0013-plural-peripheral-configs.md).
+Architecture: [Decision 0013](../architecture/decisions/0013-plural-peripheral-configs.md).
 
 This plan tracks implementation work for the cosim peripheral model
-framework. ADR 0013 documents the architecture (two execution domains,
+framework. Decision 0013 documents the architecture (two execution domains,
 observe-only vs bidirectional GPU patterns, ring buffers, plural config
 convention); this doc tracks the concrete workstreams.
 
 ## Phase 1: Multi-UART ([#90](https://github.com/gpu-eda/Jacquard/issues/90))
 
 First peripheral using the plural-config + array-in-kernel conventions
-from ADR 0013.
+from Decision 0013.
 
 ### Schema — `src/testbench.rs`
 

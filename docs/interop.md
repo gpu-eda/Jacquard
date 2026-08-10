@@ -16,8 +16,8 @@ works for any flow today.
 | `jacquard cosim` + peripheral models | UART, SPI flash, JTAG, Wishbone / APB3 monitors run as GPU kernels beside the design | Yes — inputs can depend on outputs cycle-by-cycle |
 
 So *reactive* stimulus is supported — but through Jacquard's own
-[peripheral model architecture](adr/0013-plural-peripheral-configs.md) and
-[cosim execution model](adr/0017-cosim-execution-model.md), not through an
+[peripheral model architecture](architecture/decisions/0013-plural-peripheral-configs.md) and
+[cosim execution model](architecture/decisions/0017-cosim-execution-model.md), not through an
 external testbench framework.
 
 ## The fallback that works for any flow: record-and-replay
@@ -44,11 +44,11 @@ These are directions under consideration, not commitments or dated milestones:
   of immediate assertions through synthesis (`GEM_ASSERT` cells; see the
   assertion handling in `aigpdk.rs`). Broader SVA support is the next step here.
 - **Running UVM test suites** — *design settled, unbuilt.* The shape is
-  [ADR 0022](adr/0022-flow-controlled-io.md): split the testbench the way
+  [Decision 0022](architecture/decisions/0022-flow-controlled-io.md): split the testbench the way
   emulators have since SCE-MI. Sequences, randomisation and checking stay on the
   host; the driver's *timed* half is rewritten as a synthesizable transactor and
   compiled into the AIG beside the design (possible since the
-  [RTL on-ramp](adr/0021-behavioral-rtl-support.md) shipped), so it wiggles pins
+  [RTL on-ramp](architecture/decisions/0021-behavioral-rtl-support.md) shipped), so it wiggles pins
   at GPU speed. Existing UVM drivers don't port as-is, and that isn't a gap we
   can close: they drive every cycle, and cosim runs 1024 edges per dispatch with
   the CPU absent, which is where the speed comes from.
@@ -64,4 +64,4 @@ recommended interim approach.
 
 - [Getting Started](getting-started.md) — `sim` and `cosim` walkthroughs
 - [Bus Transaction Tracing](bus-tracing.md) — protocol-aware observation of on-chip buses
-- [Cosim execution model](adr/0017-cosim-execution-model.md) — how peripheral kernels run
+- [Cosim execution model](architecture/decisions/0017-cosim-execution-model.md) — how peripheral kernels run

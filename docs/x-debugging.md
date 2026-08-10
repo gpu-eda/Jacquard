@@ -9,7 +9,7 @@ answers it as a **static query**, without the trace→guess→re-run loop.
 - `netlist-graph xroots` — given a signal, find *which* of those X-sources
   reach it (its backward "X-root" frontier).
 
-See [ADR 0016](adr/0016-selective-x-propagation.md) for the X-propagation
+See [Decision 0016](architecture/decisions/0016-selective-x-propagation.md) for the X-propagation
 semantics and [issue #98](https://github.com/gpu-eda/Jacquard/issues/98) for
 the design rationale.
 

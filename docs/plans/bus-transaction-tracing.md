@@ -20,7 +20,7 @@ entry into a ring buffer only when the bus is active/changed, drained by the
 CPU — but it is **hardcoded** to one VexRiscv-style SoC (literal names
 `cpu.fetch.ibus__cyc`, `spiflash.ctrl.wb_bus__ack`, …). We generalize that
 mechanism into a config-driven, protocol-aware monitor. It is observe-only
-(we watch design outputs, never drive), so it fits the ADR-0013 GPU
+(we watch design outputs, never drive), so it fits the decision-0013 GPU
 observe-only peripheral pattern, and gets the `effective_*()`-style plural
 config for free.
 
@@ -163,7 +163,7 @@ Yosys/scalar/structural naming conventions.
 `tests/apb_trace/` — a dedicated synthesized APB3 design (the Hazard3
 JTAG-DM post-PnR netlist drops the APB addr/data nets during flattening,
 so a names-preserved design was built instead). CI step:
-`Run APB3 bus-trace cosim (ADR 0013)`. Phases 2–3 remain.
+`Run APB3 bus-trace cosim (Decision 0013)`. Phases 2–3 remain.
 
 ## Phasing
 
@@ -196,8 +196,8 @@ so a names-preserved design was built instead). CI step:
 - **CUDA/HIP.** Cosim is Metal-only today; no kernel changes needed elsewhere
   now, but the general design should port cleanly when CUDA cosim lands.
 
-## ADR impact
+## decision impact
 
-This generalizes the cosim peripheral architecture — update **ADR-0013**
+This generalizes the cosim peripheral architecture — update **decision-0013**
 (plural-peripheral configs) to record the config-driven bus-monitor pattern and
 the GPU-capture/CPU-decode split, once Phase 1 is real.

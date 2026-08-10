@@ -10,7 +10,7 @@ drive and observe the design's pins every clock edge. Unlike `sim`, which
 replays a fixed input VCD, cosim lets an input depend on a design output
 cycle by cycle: a SPI flash serves firmware in response to the addresses the
 design issues, a UART decodes the bytes it transmits, a JTAG client single-steps
-it. Rationale for the execution model: [ADR 0017](../adr/0017-cosim-execution-model.md).
+it. Rationale for the execution model: [Decision 0017](decisions/0017-cosim-execution-model.md).
 
 ```d2
 # Colours and font are not set here on purpose: theme/d2-diagrams.css recolours
@@ -84,7 +84,7 @@ The batch collapses to a single edge whenever any peripheral model reports
 client, holds the design at one edge per dispatch for as long as it needs
 per-edge coupling. This is the `force_single_edge` path; it is correct but slow,
 and it is the exception, not the norm. The why, and the measured batch-utilisation
-that justifies the fixed size, are in [ADR 0017](../adr/0017-cosim-execution-model.md).
+that justifies the fixed size, are in [Decision 0017](decisions/0017-cosim-execution-model.md).
 
 ## Backends
 
@@ -114,7 +114,7 @@ bits and/or **emit** decoded records. Where it runs follows a rule: a model that
 drives inputs each edge (must react to output) can run on the CPU; a model that
 only observes outputs, or exchanges data bidirectionally, runs on the GPU for
 zero-copy access to the state buffer. Rationale and the full contract:
-[ADR 0013](../adr/0013-plural-peripheral-configs.md).
+[Decision 0013](decisions/0013-plural-peripheral-configs.md).
 
 GPU peripherals come in two patterns:
 
@@ -181,14 +181,14 @@ Decided but not yet built:
 - **Flow-controlled external I/O across the batch boundary** — bounded pipes, an
   adaptive commit window replacing the fixed `BATCH_SIZE`, per-tap projection, a
   socket reactor, and a CPU→GPU input pipe. Proposed in
-  [ADR 0022](../adr/0022-flow-controlled-io.md); nothing built.
+  [Decision 0022](decisions/0022-flow-controlled-io.md); nothing built.
 - **Tier 3 single-source peripherals** — one peripheral definition compiled to
-  CPU and every GPU backend. [ADR 0017](../adr/0017-cosim-execution-model.md).
+  CPU and every GPU backend. [Decision 0017](decisions/0017-cosim-execution-model.md).
 - **Bus trace beyond APB3** — AHB-Lite/AHB5 decode and annotated-VCD output;
   migrating the hardcoded Wishbone trace onto the config-driven monitor.
-  [ADR 0013](../adr/0013-plural-peripheral-configs.md).
+  [Decision 0013](decisions/0013-plural-peripheral-configs.md).
 - **Timed cosim on CPU/CUDA/HIP**, and the cosim structured timing report.
-  [ADR 0017](../adr/0017-cosim-execution-model.md).
+  [Decision 0017](decisions/0017-cosim-execution-model.md).
 - **Min-heap scheduler** to remove the one-million-tick cap.
   [Multi-clock and stimulus architecture](../plans/multi-clock-and-stimulus-architecture.md).
 
@@ -198,12 +198,12 @@ Scheduling for the larger items lives in
 
 ## Decisions behind this
 
-- [ADR 0013](../adr/0013-plural-peripheral-configs.md) — peripheral model
+- [Decision 0013](decisions/0013-plural-peripheral-configs.md) — peripheral model
   architecture: the CPU/GPU split, the two GPU patterns, ring buffers, plural
   configs.
-- [ADR 0017](../adr/0017-cosim-execution-model.md) — execution model: batch
+- [Decision 0017](decisions/0017-cosim-execution-model.md) — execution model: batch
   dispatch, the multi-clock scheduler, edges versus cycles, the backend seam.
-- [ADR 0012](../adr/0012-cdc-jitter-injection.md) — CDC jitter injection, which
+- [Decision 0012](decisions/0012-cdc-jitter-injection.md) — CDC jitter injection, which
   uses the scheduler's edge timestamps as its injection point.
-- [ADR 0022](../adr/0022-flow-controlled-io.md) — flow-controlled I/O (proposed;
+- [Decision 0022](decisions/0022-flow-controlled-io.md) — flow-controlled I/O (proposed;
   the future of the batch boundary).

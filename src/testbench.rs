@@ -604,7 +604,7 @@ fn default_bus_data_bits() -> usize {
 /// output nets per triggered edge and streams packed bytes out a
 /// UNIX-domain socket to an external renderer (first use: a live C64 video
 /// debug view). See `src/sim/cosim/signal_stream.rs` and
-/// `docs/spikes/video-streaming-tap.md`.
+/// `docs/architecture/decisions/spikes/video-streaming-tap.md`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SignalStreamConfig {
     /// Name, used in logs.

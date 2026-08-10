@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Verilog `specify` block parsing for the D6 L4 **arc-set agreement** check
-//! (ADR 0019 D6).
+//! (Decision 0019 D6).
 //!
 //! A standard-cell `.v` `specify` block carries timing *arc topology* — which
 //! delay paths exist — but only zero/placeholder values (an SDF

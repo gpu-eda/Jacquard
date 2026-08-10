@@ -1,10 +1,10 @@
 # Plan — Python engine as a bundled binary wheel
 
-Implementation plan for [ADR 0020](../adr/0020-python-engine-binary-wheel.md):
+Implementation plan for [Decision 0020](../architecture/decisions/0020-python-engine-binary-wheel.md):
 turn PR #53's subprocess API into a `pip install jacquard` self-contained
 binary wheel built with cibuildwheel.
 
-> **Deferred (2026-07-01).** ADR 0020 is a **draft** — a native PyO3 binding is
+> **Deferred (2026-07-01).** Decision 0020 is a **draft** — a native PyO3 binding is
 > the preferred long-term direction, and whether we build this subprocess-wheel
 > path at all is deferred ([#161](https://github.com/gpu-eda/Jacquard/issues/161)). **P0** (adopt
 > PR #53's API into the uv workspace) is worth doing regardless — it's the
@@ -45,7 +45,7 @@ Adopt PR #53 as a uv workspace member; ship nothing to PyPI yet.
 
 ## P1 — macOS/arm64 + Metal binary wheel (the spike + the crux)
 
-The whole ADR rests on "embed the binary + vendor its dylibs into a wheel that
+The whole decision rests on "embed the binary + vendor its dylibs into a wheel that
 launches with no Homebrew LLVM." Prove it here on the platform we already
 release for.
 
@@ -70,7 +70,7 @@ release for.
 
 Make `pip install jacquard` work in a plain Linux CI container (no GPU).
 
-1. Build the cosim **CPU backend** (ADR 0017) for `manylinux`; `auditwheel`
+1. Build the cosim **CPU backend** (Decision 0017) for `manylinux`; `auditwheel`
    repairs the (smaller, no-GPU) dylib set.
 2. Same clean-venv `sim`/`cosim` smoke, in a stock `manylinux`/ubuntu container.
 3. Document the backend the Linux wheel provides (CPU) vs. what needs P3.
@@ -78,7 +78,7 @@ Make `pip install jacquard` work in a plain Linux CI container (no GPU).
 
 ## P3 — CUDA / HIP (gated, likely extras)
 
-1. **Gate:** ADR 0018 Phase 4 (prebuilt CUDA/HIP binaries) must exist first —
+1. **Gate:** Decision 0018 Phase 4 (prebuilt CUDA/HIP binaries) must exist first —
    this reuses those binaries, it does not invent GPU CI.
 2. Decide with data: default manylinux wheel vs. `jacquard[cuda]` extra vs.
    a separate package — driven by wheel size and CUDA-runtime bundling. `log`
@@ -98,7 +98,7 @@ Make `pip install jacquard` work in a plain Linux CI container (no GPU).
 - Extend `docs/installation.md` (a `pip install jacquard` path) and
   `docs/release-process.md` (the wheel channel + its staging-validation gate).
 
-## Open questions (from the ADR)
+## Open questions (from the decision)
 
 - **PyPI name** `jacquard` — confirm availability; fall back to `jacquard-eda`
   with an aliased import name if taken. Blocks only the first real publish.

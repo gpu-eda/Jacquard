@@ -1,6 +1,6 @@
 # Plan: selective X-propagation in cosim
 
-Extends [ADR 0016](../adr/0016-selective-x-propagation.md) (selective
+Extends [Decision 0016](../architecture/decisions/0016-selective-x-propagation.md) (selective
 X-propagation, today `sim`-only) to the reactive `cosim` path. Issue:
 [#95](https://github.com/gpu-eda/Jacquard/issues/95).
 
@@ -12,7 +12,7 @@ X-propagation, today `sim`-only) to the reactive `cosim` path. Issue:
 > feedback reads, so uninitialised DFFs read as known `0` and X never
 > surfaced even in `sim`. Fixed via `vcd_io::xprop_xmask_template`
 > (X at genuine X-sources only) plus output-slot seeding in `run_cosim`.
-> See the handoff and ADR-0016 amendment. Phases 1, 2, 5, the seed fix,
+> See the handoff and decision-0016 amendment. Phases 1, 2, 5, the seed fix,
 > **phase 3** (undriven inputs → X: `compute_x_capable_pins(treat_inputs_as_x)`
 > gated by `DesignArgs::xprop_undriven_inputs`; `xprop_xmask_template_cosim`
 > seeds inputs X; `state_prep` + `gpu_apply_flash_din` clear the X-mask of
@@ -54,7 +54,7 @@ X originates from four places; cosim must model all four:
 | **Undriven input pad** | no model / constant / clock / reset drives it | input X-mask = X for every primary-input bit *not* in the driven set |
 | **Bidir pad input side** | `OE` deasserted and nothing external drives it | per-edge: input X-mask = `OE ? known : X`, reading `OE` (the `__oe` observable) |
 
-The first two are sequential power-up X (ADR 0016's original scope). The
+The first two are sequential power-up X (Decision 0016's original scope). The
 **last two are new** — input/IO X-sources the `sim` static-VCD path never
 had to model, and the reason this is more than "carry the sim machinery
 over."
@@ -140,10 +140,10 @@ within the primary inputs is X.
 - **SRAM xmask carry:** confirm the shadow persists correctly across the
   batched/single-tick dispatch modes the cosim loop uses.
 
-## ADR / docs impact
+## decision / docs impact
 
-- **Amend ADR 0016**: record the cosim extension and broaden the
+- **Amend Decision 0016**: record the cosim extension and broaden the
   X-source taxonomy to include undriven input pads + bidir-OE (the
-  original ADR covered only sequential power-up X).
+  original decision covered only sequential power-up X).
 - Fold the IO X-source rules into `docs/selective-x-propagation.md`.
 - Update the cosim `--xprop` help + `docs/installation.md` once shipped.

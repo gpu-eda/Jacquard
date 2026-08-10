@@ -18,7 +18,7 @@
 //! hierarchical designs that split sub-modules across files still
 //! link cleanly.
 //!
-//! See ADR 0009 for the broader rule and rationale.
+//! See Decision 0009 for the broader rule and rationale.
 
 /// Extract the `module <name> … endmodule` block from `content`.
 ///

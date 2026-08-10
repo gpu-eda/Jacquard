@@ -18,7 +18,7 @@ Everything else Jacquard offers is offered, often better, by the standard flow:
 
 Jacquard becomes the right tool when **(design size × vector length)** exceeds what event-driven SDF-annotated sim can handle, and you specifically want vector-driven timing answers.
 
-**STA is not optional even with Jacquard.** Jacquard does not replace OpenSTA; it complements it. The right framing is "STA proves no bad vectors exist; Jacquard proves your real workload runs cleanly within those bounds." OpenSTA is also a hard runtime dependency for any timing-aware Jacquard flow — the timing IR is produced by `opensta-to-ir`, which subprocesses OpenSTA. See ADR 0001.
+**STA is not optional even with Jacquard.** Jacquard does not replace OpenSTA; it complements it. The right framing is "STA proves no bad vectors exist; Jacquard proves your real workload runs cleanly within those bounds." OpenSTA is also a hard runtime dependency for any timing-aware Jacquard flow — the timing IR is produced by `opensta-to-ir`, which subprocesses OpenSTA. See Decision 0001.
 
 ---
 
@@ -76,7 +76,7 @@ Jacquard's timing fidelity gap with CVC is closeable. The work in [`timing-model
 
 ## Output interface — what Jacquard exposes today
 
-Jacquard's unique value depends on getting the timing information *out* of a run in a form users can act on. Phase 1 of the post-Phase-0 roadmap (ADR 0008) closed the gap between "data Jacquard has" and "answers users want" for setup/hold violations.
+Jacquard's unique value depends on getting the timing information *out* of a run in a form users can act on. Phase 1 of the post-Phase-0 roadmap (Decision 0008) closed the gap between "data Jacquard has" and "answers users want" for setup/hold violations.
 
 ### Symbolic stderr violation messages
 The kernel writes setup/hold violation events to a per-block event buffer (`csrc/kernel_v1.metal:554-576`). The host drains the buffer each cycle (`src/event_buffer.rs`), resolves the state-word index to a hierarchical DFF site name via `WordSymbolMap`, and emits:
@@ -96,7 +96,7 @@ Schema-versioned JSON document written at end of run. Contents:
 - Run metadata: design, vector source, timing source, clock period, cycles run, Jacquard version.
 - Aggregate stats: setup/hold totals, dropped events.
 
-Machine-readable, CI-friendly. Sample at `tests/timing_ir/sample_reports/two_violations.json`; full schema in `src/timing_report.rs` (`SCHEMA_VERSION = "1.0.0"`). Stability contract per ADR 0008: additive-only extensions, breaking changes bump the major.
+Machine-readable, CI-friendly. Sample at `tests/timing_ir/sample_reports/two_violations.json`; full schema in `src/timing_report.rs` (`SCHEMA_VERSION = "1.0.0"`). Stability contract per Decision 0008: additive-only extensions, breaking changes bump the major.
 
 ### Text summary (`--timing-summary`)
 One-screen human summary on stdout. Same data as the JSON report, different channel; either or both flags can be set:
@@ -136,7 +136,7 @@ Annotates the output VCD with per-signal arrival times. Largest, most detailed o
 
 ## Still on the wishlist
 
-Items captured in ADR 0008's "Optional / later outputs" plus a few caveats on what shipped. Demand-driven; not scheduled.
+Items captured in Decision 0008's "Optional / later outputs" plus a few caveats on what shipped. Demand-driven; not scheduled.
 
 ### Closest-to-violation tracking when no violation occurred
 The shipped `worst_slack` ranking is populated only from observed violation events. Surfacing "where am I close to the edge" on a run that *passed* timing requires GPU-side near-miss instrumentation (emit slack events whenever |slack| falls below a configurable threshold). Useful for proactive signoff regression. Separate workstream — needs a kernel change.
@@ -154,10 +154,10 @@ Given a flagged DFF, walk the max-of-fanin chain backward to the source AIG pin 
 The current Metal sim path routes runtime violations through `process_events` (which is what feeds the resolver, structured report, and text summary). The CUDA, HIP, and cosim paths don't yet share that plumbing — they detect violations on the GPU but don't drain through `process_events`. Independent plumbing follow-up; doesn't affect the Metal user experience.
 
 ### Per-signal activity / transition counts
-Listed in ADR 0008 as part of the JSON report's wishlist. Not in v1.0.0 of the schema; will be added (additively) when the GPU kernel emits transition events.
+Listed in Decision 0008 as part of the JSON report's wishlist. Not in v1.0.0 of the schema; will be added (additively) when the GPU kernel emits transition events.
 
 ### "Corner" and "margin percentage" in the text summary
-ADR 0008's summary template includes both. Corner is missing because the metadata struct doesn't carry it through from the IR yet; margin percentage is trivially derivable from `slack_ps / clock_period_ps` and was omitted to keep the v1 summary terse.
+Decision 0008's summary template includes both. Corner is missing because the metadata struct doesn't carry it through from the IR yet; margin percentage is trivially derivable from `slack_ps / clock_period_ps` and was omitted to keep the v1 summary terse.
 
 ---
 

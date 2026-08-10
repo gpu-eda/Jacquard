@@ -7,7 +7,7 @@
 //! consumers walk to extract whatever they need — jacquard core's
 //! `TimingLibrary` (L4 timing characterization) and the future
 //! Liberty -> cell-model-IR converter (L1-L3) both build on this crate.
-//! See `docs/adr/0019-cell-model-ir.md` decision D6.
+//! See `docs/architecture/decisions/0019-cell-model-ir.md` decision D6.
 //!
 //! Liberty's concrete syntax has exactly two statement forms:
 //!

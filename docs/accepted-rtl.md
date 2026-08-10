@@ -56,8 +56,11 @@ module). It is located in this order:
    ```sh
    pip install yowasp-yosys          # or: uvx yowasp-yosys
    ```
-4. **Fetch from release** — a planned follow-up (ADR 0021 / #162 Phase 4); not
-   yet implemented. Until then, one of the three methods above is required.
+4. **Fetch from a pinned release** (implemented; the default when the options above
+   aren't set): a sha256-verified `yosys.wasm` is downloaded from the
+   `gpu-eda/yowasp-yosys` fork and cached under `$XDG_CACHE_HOME/jacquard`. The
+   [RTL on-ramp](architecture/rtl-onramp.md) reference describes the full resolution
+   order and why the fork wasm is the default.
 
 > **Version caveat.** Pin to **`yowasp-yosys==0.64.0.0.post1131`** (the version in
 > the project's `uv.lock`, verified to carry `read_slang`). *Newer* wheels ship a
@@ -190,5 +193,5 @@ coverage table when it ships.
 
 - [Getting Started](getting-started.md) — run bundled designs to verify your build first.
 - [Synthesis Flow](synthesis-flow.md) — the performance path (DC / native Yosys, peak QoR).
-- [ADR 0021](adr/0021-behavioral-rtl-support.md) — the design decision behind the on-ramp.
+- [Decision 0021](architecture/decisions/0021-behavioral-rtl-support.md) — the design decision behind the on-ramp.
 - `docs/plans/rtl-onramp-sim-integration.md` — implementation plan and Phase 4 roadmap.

@@ -1,7 +1,7 @@
 //! `cell-model-ir-diff` — structural diff between two cell-model-IR documents.
 //!
 //! Used by CI to validate that descriptor regeneration is deterministic
-//! (ADR 0019 D7): a freshly generated descriptor must structurally equal the
+//! (Decision 0019 D7): a freshly generated descriptor must structurally equal the
 //! previous one. Also useful for debugging differences between descriptors
 //! produced by different converter versions.
 

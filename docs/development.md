@@ -63,7 +63,7 @@ submodule. NVDLA is the smallest and the usual first thing to try.
 | `src/pe.rs` | maps a partition onto one block's resources; the limits below live here |
 | `src/flatten.rs` | emits `FlattenedScriptV1`, the packed instruction stream the kernel runs |
 | `src/aigpdk.rs` | the AIGPDK standard-cell interface (AND, DFF, clock gate, SRAM) |
-| `src/synth.rs` | the embedded Yosys on-ramp (ADR 0021), behind `synth` |
+| `src/synth.rs` | the embedded Yosys on-ramp (Decision 0021), behind `synth` |
 | `csrc/kernel_v1.metal` | the Metal kernel |
 | `csrc/kernel_v1.cu`, `kernel_v1.hip.cpp` | CUDA and HIP, sharing `kernel_v1_impl.cuh` |
 | `crates/` | `timing-ir`, `opensta-to-ir`, `cell-model-ir`, `liberty-parse`, `liberty-to-cellir`, `cell-decomp` |
@@ -76,9 +76,9 @@ The pipeline reads left to right:
 NetlistDB → AIG → StagedAIG → Partitions → FlattenedScript → GPU kernel
 ```
 
-[Simulation Architecture](simulation-architecture.md) walks each stage. For
-*why* it is shaped this way, [ADR 0014](adr/0014-aig-as-simulation-ir.md)
-explains the AIG choice and [ADR 0015](adr/0015-boomerang-execution-model.md)
+[Simulation engine](architecture/simulation-engine.md) walks each stage. For
+*why* it is shaped this way, [Decision 0014](architecture/decisions/0014-aig-as-simulation-ir.md)
+explains the AIG choice and [Decision 0015](architecture/decisions/0015-boomerang-execution-model.md)
 the boomerang execution model.
 
 ## The constraint that shapes everything
@@ -153,16 +153,19 @@ to the pinned copy, so a link in an old release keeps meaning what it meant. See
 
 ## Conventions
 
-- **[ADRs](adr/README.md)** record decisions worth understanding later, and are
-  append-only: when reality moves past one, amend it rather than rewriting it.
-  An ADR's status is a claim about the code, so check it against the code.
+- **[Decisions](architecture/decisions/README.md)** record choices worth
+  understanding later. A record is immutable and past-tense: when a decision
+  changes, a new record supersedes the old rather than rewriting it. A record's
+  status is a claim about the code, so check it against the code. Current state
+  lives in the [architecture reference](architecture/README.md), not the record.
 - **[Plans](plans/README.md)** hold work in progress; deferred work gets a plan
   and an issue rather than being lost.
 - **[Handoffs](handoff-discipline.md)** are working memory, not history. One per
-  active thread, folded into the ADRs or plans and deleted when resolved.
+  active thread, folded into the decisions or plans and deleted when resolved.
+- **[Prose style](prose-style.md)** is the house style for the docs' writing.
 - **[Release Process](release-process.md)** covers cutting a release, the RC-first
   flow, and what's automated.
 
 The through-line: a sentence that says how the tool behaves is a verifiable
-claim. That applies to docs, `--help` text, and ADR status alike — check it
+claim. That applies to docs, `--help` text, and a decision's status alike; check it
 against the code before writing it.

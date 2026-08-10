@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! L3 — sequential pin-roles + classification (ADR 0019 D4).
+//! L3 — sequential pin-roles + classification (Decision 0019 D4).
 //!
 //! Reads a cell's Liberty `ff` / `latch` group (and the `clock_gate_*` pin
 //! attributes) and projects it onto [`cell_model_ir::Sequential`] plus a

@@ -5,7 +5,7 @@ regression test for any change that affects timing-IR production or consumption.
 
 Run on every CI execution.
 
-See [`docs/adr/0005-opensta-vendoring-and-corpus.md`](../../../docs/adr/0005-opensta-vendoring-and-corpus.md)
+See [`docs/architecture/decisions/0005-opensta-vendoring-and-corpus.md`](../../../docs/architecture/decisions/0005-opensta-vendoring-and-corpus.md)
 for the rationale behind the corpus split (primary vs stress).
 
 ## Layout

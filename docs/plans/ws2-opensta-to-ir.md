@@ -7,7 +7,7 @@ lives at `crates/opensta-to-ir/`. Current scheduling for further
 timing-model fidelity work is tracked in `post-phase-0-roadmap.md`.
 
 **Phase:** 0 (executed WS2 from `phase-0-ir-and-oracle.md`).
-**Predecessors:** WS1 (`crates/timing-ir`, schema and round-trip — done), ADRs 0001 / 0002 / 0005 / 0006.
+**Predecessors:** WS1 (`crates/timing-ir`, schema and round-trip — done), Decisions 0001 / 0002 / 0005 / 0006.
 
 ## Goal
 
@@ -17,7 +17,7 @@ Deliver a production-quality preprocessing tool that consumes a design's timing 
 .lib + .v + .sdf + .spef + .sdc  →  opensta-to-ir  →  design.jtir (+ design.json)
 ```
 
-`opensta-to-ir` is shipped as a release artefact (per ADR 0006) and is also used by Phase 0 WS3's interim `jacquard sim --timing-sdf` runtime hook.
+`opensta-to-ir` is shipped as a release artefact (per Decision 0006) and is also used by Phase 0 WS3's interim `jacquard sim --timing-sdf` runtime hook.
 
 ## High-level architecture
 
@@ -41,7 +41,7 @@ Reasons for this shape:
 
 - OpenSTA's structured Tcl API (`get_timing_edges`, `get_timing_arcs_from`, etc.) gives access to OpenSTA's internalised timing graph directly. Walking it is simpler than parsing OpenSTA's SDF output back through a second-generation parser.
 - The Tcl script is the only OpenSTA-specific code; the Rust side is format-only and can later be reused with other producers (Phase 3 native Rust parser, future OpenTimer adapter).
-- Subprocess invocation preserves Jacquard's permissive license posture (ADR 0001).
+- Subprocess invocation preserves Jacquard's permissive license posture (Decision 0001).
 
 ## Tcl dump format
 
@@ -203,15 +203,15 @@ Still open / deferred:
 
 - A general SDF parser. (The whole point: avoid that.)
 - Wire-level reactivity or feedback to OpenSTA mid-run (this is a one-shot extract).
-- Comparison against OpenTimer (that's a separate ADR-0003-spike concern).
+- Comparison against OpenTimer (that's a separate decision-0003-spike concern).
 - Replacing OpenSTA's role as oracle in CI — `opensta-to-ir` is a producer, not a checker.
 
 ## References
 
-- `../adr/0001-opensta-as-oracle.md` — subprocess model, license posture.
-- `../adr/0002-timing-ir.md` — IR contract this tool emits.
-- `../adr/0005-opensta-vendoring-and-corpus.md` — `vendor/opensta/` submodule.
-- `../adr/0006-sdf-preprocessing-model.md` — interim runtime hook + release-time cutover.
+- `../architecture/decisions/0001-opensta-as-oracle.md` — subprocess model, license posture.
+- `../architecture/decisions/0002-timing-ir.md` — IR contract this tool emits.
+- `../architecture/decisions/0005-opensta-vendoring-and-corpus.md` — `vendor/opensta/` submodule.
+- `../architecture/decisions/0006-sdf-preprocessing-model.md` — interim runtime hook + release-time cutover.
 - `phase-0-ir-and-oracle.md` — WS2 row in the work breakdown.
 - `crates/timing-ir/schemas/timing_ir.fbs` — schema this tool produces.
 - `vendor/opensta/doc/StaApi.txt` — OpenSTA Tcl API reference.
