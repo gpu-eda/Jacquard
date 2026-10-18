@@ -30,7 +30,7 @@ you're adding:
   manifest). For third-party IP, hard macros, foundry memories, and
   any other cells that *don't* need new AIG decomposition rules — i.e.
   cells that act as opaque outputs (RAM macros), filler/cap blocks,
-  or IO pads. See **Decision 0010** and `docs/plans/declarative-cell-metadata.md`
+  or IO pads. See **Decision 0010** and `docs/plans/archive/declarative-cell-metadata.md`
   for the recipe. **No Jacquard PR required** — users ship a manifest
   alongside their netlist. See **"Adding third-party IP via runtime
   manifest"** at the end.

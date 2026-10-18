@@ -10,7 +10,7 @@ Decision rationale, technical context, and project state all have natural homes:
 
 - **Decisions** (`docs/architecture/decisions/`) capture architectural choices and their *why*.
 - **Design docs** (`docs/timing-model-extensions.md`, etc.) capture *how* things work.
-- **Plan docs** (`docs/plans/phase-0-ir-and-oracle.md`, `post-phase-0-roadmap.md`) capture *what's left* and the next workstream slices.
+- **Plan docs** (`docs/plans/archive/phase-0-ir-and-oracle.md`, `post-phase-0-roadmap.md`) capture *what's left* and the next workstream slices.
 
 When that content lives in a handoff instead, two things go wrong:
 

@@ -382,6 +382,6 @@ provenance.
 - **Feeds [Decision 0014](0014-aig-as-simulation-ir.md)** — the cell-model IR's
   L2 payload *is* AIG (D3), spliced into the design AIG at load.
 
-Staged delivery: [`docs/plans/cell-model-ir.md`](../../plans/cell-model-ir.md).
+Staged delivery: [`docs/plans/archive/cell-model-ir.md`](../../plans/archive/cell-model-ir.md).
 Tracks [#130](https://github.com/gpu-eda/Jacquard/issues/130) and
 [#67](https://github.com/gpu-eda/Jacquard/issues/67).

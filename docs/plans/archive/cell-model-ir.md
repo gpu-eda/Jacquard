@@ -1,7 +1,7 @@
 # Cell-model IR — staged delivery plan
 
 **Status:** Largely delivered. Realises
-[Decision 0019](../architecture/decisions/0019-cell-model-ir.md). Tracks
+[Decision 0019](../../architecture/decisions/0019-cell-model-ir.md). Tracks
 [#130](https://github.com/gpu-eda/Jacquard/issues/130) and
 [#67](https://github.com/gpu-eda/Jacquard/issues/67).
 
@@ -120,10 +120,10 @@ reintroduce `PdkVariant`.
 
 ## References
 
-- [Decision 0019 — Cell-model IR](../architecture/decisions/0019-cell-model-ir.md).
-- [Decision 0002 — Timing IR](../architecture/decisions/0002-timing-ir.md) (the pattern + scope
-  boundary this realises), [Decision 0010](../architecture/decisions/0010-declarative-cell-metadata.md)
-  / [Decision 0011](../architecture/decisions/0011-ram-port-mapping-schema.md) (the declarative path
+- [Decision 0019 — Cell-model IR](../../architecture/decisions/0019-cell-model-ir.md).
+- [Decision 0002 — Timing IR](../../architecture/decisions/0002-timing-ir.md) (the pattern + scope
+  boundary this realises), [Decision 0010](../../architecture/decisions/0010-declarative-cell-metadata.md)
+  / [Decision 0011](../../architecture/decisions/0011-ram-port-mapping-schema.md) (the declarative path
   this extends).
 - Current state: `src/aig.rs:1895` (hardcoded 7T path), `build.rs`
   (port-only pin gen), `src/pdk.rs` / `src/gf180mcu_pdk.rs` (hardcoded

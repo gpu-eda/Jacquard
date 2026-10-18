@@ -5,7 +5,7 @@
 //! `timing_ir::TimingIR<'_>` view whose lifetime is tied to the buffer.
 //! Callers keep the file alive while iterating the view.
 //!
-//! See `docs/plans/ws3-delete-sdf-parser.md` for the consumer cutover
+//! See `docs/plans/archive/ws3-delete-sdf-parser.md` for the consumer cutover
 //! plan.
 
 use std::path::Path;

@@ -1,6 +1,6 @@
 //! Round-trip: build a small IR, serialize, deserialize, assert equality.
 //!
-//! This is the WS1 acceptance test from `docs/plans/phase-0-ir-and-oracle.md` —
+//! This is the WS1 acceptance test from `docs/plans/archive/phase-0-ir-and-oracle.md` —
 //! schema round-trip works.
 
 use flatbuffers::FlatBufferBuilder;

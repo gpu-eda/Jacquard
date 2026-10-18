@@ -88,7 +88,7 @@ Each converter (SDF→IR, Liberty→IR, OpenSTA→IR, reference-STA→IR) is tes
 
 ## Acceptance criteria — phase 0
 
-Phase 0 (see `docs/plans/phase-0-ir-and-oracle.md`) is complete when:
+Phase 0 (see `docs/plans/archive/phase-0-ir-and-oracle.md`) is complete when:
 
 1. Timing IR schema defined, with both a binary encoding and a JSON sidecar for human/CI diffs.
 2. OpenSTA → IR converter implemented as a subprocess-driven tool.

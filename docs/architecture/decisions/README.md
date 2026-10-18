@@ -155,4 +155,6 @@ retired as the records are reframed to the immutable model.*
    [reference layer](../README.md) whose current state this decision shaped.
 6. When a decision changes later, **do not edit its record**: write a new record
    that supersedes it, set the old one's status to **Superseded**, and move the old
-   file to [`archive/`](archive/).
+   file to `archive/` with
+   `python3 docs/scripts/move_doc.py docs/architecture/decisions/<file>.md docs/architecture/decisions/archive/`,
+   which repoints every link to it.

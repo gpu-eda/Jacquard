@@ -198,7 +198,7 @@ struct SimArgs {
     /// the netlist reader without vendoring. If a sibling
     /// `<file>.cells.toml` manifest is present, its per-cell `kind`
     /// annotations are loaded automatically. See ADR 0010 and
-    /// `docs/plans/declarative-cell-metadata.md`.
+    /// `docs/plans/archive/declarative-cell-metadata.md`.
     #[clap(long = "cell-library", value_name = "PATH")]
     cell_library: Vec<PathBuf>,
 
@@ -464,7 +464,7 @@ struct CosimArgs {
     /// Enable selective X-propagation (ADR 0016): uninitialised DFF/SRAM,
     /// undriven input pads, and bidir pads with OE deasserted resolve to
     /// X rather than silently to 0. Emits `x` in the output VCD. See
-    /// `docs/plans/cosim-xprop.md`.
+    /// `docs/plans/archive/cosim-xprop.md`.
     #[clap(long)]
     xprop: bool,
 

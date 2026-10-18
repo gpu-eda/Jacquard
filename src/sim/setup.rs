@@ -52,7 +52,7 @@ pub struct DesignArgs {
     /// reader through `ChainedPinProvider`. Sibling
     /// `<file>.cells.toml` manifests are autoloaded for per-cell
     /// `kind` annotations. See ADR 0010 and
-    /// `docs/plans/declarative-cell-metadata.md`.
+    /// `docs/plans/archive/declarative-cell-metadata.md`.
     pub cell_library: Vec<PathBuf>,
     /// Optional `--trace-signals <PATH>` — file with one
     /// hierarchical signal name per line. Resolved against

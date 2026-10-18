@@ -1933,7 +1933,7 @@ impl FlattenedScriptV1 {
     ///
     /// Consumes the IR directly with `/` as the hierarchy separator
     /// (OpenSTA's default divider). See
-    /// `docs/plans/ws3-delete-sdf-parser.md`.
+    /// `docs/plans/archive/ws3-delete-sdf-parser.md`.
     pub fn load_timing_from_ir(
         &mut self,
         aig: &AIG,

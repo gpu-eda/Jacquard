@@ -3,9 +3,9 @@
 **Status:** Implemented — historical record. Tier 1, minimal Tier 2,
 and the port-mapping schema have all landed.
 **Decisions:**
-- [0010 — Declarative cell metadata for PDK enablement](../architecture/decisions/0010-declarative-cell-metadata.md)
+- [0010 — Declarative cell metadata for PDK enablement](../../architecture/decisions/0010-declarative-cell-metadata.md)
   (Tier 1 + minimal Tier 2)
-- [0011 — RAM port-mapping schema](../architecture/decisions/0011-ram-port-mapping-schema.md)
+- [0011 — RAM port-mapping schema](../../architecture/decisions/0011-ram-port-mapping-schema.md)
   (the port-mapping extension originally deferred by Decision 0010)
 **Issues:** [#67](https://github.com/gpu-eda/Jacquard/issues/67),
 [#80](https://github.com/gpu-eda/Jacquard/issues/80).

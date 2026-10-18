@@ -1,6 +1,6 @@
 # Plan: selective X-propagation in cosim
 
-Extends [Decision 0016](../architecture/decisions/0016-selective-x-propagation.md) (selective
+Extends [Decision 0016](../../architecture/decisions/0016-selective-x-propagation.md) (selective
 X-propagation, today `sim`-only) to the reactive `cosim` path. Issue:
 [#95](https://github.com/gpu-eda/Jacquard/issues/95).
 

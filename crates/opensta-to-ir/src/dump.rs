@@ -3,7 +3,7 @@
 //! The OpenSTA Tcl driver emits a line-oriented, tab-separated record format
 //! consumed by this parser. The format is a private contract between the
 //! Tcl driver and this binary — both ship together, both bump
-//! `format-version` together. See `docs/plans/ws2-opensta-to-ir.md` for the
+//! `format-version` together. See `docs/plans/archive/ws2-opensta-to-ir.md` for the
 //! record layout.
 //!
 //! Phase 0 WS2 (Phase 2.1) populates only `CORNER` and `ARC` records.

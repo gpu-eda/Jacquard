@@ -155,7 +155,7 @@ captures those `\src` locations into `netlistdb.cell_src`, and
 `--trace-signals` can report an RTL file:line instead of a flattened gate
 name. A signal resolving to `binary_to_gray.sv:15` instead of
 `$auto$…$1234` is the visible result. Full write-up:
-[RTL-source provenance](../plans/rtl-source-provenance.md).
+[RTL-source provenance](../plans/archive/rtl-source-provenance.md).
 
 ## Constraints
 
@@ -200,7 +200,7 @@ Decided but not yet built:
 - **Source locations in `--timing-report`.** Provenance reaches
   `--trace-signals` and `xsources`/`xroots` today; threading `\src` into the
   structured timing report is the one deferred piece of the provenance plan.
-  [RTL-source provenance](../plans/rtl-source-provenance.md).
+  [RTL-source provenance](../plans/archive/rtl-source-provenance.md).
 
 ## Decisions behind this
 

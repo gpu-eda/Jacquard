@@ -15,7 +15,7 @@
 
 ## Context
 
-Under Decision 0001, OpenSTA is the ground-truth oracle for timing correctness, invoked as a subprocess. Phase 0 (`../plans/phase-0-ir-and-oracle.md`) requires:
+Under Decision 0001, OpenSTA is the ground-truth oracle for timing correctness, invoked as a subprocess. Phase 0 (`../../plans/archive/phase-0-ir-and-oracle.md`) requires:
 
 - A reproducible, pinned OpenSTA reference so CI diffs are comparable run-to-run.
 - Access to OpenSTA's test inputs for stress testing our OpenSTA-driven converters.
@@ -76,4 +76,4 @@ If a stress-corpus file exposes a bug, a minimal reproducer may be distilled and
 - `../timing-correctness.md` — R3 (oracle-backed CI).
 - Decision 0001 — OpenSTA as oracle (establishes the subprocess model).
 - Decision 0002 — timing IR (the format being stress-tested).
-- `../plans/phase-0-ir-and-oracle.md` — Phase 0 WS4 implements this split.
+- `../../plans/archive/phase-0-ir-and-oracle.md` — Phase 0 WS4 implements this split.
