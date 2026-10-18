@@ -1,6 +1,7 @@
 # Stage B (T2.1) port spec — `gpu_io_step` on CUDA/HIP + batched `run_edges`
 
-**Status:** Spec for review — not yet implemented. Sibling detail doc to
+**Status:** ✅ **SHIPPED** — landed as `80a2993e` and merged in PR #120
+(2026-06-21). Kept as the as-built spec. Sibling detail doc to
 [`cosim-phase2-cuda-hip.md`](cosim-phase2-cuda-hip.md) (the authoritative plan;
 Stage B = its checkpoint **T2.1**). Resumed from
 `docs/handoffs/backend-alignment-handoff.md`.

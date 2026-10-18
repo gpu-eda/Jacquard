@@ -11,9 +11,9 @@ backends to Metal parity on the two paths that lag today:
 2. **#105 Phase 2** — `cosim` on CUDA/HIP **with batching** (Metal-only today;
    a `--features cuda` build currently falls through to `CpuBackend`).
 
-**Architecture:** [Decision 0017](../architecture/decisions/0017-cosim-execution-model.md) (Layer 1/2/3 +
+**Architecture:** [Decision 0017](../../architecture/decisions/0017-cosim-execution-model.md) (Layer 1/2/3 +
 peripheral contract); staging in
-[cosim-backend-portability.md](cosim-backend-portability.md) (this is the
+[cosim-backend-portability.md](../cosim-backend-portability.md) (this is the
 Phase-2 detail doc, sibling to `cosim-phase1-cpu-backend.md`).
 
 **Release bar (decided):** full batched cosim (checkpoints 2a **and** 2b), not a

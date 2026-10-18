@@ -26,7 +26,7 @@ persistent plans here.
 | [GF180MCU PDK enablement](gf180mcu-enablement.md) | Mostly implemented — Phases 0–6 shipped; Phase 7 deferred |
 | [WS3 follow-up: re-add cosim `--sdf` via `opensta-to-ir`](ws3-cosim-sdf-followup.md) | Deferred |
 | [Multi-clock and stimulus architecture](multi-clock-and-stimulus-architecture.md) | Exploratory — demand-driven |
-| [Cosim backend portability](cosim-backend-portability.md) | Active — design captured (#105); see Decision 0017 amendment |
+| [Cosim backend portability](cosim-backend-portability.md) | Phases 0–2 shipped (#118, #120); Phase 3 future, demand-driven |
 | [RTL on-ramp folded into `sim`/`cosim`](rtl-onramp-sim-integration.md) | Active — reworks #167, realises Decision 0021 (#162) |
 
 ## Archive
@@ -44,6 +44,10 @@ how each decision was carried out.
 | [Selective X-propagation in cosim](archive/cosim-xprop.md) | Implemented |
 | [Cell-model IR](archive/cell-model-ir.md) | Largely delivered; realises Decision 0019 |
 | [RTL-source provenance](archive/rtl-source-provenance.md) | Shipped in v0.3.0; realises Decision 0021 Phase 2 |
+| [Cosim Phase 1: CpuBackend + Linux cosim CI](archive/cosim-phase1-cpu-backend.md) | Shipped in PR #118 with Phase 0 |
+| [Cosim Phase 2: CUDA/HIP parity](archive/cosim-phase2-cuda-hip.md) | Shipped in PR #120; performance follow-up is #122 |
+| [Cosim Phase 2 Stage B: `gpu_io_step` port](archive/cosim-phase2-stageB-io-port.md) | Shipped in PR #120 |
+| [Cosim Phase 2 Stage C: flash kernels](archive/cosim-phase2-stageC-flash.md) | Shipped in PR #120 |
 
 ## Reading order for new contributors
 
