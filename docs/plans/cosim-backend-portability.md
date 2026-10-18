@@ -1,6 +1,8 @@
 # Cosim Backend Portability
 
-**Status:** Active — design captured, not yet scheduled.
+**Status:** Phases 0–2 shipped (PR #118, 2026-06-17; PR #120, 2026-06-21).
+Phase 3 (single-source peripherals) remains future, demand-driven work.
+The per-phase plans are in [`archive/`](README.md#archive).
 **Issue:** [#105](https://github.com/gpu-eda/Jacquard/issues/105).
 **Architecture:** [Decision 0017 — Cosim execution model](../architecture/decisions/0017-cosim-execution-model.md)
 (see *Amendment 2026-06-07: backend-portable cosim — target architecture*).
@@ -155,7 +157,7 @@ existing cosim fixtures on Linux CI and passes their checkers.
 ### Phase 2 — Path B: `Cuda`/`HipBackend` mirroring Metal (GPU peripherals, batched)
 
 > **Refined 2026-06-19** (see Decision 0017 *Amendment 2026-06-19* and the detail doc
-> [`cosim-phase2-cuda-hip.md`](cosim-phase2-cuda-hip.md)): there is **one**
+> [`cosim-phase2-cuda-hip.md`](archive/cosim-phase2-cuda-hip.md)): there is **one**
 > CUDA/HIP cosim backend, mirroring `MetalBackend` (GPU design step + GPU
 > peripherals + variable batching + managed memory). The earlier
 > "checkpoint 2a = CPU-peripheral CUDA backend" is **dropped** — no production

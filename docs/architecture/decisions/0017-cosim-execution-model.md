@@ -436,7 +436,7 @@ analog to Metal's unified `StorageModeShared`).
   peripherals), B (`gpu_io_step` → `dual_uart` + `apb_trace`), C (flash kernels
   → flash/JTAG). Every stage is the real architecture, gated against the
   committed CPU/Metal goldens on the T4. Staging detail:
-  [`docs/plans/cosim-phase2-cuda-hip.md`](../../plans/cosim-phase2-cuda-hip.md).
+  [`docs/plans/archive/cosim-phase2-cuda-hip.md`](../../plans/archive/cosim-phase2-cuda-hip.md).
 
 ## Amendment 2026-06-21: interactive (externally-paced) peripheral models
 

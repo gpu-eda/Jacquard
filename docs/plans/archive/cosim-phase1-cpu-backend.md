@@ -1,8 +1,9 @@
 # Cosim Phase 1 — `CpuBackend` + Linux cosim CI (implementation plan)
 
-**Status:** Proposed (implementation plan for Phase 1 of #105).
-**Parent plan:** [`cosim-backend-portability.md`](./cosim-backend-portability.md) (staging).
-**Architecture:** [Decision 0017 — Amendment 2026-06-07](../architecture/decisions/0017-cosim-execution-model.md).
+**Status:** ✅ **SHIPPED** — merged to `main` with Phase 0 in PR #118
+(2026-06-17). Kept as the as-built record of Phase 1 of #105.
+**Parent plan:** [`cosim-backend-portability.md`](../cosim-backend-portability.md) (staging).
+**Architecture:** [Decision 0017 — Amendment 2026-06-07](../../architecture/decisions/0017-cosim-execution-model.md).
 **Base:** stacks on Phase 0 (branch `cosim-backend-seam-phase0`, PR #118 —
 `CosimBackend` trait + `MetalBackend` extracted, Metal bit-identical).
 
