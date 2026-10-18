@@ -2,7 +2,7 @@
 //! cells outside Jacquard's vendored PDKs.
 //!
 //! See [ADR 0010](../../docs/architecture/decisions/0010-declarative-cell-metadata.md)
-//! and `docs/plans/declarative-cell-metadata.md`. This module is the
+//! and `docs/plans/archive/declarative-cell-metadata.md`. This module is the
 //! Tier 1 + minimal Tier 2 slice:
 //!
 //! - `RuntimeCellLibrary` parses one or more user-supplied

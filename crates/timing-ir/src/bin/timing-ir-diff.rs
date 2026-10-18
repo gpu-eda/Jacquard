@@ -3,7 +3,7 @@
 //! Used by CI to validate converter output against golden IR, and by
 //! contributors to debug differences between two IRs produced by
 //! different tools or tool versions. See WS4 in
-//! `docs/plans/phase-0-ir-and-oracle.md`.
+//! `docs/plans/archive/phase-0-ir-and-oracle.md`.
 
 use std::path::PathBuf;
 use std::process::ExitCode;

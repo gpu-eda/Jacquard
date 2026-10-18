@@ -165,6 +165,6 @@ tests stay green without churn.
 - Decision 0009 — OpenSTA Verilog reader input constraints
   (`sverilogparse` is already in-tree for unrelated reasons; Tier 1
   reuses that dep).
-- `docs/plans/declarative-cell-metadata.md` — implementation phasing.
+- `docs/plans/archive/declarative-cell-metadata.md` — implementation phasing.
 - `docs/plans/gf180mcu-enablement.md` § Follow-on cleanup items
   1, 2, 3 — superseded by this ADR.

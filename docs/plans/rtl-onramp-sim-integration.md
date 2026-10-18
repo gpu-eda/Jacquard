@@ -130,7 +130,7 @@ the feature; green on the branch.
     coverage table (Phase 4), not this prose — prose is the orientation.
   - Cross-link from `getting-started.md`.
 - Fix stale `jacquard map` references (`CLAUDE.md`, docs) → `dump-paths`.
-- `docs/plans/cell-model-ir.md` status — **reconciled with `main`** during rebase:
+- `docs/plans/archive/cell-model-ir.md` status — **reconciled with `main`** during rebase:
   its status is now "Largely delivered" (C3 + the D5 L4-from-descriptor runtime
   wiring landed on `main` via `de8255f3`), so no further edit here.
 - Update `docs/handoffs/adr-0021-behavioral-rtl-handoff.md` (or resolve/fold it

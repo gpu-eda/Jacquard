@@ -22,7 +22,7 @@ const EXIT_ARG_INVALID: u8 = 4;
     name = "opensta-to-ir",
     about = "Drive OpenSTA and emit Jacquard timing IR",
     long_about = "Phase 0 WS2 preprocessing tool. See \
-                  docs/plans/ws2-opensta-to-ir.md."
+                  docs/plans/archive/ws2-opensta-to-ir.md."
 )]
 struct Args {
     /// Liberty cell library files. Repeatable. To split Liberty files

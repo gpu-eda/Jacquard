@@ -10,7 +10,9 @@ This script:
   1. parses ``docs/SUMMARY.md`` to build the set of rendered pages;
   2. for every rendered page, checks each ``](target.md#anchor)`` link resolves
      to a file that both exists on disk *and* is itself a rendered page;
-  3. prints (non-fatally) the inventory of ``.md`` files not in SUMMARY so doc
+  3. checks that archived plans (``plans/archive/``) are listed under the
+     "Completed plans" part of SUMMARY and live plans are not;
+  4. prints (non-fatally) the inventory of ``.md`` files not in SUMMARY so doc
      drift stays visible.
 
 Exit status is non-zero iff any rendered page has a broken/404-ing link.
@@ -37,6 +39,10 @@ LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
 SUMMARY_LINK_RE = re.compile(r"\]\(([^)\s]+\.md)\)")
 # Opens/closes a fenced code block: a line starting (after indent) with ``` or ~~~.
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+
+# Shipped plans live under plans/archive/ and are listed in this SUMMARY part.
+PLANS_ARCHIVE = "plans/archive/"
+COMPLETED_PLANS_PART = "Completed plans"
 
 # Directories whose pages are deliberately out-of-book working memory.
 IGNORE_ORPHAN_DIRS = {"handoffs"}
@@ -71,9 +77,29 @@ def rendered_pages() -> set[str]:
     return pages
 
 
+def misplaced_plans() -> list[str]:
+    """SUMMARY entries for archived plans must sit under the "Completed plans"
+    part, and live plans must not. A plan moved with ``move_doc.py`` keeps a
+    working link, so without this check its nav entry silently stays among the
+    active plans."""
+    errors: list[str] = []
+    part = ""
+    for line in SUMMARY.read_text().splitlines():
+        if line.startswith("# "):
+            part = line[2:].strip()
+        m = SUMMARY_LINK_RE.search(line)
+        if not m or not m.group(1).startswith("plans/"):
+            continue
+        archived = m.group(1).startswith(PLANS_ARCHIVE)
+        if archived != (part == COMPLETED_PLANS_PART):
+            where = "outside" if archived else "under"
+            errors.append(f"SUMMARY.md: {m.group(1)} is listed {where} '# {COMPLETED_PLANS_PART}'")
+    return errors
+
+
 def main() -> int:
     pages = rendered_pages()
-    errors: list[str] = []
+    errors: list[str] = misplaced_plans()
 
     for page in sorted(pages):
         page_path = DOCS / page
@@ -116,7 +142,7 @@ def main() -> int:
 
     if errors:
         print(
-            f"\n{len(errors)} broken/404-ing doc link(s):", file=sys.stderr
+            f"\n{len(errors)} doc link error(s):", file=sys.stderr
         )
         for e in errors:
             print(f"  {e}", file=sys.stderr)

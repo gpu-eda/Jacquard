@@ -11,7 +11,7 @@
 //! and review the diff before committing — that's the load-bearing
 //! workflow this test exists to gate.
 //!
-//! See `docs/plans/phase-0-ir-and-oracle.md` § WS4 and
+//! See `docs/plans/archive/phase-0-ir-and-oracle.md` § WS4 and
 //! `tests/timing_ir/corpus/README.md`.
 
 use std::path::{Path, PathBuf};

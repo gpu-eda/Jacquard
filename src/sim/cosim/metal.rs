@@ -1462,7 +1462,7 @@ impl MetalBackend {
         // inputs); we copy its [value|xmask] block into the input slot. The
         // arrivals region (if timing is enabled) stays 0. Phase 3 will refine
         // undriven inputs back to X; here inputs start known, matching the
-        // sim-path template. See docs/plans/cosim-xprop.md.
+        // sim-path template. See docs/plans/archive/cosim-xprop.md.
         if script.xprop_enabled {
             let rio = script.reg_io_state_size as usize;
             // Cosim template: X at uninitialised DFF/SRAM AND at every primary

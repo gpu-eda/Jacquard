@@ -462,7 +462,7 @@ impl TimingLibrary {
     /// Errors if the parser succeeded structurally but extracted zero
     /// cells — this is the silent-failure mode that issue #2 of the
     /// timing-correctness review called out, and the WS5 deliverable in
-    /// `docs/plans/phase-0-ir-and-oracle.md`. The structural parser
+    /// `docs/plans/archive/phase-0-ir-and-oracle.md`. The structural parser
     /// already rejects input without a `library` block, so this check
     /// only fires when the input was real-shaped Liberty that yielded no
     /// usable cells.

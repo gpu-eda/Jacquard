@@ -127,7 +127,7 @@ Implementation phasing lives in **[#162](https://github.com/gpu-eda/Jacquard/iss
 > **`gpu-eda/yowasp-yosys`** fork's own CI; `jacquard` fetches the pinned release
 > (A2). aigpdk-specific mapping needs `read_liberty -lib` + `hierarchy -purge_lib`
 > before `abc_new` and a single mapping pass. Details:
-> [`docs/plans/rtl-source-provenance.md`](../../plans/rtl-source-provenance.md).
+> [`docs/plans/archive/rtl-source-provenance.md`](../../plans/archive/rtl-source-provenance.md).
 
 A patched toolchain carrying the [origin-shell](https://github.com/robtaylor/origin-shell)
 `\src` pass-through — berkeley-abc **#487** (`vOrigins`/`&origins`) +

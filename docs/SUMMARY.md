@@ -88,10 +88,10 @@
 
 # Completed plans
 
-- [Phase 0: Timing IR and OpenSTA oracle](plans/phase-0-ir-and-oracle.md)
-- [WS2: opensta-to-ir](plans/ws2-opensta-to-ir.md)
-- [WS3: delete SDF parser](plans/ws3-delete-sdf-parser.md)
-- [Declarative cell metadata](plans/declarative-cell-metadata.md)
-- [Selective X-propagation in cosim](plans/cosim-xprop.md)
-- [Cell-model IR](plans/cell-model-ir.md)
-- [RTL-source provenance](plans/rtl-source-provenance.md)
+- [Phase 0: Timing IR and OpenSTA oracle](plans/archive/phase-0-ir-and-oracle.md)
+- [WS2: opensta-to-ir](plans/archive/ws2-opensta-to-ir.md)
+- [WS3: delete SDF parser](plans/archive/ws3-delete-sdf-parser.md)
+- [Declarative cell metadata](plans/archive/declarative-cell-metadata.md)
+- [Selective X-propagation in cosim](plans/archive/cosim-xprop.md)
+- [Cell-model IR](plans/archive/cell-model-ir.md)
+- [RTL-source provenance](plans/archive/rtl-source-provenance.md)

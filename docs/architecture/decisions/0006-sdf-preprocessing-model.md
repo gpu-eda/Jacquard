@@ -86,4 +86,4 @@ Given these, maintaining the hand-rolled parser through Phase 0–2 is unnecessa
 - Decision 0001 — OpenSTA as oracle (subprocess model).
 - Decision 0002 — timing IR (format consumed).
 - Decision 0005 — OpenSTA vendoring (submodule for reproducibility + stress corpus).
-- `../plans/phase-0-ir-and-oracle.md` — WS2 productionisation, WS3 deletion + interim hook.
+- `../../plans/archive/phase-0-ir-and-oracle.md` — WS2 productionisation, WS3 deletion + interim hook.

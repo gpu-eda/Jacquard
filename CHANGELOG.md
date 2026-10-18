@@ -435,7 +435,7 @@ runners land (ADR 0018).
   any sequential design ran two-state. Undriven primary inputs read X in
   cosim; SRAM writes and preloads clear the per-cell X-mask shadow.
   End-to-end CI guards live in `tests/xprop_cosim/`. See ADR 0016 and
-  `docs/plans/cosim-xprop.md`.
+  `docs/plans/archive/cosim-xprop.md`.
 
 ### Changed
 

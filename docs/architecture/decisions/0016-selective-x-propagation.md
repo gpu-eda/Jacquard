@@ -99,7 +99,7 @@ specific to cosim.
 The Metal kernel is already X-capable, so this is host-side reactive
 plumbing (state-buffer expansion, per-edge X-mask maintenance, and an
 observe-kernel output-offset fix for the doubled layout). Phasing and
-risks are in [`../plans/cosim-xprop.md`](../../plans/cosim-xprop.md).
+risks are in [`docs/plans/archive/cosim-xprop.md`](../../plans/archive/cosim-xprop.md).
 
 ### Seed-template correction (2026-06-03)
 

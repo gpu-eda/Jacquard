@@ -2546,7 +2546,7 @@ impl AIG {
     /// Build an AIG from a netlistdb, with a runtime cell library
     /// supplying pin tables and `kind` metadata for cells outside
     /// Jacquard's vendored PDKs. See ADR 0010 and
-    /// `docs/plans/declarative-cell-metadata.md`.
+    /// `docs/plans/archive/declarative-cell-metadata.md`.
     ///
     /// Goes through the same library detection + behavioural-model
     /// loading as [`Self::from_netlistdb`] for cells that ARE in the

@@ -33,9 +33,9 @@ bug. Per-section ✅ markers below remain authoritative for detail.
   reporting half is fixed — a trap now names the pass instead of printing 27 wasm
   frames). Low impact for real designs: a portless module is testbench-shaped.
 
-**Decisions:** [0021](../architecture/decisions/0021-behavioral-rtl-support.md) Phase 2 (the roadmap this
-realises), [0014](../architecture/decisions/0014-aig-as-simulation-ir.md) (AIG core the provenance
-rides through), [0018](../architecture/decisions/0018-distribution-and-installation.md) (wasm
+**Decisions:** [0021](../../architecture/decisions/0021-behavioral-rtl-support.md) Phase 2 (the roadmap this
+realises), [0014](../../architecture/decisions/0014-aig-as-simulation-ir.md) (AIG core the provenance
+rides through), [0018](../../architecture/decisions/0018-distribution-and-installation.md) (wasm
 distribution).
 
 **Predecessors:** Decision 0021 Phase 1 (the on-ramp — `sim`/`cosim` synthesize
@@ -253,7 +253,7 @@ mechanism). Decide: is provenance the *default* on-ramp wasm, or an opt-in
 Stop discarding `(* … *)` (`sverilognom.rs:44`). Parse `src` (and keep the door
 open for other attrs) and attach to the cell/wire in the `SVerilog` AST.
 `vendor/eda-infra-rs` is a **vendored submodule** → fork + integration branch per
-[`~/.claude/FORKED_DEPS_WORKFLOW.md`](../../).
+[`~/.claude/FORKED_DEPS_WORKFLOW.md`](../../..).
 
 - **Exit:** a `(* src="f.v:12" *)`-annotated netlist round-trips through
   `SVerilog::parse_*` with the attribute retrievable per cell.
