@@ -77,11 +77,11 @@ carries its pre-decomposed AIG, and that AIG is spliced straight in
 SKY130, GF180MCU, IHP SG13G2) ship generated descriptors, and cells outside them
 supply the same kind of declarative metadata
 ([Decision 0010](decisions/0010-declarative-cell-metadata.md)); both take the one
-descriptor path. How a PDK is onboarded: [PDK enablement](pdk-enablement.md). A legacy per-PDK behavioural-model decomposition
-(`decompose_with_pdk`) survives only as a fallback for cell types no descriptor
-covers. A structural cache deduplicates identical sub-expressions, and AIG pins come
-out in topological order, which the downstream level computation and scheduling rely
-on.
+descriptor path. How a PDK is onboarded: [PDK enablement](pdk-enablement.md). A
+legacy per-PDK behavioural-model decomposition (`decompose_with_pdk`) survives only
+as a fallback for cell types no descriptor covers. A structural cache deduplicates
+identical sub-expressions, and AIG pins come out in topological order, which the
+downstream level computation and scheduling rely on.
 
 The AIG's outputs are grouped into **endpoint groups** — the units of work a
 partition must realise: a primary output, a DFF (data + clock-enable), a RAM block
