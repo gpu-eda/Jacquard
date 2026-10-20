@@ -1,0 +1,25 @@
+# amd-runner: thin runner layer on top of the amd-bench toolchain image.
+#   docker build -f Dockerfile.runner -t amd-runner:latest .
+# Mirrors the blackwell-runner packaging; adds the GitHub Actions runner + entrypoint.
+FROM amd-bench:latest
+
+ARG RUNNER_VERSION=2.335.1
+ARG RUNNER_ARCH=x64
+
+# Unprivileged runner user (the Actions runner refuses to run as root by default).
+# Device access to the passed-through AMD iGPU comes from numeric --group-add at
+# runtime (see amd-runner.service), so no in-container group juggling is needed here.
+RUN useradd -m runner
+WORKDIR /home/runner/actions-runner
+
+RUN curl -fsSL -o runner.tar.gz \
+      "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" \
+ && tar xzf runner.tar.gz && rm runner.tar.gz \
+ && ./bin/installdependencies.sh \
+ && chown -R runner:runner /home/runner
+
+COPY --chown=runner:runner entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
+USER runner
+ENTRYPOINT ["/home/runner/actions-runner/entrypoint.sh"]

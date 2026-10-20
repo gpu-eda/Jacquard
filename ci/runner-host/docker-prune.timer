@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly Docker prune for the GitHub Actions runner
+
+[Timer]
+OnCalendar=Sun 04:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
