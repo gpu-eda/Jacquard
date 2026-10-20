@@ -23,22 +23,30 @@ Wants=network-online.target
 [Service]
 EnvironmentFile=/etc/amd-runner/env
 ExecStartPre=-/usr/bin/docker rm -f amd-runner
-# Raphael iGPU = PCI 0f:00.0 -> renderD128 / card1 (renderD129 is the NVIDIA card; do NOT pass it).
-# If DRM minor numbers ever shuffle across reboots, switch to the stable by-path symlinks:
-#   /dev/dri/by-path/pci-0000:0f:00.0-render  and  -card
+# Raphael iGPU = PCI 0f:00.0. Its DRM node numbers are NOT stable across boots: before
+# 2026-10-20 it was renderD128/card1, after that reboot the NVIDIA card took those and
+# the iGPU became renderD129/card2, so ROCm in the container saw no AMD device. The
+# nodes are therefore resolved from the stable by-path symlinks at start, and passed
+# through under their real names. Mapping them to a fixed in-container name does not
+# work: ROCm opens /dev/dri/renderD<minor> using the minor it reads from the host's
+# KFD topology in sysfs. The by-path names contain ':', which `--device` cannot take
+# directly, hence the shell. ($$ escapes `$` from systemd's own expansion.)
 # --group-add uses NUMERIC host GIDs so the non-root runner can reach the device nodes:
-#   993 = render (owns /dev/kfd, renderD128), 44 = video (owns card1). Verify with
+#   993 = render (owns /dev/kfd, renderD*), 44 = video (owns card*). Verify with
 #   `getent group render video` if the host is ever rebuilt.
-ExecStart=/usr/bin/docker run --rm --name amd-runner \
+ExecStart=/bin/sh -c 'set -e; \
+    render=$$(readlink -e /dev/dri/by-path/pci-0000:0f:00.0-render); \
+    card=$$(readlink -e /dev/dri/by-path/pci-0000:0f:00.0-card); \
+    exec /usr/bin/docker run --rm --name amd-runner \
     --device /dev/kfd \
-    --device /dev/dri/renderD128 \
-    --device /dev/dri/card1 \
+    --device "$$render" \
+    --device "$$card" \
     --group-add 993 --group-add 44 \
     --security-opt seccomp=unconfined \
     --pull never \
     -e RUNNER_PAT -e GH_OWNER -e GH_REPO \
     -e RUNNER_LABELS=self-hosted,amd,gfx1036,rocm,hip,vulkan,cubecl \
-    amd-runner:latest
+    amd-runner:latest'
 ExecStop=/usr/bin/docker stop amd-runner
 Restart=always
 RestartSec=10
