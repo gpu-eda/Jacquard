@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,16 +184,16 @@
 <h2 id="why-this-discipline-exists"><a class="header" href="#why-this-discipline-exists">Why this discipline exists</a></h2>
 <p>Decision rationale, technical context, and project state all have natural homes:</p>
 <ul>
-<li><strong>ADRs</strong> (<code>docs/adr/</code>) capture architectural decisions and their <em>why</em>.</li>
+<li><strong>Decisions</strong> (<code>docs/architecture/decisions/</code>) capture architectural choices and their <em>why</em>.</li>
 <li><strong>Design docs</strong> (<code>docs/timing-model-extensions.md</code>, etc.) capture <em>how</em> things work.</li>
-<li><strong>Plan docs</strong> (<code>docs/plans/phase-0-ir-and-oracle.md</code>, <code>post-phase-0-roadmap.md</code>) capture <em>what’s left</em> and the next workstream slices.</li>
+<li><strong>Plan docs</strong> (<code>docs/plans/archive/phase-0-ir-and-oracle.md</code>, <code>post-phase-0-roadmap.md</code>) capture <em>what’s left</em> and the next workstream slices.</li>
 </ul>
 <p>When that content lives in a handoff instead, two things go wrong:</p>
 <ol>
-<li><strong>It’s not where contributors look.</strong> A new contributor reading the README → SUMMARY → ADR chain shouldn’t have to dig through a stack of resolved handoff docs to find load-bearing decisions or the current state of a workstream.</li>
+<li><strong>It’s not where contributors look.</strong> A new contributor reading the README → SUMMARY → decision chain shouldn’t have to dig through a stack of resolved handoff docs to find load-bearing decisions or the current state of a workstream.</li>
 <li><strong>It rots out of sync with reality.</strong> Handoffs are point-in-time snapshots. A “STATUS: RESOLVED” banner doesn’t help when the thing referenced has moved or changed; the canonical doc is what should hold the current truth.</li>
 </ol>
-<p>The discipline closes this gap by <strong>forcing migration before deletion</strong>. Every load-bearing piece of a handoff lands in its proper home (ADR / design doc / plan doc) before the handoff file is removed.</p>
+<p>The discipline closes this gap by <strong>forcing migration before deletion</strong>. Every load-bearing piece of a handoff lands in its proper home (decision / design doc / plan doc) before the handoff file is removed.</p>
 <h2 id="what-a-handoff-is"><a class="header" href="#what-a-handoff-is">What a handoff IS</a></h2>
 <p>A handoff <em>lives</em> in its own dedicated directory, separate from the persistent plan docs whose content it eventually feeds: a single markdown file at <code>docs/handoffs/&lt;topic&gt;-handoff.md</code> containing exactly what the next session needs to pick up where you left off:</p>
 <ul>
@@ -218,7 +218,7 @@ engineering reality, where several independent arcs are legitimately in flight a
 once. The per-thread rule plus the WIP heuristic replaces it.)</p>
 <h2 id="what-a-handoff-is-not"><a class="header" href="#what-a-handoff-is-not">What a handoff IS NOT</a></h2>
 <ul>
-<li><strong>Not a decision log.</strong> Decisions go in ADRs. If you find yourself writing “we chose X over Y because Z” in a handoff, that paragraph belongs in an ADR (or an existing ADR’s “Consequences” / “Walk-back” section).</li>
+<li><strong>Not a decision log.</strong> Decisions go in decision records. If you find yourself writing “we chose X over Y because Z” in a handoff, that paragraph belongs in a decision record (or an existing record’s “Consequences” / “Walk-back” section).</li>
 <li><strong>Not a design doc.</strong> “How clock arrival flows from OpenSTA Tcl through the IR into the GPU constraint buffer” is a design topic; it lives in <code>docs/timing-model-extensions.md</code> Part B, not in a handoff’s “Critical context” section.</li>
 <li><strong>Not a status dashboard for the project.</strong> Workstream status lives in plan docs — <code>phase-0-ir-and-oracle.md</code> for current-phase WS state, <code>post-phase-0-roadmap.md</code> for forward-looking sequencing. A handoff cites those, doesn’t reproduce them.</li>
 <li><strong>Not a historical record.</strong> <code>git log</code> is the historical record. Handoffs that survive past their resolution turn into noise that misleads new contributors.</li>
@@ -230,9 +230,9 @@ once. The per-thread rule plus the WIP heuristic replaces it.)</p>
 <li><strong>Captures non-obvious context</strong> the next session needs (e.g. “the OpenSTA Tcl <code>find_timing</code> proc rejects <code>-full_update</code>; use <code>::sta::find_timing_cmd 1</code> directly”).</li>
 <li><strong>Documents the next concrete step</strong> with enough scope to start without re-discovering it.</li>
 </ol>
-<p>If the session ended at a clean stopping point (everything merged, all decisions documented in ADRs/plans, nothing surprising), don’t write a handoff. The plan doc already says what’s next.</p>
+<p>If the session ended at a clean stopping point (everything merged, all decisions documented in decision records or plans, nothing surprising), don’t write a handoff. The plan doc already says what’s next.</p>
 <h2 id="resolution-fold-then-delete"><a class="header" href="#resolution-fold-then-delete">Resolution: fold, then delete</a></h2>
-<p>The two-location split is deliberate: handoffs <em>live</em> at <code>docs/handoffs/&lt;topic&gt;-handoff.md</code> while in flight; their <em>content</em> migrates into the persistent docs (<code>docs/adr/</code>, <code>docs/plans/</code>, design docs under <code>docs/</code>) at resolution. The handoff file then gets removed; nothing about the work is lost because everything load-bearing has a permanent home elsewhere.</p>
+<p>The two-location split is deliberate: handoffs <em>live</em> at <code>docs/handoffs/&lt;topic&gt;-handoff.md</code> while in flight; their <em>content</em> migrates into the persistent docs (<code>docs/architecture/decisions/</code>, <code>docs/plans/</code>, design docs under <code>docs/</code>) at resolution. The handoff file then gets removed; nothing about the work is lost because everything load-bearing has a permanent home elsewhere.</p>
 <p>When a handoff’s work is done — whether in the next session or several sessions later — every load-bearing piece of it must be migrated to its proper home <strong>before the handoff file is deleted</strong>:</p>
 <div class="table-wrapper">
 <table>
@@ -240,11 +240,11 @@ once. The per-thread rule plus the WIP heuristic replaces it.)</p>
 <tr><th>If the handoff says…</th><th>It belongs in…</th></tr>
 </thead>
 <tbody>
-<tr><td>“We chose approach X over Y because Z”</td><td>The relevant ADR’s Decision/Consequences section, or a new ADR if no fit exists</td></tr>
+<tr><td>“We chose approach X over Y because Z”</td><td>The relevant decision’s Decision/Consequences section, or a new decision if no fit exists</td></tr>
 <tr><td>“Future scope for WS-N: do A then B then C”</td><td>The plan doc’s WS-N section (<code>phase-0-ir-and-oracle.md</code> or successor)</td></tr>
 <tr><td>“Gotcha: OpenSTA’s Tcl X behaves Y”</td><td>A code comment near the Tcl call site, or a design doc if the gotcha cuts across files</td></tr>
 <tr><td>“Build dep Z is required on Linux”</td><td>The build script’s apt-suggestion / Brewfile / README install section</td></tr>
-<tr><td>“Subsystem A doesn’t yet do B”</td><td>Plan doc as a new open item, or an ADR-tracked walk-back if it’s a deferred design choice</td></tr>
+<tr><td>“Subsystem A doesn’t yet do B”</td><td>Plan doc as a new open item, or a decision-tracked walk-back if it’s a deferred design choice</td></tr>
 <tr><td>“Run <code>cargo test --feature foo</code> to verify”</td><td>The verification block in the relevant plan doc, or a test-running section in <code>CLAUDE.md</code></td></tr>
 </tbody>
 </table>
@@ -294,7 +294,7 @@ EOF
 </div>
 <h2 id="open-follow-ups-priority-ordered"><a class="header" href="#open-follow-ups-priority-ordered">Open follow-ups (priority-ordered)</a></h2>
 <h3 id="1--"><a class="header" href="#1--">1. <item name=""> (<rough size="">)</rough></item></a></h3>
-<p>&lt;Concrete scope. Enough detail to start cold. Link to existing plan/ADR/design-doc sections rather than reproducing them.&gt;</p>
+<p>&lt;Concrete scope. Enough detail to start cold. Link to existing plan/decision/design-doc sections rather than reproducing them.&gt;</p>
 <h3 id="2-"><a class="header" href="#2-">2. …</a></h3>
 <h2 id="critical-context"><a class="header" href="#critical-context">Critical context</a></h2>
 <p>&lt;Things the next session needs to know that aren’t yet in the code/docs. Be honest about what’s truly load-bearing — anything obvious from <code>git log</code> or a quick <code>grep</code> doesn’t belong here.&gt;</p>
@@ -302,7 +302,7 @@ EOF
 <ul>
 <li><a href="path"><code>&lt;predecessor-handoff if any&gt;</code></a> — predecessor (if relevant)</li>
 <li><a href="path"><code>&lt;plan doc&gt;</code></a> — current workstream state</li>
-<li><a href="path"><code>&lt;ADR&gt;</code></a> — relevant decision</li>
+<li><a href="path"><code>&lt;decision&gt;</code></a> — relevant decision</li>
 </ul>
 <hr>
 <p><strong>Resume in a new session with:</strong>
@@ -325,7 +325,7 @@ If you use one of those skills, expect it to default to YAML format under `thoug
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="adr/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="architecture/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -339,7 +339,7 @@ If you use one of those skills, expect it to default to YAML format under `thoug
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="adr/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="architecture/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

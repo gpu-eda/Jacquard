@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,8 +198,8 @@ works for any flow today.</p>
 </table>
 </div>
 <p>So <em>reactive</em> stimulus is supported — but through Jacquard’s own
-<a href="adr/0013-plural-peripheral-configs.html">peripheral model architecture</a> and
-<a href="adr/0017-cosim-execution-model.html">cosim execution model</a>, not through an
+<a href="architecture/decisions/0013-plural-peripheral-configs.html">peripheral model architecture</a> and
+<a href="architecture/decisions/0017-cosim-execution-model.html">cosim execution model</a>, not through an
 external testbench framework.</p>
 <h2 id="the-fallback-that-works-for-any-flow-record-and-replay"><a class="header" href="#the-fallback-that-works-for-any-flow-record-and-replay">The fallback that works for any flow: record-and-replay</a></h2>
 <p>You do <strong>not</strong> need framework integration to use Jacquard with a UVM, cocotb, or
@@ -222,11 +222,11 @@ peripheral as a cosim kernel instead.</p>
 of immediate assertions through synthesis (<code>GEM_ASSERT</code> cells; see the
 assertion handling in <code>aigpdk.rs</code>). Broader SVA support is the next step here.</li>
 <li><strong>Running UVM test suites</strong> — <em>design settled, unbuilt.</em> The shape is
-<a href="adr/0022-flow-controlled-io.html">ADR 0022</a>: split the testbench the way
+<a href="architecture/decisions/0022-flow-controlled-io.html">Decision 0022</a>: split the testbench the way
 emulators have since SCE-MI. Sequences, randomisation and checking stay on the
 host; the driver’s <em>timed</em> half is rewritten as a synthesizable transactor and
 compiled into the AIG beside the design (possible since the
-<a href="adr/0021-behavioral-rtl-support.html">RTL on-ramp</a> shipped), so it wiggles pins
+<a href="architecture/decisions/0021-behavioral-rtl-support.html">RTL on-ramp</a> shipped), so it wiggles pins
 at GPU speed. Existing UVM drivers don’t port as-is, and that isn’t a gap we
 can close: they drive every cycle, and cosim runs 1024 edges per dispatch with
 the CPU absent, which is where the speed comes from.</li>
@@ -241,7 +241,7 @@ recommended interim approach.</p>
 <ul>
 <li><a href="getting-started.html">Getting Started</a> — <code>sim</code> and <code>cosim</code> walkthroughs</li>
 <li><a href="bus-tracing.html">Bus Transaction Tracing</a> — protocol-aware observation of on-chip buses</li>
-<li><a href="adr/0017-cosim-execution-model.html">Cosim execution model</a> — how peripheral kernels run</li>
+<li><a href="architecture/decisions/0017-cosim-execution-model.html">Cosim execution model</a> — how peripheral kernels run</li>
 </ul>
 
                     </main>

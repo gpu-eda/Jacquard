@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -351,9 +351,9 @@ leaves the JTAG inputs floating and runs at full throughput.</p>
 <p>This works on any cosim backend (CPU / Metal / CUDA / HIP) — it is the
 CPU-side model plus <code>batch=1</code> of the GPU backend, with no per-backend
 kernel work. See
-<a href="adr/0017-cosim-execution-model.html">ADR 0017 (Amendment 2026-06-21)</a> for
+<a href="architecture/decisions/0017-cosim-execution-model.html">Decision 0017 (Amendment 2026-06-21)</a> for
 the execution-model rationale and
-<a href="adr/0013-plural-peripheral-configs.html">ADR 0013 (Amendment 2026-06-21)</a>
+<a href="architecture/decisions/0013-plural-peripheral-configs.html">Decision 0013 (Amendment 2026-06-21)</a>
 for the <code>tdo_gpio</code> config surface.</p>
 <h2 id="caveats-and-limitations"><a class="header" href="#caveats-and-limitations">Caveats and limitations</a></h2>
 <ul>
@@ -414,10 +414,10 @@ fully.</p>
 <li>Issue <a href="https://github.com/gpu-eda/Jacquard/issues/124">#124</a>.</li>
 <li>Implementation staging:
 <a href="plans/jtag-debug-server.html"><code>docs/plans/jtag-debug-server.md</code></a>.</li>
-<li><a href="adr/0017-cosim-execution-model.html">ADR 0017 — Cosim execution model</a>
+<li><a href="architecture/decisions/0017-cosim-execution-model.html">Decision 0017 — Cosim execution model</a>
 (interactive, externally-paced peripheral models; <code>output_state</code>
 wiring).</li>
-<li><a href="adr/0013-plural-peripheral-configs.html">ADR 0013 — Cosim peripheral model architecture</a>
+<li><a href="architecture/decisions/0013-plural-peripheral-configs.html">Decision 0013 — Cosim peripheral model architecture</a>
 (<code>tdo_gpio</code> config surface).</li>
 <li>Replay path &amp; fixture: <code>src/sim/models/jtag.rs</code>, <code>tests/jtag_minimal/</code>.</li>
 </ul>

@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -185,7 +185,7 @@
 <h2 id="purpose"><a class="header" href="#purpose">Purpose</a></h2>
 <p>Jacquard is a GPU-accelerated gate-level simulator for synthesized digital circuits. It exists to make pre-silicon functional verification of synthesized designs substantially faster than CPU-based simulators, by mapping the design onto a GPU’s massively parallel execution model.</p>
 <p>It is a descendant of NVIDIA Research’s GEM project, maintained by Rob Taylor and community contributors.</p>
-<p>Jacquard ships with <strong>AIGPDK</strong>, a simple and-inverter standard cell library aligned to the GPU schema’s internal representation. It also accepts Liberty-described cells from open-source PDKs (SKY130) and commercial PDKs (under a private test track; see ADR 0004).</p>
+<p>Jacquard ships with <strong>AIGPDK</strong>, a simple and-inverter standard cell library aligned to the GPU schema’s internal representation. It also accepts Liberty-described cells from open-source PDKs (SKY130) and commercial PDKs (under a private test track; see Decision 0004).</p>
 <h2 id="in-scope"><a class="header" href="#in-scope">In scope</a></h2>
 <ul>
 <li>Gate-level simulation of synthesized Verilog netlists against AIGPDK, SKY130, and similar Liberty-described cell libraries.</li>
@@ -211,7 +211,7 @@
 <h3 id="design-assumptions-baked-into-the-architecture"><a class="header" href="#design-assumptions-baked-into-the-architecture">Design assumptions baked into the architecture</a></h3>
 <p>These are structural properties of the current GPU schema:</p>
 <ul>
-<li>Sequential logic is currently edge-triggered and synchronous: a raw latch in the logic, and asynchronous <em>sequential</em> (self-timed) logic, are not modelled today — the GPU schema’s scheduling assumes synchronous clocking. (Async set/reset on flip-flops <em>is</em> supported; so are clock gating via <code>CKLNQD</code> and latch-based memory mapped to RAM — see the latch note in <code>simulation-architecture.md</code>.) Extending it to support async sequential approaches is open territory; contributions with a viable approach are welcome.</li>
+<li>Sequential logic is currently edge-triggered and synchronous: a raw latch in the logic, and asynchronous <em>sequential</em> (self-timed) logic, are not modelled today — the GPU schema’s scheduling assumes synchronous clocking. (Async set/reset on flip-flops <em>is</em> supported; so are clock gating via <code>CKLNQD</code> and latch-based memory mapped to RAM — see the latch note in <code>architecture/simulation-engine.md</code>.) Extending it to support async sequential approaches is open territory; contributions with a viable approach are welcome.</li>
 <li>Circuits fit the boomerang block shape: 8191-signal input/output and 4095 intermediate-pin limits per partition, 64 SRAM output groups. Very wide designs may require manual <code>--level-split</code> tuning.</li>
 <li>Numerics are 4-state at partition granularity (X-capable or not), not per-bit.</li>
 </ul>
@@ -222,9 +222,9 @@
 <ul>
 <li><strong>Stable.</strong> Core GPU simulation of AIGPDK designs. NVDLA / Rocket / Gemmini regression path.</li>
 <li><strong>Stable with caveats.</strong> SKY130 flow; known to work on the MCU SoC reference design, with a history of PDK-specific issues resolved over time.</li>
-<li><strong>Evolving.</strong> Timing simulation: <code>sim</code>-path arrival tracking and setup/hold violation detection now work across Metal, CUDA, and HIP (ADR 0008), with per-DFF clock-arrival skew folded in (ADR 0007 Pillar B); <code>cosim</code>-path timing output (<code>--timing-report</code>) is not yet wired. Multi-clock scheduling. X-propagation semantics. SDF parser is hand-rolled and has received multiple reactive fixes.</li>
+<li><strong>Evolving.</strong> Timing simulation: <code>sim</code>-path arrival tracking and setup/hold violation detection now work across Metal, CUDA, and HIP (Decision 0008), with per-DFF clock-arrival skew folded in (Decision 0007 Pillar B); <code>cosim</code>-path timing output (<code>--timing-report</code>) is not yet wired. Multi-clock scheduling. X-propagation semantics. SDF parser is hand-rolled and has received multiple reactive fixes.</li>
 <li><strong>Experimental.</strong> GPU-resident peripheral models. HIP-on-NVIDIA path exists primarily to unblock CI.</li>
-<li><strong>Planned.</strong> Private commercial-PDK test track (see ADR 0004).</li>
+<li><strong>Planned.</strong> Private commercial-PDK test track (see Decision 0004).</li>
 </ul>
 <p>Contributors can expect stable-tier behaviour to remain stable across releases. Evolving and experimental tiers may change shape between releases; reasonable migration notes will be provided.</p>
 <h2 id="decision-principles"><a class="header" href="#decision-principles">Decision principles</a></h2>
@@ -240,13 +240,13 @@
 <ul>
 <li><code>README.md</code> — project overview, quick start.</li>
 <li><code>CLAUDE.md</code> — repository conventions and architecture overview for contributors working with AI assistance.</li>
-<li><code>docs/simulation-architecture.md</code> — internal pipeline and data structures.</li>
+<li><code>docs/architecture/simulation-engine.md</code> — internal pipeline and data structures.</li>
 <li><code>docs/timing-correctness.md</code> — scoped contract for timing accuracy, validation, and IR requirements.</li>
-<li><code>docs/adr/</code> — architectural decision records.</li>
+<li><code>docs/architecture/decisions/</code> — architectural decision records.</li>
 <li><code>docs/plans/</code> — phased implementation plans.</li>
 </ul>
 <hr>
-<p><strong>Last updated:</strong> 2026-06-26 (v0.2.x; CUDA/HIP sim-timing + cosim backends shipped; reflects ADR 0007/0008/0013/0017/0018 amendments).</p>
+<p><strong>Last updated:</strong> 2026-06-26 (v0.2.x; CUDA/HIP sim-timing + cosim backends shipped; reflects Decision 0007/0008/0013/0017/0018 amendments).</p>
 
                     </main>
 

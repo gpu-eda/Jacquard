@@ -1,0 +1,4 @@
+/target
+/Cargo.lock
+work/aigpdk_nomem.lib
+work/gatelevel.gv

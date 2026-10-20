@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Worked example — Cosim runtime - Jacquard Documentation</title>
+        <title>Cosim runtime - Jacquard Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,7 +188,7 @@ drive and observe the design’s pins every clock edge. Unlike <code>sim</code>,
 replays a fixed input VCD, cosim lets an input depend on a design output
 cycle by cycle: a SPI flash serves firmware in response to the addresses the
 design issues, a UART decodes the bytes it transmits, a JTAG client single-steps
-it. Rationale for the execution model: <a href="../adr/0017-cosim-execution-model.html">ADR 0017</a>.</p>
+it. Rationale for the execution model: <a href="decisions/0017-cosim-execution-model.html">Decision 0017</a>.</p>
 <pre><!--?xml version="1.0" encoding="utf-8"?--><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" data-d2-version="v0.7.1" preserveaspectratio="xMinYMin meet" viewbox="0 0 1009 1794"><svg class="d2-7073834 d2-svg" width="1009" height="1794" viewbox="-4 -5 1009 1794"><rect x="-4.000000" y="-5.000000" width="1009.000000" height="1794.000000" rx="0.000000" fill="#FFFFFF" class=" fill-N7" stroke-width="0" /><style type="text/css"><![CDATA[
 .d2-7073834 .text {
 	font-family: "d2-7073834-font-regular";
@@ -327,7 +327,7 @@ cosim is GPU-bound rather than round-trip-bound.</p>
 client, holds the design at one edge per dispatch for as long as it needs
 per-edge coupling. This is the <code>force_single_edge</code> path; it is correct but slow,
 and it is the exception, not the norm. The why, and the measured batch-utilisation
-that justifies the fixed size, are in <a href="../adr/0017-cosim-execution-model.html">ADR 0017</a>.</p>
+that justifies the fixed size, are in <a href="decisions/0017-cosim-execution-model.html">Decision 0017</a>.</p>
 <h2 id="backends"><a class="header" href="#backends">Backends</a></h2>
 <p>One orchestration driver runs above a <code>CosimBackend</code> trait; each backend owns the
 design state and runs N consecutive edges per call.</p>
@@ -353,7 +353,7 @@ bits and/or <strong>emit</strong> decoded records. Where it runs follows a rule:
 drives inputs each edge (must react to output) can run on the CPU; a model that
 only observes outputs, or exchanges data bidirectionally, runs on the GPU for
 zero-copy access to the state buffer. Rationale and the full contract:
-<a href="../adr/0013-plural-peripheral-configs.html">ADR 0013</a>.</p>
+<a href="decisions/0013-plural-peripheral-configs.html">Decision 0013</a>.</p>
 <p>GPU peripherals come in two patterns:</p>
 <ul>
 <li><strong>Observe-only</strong> — one post-simulate kernel per edge, reading output state into
@@ -417,14 +417,14 @@ configs, and the interactive JTAG server. These are the sections above without a
 <li><strong>Flow-controlled external I/O across the batch boundary</strong> — bounded pipes, an
 adaptive commit window replacing the fixed <code>BATCH_SIZE</code>, per-tap projection, a
 socket reactor, and a CPU→GPU input pipe. Proposed in
-<a href="../adr/0022-flow-controlled-io.html">ADR 0022</a>; nothing built.</li>
+<a href="decisions/0022-flow-controlled-io.html">Decision 0022</a>; nothing built.</li>
 <li><strong>Tier 3 single-source peripherals</strong> — one peripheral definition compiled to
-CPU and every GPU backend. <a href="../adr/0017-cosim-execution-model.html">ADR 0017</a>.</li>
+CPU and every GPU backend. <a href="decisions/0017-cosim-execution-model.html">Decision 0017</a>.</li>
 <li><strong>Bus trace beyond APB3</strong> — AHB-Lite/AHB5 decode and annotated-VCD output;
 migrating the hardcoded Wishbone trace onto the config-driven monitor.
-<a href="../adr/0013-plural-peripheral-configs.html">ADR 0013</a>.</li>
+<a href="decisions/0013-plural-peripheral-configs.html">Decision 0013</a>.</li>
 <li><strong>Timed cosim on CPU/CUDA/HIP</strong>, and the cosim structured timing report.
-<a href="../adr/0017-cosim-execution-model.html">ADR 0017</a>.</li>
+<a href="decisions/0017-cosim-execution-model.html">Decision 0017</a>.</li>
 <li><strong>Min-heap scheduler</strong> to remove the one-million-tick cap.
 <a href="../plans/multi-clock-and-stimulus-architecture.html">Multi-clock and stimulus architecture</a>.</li>
 </ul>
@@ -433,14 +433,14 @@ migrating the hardcoded Wishbone trace onto the config-driven monitor.
 <a href="../plans/multi-clock-and-stimulus-architecture.html">multi-clock plan</a>.</p>
 <h2 id="decisions-behind-this"><a class="header" href="#decisions-behind-this">Decisions behind this</a></h2>
 <ul>
-<li><a href="../adr/0013-plural-peripheral-configs.html">ADR 0013</a> — peripheral model
+<li><a href="decisions/0013-plural-peripheral-configs.html">Decision 0013</a> — peripheral model
 architecture: the CPU/GPU split, the two GPU patterns, ring buffers, plural
 configs.</li>
-<li><a href="../adr/0017-cosim-execution-model.html">ADR 0017</a> — execution model: batch
+<li><a href="decisions/0017-cosim-execution-model.html">Decision 0017</a> — execution model: batch
 dispatch, the multi-clock scheduler, edges versus cycles, the backend seam.</li>
-<li><a href="../adr/0012-cdc-jitter-injection.html">ADR 0012</a> — CDC jitter injection, which
+<li><a href="decisions/0012-cdc-jitter-injection.html">Decision 0012</a> — CDC jitter injection, which
 uses the scheduler’s edge timestamps as its injection point.</li>
-<li><a href="../adr/0022-flow-controlled-io.html">ADR 0022</a> — flow-controlled I/O (proposed;
+<li><a href="decisions/0022-flow-controlled-io.html">Decision 0022</a> — flow-controlled I/O (proposed;
 the future of the batch boundary).</li>
 </ul>
 
@@ -448,10 +448,13 @@ the future of the batch boundary).</li>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../architecture/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../architecture/simulation-engine.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="../architecture/rtl-onramp.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -459,10 +462,13 @@ the future of the batch boundary).</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../architecture/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../architecture/simulation-engine.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="../architecture/rtl-onramp.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>

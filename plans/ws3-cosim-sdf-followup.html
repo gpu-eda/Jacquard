@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -213,7 +213,7 @@ is missing the bulk of the design’s timing. The “28162 matched /
 2090 unmatched” verification log we celebrated at the time measured
 jtir records against the cosim-loaded netlist, not SDF coverage
 against the jtir — high surface match rate, materially incomplete
-IR. See <strong>ADR 0009</strong> (OpenSTA Verilog reader input constraints) for
+IR. See <strong>Decision 0009</strong> (OpenSTA Verilog reader input constraints) for
 the broader rule.</p>
 <p><code>opensta-to-ir</code> now transparently extracts <code>module &lt;--top&gt;</code> from each
 input file before invoking OpenSTA (implementation in
@@ -334,7 +334,7 @@ CLI &gt; config.timing.* &gt; nothing.</li>
 </ol>
 <h3 id="out-of-scope-for-option-a"><a class="header" href="#out-of-scope-for-option-a">Out of scope for Option A</a></h3>
 <ul>
-<li>Rebuilding a hand-rolled SDF parser. (See ADR 0006 — the durable
+<li>Rebuilding a hand-rolled SDF parser. (See Decision 0006 — the durable
 replacement is the native Rust SDF→IR converter, tracked separately as
 Phase 3 in the original phasing.)</li>
 <li>Adding cosim-specific corner-selection beyond what <code>jacquard sim</code>
@@ -366,7 +366,7 @@ contributor-ergonomics improvement, not a correctness gap.</p>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../plans/ws3-delete-sdf-parser.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../plans/gf180mcu-enablement.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -380,7 +380,7 @@ contributor-ergonomics improvement, not a correctness gap.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../plans/ws3-delete-sdf-parser.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../plans/gf180mcu-enablement.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

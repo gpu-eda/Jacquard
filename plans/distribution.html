@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,10 +179,10 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="plan-distribution--easy-install"><a class="header" href="#plan-distribution--easy-install">Plan: distribution &amp; easy install</a></h1>
-<p>Implements <a href="../adr/0018-distribution-and-installation.html">ADR 0018</a>. Goal:
+<p>Implements <a href="../architecture/decisions/0018-distribution-and-installation.html">Decision 0018</a>. Goal:
 a fresh user (or a docs-dogfooding agent) can install Jacquard in one
 line on macOS/Metal, with CUDA/HIP following as runners land.</p>
-<h2 id="artifacts--channels-from-adr-0018"><a class="header" href="#artifacts--channels-from-adr-0018">Artifacts &amp; channels (from ADR 0018)</a></h2>
+<h2 id="artifacts--channels-from-decision-0018"><a class="header" href="#artifacts--channels-from-decision-0018">Artifacts &amp; channels (from Decision 0018)</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -284,13 +284,13 @@ while keeping the from-source instructions for contributors.</li>
 <h2 id="phase-6--container-image-optional-deferred"><a class="header" href="#phase-6--container-image-optional-deferred">Phase 6 — Container image (optional, deferred)</a></h2>
 <ul>
 <li><code>ghcr.io/gpu-eda/jacquard:cuda</code> for reproducible Linux/CUDA runs.
-Deferred per ADR 0018; revisit if CUDA release binaries prove awkward.</li>
+Deferred per Decision 0018; revisit if CUDA release binaries prove awkward.</li>
 </ul>
 <h2 id="phase-7--upstream-the-eda-infra-rs-fork-de-fork-prerequisite"><a class="header" href="#phase-7--upstream-the-eda-infra-rs-fork-de-fork-prerequisite">Phase 7 — Upstream the <code>eda-infra-rs</code> fork (de-fork prerequisite)</a></h2>
 <p>The simulator can’t be published to crates.io while its core deps are a
 <strong>vendored fork</strong> (<code>vendor/eda-infra-rs</code> → <code>ChipFlow/eda-infra-rs</code>) carrying
 patches not on the registry (the path deps declare a version but resolve to the
-fork’s patched code; ADR 0018). De-forking — getting every fork change
+fork’s patched code; Decision 0018). De-forking — getting every fork change
 upstreamed + released so jacquard can depend on published
 <code>gzz2000/eda-infra-rs</code> crates — is the long-term unblock. <strong>Not</strong> required for
 the binary-distribution channels (those work today); tracked here as the path to
@@ -355,7 +355,7 @@ filter on their own tag prefixes so they never collide.</li>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../plans/cosim-xprop.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../plans/cosim-backend-portability.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -369,7 +369,7 @@ filter on their own tag prefixes so they never collide.</li>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../plans/cosim-xprop.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../plans/cosim-backend-portability.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -237,8 +237,11 @@ priority; overrides the env var and discovery).</p>
 </code></pre>
 </li>
 <li>
-<p><strong>Fetch from release</strong> — a planned follow-up (ADR 0021 / #162 Phase 4); not
-yet implemented. Until then, one of the three methods above is required.</p>
+<p><strong>Fetch from a pinned release</strong> (implemented; the default when the options above
+aren’t set): a sha256-verified <code>yosys.wasm</code> is downloaded from the
+<code>gpu-eda/yowasp-yosys</code> fork and cached under <code>$XDG_CACHE_HOME/jacquard</code>. The
+<a href="architecture/rtl-onramp.html">RTL on-ramp</a> reference describes the full resolution
+order and why the fork wasm is the default.</p>
 </li>
 </ol>
 <blockquote>
@@ -355,7 +358,7 @@ coverage table when it ships.</p>
 <ul>
 <li><a href="getting-started.html">Getting Started</a> — run bundled designs to verify your build first.</li>
 <li><a href="synthesis-flow.html">Synthesis Flow</a> — the performance path (DC / native Yosys, peak QoR).</li>
-<li><a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> — the design decision behind the on-ramp.</li>
+<li><a href="architecture/decisions/0021-behavioral-rtl-support.html">Decision 0021</a> — the design decision behind the on-ramp.</li>
 <li><code>docs/plans/rtl-onramp-sim-integration.md</code> — implementation plan and Phase 4 roadmap.</li>
 </ul>
 

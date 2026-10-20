@@ -1,0 +1,15 @@
+# aigpdk logic-synthesis flow (Yosys path from docs/synthesis-flow.md Step 2).
+# No memory in this design, so memory synthesis (Step 1) is skipped.
+read_verilog counter.v
+hierarchy -check -top counter
+synth -flatten
+delete t:$print
+dfflibmap -liberty aigpdk_nomem.lib
+opt_clean -purge
+abc -liberty aigpdk_nomem.lib
+opt_clean -purge
+techmap
+abc -liberty aigpdk_nomem.lib
+opt_clean -purge
+write_verilog gatelevel.gv
+stat

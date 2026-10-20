@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -304,7 +304,7 @@ shipped and what remains (Stage 3, conditional).</p>
 <p><strong>The AIG clock walk</strong> in <code>aig.rs:495–560</code> already iterates the clock-side cells of each DFF in order. It just doesn’t accumulate their delays. Adding a <code>dff_clock_origins: Vec&lt;Vec&lt;cellid&gt;&gt;</code> parallel structure costs O(num_dffs × clock_depth) memory — negligible.</p>
 </li>
 <li>
-<p><strong>OpenSTA</strong> can compute per-DFF clock arrival end-to-end. (OpenTimer was the original primary STA candidate per ADR 0003 but the spike Superseded it; ADR 0001 makes OpenSTA the sole STA path, called out of process via <code>opensta-to-ir</code>.) Per-pair common-path-pessimism removal (CRPR) is fundamentally a launch/capture credit, not a per-DFF property — so what shipped is per-DFF capture-side arrival, treating launch as a 0-reference. This is the form in the IR today:</p>
+<p><strong>OpenSTA</strong> can compute per-DFF clock arrival end-to-end. (OpenTimer was the original primary STA candidate per Decision 0003 but the spike Superseded it; Decision 0001 makes OpenSTA the sole STA path, called out of process via <code>opensta-to-ir</code>.) Per-pair common-path-pessimism removal (CRPR) is fundamentally a launch/capture credit, not a per-DFF property — so what shipped is per-DFF capture-side arrival, treating launch as a 0-reference. This is the form in the IR today:</p>
 <pre><code class="language-fbs">table ClockArrival {
     cell_instance: string;     // DFF instance path
     clk_pin: string;           // local pin name
@@ -487,7 +487,7 @@ entry.1 = entry.1.max(d);   // fall (same value!)
 <li><strong>δ(T) characterisation cost.</strong> One-off SPICE per cell-type per corner. Cheaper if we lean on existing ECSM/CCSM data already in vendor Liberty rather than re-running SPICE. Worth investigating before committing to Stage 2.</li>
 <li><strong>Whose clock arrival is authoritative?</strong> Resolved by Pillar B Stage 1+2: OpenSTA-computed per-DFF arrival via <code>opensta-to-ir</code>, treating launch as 0-reference. Per-pair CRPR credit is intentionally not modelled at this stage (see Stage 3 in the staged plan above).</li>
 <li><strong>Interaction.</strong> Does δ(T) on clock-tree buffers matter? Probably not enough to model — clock buffers are sized for fast edges and operate far from their pulse-degradation regime. But the framework should be able to express “ignore δ(T) on clock domain” cleanly.</li>
-<li><strong>Validation oracle.</strong> CVC and Icarus already serve as functional oracles; for skew-aware and wire-aware reporting OpenSTA’s slack report (via <code>opensta-to-ir</code> / direct subprocess) is the ground truth for unit tests. (ADR 0003 originally nominated OpenTimer for this role; superseded by the spike outcome — OpenSTA carries the role end-to-end now.)</li>
+<li><strong>Validation oracle.</strong> CVC and Icarus already serve as functional oracles; for skew-aware and wire-aware reporting OpenSTA’s slack report (via <code>opensta-to-ir</code> / direct subprocess) is the ground truth for unit tests. (Decision 0003 originally nominated OpenTimer for this role; superseded by the spike outcome — OpenSTA carries the role end-to-end now.)</li>
 <li><strong>IR size at 22nm scale.</strong> Open question whether <code>.jtir</code> for a representative many-core NoC fits in available memory under the current eager-load model. Needs measurement before committing to streaming mitigations.</li>
 <li><strong>Edge-attributed AIG.</strong> Per-receiver wire delay wants delay attached to AIG <em>edges</em>, not nodes. Today the AIG is node-attributed (<code>gate_delays: Vec&lt;PackedDelay&gt;</code> indexed by aigpin). A clean Tier-1 implementation may push toward edge attribution, with downstream effects on the boomerang reduction script layout. Worth a small spike before the main implementation.</li>
 <li><strong>Partition-crossing format.</strong> Adding per-edge wire delay to <code>cosim_metal.rs</code> inter-partition transfers needs a precise place in the existing pipeline. Currently the shuffle moves Boolean state words without arrival; the natural place is alongside the writeout-arrival path that already exists for setup/hold checking, but the alignment isn’t 1:1 because partition crossings happen at logic boundaries, not capture-DFF boundaries.</li>
@@ -497,9 +497,9 @@ entry.1 = entry.1.max(d);   // fall (same value!)
 <li><code>docs/timing-correctness.md</code> — forward-looking validation contract; this doc extends rather than replaces.</li>
 <li><code>docs/timing-simulation.md</code> — boomerang architecture; the kernel-side context.</li>
 <li><code>docs/timing-validation.md</code> — current ±5% acceptance criteria; would tighten under δ(T).</li>
-<li><code>docs/adr/0002-timing-ir.md</code> — IR design rationale; schema additions here follow the “lossless extension” principle.</li>
-<li><code>docs/adr/0001-opensta-as-oracle.md</code> — STA path; OpenSTA out of process is committed (post-supersedure of ADR 0003).</li>
-<li><code>docs/adr/0003-opentimer-primary-sta.md</code> — <strong>Superseded.</strong> Original in-process STA proposal; spike Q2 fail moved Jacquard to OpenSTA-only. See <code>docs/spikes/opentimer-sky130.md</code>.</li>
+<li><code>docs/architecture/decisions/0002-timing-ir.md</code> — IR design rationale; schema additions here follow the “lossless extension” principle.</li>
+<li><code>docs/architecture/decisions/0001-opensta-as-oracle.md</code> — STA path; OpenSTA out of process is committed (post-supersedure of Decision 0003).</li>
+<li><code>docs/architecture/decisions/archive/0003-opentimer-primary-sta.md</code> — <strong>Superseded.</strong> Original in-process STA proposal; spike Q2 fail moved Jacquard to OpenSTA-only. See <code>docs/architecture/decisions/spikes/opentimer-sky130.md</code>.</li>
 </ul>
 
                     </main>

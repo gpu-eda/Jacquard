@@ -1,0 +1,552 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Simulation engine - Jacquard Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-5e44e8e6.svg">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-picker-0393021e.css">
+        <link rel="stylesheet" href="../theme/d2-diagrams-d5432d61.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-d063f042.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Jacquard Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/gpu-eda/Jacquard" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="simulation-engine"><a class="header" href="#simulation-engine">Simulation engine</a></h1>
+<p><em>Reference — the current design as it stands in the code. The why lives in the
+decision records linked from each section; the not-yet-built work is under
+<a href="#implementation-status">Implementation status</a>. Present tense means “true
+today”; if a claim here is stale, the code moved and this doc didn’t.</em></p>
+<p>The simulation engine compiles a gate-level netlist into a packed GPU script and
+evaluates it as a branch-free Boolean processor. A design is converted once, at
+the start of a run, into an and-inverter graph; the graph is partitioned to fit a
+fixed GPU block geometry, and each partition becomes a stream of <code>u32</code>
+instructions the kernel executes with no per-gate dispatch. This is the path
+behind <code>jacquard sim</code> (static-input replay) and the substrate the
+<a href="cosim-runtime.html">cosim runtime</a> drives reactively.</p>
+<h2 id="the-pipeline"><a class="header" href="#the-pipeline">The pipeline</a></h2>
+<p>Compilation is a fixed sequence of lowering stages, each narrowing the design
+toward the GPU’s fixed shape:</p>
+<pre><!--?xml version="1.0" encoding="utf-8"?--><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" data-d2-version="v0.7.1" preserveaspectratio="xMinYMin meet" viewbox="0 0 346 1028"><svg class="d2-3811912648 d2-svg" width="346" height="1028" viewbox="-5 -5 346 1028"><rect x="-5.000000" y="-5.000000" width="346.000000" height="1028.000000" rx="0.000000" fill="#FFFFFF" class=" fill-N7" stroke-width="0" /><style type="text/css"><![CDATA[
+.d2-3811912648 .text-bold {
+	font-family: "d2-3811912648-font-bold";
+}
+@font-face {
+	font-family: d2-3811912648-font-bold;
+	src: url("data:application/font-woff;base64,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");
+}]]></style><style type="text/css"><![CDATA[.shape {
+  shape-rendering: geometricPrecision;
+  stroke-linejoin: round;
+}
+.connection {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.blend {
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+
+		.d2-3811912648 .fill-N1{fill:#0A0F25;}
+		.d2-3811912648 .fill-N2{fill:#676C7E;}
+		.d2-3811912648 .fill-N3{fill:#9499AB;}
+		.d2-3811912648 .fill-N4{fill:#CFD2DD;}
+		.d2-3811912648 .fill-N5{fill:#DEE1EB;}
+		.d2-3811912648 .fill-N6{fill:#EEF1F8;}
+		.d2-3811912648 .fill-N7{fill:#FFFFFF;}
+		.d2-3811912648 .fill-B1{fill:#0D32B2;}
+		.d2-3811912648 .fill-B2{fill:#0D32B2;}
+		.d2-3811912648 .fill-B3{fill:#E3E9FD;}
+		.d2-3811912648 .fill-B4{fill:#E3E9FD;}
+		.d2-3811912648 .fill-B5{fill:#EDF0FD;}
+		.d2-3811912648 .fill-B6{fill:#F7F8FE;}
+		.d2-3811912648 .fill-AA2{fill:#4A6FF3;}
+		.d2-3811912648 .fill-AA4{fill:#EDF0FD;}
+		.d2-3811912648 .fill-AA5{fill:#F7F8FE;}
+		.d2-3811912648 .fill-AB4{fill:#EDF0FD;}
+		.d2-3811912648 .fill-AB5{fill:#F7F8FE;}
+		.d2-3811912648 .stroke-N1{stroke:#0A0F25;}
+		.d2-3811912648 .stroke-N2{stroke:#676C7E;}
+		.d2-3811912648 .stroke-N3{stroke:#9499AB;}
+		.d2-3811912648 .stroke-N4{stroke:#CFD2DD;}
+		.d2-3811912648 .stroke-N5{stroke:#DEE1EB;}
+		.d2-3811912648 .stroke-N6{stroke:#EEF1F8;}
+		.d2-3811912648 .stroke-N7{stroke:#FFFFFF;}
+		.d2-3811912648 .stroke-B1{stroke:#0D32B2;}
+		.d2-3811912648 .stroke-B2{stroke:#0D32B2;}
+		.d2-3811912648 .stroke-B3{stroke:#E3E9FD;}
+		.d2-3811912648 .stroke-B4{stroke:#E3E9FD;}
+		.d2-3811912648 .stroke-B5{stroke:#EDF0FD;}
+		.d2-3811912648 .stroke-B6{stroke:#F7F8FE;}
+		.d2-3811912648 .stroke-AA2{stroke:#4A6FF3;}
+		.d2-3811912648 .stroke-AA4{stroke:#EDF0FD;}
+		.d2-3811912648 .stroke-AA5{stroke:#F7F8FE;}
+		.d2-3811912648 .stroke-AB4{stroke:#EDF0FD;}
+		.d2-3811912648 .stroke-AB5{stroke:#F7F8FE;}
+		.d2-3811912648 .background-color-N1{background-color:#0A0F25;}
+		.d2-3811912648 .background-color-N2{background-color:#676C7E;}
+		.d2-3811912648 .background-color-N3{background-color:#9499AB;}
+		.d2-3811912648 .background-color-N4{background-color:#CFD2DD;}
+		.d2-3811912648 .background-color-N5{background-color:#DEE1EB;}
+		.d2-3811912648 .background-color-N6{background-color:#EEF1F8;}
+		.d2-3811912648 .background-color-N7{background-color:#FFFFFF;}
+		.d2-3811912648 .background-color-B1{background-color:#0D32B2;}
+		.d2-3811912648 .background-color-B2{background-color:#0D32B2;}
+		.d2-3811912648 .background-color-B3{background-color:#E3E9FD;}
+		.d2-3811912648 .background-color-B4{background-color:#E3E9FD;}
+		.d2-3811912648 .background-color-B5{background-color:#EDF0FD;}
+		.d2-3811912648 .background-color-B6{background-color:#F7F8FE;}
+		.d2-3811912648 .background-color-AA2{background-color:#4A6FF3;}
+		.d2-3811912648 .background-color-AA4{background-color:#EDF0FD;}
+		.d2-3811912648 .background-color-AA5{background-color:#F7F8FE;}
+		.d2-3811912648 .background-color-AB4{background-color:#EDF0FD;}
+		.d2-3811912648 .background-color-AB5{background-color:#F7F8FE;}
+		.d2-3811912648 .color-N1{color:#0A0F25;}
+		.d2-3811912648 .color-N2{color:#676C7E;}
+		.d2-3811912648 .color-N3{color:#9499AB;}
+		.d2-3811912648 .color-N4{color:#CFD2DD;}
+		.d2-3811912648 .color-N5{color:#DEE1EB;}
+		.d2-3811912648 .color-N6{color:#EEF1F8;}
+		.d2-3811912648 .color-N7{color:#FFFFFF;}
+		.d2-3811912648 .color-B1{color:#0D32B2;}
+		.d2-3811912648 .color-B2{color:#0D32B2;}
+		.d2-3811912648 .color-B3{color:#E3E9FD;}
+		.d2-3811912648 .color-B4{color:#E3E9FD;}
+		.d2-3811912648 .color-B5{color:#EDF0FD;}
+		.d2-3811912648 .color-B6{color:#F7F8FE;}
+		.d2-3811912648 .color-AA2{color:#4A6FF3;}
+		.d2-3811912648 .color-AA4{color:#EDF0FD;}
+		.d2-3811912648 .color-AA5{color:#F7F8FE;}
+		.d2-3811912648 .color-AB4{color:#EDF0FD;}
+		.d2-3811912648 .color-AB5{color:#F7F8FE;}.appendix text.text{fill:#0A0F25}.md{--color-fg-default:#0A0F25;--color-fg-muted:#676C7E;--color-fg-subtle:#9499AB;--color-canvas-default:#FFFFFF;--color-canvas-subtle:#EEF1F8;--color-border-default:#0D32B2;--color-border-muted:#0D32B2;--color-neutral-muted:#EEF1F8;--color-accent-fg:#0D32B2;--color-accent-emphasis:#0D32B2;--color-attention-subtle:#676C7E;--color-danger-fg:red;}.sketch-overlay-B1{fill:url(#streaks-darker-d2-3811912648);mix-blend-mode:lighten}.sketch-overlay-B2{fill:url(#streaks-darker-d2-3811912648);mix-blend-mode:lighten}.sketch-overlay-B3{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-B4{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-B5{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-B6{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-AA2{fill:url(#streaks-dark-d2-3811912648);mix-blend-mode:overlay}.sketch-overlay-AA4{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-AA5{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-AB4{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-AB5{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-N1{fill:url(#streaks-darker-d2-3811912648);mix-blend-mode:lighten}.sketch-overlay-N2{fill:url(#streaks-dark-d2-3811912648);mix-blend-mode:overlay}.sketch-overlay-N3{fill:url(#streaks-normal-d2-3811912648);mix-blend-mode:color-burn}.sketch-overlay-N4{fill:url(#streaks-normal-d2-3811912648);mix-blend-mode:color-burn}.sketch-overlay-N5{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-N6{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.sketch-overlay-N7{fill:url(#streaks-bright-d2-3811912648);mix-blend-mode:darken}.light-code{display: block}.dark-code{display: none}]]></style><g class="bmV0bGlzdA=="><g class="shape"><rect x="95.000000" y="12.000000" width="145.000000" height="82.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="167.500000" y="50.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="167.500000" dy="0.000000">Verilog netlist</tspan><tspan x="167.500000" dy="18.500000">(.gv / .v)</tspan></text></g><g class="ZGI="><g class="shape"><rect x="70.000000" y="164.000000" width="196.000000" height="82.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="168.000000" y="202.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="168.000000" dy="0.000000">NetlistDB</tspan><tspan x="168.000000" dy="18.500000">cells, pins, nets (CSR)</tspan></text></g><g class="YWln"><g class="shape"><rect x="53.000000" y="316.000000" width="230.000000" height="82.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="168.000000" y="354.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="168.000000" dy="0.000000">AIG</tspan><tspan x="168.000000" dy="18.500000">uniform AND-invert graph</tspan></text></g><g class="c3RhZ2Vk"><g class="shape"><rect x="37.000000" y="468.000000" width="261.000000" height="82.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="167.500000" y="506.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="167.500000" dy="0.000000">StagedAIG</tspan><tspan x="167.500000" dy="18.500000">deep cones split at --level-split</tspan></text></g><g class="cGFydHM="><g class="shape"><rect x="12.000000" y="620.000000" width="312.000000" height="82.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="168.000000" y="658.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="168.000000" dy="0.000000">Partitions</tspan><tspan x="168.000000" dy="18.500000">one per GPU block, resource-bounded</tspan></text></g><g class="c2NyaXB0"><g class="shape"><rect x="38.000000" y="772.000000" width="259.000000" height="82.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="167.500000" y="810.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="167.500000" dy="0.000000">FlattenedScriptV1</tspan><tspan x="167.500000" dy="18.500000">packed u32 instruction stream</tspan></text></g><g class="a2VybmVs"><g class="shape"><rect x="64.000000" y="924.000000" width="207.000000" height="82.000000" stroke="#0D32B2" fill="#F7F8FE" class=" stroke-B1 fill-B6" style="stroke-width:2;" /></g><text x="167.500000" y="962.500000" fill="#0A0F25" class="text-bold fill-N1" style="text-anchor:middle;font-size:16px"><tspan x="167.500000" dy="0.000000">GPU kernel</tspan><tspan x="167.500000" dy="18.500000">one block per partition</tspan></text></g><g class="KG5ldGxpc3QgLSZndDsgZGIpWzBd"><marker id="mk-d2-3811912648-3488378134" markerwidth="10.000000" markerheight="12.000000" refx="7.000000" refy="6.000000" viewbox="0.000000 0.000000 10.000000 12.000000" orient="auto" markerunits="userSpaceOnUse"> <polygon points="0.000000,0.000000 10.000000,6.000000 0.000000,12.000000" fill="#0D32B2" class="connection fill-B1" stroke-width="2" /> </marker><path d="M 168.000000 96.000000 L 168.000000 160.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-3811912648-3488378134)" mask="url(#d2-3811912648)" /></g><g class="KGRiIC0mZ3Q7IGFpZylbMF0="><path d="M 168.000000 248.000000 L 168.000000 312.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-3811912648-3488378134)" mask="url(#d2-3811912648)" /></g><g class="KGFpZyAtJmd0OyBzdGFnZWQpWzBd"><path d="M 168.000000 400.000000 L 168.000000 464.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-3811912648-3488378134)" mask="url(#d2-3811912648)" /></g><g class="KHN0YWdlZCAtJmd0OyBwYXJ0cylbMF0="><path d="M 168.000000 552.000000 L 168.000000 616.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-3811912648-3488378134)" mask="url(#d2-3811912648)" /></g><g class="KHBhcnRzIC0mZ3Q7IHNjcmlwdClbMF0="><path d="M 168.000000 704.000000 L 168.000000 768.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-3811912648-3488378134)" mask="url(#d2-3811912648)" /></g><g class="KHNjcmlwdCAtJmd0OyBrZXJuZWwpWzBd"><path d="M 168.000000 856.000000 L 168.000000 920.000000" stroke="#0D32B2" fill="none" class="connection stroke-B1" style="stroke-width:2;" marker-end="url(#mk-d2-3811912648-3488378134)" mask="url(#d2-3811912648)" /></g><mask id="d2-3811912648" maskunits="userSpaceOnUse" x="-5" y="-5" width="346" height="1028">
+<rect x="-5" y="-5" width="346" height="1028" fill="white"></rect>
+
+</mask></svg></svg>
+</pre>
+
+<ul>
+<li><strong>NetlistDB</strong> parses structural (gate-level) Verilog (<code>sverilogparse</code>) into a
+flattened database of cells, pins, and nets with CSR connectivity. Behavioural
+RTL is synthesised to this form first; see the <a href="rtl-onramp.html">RTL on-ramp</a>.</li>
+<li><strong>AIG</strong> rewrites all combinational logic to one uniform AND-with-invert node
+type, so the kernel needs no opcode decode (<a href="decisions/0014-aig-as-simulation-ir.html">Decision 0014</a>).</li>
+<li><strong>StagedAIG</strong> splits combinational cones too deep for one boomerang tree into
+sequential major stages.</li>
+<li><strong>Partitions</strong> distribute the AIG’s endpoint groups across GPU blocks under
+fixed resource limits, via hypergraph partitioning.</li>
+<li><strong>FlattenedScriptV1</strong> packs each partition into the <code>u32</code> instruction stream the
+kernel reads directly (<a href="decisions/0015-boomerang-execution-model.html">Decision 0015</a>).</li>
+</ul>
+<p>Partitioning and script generation run automatically at simulation start; the
+user only sets <code>NUM_BLOCKS</code> (2× the GPU’s SM/CU count; 1 for Metal).</p>
+<h2 id="the-aig"><a class="header" href="#the-aig">The AIG</a></h2>
+<p>All combinational logic is one <strong>and-inverter graph</strong>. Every node in a
+combinational cone is a <code>DriverType</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum DriverType {
+    AndGate(usize, usize),     // two operands, each carrying an inversion bit
+    InputPort(usize),          // primary input
+    InputClockFlag(usize, u8), // clock edge (posedge / negedge) detector
+    DFF(usize),                // D flip-flop output
+    SRAM(usize),               // memory block output
+    Tie0,                      // constant zero
+}
+<span class="boring">}</span></code></pre>
+<p>Only <code>AndGate</code> has combinational fan-in. Each operand is encoded <code>aigpin &lt;&lt; 1 | invert</code>, so one node type covers the whole <code>{AND, NAND, OR, NOR}</code> family and
+inverters/buffers fold into the inversion bit rather than becoming nodes. This
+uniformity is the load-bearing property: because every combinational node is the
+same <code>(a XOR xa) AND (b XOR xb)</code> operation, the boomerang tree evaluates them all
+with a single instruction pattern. Rationale, and why AIG over BDDs / LUTs / MIG /
+direct netlist execution: <a href="decisions/0014-aig-as-simulation-ir.html">Decision 0014</a>.</p>
+<p>Construction (<code>src/aig.rs</code>, <code>AIG::from_netlistdb</code>) is technology-independent and
+descriptor-driven. Every cell type is looked up in a cell-model-IR descriptor that
+carries its pre-decomposed AIG, and that AIG is spliced straight in
+(<a href="decisions/0019-cell-model-ir.html">Decision 0019</a>). The built-in PDKs (AIGPDK,
+SKY130, GF180MCU, IHP SG13G2) ship generated descriptors, and cells outside them
+supply the same kind of declarative metadata
+(<a href="decisions/0010-declarative-cell-metadata.html">Decision 0010</a>); both take the one
+descriptor path. How a PDK is onboarded: <a href="pdk-enablement.html">PDK enablement</a>. A
+legacy per-PDK behavioural-model decomposition (<code>decompose_with_pdk</code>) survives only
+as a fallback for cell types no descriptor covers. A structural cache deduplicates
+identical sub-expressions, and AIG pins come out in topological order, which the
+downstream level computation and scheduling rely on.</p>
+<p>The AIG’s outputs are grouped into <strong>endpoint groups</strong> — the units of work a
+partition must realise: a primary output, a DFF (data + clock-enable), a RAM block
+(address/data/enables), a <code>$stop</code>/<code>$finish</code> control node, a <code>$display</code> node, or an
+inter-stage boundary pin from staging. Each group bundles the signals that must be
+evaluated together; the partitioner uses the group’s input set for connectivity and
+the partition executor uses it for resource accounting.</p>
+<h2 id="staging-deep-circuits"><a class="header" href="#staging-deep-circuits">Staging deep circuits</a></h2>
+<p>When a design’s combinational depth exceeds one 8192-wide boomerang tree,
+<code>src/staging.rs</code> splits the AIG into <strong>major stages</strong> at user-specified level
+thresholds (<code>--level-split 30</code>, or <code>--level-split 20,40</code> for two cuts). Each stage
+carries its own primary inputs (the pins produced by earlier stages, or the design’s
+real inputs for the first), the live boundary pins it must forward, and the endpoint
+groups whose depth falls within it. Major stages run sequentially — the kernel loops
+over them, writing boundary values to the state buffer and re-reading them in the
+next stage. Staging trades extra sequential dispatches for fitting the fixed
+boomerang; without it, designs with cones deeper than ~50 levels fail partitioning
+outright. Mapping details: <a href="decisions/0015-boomerang-execution-model.html">Decision 0015</a>.</p>
+<h2 id="partitioning"><a class="header" href="#partitioning">Partitioning</a></h2>
+<p>Endpoint groups are distributed across GPU blocks by <strong>RepCut</strong> (<code>src/repcut.rs</code>),
+which builds a weighted hypergraph and cuts it with <strong>mt-kahypar</strong>. A hypergraph,
+not a graph, because one shared AIG node reached by many endpoint groups is a single
+hyperedge across all of them — cutting it costs one global-memory read shared by
+every block that needs the signal, which pairwise edges cannot express. The cut
+minimises Sum-of-External-Degrees, which is exactly that cross-block read count.</p>
+<p>mt-kahypar deliberately over-partitions (≈2× the block count); <code>process_partitions()</code>
+in <code>src/pe.rs</code> then greedily <strong>merges partitions back</strong>, scoring merge candidates by
+AIG-node-bitset overlap, trying merges speculatively in parallel with
+cancel-on-success, and rejecting any merge that would add boomerang stages beyond a
+degradation bound. The result is 2–4× fewer partitions than the raw solution, each
+validated to fit the boomerang’s resource limits (<a href="#constraints">Constraints</a>).</p>
+<h2 id="the-boomerang-execution-model"><a class="header" href="#the-boomerang-execution-model">The boomerang execution model</a></h2>
+<p>One GPU block (CUDA/HIP) or threadgroup (Metal) evaluates one partition by reducing
+its endpoint groups’ fan-in cones through a hierarchical binary tree — the
+<strong>boomerang</strong>. The tree has <code>BOOMERANG_NUM_STAGES = 13</code> levels (<code>2^13 = 8192</code> leaf
+positions); each thread owns 32 bits, so a block is <code>8192 / 32 = 256</code> threads
+(<code>NUM_THREADS_V1</code>). The 13 levels map to three GPU mechanisms:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Levels</th><th>Width</th><th>Mechanism</th></tr>
+</thead>
+<tbody>
+<tr><td>hier[0]</td><td>8192 → 4096</td><td>256 threads, shared-memory reduction</td></tr>
+<tr><td>hier[1–3]</td><td>4096 → 512</td><td>shared-memory reduction, barrier between levels</td></tr>
+<tr><td>hier[4–7]</td><td>512 → 32</td><td>warp / SIMD shuffle (<code>__shfl_down_sync</code> / <code>simd_shuffle_down</code>), no barrier</td></tr>
+<tr><td>hier[8–12]</td><td>32 → 1</td><td>bit operations within one <code>u32</code> on thread 0</td></tr>
+</tbody>
+</table>
+</div>
+<p>Every position computes <code>(a XOR xora) AND (b XOR xorb) OR orb</code> — the AIG’s
+AND-with-invert, with <code>orb</code> all-ones turning a position into a pass-through. One
+instruction pattern, zero branch divergence, maximal SIMT utilisation across all
+backends. When a partition needs more than one 8192-wide tree, a <strong>shuffle
+permutation</strong> (16-bit index pairs in the script) re-routes signals from shared
+memory back into thread registers between stages. Full derivation:
+<a href="decisions/0015-boomerang-execution-model.html">Decision 0015</a>.</p>
+<h2 id="the-flattened-script"><a class="header" href="#the-flattened-script">The flattened script</a></h2>
+<p><code>src/flatten.rs</code> packs each partition into <code>FlattenedScriptV1</code>, a <code>u32</code> stream read
+sequentially by the kernel, with four sections: a <strong>metadata</strong> block (256 u32 of
+per-partition control fields at fixed indices, plus the write-out hook table that
+maps each thread to the boomerang stage+position where it captures its output); a
+<strong>global-read permutation</strong> that gathers each thread’s input bits from the state
+buffer; the <strong>boomerang sections</strong> (per stage, the shuffle permutation plus the
+<code>xora</code>/<code>xorb</code>/<code>orb</code> AND-gate flags, with a padding slot reused to carry per-gate
+gate-delay picoseconds for timing runs); and the <strong>global write-out</strong> that commits
+results, SRAM ports, and output duplicates back to the state buffer. The metadata
+index layout is the load-bearing contract between <code>flatten.rs</code> and every kernel.</p>
+<p>The global-read permutation carries one subtle cross-backend detail. A read’s word
+index has bit 31 set when the value is an inter-stage intermediate rather than
+previous-cycle state. Every decoder must strip that flag from the <em>index</em> before
+indexing: <code>flatten.rs</code>, the CPU reference, the shared CUDA/HIP <code>kernel_v1_impl.cuh</code>,
+and <code>kernel_v1.metal</code>. Cancelling the flag by offsetting the base pointer instead
+forms an out-of-bounds address. That bug placed staged reads 2^32 words past the
+buffer on ROCm, the one backend that computes the full address rather than
+truncating it to 32 bits (<a href="https://github.com/gpu-eda/Jacquard/issues/203">#203</a>).</p>
+<h2 id="backends-and-the-reference-model"><a class="header" href="#backends-and-the-reference-model">Backends and the reference model</a></h2>
+<p>The same <code>FlattenedScriptV1</code> runs on four backends behind one seam. The GPU kernels
+each evaluate one partition per block: <code>csrc/kernel_v1.cu</code> and <code>csrc/kernel_v1.hip.cpp</code>
+share <code>kernel_v1_impl.cuh</code>, and <code>csrc/kernel_v1.metal</code> is the Metal port. <code>sim</code> takes
+a grid-wide barrier between stages, which needs cooperative launch; the
+<a href="cosim-runtime.html">cosim runtime</a> sidesteps that so its CUDA/HIP backends run without
+it. A CPU reference kernel (<code>--check-with-cpu</code>) evaluates the same script bit-for-bit
+and is the cross-backend equivalence oracle. Every backend is expected to produce
+identical results on the same design, and that equivalence is checked in CI.</p>
+<h2 id="selective-x-propagation"><a class="header" href="#selective-x-propagation">Selective X-propagation</a></h2>
+<p>By default the engine is two-state: uninitialised DFF and SRAM outputs resolve to 0,
+which hides init bugs and causes false mismatches against four-state RTL simulators.
+<code>--xprop</code> turns on <strong>selective</strong> four-state simulation. Static analysis identifies
+X-source signals (uninitialised DFFs, SRAM reads), and forward-cone analysis marks
+each partition X-capable or X-free. Only X-capable partitions run the X-aware kernel
+variant and pay its ~2× storage and ALU cost, held in X-mask words appended to the
+state buffer; the rest keep the fast two-state path. In a typical SoC after reset,
+under ~5% of partitions are X-capable. Output VCD then carries <code>x</code> values, and
+<code>--check-with-cpu</code> has an X-aware reference. Design choices and the seven-phase
+implementation are in <a href="decisions/0016-selective-x-propagation.html">Decision 0016</a> and
+<a href="../selective-x-propagation.html"><code>docs/selective-x-propagation.md</code></a>. The reactive
+extension belongs to the <a href="cosim-runtime.html">cosim runtime</a>: it adds undriven input
+pads as a third X-source and maintains the X-mask per edge.</p>
+<h2 id="assertions-and-display"><a class="header" href="#assertions-and-display">Assertions and display</a></h2>
+<p><code>assert()</code> and <code>$display</code>/<code>$write</code> survive synthesis as <code>GEM_ASSERT</code> / <code>GEM_DISPLAY</code>
+cells (via the <code>gem_formal.v</code> techmap over Yosys <code>$check</code>/<code>$print</code> cells). The AIG
+records their bit positions in the script; after each GPU step the CPU reads those
+positions and acts on them. An assertion fires a configurable action (log, pause, or
+terminate, bounded by <code>max_failures</code>). A display reconstructs its message from format
+strings held in JSON metadata and argument bits read from the state buffer.</p>
+<h2 id="constraints"><a class="header" href="#constraints">Constraints</a></h2>
+<ul>
+<li><strong>Synchronous, edge-triggered logic only.</strong> Sequential state is D flip-flops
+capturing on clock edges. What is <em>not</em> modelled is a raw level-sensitive latch
+left in the logic, and asynchronous <em>sequential</em> (self-timed) feedback. Three
+common latch-derived structures are supported: asynchronous set/reset on
+flip-flops (it lowers to an AIG overlay), clock gating via the <code>CKLNQD</code> integrated
+clock-gating cell, and latch-based register files mapped to <code>$__RAMGEM_SYNC_</code> SRAM
+cells by memory synthesis. See the latch note in
+<a href="decisions/0014-aig-as-simulation-ir.html">Decision 0014</a>.</li>
+<li><strong>8191 unique inputs and 8191 unique outputs per partition</strong> — the 8192 boomerang
+leaf/write-out slots minus Tie0. Wide buses or highly-connected cones force finer
+partitioning, which raises inter-block reads.</li>
+<li><strong>4095 intermediate pins alive per stage</strong>, and <strong>64 SRAM output groups per
+partition</strong> (each SRAM consumes 4 of the 256 write-out slots). SRAM-heavy designs
+may need finer partitioning than gate count alone implies.</li>
+<li><strong>Fixed boomerang geometry.</strong> The 8192-leaf, 256-thread, 13-stage tree is one
+hardcoded design, uniform across CUDA, HIP, and Metal rather than tuned per GPU
+architecture. It assumes 32-bit lanes and a 32-wide SIMD reduction at the shuffle
+tier (levels 4–7). There is no occupancy-tuning knob; retargeting the geometry to a
+different architecture would mean redesigning the hierarchy depth and the script
+bit-packing.</li>
+</ul>
+<p>When a single endpoint cannot be mapped, <code>--level-split</code> forces stage splits.</p>
+<h2 id="implementation-status"><a class="header" href="#implementation-status">Implementation status</a></h2>
+<p>Built and in use: the full NetlistDB → AIG → StagedAIG → Partitions →
+FlattenedScriptV1 → kernel pipeline; all four backends (CUDA, HIP, Metal, CPU
+reference) with cross-backend equivalence in CI; RepCut hypergraph partitioning with
+greedy merge-back; selective X-propagation (all seven phases, including the CPU
+reference and Criterion overhead benchmarks); and assertion/display support.</p>
+<p>Decided but not yet built:</p>
+<ul>
+<li><strong>Dynamic X narrowing</strong> — periodically re-scanning the X-mask and hot-swapping a
+partition from the X-aware kernel back to the fast path once its cone is X-free.
+Distinct from the shipped static X analysis. <a href="decisions/0016-selective-x-propagation.html">Decision 0016</a>.</li>
+<li><strong>Per-address SRAM X</strong> — reads currently return X until the <em>first</em> write to the
+memory; finer per-address tracking is deferred. <a href="decisions/0016-selective-x-propagation.html">Decision 0016</a>.</li>
+</ul>
+<h2 id="decisions-behind-this"><a class="header" href="#decisions-behind-this">Decisions behind this</a></h2>
+<ul>
+<li><a href="decisions/0014-aig-as-simulation-ir.html">Decision 0014</a> — AIG as the simulation IR:
+the uniform AND-invert node, the inversion-bit encoding, the decomposition path,
+and the EndpointGroup abstraction.</li>
+<li><a href="decisions/0015-boomerang-execution-model.html">Decision 0015</a> — the boomerang
+execution model: the 13-level reduction tree, the GPU resource limits, RepCut
+hypergraph partitioning, and the <code>FlattenedScriptV1</code> format.</li>
+<li><a href="decisions/0016-selective-x-propagation.html">Decision 0016</a> — selective
+X-propagation: partition-level four-state simulation behind <code>--xprop</code>.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../architecture/timing-correctness.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/cosim-runtime.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../architecture/timing-correctness.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/cosim-runtime.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-picker-36db8dd8.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

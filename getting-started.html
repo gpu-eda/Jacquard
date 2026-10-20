@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -246,7 +246,7 @@ clock and reset come from the config.</p>
 </code></pre>
 <p>The peripherals, pin mapping, baud rates, and clock are all declared in
 <a href="https://github.com/gpu-eda/Jacquard/blob/main/tests/dual_uart/sim_config.json"><code>tests/dual_uart/sim_config.json</code></a>.
-See <a href="adr/0017-cosim-execution-model.html">Cosim execution model</a> and
+See <a href="architecture/decisions/0017-cosim-execution-model.html">Cosim execution model</a> and
 <a href="bus-tracing.html">Bus Transaction Tracing</a> for the full peripheral set.</p>
 <hr>
 <h2 id="tier-3--a-real-open-source-pdk"><a class="header" href="#tier-3--a-real-open-source-pdk">Tier 3 — A real open-source PDK</a></h2>
@@ -299,7 +299,7 @@ run <code>jacquard sim</code> exactly as in 3a.</p>
 <tr><td>Add <strong>timing</strong> (Liberty / SDF / violation checks)</td><td><a href="timing-simulation.html">Timing Simulation</a></td></tr>
 <tr><td>Use <strong>UVM / cocotb / SVA</strong>, or understand interop limits</td><td><a href="interop.html">Testbench Interop</a></td></tr>
 <tr><td>Add support for a <strong>new PDK</strong></td><td><a href="adding-a-pdk.html">Adding a New PDK</a></td></tr>
-<tr><td>Understand <strong>how it works</strong></td><td><a href="simulation-architecture.html">Simulation Architecture</a></td></tr>
+<tr><td>Understand <strong>how it works</strong></td><td><a href="architecture/simulation-engine.html">Simulation engine</a></td></tr>
 </tbody>
 </table>
 </div>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,14 +179,14 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="cosim-peripheral-models"><a class="header" href="#cosim-peripheral-models">Cosim Peripheral Models</a></h1>
-<p>Architecture: <a href="../adr/0013-plural-peripheral-configs.html">ADR 0013</a>.</p>
+<p>Architecture: <a href="../architecture/decisions/0013-plural-peripheral-configs.html">Decision 0013</a>.</p>
 <p>This plan tracks implementation work for the cosim peripheral model
-framework. ADR 0013 documents the architecture (two execution domains,
+framework. Decision 0013 documents the architecture (two execution domains,
 observe-only vs bidirectional GPU patterns, ring buffers, plural config
 convention); this doc tracks the concrete workstreams.</p>
 <h2 id="phase-1-multi-uart-90"><a class="header" href="#phase-1-multi-uart-90">Phase 1: Multi-UART (<a href="https://github.com/gpu-eda/Jacquard/issues/90">#90</a>)</a></h2>
 <p>First peripheral using the plural-config + array-in-kernel conventions
-from ADR 0013.</p>
+from Decision 0013.</p>
 <h3 id="schema--srctestbenchrs"><a class="header" href="#schema--srctestbenchrs">Schema — <code>src/testbench.rs</code></a></h3>
 <p>Add <code>name: Option&lt;String&gt;</code> to <code>UartConfig</code>. Add
 <code>uarts: Vec&lt;UartConfig&gt;</code> to <code>TestbenchConfig</code>. Add
@@ -268,7 +268,7 @@ to use <code>"uarts": [...]</code> syntax, confirm identical results.</li>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../plans/declarative-cell-metadata.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../plans/multi-clock-and-stimulus-architecture.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -282,7 +282,7 @@ to use <code>"uarts": [...]</code> syntax, confirm identical results.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../plans/declarative-cell-metadata.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../plans/multi-clock-and-stimulus-architecture.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

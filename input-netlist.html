@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,7 +182,7 @@
 <h2 id="what-jacquard-reads"><a class="header" href="#what-jacquard-reads">What Jacquard reads</a></h2>
 <p>Jacquard is a gate-level <strong>emulator</strong> — it maps a <em>synthesized</em> and-inverter
 graph onto a virtual manycore GPU processor (see
-<a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a>). So the direct input to
+<a href="architecture/decisions/0014-aig-as-simulation-ir.html">Decision 0014</a>). So the direct input to
 <code>jacquard sim</code> / <code>cosim</code> is a <strong>gate-level Verilog netlist</strong>: structural
 Verilog whose leaf cells are <code>aigpdk</code>, SKY130, or GF180MCU standard cells.</p>
 <p><strong>Behavioral RTL is the intended design input — via a synthesis step.</strong> You
@@ -195,7 +195,7 @@ a commercial tool like DC gives better QoR).</p>
 <blockquote>
 <p><strong>Roadmap:</strong> an integrated <code>jacquard build design.v</code> on-ramp (Yosys via
 YoWASP, no manual synthesis) is planned — see
-<a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> and
+<a href="architecture/decisions/0021-behavioral-rtl-support.html">Decision 0021</a> and
 <a href="https://github.com/gpu-eda/Jacquard/issues/162">#162</a>. Until then, synthesize
 first, then <code>sim</code>.</p>
 </blockquote>
@@ -287,14 +287,14 @@ to RAM through the memory-synthesis step (see <a href="synthesis-flow.html">Synt
 check against the X-mask (<a href="https://github.com/gpu-eda/Jacquard/issues/106">#106</a>)
 and lowering an <code>$isunknown</code> SVA subset from RTL to that spec
 (<a href="https://github.com/gpu-eda/Jacquard/issues/107">#107</a>), building on selective
-X-propagation (<a href="adr/0016-selective-x-propagation.html">ADR 0016</a>).</li>
+X-propagation (<a href="architecture/decisions/0016-selective-x-propagation.html">Decision 0016</a>).</li>
 </ul>
 <h2 id="see-also"><a class="header" href="#see-also">See also</a></h2>
 <ul>
 <li><a href="synthesis-flow.html">Synthesis Flow</a> — RTL → gate-level netlist (the step above).</li>
 <li><a href="interop.html">Testbench Interop</a> — UVM / cocotb / SVA, and record-and-replay.</li>
-<li><a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a> — why the input is a synthesized AIG.</li>
-<li><a href="adr/0021-behavioral-rtl-support.html">ADR 0021</a> — the planned integrated RTL on-ramp.</li>
+<li><a href="architecture/decisions/0014-aig-as-simulation-ir.html">Decision 0014</a> — why the input is a synthesized AIG.</li>
+<li><a href="architecture/decisions/0021-behavioral-rtl-support.html">Decision 0021</a> — the planned integrated RTL on-ramp.</li>
 </ul>
 
                     </main>

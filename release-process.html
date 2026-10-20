@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -199,14 +199,14 @@ exits all criteria).</li>
 release ships. Pre-1.0 versions (<code>0.x.0</code>) carry the standard SemVer
 caveat: minor bumps may include breaking changes; the public
 contracts (<code>--timing-report</code> schema, IR layout) are documented in their
-own ADRs and follow stricter rules.</p>
+own decisions and follow stricter rules.</p>
 <p>Stable contracts (additive-only, breaking changes require a major
 bump and a deprecation window):</p>
 <ul>
 <li><code>--timing-report</code> JSON schema — <code>src/timing_report.rs::SCHEMA_VERSION</code>,
-governed by ADR 0008.</li>
+governed by Decision 0008.</li>
 <li>Timing IR FlatBuffers schema — <code>crates/timing-ir/schemas/timing_ir.fbs</code>,
-governed by ADR 0002.</li>
+governed by Decision 0002.</li>
 </ul>
 <p>CLI flags, log message formats, and <code>--timing-summary</code> text output are
 <strong>not</strong> stable parseable contracts; consumers that need to script
@@ -363,7 +363,7 @@ WS-RH.1 in <a href="plans/post-phase-0-roadmap.html"><code>docs/plans/post-phase
 <p>These items are tracked in <a href="plans/post-phase-0-roadmap.html"><code>docs/plans/post-phase-0-roadmap.md</code></a>
 § Release hardening; this section is the visible punch-list:</p>
 <ul>
-<li><input disabled="" type="checkbox" checked=""> Phase 1 (ADR 0008 required outputs) closed.</li>
+<li><input disabled="" type="checkbox" checked=""> Phase 1 (Decision 0008 required outputs) closed.</li>
 <li><input disabled="" type="checkbox" checked=""> WS-RH.1 (OpenSTA detection + version check) shipped.</li>
 <li><input disabled="" type="checkbox" checked=""> Metal CI on <code>macos-runner-1</code> green (re-enabled in commit <code>12e98df</code>,
 2026-05-12).</li>
@@ -373,7 +373,7 @@ disabled in <code>.github/workflows/ci.yml</code> (<code>if: ${{ false }}</code>
 <li><input disabled="" type="checkbox"> <strong>HIP CI</strong> on the AMD runner green on main. Currently disabled
 in <code>.github/workflows/ci.yml</code> (<code>if: ${{ false }}</code>, ~line 357).
 Re-enable when the AMD runner is online.</li>
-<li><input disabled="" type="checkbox"> <strong>Prebuilt CUDA/HIP binaries</strong> (ADR 0018 Phase 4), when produced, must
+<li><input disabled="" type="checkbox"> <strong>Prebuilt CUDA/HIP binaries</strong> (Decision 0018 Phase 4), when produced, must
 build with <code>JACQUARD_CUDA_ARCH=all-major</code> so the kernel ships portable
 SASS for every major arch (<code>sm_50</code>…<code>sm_120</code> on CUDA ≥ 12.8, Blackwell
 included) plus PTX for the newest — see the README § CUDA target
@@ -419,17 +419,17 @@ typo per upstream maintainer
 governed by the workspace LICENSE. Submodule pin will be bumped when
 upstream pushes the correction.</li>
 <li><code>vendor/sky130_fd_sc_hd/</code> — Apache-2.0.</li>
-<li><code>vendor/opensta/</code> — GPL-3 (subprocess only per ADR 0001 + ADR 0006
+<li><code>vendor/opensta/</code> — GPL-3 (subprocess only per Decision 0001 + Decision 0006
 § Amendment; never linked, never bundled).</li>
 </ul>
 <h2 id="cross-references"><a class="header" href="#cross-references">Cross-references</a></h2>
 <ul>
 <li><a href="https://github.com/gpu-eda/Jacquard/blob/main/CHANGELOG.md"><code>CHANGELOG.md</code></a> — release log.</li>
-<li><a href="adr/0008-structured-timing-output.html"><code>docs/adr/0008-structured-timing-output.md</code></a>
+<li><a href="architecture/decisions/0008-structured-timing-output.html"><code>docs/architecture/decisions/0008-structured-timing-output.md</code></a>
 — <code>--timing-report</code> stability contract.</li>
-<li><a href="adr/0002-timing-ir.html"><code>docs/adr/0002-timing-ir.md</code></a> — IR schema
+<li><a href="architecture/decisions/0002-timing-ir.html"><code>docs/architecture/decisions/0002-timing-ir.md</code></a> — IR schema
 versioning.</li>
-<li><a href="adr/0006-sdf-preprocessing-model.html"><code>docs/adr/0006-sdf-preprocessing-model.md</code></a>
+<li><a href="architecture/decisions/0006-sdf-preprocessing-model.html"><code>docs/architecture/decisions/0006-sdf-preprocessing-model.md</code></a>
 — OpenSTA bundling rules.</li>
 <li><a href="project-scope.html"><code>docs/project-scope.md</code></a> — license posture
 contract.</li>
@@ -439,7 +439,7 @@ contract.</li>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="development.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="prose-style.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -453,7 +453,7 @@ contract.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="development.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="prose-style.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

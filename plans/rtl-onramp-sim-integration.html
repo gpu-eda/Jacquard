@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,10 +180,10 @@
                     <main>
                         <h1 id="plan--rtl-on-ramp-folded-into-simcosim"><a class="header" href="#plan--rtl-on-ramp-folded-into-simcosim">Plan — RTL on-ramp folded into <code>sim</code>/<code>cosim</code></a></h1>
 <p><strong>Status:</strong> Active — reworks draft PR <a href="https://github.com/gpu-eda/Jacquard/pull/167">#167</a></p>
-<p><strong>ADRs:</strong> <a href="../adr/0021-behavioral-rtl-support.html">0021</a> (Revised 2026-07-03 —
+<p><strong>Decisions:</strong> <a href="../architecture/decisions/0021-behavioral-rtl-support.html">0021</a> (Revised 2026-07-03 —
 synth folds into <code>sim</code>/<code>cosim</code>, no <code>build</code> command), aligns with
-<a href="../adr/0019-cell-model-ir.html">0019</a> (descriptor-supplied logic + timing) and
-<a href="../adr/0018-distribution-and-installation.html">0018</a> (wasm distribution).</p>
+<a href="../architecture/decisions/0019-cell-model-ir.html">0019</a> (descriptor-supplied logic + timing) and
+<a href="../architecture/decisions/0018-distribution-and-installation.html">0018</a> (wasm distribution).</p>
 <p><strong>Predecessors:</strong> #167 shipped the <code>src/synth.rs</code> embedded-Yosys engine and a
 <code>jacquard build</code> subcommand + <code>synth</code> feature (CI green, draft). This plan keeps
 the engine and <strong>removes the standalone command</strong>, wiring synthesis into the
@@ -196,18 +196,18 @@ simulation input path instead.</p>
 behavioral RTL, synthesizes it transparently to an aigpdk netlist (cached), and
 simulates — no separate <code>build</code> step, no Python, no external toolchain. A
 pre-synthesized netlist continues to simulate unchanged.</p>
-<h2 id="input-dispatch-the-core-behaviour--adr-0021-1"><a class="header" href="#input-dispatch-the-core-behaviour--adr-0021-1">Input dispatch (the core behaviour — ADR 0021 §1)</a></h2>
+<h2 id="input-dispatch-the-core-behaviour--decision-0021-1"><a class="header" href="#input-dispatch-the-core-behaviour--decision-0021-1">Input dispatch (the core behaviour — Decision 0021 §1)</a></h2>
 <p>On the netlist-input path of <code>sim</code>/<code>cosim</code>:</p>
 <ol>
 <li>Attempt structural parse (<code>NetlistDB::from_sverilog_file</code>).</li>
 <li><strong>Parse succeeds</strong> → enumerate instantiated cells, test against the built-in
-stdcell recognizers (the <code>is_*_stdcell</code> helpers introduced by #160 / ADR 0019):
+stdcell recognizers (the <code>is_*_stdcell</code> helpers introduced by #160 / Decision 0019):
 <ul>
 <li><strong>All recognized</strong> → gate-level, built-in PDK → <strong>simulate directly.</strong>
 Logic + timing come from the embedded descriptor (<code>--corner</code>); no <code>.lib</code>.</li>
 <li><strong>Any unrecognized</strong> → gate-level, unknown PDK → <strong>error</strong>, listing the
 unrecognized cell types: <em>“gate-level netlist with unrecognized cells —
-pass <code>--cell-descriptor &lt;path&gt;</code>”</em> (ADR 0019 D8). <strong>Do not synthesize.</strong></li>
+pass <code>--cell-descriptor &lt;path&gt;</code>”</em> (Decision 0019 D8). <strong>Do not synthesize.</strong></li>
 </ul>
 </li>
 <li><strong>Parse fails</strong> → treat as behavioral → <strong>synthesize</strong> (embedded Yosys) →
@@ -299,7 +299,7 @@ coverage table (Phase 4), not this prose — prose is the orientation.</li>
 </ul>
 </li>
 <li>Fix stale <code>jacquard map</code> references (<code>CLAUDE.md</code>, docs) → <code>dump-paths</code>.</li>
-<li><code>docs/plans/cell-model-ir.md</code> status — <strong>reconciled with <code>main</code></strong> during rebase:
+<li><code>docs/plans/archive/cell-model-ir.md</code> status — <strong>reconciled with <code>main</code></strong> during rebase:
 its status is now “Largely delivered” (C3 + the D5 L4-from-descriptor runtime
 wiring landed on <code>main</code> via <code>de8255f3</code>), so no further edit here.</li>
 <li>Update <code>docs/handoffs/adr-0021-behavioral-rtl-handoff.md</code> (or resolve/fold it
@@ -316,7 +316,7 @@ without the exception handling feature.”</em> <code>Config::wasm_exceptions(tr
 but is <code>#[cfg(feature = "gc")]</code>, so it needs the <code>gc</code> feature <strong>and</strong> a spike
 confirming wasm-EH actually <em>runs</em> yosys (not just parses). Until then CI + docs
 pin <code>yowasp-yosys==0.64.0.0.post1131</code>. Removing that pin is the exit criterion.</li>
-<li><strong>Fetch <code>yosys.wasm</code> from GitHub release</strong> (increment 2, ADR 0018): publish the
+<li><strong>Fetch <code>yosys.wasm</code> from GitHub release</strong> (increment 2, Decision 0018): publish the
 pinned wasm as a Jacquard release asset; first behavioral run fetches to cache
 <ul>
 <li>sha256-verifies.</li>
@@ -333,30 +333,30 @@ this is the only trustworthy way to enumerate it (vs hand-claiming a feature
 list). Publish the table into <code>docs/accepted-rtl.md</code>; automatable as a CI job
 so the coverage claim stays current as the pinned <code>yosys.wasm</code> moves.</li>
 <li><del><strong>Wire L4-from-descriptor onto the runtime timing path</strong></del> — <strong>landed on
-<code>main</code></strong> (<code>de8255f3</code>, ADR 0019 D5): all runtime timing paths now source L4 from
+<code>main</code></strong> (<code>de8255f3</code>, Decision 0019 D5): all runtime timing paths now source L4 from
 the cell-model-IR descriptor, so <code>--corner</code> on-ramp timing for built-in PDKs is
 live. No longer a follow-up.</li>
 <li><strong>Project manifest (<code>Jacquard.toml</code>)</strong> — collapse the positional
 <code>sim netlist in.vcd out.vcd N</code> arg soup and hold synth-target/top/sources,
-referencing the existing <code>sim_config.json</code>. Its own ADR when scheduled.</li>
+referencing the existing <code>sim_config.json</code>. Its own decision when scheduled.</li>
 </ul>
 <hr>
 <h2 id="non-goals"><a class="header" href="#non-goals">Non-goals</a></h2>
 <ul>
 <li>No config/manifest format this pass (Phase 4).</li>
-<li>No Phase-2 <code>\src</code>-provenance work (ADR 0021 Phase 2 roadmap, unchanged).</li>
-<li>No change to the AIG/boomerang core or <code>sverilogparse</code> (ADR 0021 §4).</li>
+<li>No Phase-2 <code>\src</code>-provenance work (Decision 0021 Phase 2 roadmap, unchanged).</li>
+<li>No change to the AIG/boomerang core or <code>sverilogparse</code> (Decision 0021 §4).</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../plans/cell-model-ir.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../plans/netlist-graph-xroots.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../plans/rtl-source-provenance.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../plans/archive/phase-0-ir-and-oracle.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -366,11 +366,11 @@ referencing the existing <code>sim_config.json</code>. Its own ADR when schedule
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../plans/cell-model-ir.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../plans/netlist-graph-xroots.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../plans/rtl-source-provenance.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../plans/archive/phase-0-ir-and-oracle.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,11 +179,11 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="plan--python-engine-as-a-bundled-binary-wheel"><a class="header" href="#plan--python-engine-as-a-bundled-binary-wheel">Plan — Python engine as a bundled binary wheel</a></h1>
-<p>Implementation plan for <a href="../adr/0020-python-engine-binary-wheel.html">ADR 0020</a>:
+<p>Implementation plan for <a href="../architecture/decisions/0020-python-engine-binary-wheel.html">Decision 0020</a>:
 turn PR #53’s subprocess API into a <code>pip install jacquard</code> self-contained
 binary wheel built with cibuildwheel.</p>
 <blockquote>
-<p><strong>Deferred (2026-07-01).</strong> ADR 0020 is a <strong>draft</strong> — a native PyO3 binding is
+<p><strong>Deferred (2026-07-01).</strong> Decision 0020 is a <strong>draft</strong> — a native PyO3 binding is
 the preferred long-term direction, and whether we build this subprocess-wheel
 path at all is deferred (<a href="https://github.com/gpu-eda/Jacquard/issues/161">#161</a>). <strong>P0</strong> (adopt
 PR #53’s API into the uv workspace) is worth doing regardless — it’s the
@@ -221,7 +221,7 @@ the build/test split).</li>
 locally built binary. #53 can be closed/superseded by this branch.</li>
 </ol>
 <h2 id="p1--macosarm64--metal-binary-wheel-the-spike--the-crux"><a class="header" href="#p1--macosarm64--metal-binary-wheel-the-spike--the-crux">P1 — macOS/arm64 + Metal binary wheel (the spike + the crux)</a></h2>
-<p>The whole ADR rests on “embed the binary + vendor its dylibs into a wheel that
+<p>The whole decision rests on “embed the binary + vendor its dylibs into a wheel that
 launches with no Homebrew LLVM.” Prove it here on the platform we already
 release for.</p>
 <ol>
@@ -245,7 +245,7 @@ box; TestPyPI upload validated via <code>workflow_dispatch</code>.</li>
 <h2 id="p2--linuxx86_64-cpu-fallback-wheel"><a class="header" href="#p2--linuxx86_64-cpu-fallback-wheel">P2 — Linux/x86_64 CPU-fallback wheel</a></h2>
 <p>Make <code>pip install jacquard</code> work in a plain Linux CI container (no GPU).</p>
 <ol>
-<li>Build the cosim <strong>CPU backend</strong> (ADR 0017) for <code>manylinux</code>; <code>auditwheel</code>
+<li>Build the cosim <strong>CPU backend</strong> (Decision 0017) for <code>manylinux</code>; <code>auditwheel</code>
 repairs the (smaller, no-GPU) dylib set.</li>
 <li>Same clean-venv <code>sim</code>/<code>cosim</code> smoke, in a stock <code>manylinux</code>/ubuntu container.</li>
 <li>Document the backend the Linux wheel provides (CPU) vs. what needs P3.</li>
@@ -253,7 +253,7 @@ repairs the (smaller, no-GPU) dylib set.</li>
 </ol>
 <h2 id="p3--cuda--hip-gated-likely-extras"><a class="header" href="#p3--cuda--hip-gated-likely-extras">P3 — CUDA / HIP (gated, likely extras)</a></h2>
 <ol>
-<li><strong>Gate:</strong> ADR 0018 Phase 4 (prebuilt CUDA/HIP binaries) must exist first —
+<li><strong>Gate:</strong> Decision 0018 Phase 4 (prebuilt CUDA/HIP binaries) must exist first —
 this reuses those binaries, it does not invent GPU CI.</li>
 <li>Decide with data: default manylinux wheel vs. <code>jacquard[cuda]</code> extra vs.
 a separate package — driven by wheel size and CUDA-runtime bundling. <code>log</code>
@@ -273,7 +273,7 @@ binary and the wheel are one artifact), not <code>netlist-graph</code>’s indep
 <li>Extend <code>docs/installation.md</code> (a <code>pip install jacquard</code> path) and
 <code>docs/release-process.md</code> (the wheel channel + its staging-validation gate).</li>
 </ul>
-<h2 id="open-questions-from-the-adr"><a class="header" href="#open-questions-from-the-adr">Open questions (from the ADR)</a></h2>
+<h2 id="open-questions-from-the-decision"><a class="header" href="#open-questions-from-the-decision">Open questions (from the decision)</a></h2>
 <ul>
 <li><strong>PyPI name</strong> <code>jacquard</code> — confirm availability; fall back to <code>jacquard-eda</code>
 with an aliased import name if taken. Blocks only the first real publish.</li>

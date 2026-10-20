@@ -1,0 +1,18 @@
+{
+  "_comment": "Fragment: merge this `signal_streams` array into the C64 cocotb/sim_config.json. Bundle order is colorIndex[3..0], hsync, vsync — packed LSB-first, one byte per pixel. The renderer's decode_sample() assumes this order.",
+  "signal_streams": [
+    {
+      "name": "video",
+      "socket": "/tmp/c64-video.sock",
+      "trigger": { "strobe": "\\i_chip_core.c64_u.enablepixel" },
+      "signals": [
+        "\\bidir_CORE2PAD[4]",
+        "\\bidir_CORE2PAD[3]",
+        "\\bidir_CORE2PAD[2]",
+        "\\bidir_CORE2PAD[1]",
+        "\\bidir_CORE2PAD[5]",
+        "\\bidir_CORE2PAD[6]"
+      ]
+    }
+  ]
+}

@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -229,7 +229,7 @@ submodule. NVDLA is the smallest and the usual first thing to try.</p>
 <tr><td><code>src/pe.rs</code></td><td>maps a partition onto one block’s resources; the limits below live here</td></tr>
 <tr><td><code>src/flatten.rs</code></td><td>emits <code>FlattenedScriptV1</code>, the packed instruction stream the kernel runs</td></tr>
 <tr><td><code>src/aigpdk.rs</code></td><td>the AIGPDK standard-cell interface (AND, DFF, clock gate, SRAM)</td></tr>
-<tr><td><code>src/synth.rs</code></td><td>the embedded Yosys on-ramp (ADR 0021), behind <code>synth</code></td></tr>
+<tr><td><code>src/synth.rs</code></td><td>the embedded Yosys on-ramp (Decision 0021), behind <code>synth</code></td></tr>
 <tr><td><code>csrc/kernel_v1.metal</code></td><td>the Metal kernel</td></tr>
 <tr><td><code>csrc/kernel_v1.cu</code>, <code>kernel_v1.hip.cpp</code></td><td>CUDA and HIP, sharing <code>kernel_v1_impl.cuh</code></td></tr>
 <tr><td><code>crates/</code></td><td><code>timing-ir</code>, <code>opensta-to-ir</code>, <code>cell-model-ir</code>, <code>liberty-parse</code>, <code>liberty-to-cellir</code>, <code>cell-decomp</code></td></tr>
@@ -241,9 +241,9 @@ submodule. NVDLA is the smallest and the usual first thing to try.</p>
 <p>The pipeline reads left to right:</p>
 <pre><code>NetlistDB → AIG → StagedAIG → Partitions → FlattenedScript → GPU kernel
 </code></pre>
-<p><a href="simulation-architecture.html">Simulation Architecture</a> walks each stage. For
-<em>why</em> it is shaped this way, <a href="adr/0014-aig-as-simulation-ir.html">ADR 0014</a>
-explains the AIG choice and <a href="adr/0015-boomerang-execution-model.html">ADR 0015</a>
+<p><a href="architecture/simulation-engine.html">Simulation engine</a> walks each stage. For
+<em>why</em> it is shaped this way, <a href="architecture/decisions/0014-aig-as-simulation-ir.html">Decision 0014</a>
+explains the AIG choice and <a href="architecture/decisions/0015-boomerang-execution-model.html">Decision 0015</a>
 the boomerang execution model.</p>
 <h2 id="the-constraint-that-shapes-everything"><a class="header" href="#the-constraint-that-shapes-everything">The constraint that shapes everything</a></h2>
 <p>A GPU block is a fixed budget, and <code>src/pe.rs</code> has to fit each partition inside
@@ -308,18 +308,21 @@ to the pinned copy, so a link in an old release keeps meaning what it meant. See
 <a href="release-process.html">Release Process</a>.</p>
 <h2 id="conventions"><a class="header" href="#conventions">Conventions</a></h2>
 <ul>
-<li><strong><a href="adr/README.html">ADRs</a></strong> record decisions worth understanding later, and are
-append-only: when reality moves past one, amend it rather than rewriting it.
-An ADR’s status is a claim about the code, so check it against the code.</li>
+<li><strong><a href="architecture/decisions/README.html">Decisions</a></strong> record choices worth
+understanding later. A record is immutable and past-tense: when a decision
+changes, a new record supersedes the old rather than rewriting it. A record’s
+status is a claim about the code, so check it against the code. Current state
+lives in the <a href="architecture/README.html">architecture reference</a>, not the record.</li>
 <li><strong><a href="plans/README.html">Plans</a></strong> hold work in progress; deferred work gets a plan
 and an issue rather than being lost.</li>
 <li><strong><a href="handoff-discipline.html">Handoffs</a></strong> are working memory, not history. One per
-active thread, folded into the ADRs or plans and deleted when resolved.</li>
+active thread, folded into the decisions or plans and deleted when resolved.</li>
+<li><strong><a href="prose-style.html">Prose style</a></strong> is the house style for the docs’ writing.</li>
 <li><strong><a href="release-process.html">Release Process</a></strong> covers cutting a release, the RC-first
 flow, and what’s automated.</li>
 </ul>
 <p>The through-line: a sentence that says how the tool behaves is a verifiable
-claim. That applies to docs, <code>--help</code> text, and ADR status alike — check it
+claim. That applies to docs, <code>--help</code> text, and a decision’s status alike; check it
 against the code before writing it.</p>
 
                     </main>
@@ -330,7 +333,7 @@ against the code before writing it.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="release-process.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="prose-style.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -344,7 +347,7 @@ against the code before writing it.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="release-process.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="prose-style.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

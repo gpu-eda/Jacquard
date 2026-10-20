@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,9 +181,9 @@
                         <h1 id="implementation-plans"><a class="header" href="#implementation-plans">Implementation Plans</a></h1>
 <p>Phased implementation plans with entry and exit criteria. Plans live
 here when the work spans multiple commits and needs an explicit
-scheduling artefact; once shipped, the plan is kept as a historical
-record (Status flipped to <em>Implemented</em>) rather than deleted, so the
-phasing is recoverable later.</p>
+scheduling artefact. Once shipped, the plan moves to <code>archive/</code> as a
+historical record (Status flipped to <em>Implemented</em>) rather than being
+deleted, so the phasing is recoverable later.</p>
 <p>For short-lived working memory between sessions, see
 <a href="../handoff-discipline.html"><code>../handoff-discipline.md</code></a> — that lives
 in <code>docs/handoffs/</code> and is deliberately kept separate from the
@@ -202,49 +202,85 @@ persistent plans here.</p>
 <tr><th>Plan</th><th>Status</th></tr>
 </thead>
 <tbody>
-<tr><td><a href="post-phase-0-roadmap.html">Post-Phase-0 Roadmap</a></td><td>Active — scheduling doc for ADRs 0007 and 0008</td></tr>
+<tr><td><a href="post-phase-0-roadmap.html">Post-Phase-0 Roadmap</a></td><td>Active — scheduling doc for Decisions 0007 and 0008</td></tr>
 <tr><td><a href="gf180mcu-enablement.html">GF180MCU PDK enablement</a></td><td>Mostly implemented — Phases 0–6 shipped; Phase 7 deferred</td></tr>
-<tr><td><a href="phase-0-ir-and-oracle.html">Phase 0: Timing IR and OpenSTA oracle</a></td><td>Implemented — historical record</td></tr>
-<tr><td><a href="ws2-opensta-to-ir.html">WS2: <code>opensta-to-ir</code></a></td><td>Implemented — historical record</td></tr>
-<tr><td><a href="ws3-delete-sdf-parser.html">WS3: delete SDF parser + interim runtime hook</a></td><td>Implemented — historical record (see ADR 0006 Amendment)</td></tr>
 <tr><td><a href="ws3-cosim-sdf-followup.html">WS3 follow-up: re-add cosim <code>--sdf</code> via <code>opensta-to-ir</code></a></td><td>Deferred</td></tr>
 <tr><td><a href="multi-clock-and-stimulus-architecture.html">Multi-clock and stimulus architecture</a></td><td>Exploratory — demand-driven</td></tr>
-<tr><td><a href="cosim-backend-portability.html">Cosim backend portability</a></td><td>Active — design captured (#105); see ADR 0017 amendment</td></tr>
-<tr><td><a href="cell-model-ir.html">Cell-model IR</a></td><td>Proposed — realises ADR 0019 (#130, #67)</td></tr>
-<tr><td><a href="rtl-onramp-sim-integration.html">RTL on-ramp folded into <code>sim</code>/<code>cosim</code></a></td><td>Active — reworks #167, realises ADR 0021 (#162)</td></tr>
-<tr><td><a href="rtl-source-provenance.html">RTL-source provenance</a></td><td>Active — design captured; ADR 0021 Phase 2 (#162), gated on A0 (build forked wasm, check <code>\src</code> survives)</td></tr>
+<tr><td><a href="cosim-backend-portability.html">Cosim backend portability</a></td><td>Phases 0–2 shipped (#118, #120); Phase 3 future, demand-driven</td></tr>
+<tr><td><a href="rtl-onramp-sim-integration.html">RTL on-ramp folded into <code>sim</code>/<code>cosim</code></a></td><td>Active — reworks #167, realises Decision 0021 (#162)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="archive"><a class="header" href="#archive">Archive</a></h2>
+<p>Shipped plans move to <code>archive/</code> so this directory lists only live
+work. They stay in the repo because decision records cite them as the record of
+how each decision was carried out.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Plan</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="archive/phase-0-ir-and-oracle.html">Phase 0: Timing IR and OpenSTA oracle</a></td><td>Implemented</td></tr>
+<tr><td><a href="archive/ws2-opensta-to-ir.html">WS2: <code>opensta-to-ir</code></a></td><td>Implemented</td></tr>
+<tr><td><a href="archive/ws3-delete-sdf-parser.html">WS3: delete SDF parser + interim runtime hook</a></td><td>Implemented (see Decision 0006 Amendment)</td></tr>
+<tr><td><a href="archive/declarative-cell-metadata.html">Declarative cell metadata</a></td><td>Implemented</td></tr>
+<tr><td><a href="archive/cosim-xprop.html">Selective X-propagation in cosim</a></td><td>Implemented</td></tr>
+<tr><td><a href="archive/cell-model-ir.html">Cell-model IR</a></td><td>Largely delivered; realises Decision 0019</td></tr>
+<tr><td><a href="archive/rtl-source-provenance.html">RTL-source provenance</a></td><td>Shipped in v0.3.0; realises Decision 0021 Phase 2</td></tr>
+<tr><td><a href="archive/cosim-phase1-cpu-backend.html">Cosim Phase 1: CpuBackend + Linux cosim CI</a></td><td>Shipped in PR #118 with Phase 0</td></tr>
+<tr><td><a href="archive/cosim-phase2-cuda-hip.html">Cosim Phase 2: CUDA/HIP parity</a></td><td>Shipped in PR #120; performance follow-up is #122</td></tr>
+<tr><td><a href="archive/cosim-phase2-stageB-io-port.html">Cosim Phase 2 Stage B: <code>gpu_io_step</code> port</a></td><td>Shipped in PR #120</td></tr>
+<tr><td><a href="archive/cosim-phase2-stageC-flash.html">Cosim Phase 2 Stage C: flash kernels</a></td><td>Shipped in PR #120</td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="reading-order-for-new-contributors"><a class="header" href="#reading-order-for-new-contributors">Reading order for new contributors</a></h2>
 <p>If you want to understand how the timing stack got to where it is:</p>
 <ol>
-<li><a href="phase-0-ir-and-oracle.html"><code>phase-0-ir-and-oracle.md</code></a> — the
+<li><a href="archive/phase-0-ir-and-oracle.html"><code>phase-0-ir-and-oracle.md</code></a> — the
 umbrella plan, with the five work streams (WS1–WS5).</li>
-<li><a href="ws2-opensta-to-ir.html"><code>ws2-opensta-to-ir.md</code></a> and
-<a href="ws3-delete-sdf-parser.html"><code>ws3-delete-sdf-parser.md</code></a> — the
+<li><a href="archive/ws2-opensta-to-ir.html"><code>ws2-opensta-to-ir.md</code></a> and
+<a href="archive/ws3-delete-sdf-parser.html"><code>ws3-delete-sdf-parser.md</code></a> — the
 per-work-stream detail for the IR producer and the SDF parser
 removal.</li>
 <li><a href="post-phase-0-roadmap.html"><code>post-phase-0-roadmap.md</code></a> — what comes
-next, sequenced against the ADRs.</li>
+next, sequenced against the decisions.</li>
 </ol>
 <h2 id="adding-a-new-plan"><a class="header" href="#adding-a-new-plan">Adding a new plan</a></h2>
 <ol>
-<li>Filename: short kebab-case (<code>&lt;topic&gt;.md</code> or
-<code>&lt;ws-or-phase&gt;-&lt;topic&gt;.md</code>).</li>
-<li>Start with <code># Plan — &lt;title&gt;</code> and a <code>**Status:**</code> line.</li>
-<li>Where the plan executes a specific ADR or work stream, name them
-in a <code>**Predecessors:**</code> / <code>**ADRs:**</code> block near the top so the
-dependency graph is explicit.</li>
-<li>Add the row to the table above. When the plan ships, change the
-status in the file and here in the same commit.</li>
+<li>
+<p>Filename: short kebab-case (<code>&lt;topic&gt;.md</code> or
+<code>&lt;ws-or-phase&gt;-&lt;topic&gt;.md</code>).</p>
+</li>
+<li>
+<p>Start with <code># Plan — &lt;title&gt;</code> and a <code>**Status:**</code> line.</p>
+</li>
+<li>
+<p>Where the plan executes a specific decision or work stream, name them
+in a <code>**Predecessors:**</code> / <code>**decisions:**</code> block near the top so the
+dependency graph is explicit.</p>
+</li>
+<li>
+<p>Add the row to the table above.</p>
+</li>
+<li>
+<p>When the plan ships, flip its status, move its row to the Archive
+table, and move the file with the doc-move tool, all in one commit:</p>
+<pre><code class="language-sh">python3 docs/scripts/move_doc.py docs/plans/&lt;plan-name&gt;.md docs/plans/archive/
+</code></pre>
+<p>The tool <code>git mv</code>s the plan into <code>archive/</code> and repoints every link and
+<code>docs/plans/</code> path in the repo, including source comments. Move its
+<code>SUMMARY.md</code> entry under “Completed plans” by hand, then run
+<code>python3 docs/scripts/check_doc_links.py</code>, which fails if you forget.</p>
+</li>
 </ol>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../adr/0022-flow-controlled-io.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../architecture/decisions/spikes/architecture-doc-redesign.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -258,7 +294,7 @@ status in the file and here in the same commit.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../adr/0022-flow-controlled-io.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../architecture/decisions/spikes/architecture-doc-redesign.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

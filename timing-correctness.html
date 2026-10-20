@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Timing Correctness - Jacquard Documentation</title>
+        <title>Timing Correctness Requirements - Jacquard Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,7 +180,7 @@
                     <main>
                         <h1 id="timing-correctness-requirements"><a class="header" href="#timing-correctness-requirements">Timing Correctness Requirements</a></h1>
 <p><strong>Status:</strong> Draft — under review.</p>
-<p>This document is the contract for Jacquard’s timing correctness story. It defines <em>what</em> must be true; ADRs under <code>docs/adr/</code> define <em>how</em>; plans under <code>docs/plans/</code> execute them.</p>
+<p>This document is the contract for Jacquard’s timing correctness story. It defines <em>what</em> must be true; decisions under <code>docs/architecture/decisions/</code> define <em>how</em>; plans under <code>docs/plans/</code> execute them.</p>
 <h2 id="scope"><a class="header" href="#scope">Scope</a></h2>
 <p>Inherits constraints and non-goals from <a href="project-scope.html"><code>project-scope.md</code></a> — in particular the permissive-license requirement for linked code and the synchronous-only design assumption.</p>
 <p>Addresses three known weaknesses from the April 2026 architecture review:</p>
@@ -192,7 +192,7 @@
 <p>Out of scope (tracked elsewhere, addressed later): hard schema limits (no latches, static VCD), three-backend maintenance cost, GPU-side IO model scaling, silent-failure engineering patterns beyond parsers, partitioner non-determinism.</p>
 <h2 id="principles"><a class="header" href="#principles">Principles</a></h2>
 <h3 id="p1--opensta-is-the-oracle"><a class="header" href="#p1--opensta-is-the-oracle">P1 — OpenSTA is the oracle</a></h3>
-<p>When Jacquard’s results disagree with OpenSTA, Jacquard is wrong until demonstrated otherwise. In the shipped release, OpenSTA is never invoked from the <code>jacquard</code> runtime binary, and never linked (it is GPL; Jacquard stays permissive). Subprocess invocation from CI, test harnesses, and the standalone <code>opensta-to-ir</code> preprocessing tool is acceptable. During development before first release, a runtime subprocess invocation may exist as a contributor-ergonomics convenience (see ADR 0006) — this is explicitly interim and is removed before release. Divergence is never accepted silently: it is fixed, explicitly justified in-doc, or filed as a bug.</p>
+<p>When Jacquard’s results disagree with OpenSTA, Jacquard is wrong until demonstrated otherwise. In the shipped release, OpenSTA is never invoked from the <code>jacquard</code> runtime binary, and never linked (it is GPL; Jacquard stays permissive). Subprocess invocation from CI, test harnesses, and the standalone <code>opensta-to-ir</code> preprocessing tool is acceptable. During development before first release, a runtime subprocess invocation may exist as a contributor-ergonomics convenience (see Decision 0006) — this is explicitly interim and is removed before release. Divergence is never accepted silently: it is fixed, explicitly justified in-doc, or filed as a bug.</p>
 <h3 id="p2--no-single-parse-path-is-its-own-reference"><a class="header" href="#p2--no-single-parse-path-is-its-own-reference">P2 — No single parse path is its own reference</a></h3>
 <p>Every format we consume (SDF, Liberty, SPEF, Verilog) is validated against at least one third-party tool’s parse of the same file. This is the primary defense against representation bugs that would otherwise affect Jacquard’s primary and reference paths simultaneously.</p>
 <h3 id="p3--fail-loud-on-silent-failures"><a class="header" href="#p3--fail-loud-on-silent-failures">P3 — Fail loud on silent failures</a></h3>
@@ -209,10 +209,10 @@
 <li>Multi-corner by default.</li>
 <li>Tags each arc with provenance: source tool, source file, and origin category (asserted / computed / defaulted).</li>
 </ul>
-<p>Details: <code>docs/adr/0002-timing-ir.md</code>.</p>
+<p>Details: <code>docs/architecture/decisions/0002-timing-ir.md</code>.</p>
 <h3 id="r2--in-process-reference-sta--deferred"><a class="header" href="#r2--in-process-reference-sta--deferred">R2 — In-process reference STA — <em>deferred</em></a></h3>
 <p>The original requirement was an in-process STA engine that computes per-endpoint arrival/slack from Liberty + SPEF, linked directly (subject to the permissive-license constraint in <code>project-scope.md</code>), cross-checking Jacquard’s SDF-derived timing at load time and on demand during sim.</p>
-<p>Preferred implementation was OpenTimer; the SKY130 spike (<code>docs/spikes/opentimer-sky130.md</code>) found OpenTimer’s input pipeline unfit for OpenROAD-flow outputs, and ADR 0003 was Superseded (commit <code>d002bde</code>). The cross-check role is now performed out of process by OpenSTA via <code>opensta-to-ir</code> (ADR 0001 — sole STA path); the in-process variant is parked until a fit-for-purpose permissive option appears (libreda-sta or in-house walker, both behind a future ADR).</p>
+<p>Preferred implementation was OpenTimer; the SKY130 spike (<code>docs/architecture/decisions/spikes/opentimer-sky130.md</code>) found OpenTimer’s input pipeline unfit for OpenROAD-flow outputs, and Decision 0003 was Superseded (commit <code>d002bde</code>). The cross-check role is now performed out of process by OpenSTA via <code>opensta-to-ir</code> (Decision 0001 — sole STA path); the in-process variant is parked until a fit-for-purpose permissive option appears (libreda-sta or in-house walker, both behind a future decision).</p>
 <h3 id="r3--oracle-backed-ci"><a class="header" href="#r3--oracle-backed-ci">R3 — Oracle-backed CI</a></h3>
 <p>The OpenSTA test corpus is vendored (or submoduled) into the repository and used as a regression fixture. Every IR converter runs against the corpus; converter-to-converter diffs must be explained or fixed before merge.</p>
 <p>Jacquard’s own regression designs are run through OpenSTA (subprocess) and compared against Jacquard’s output. Runs nightly or pre-release, not per-PR, due to runtime cost.</p>
@@ -224,7 +224,7 @@
 <li>Provenance of each delay (SDF-asserted / Liberty-computed / defaulted).</li>
 </ul>
 <h3 id="r5--private-pdk-testing"><a class="header" href="#r5--private-pdk-testing">R5 — Private PDK testing</a></h3>
-<p>A private test track for commercial PDKs exists, gated on per-PDK environment variables (e.g. <code>&lt;VENDOR&gt;_PDK_PATH</code>). Tests skip cleanly when PDK files are unavailable; CI runs with PDK access execute them. No PDK-derived artifacts are committed. Details: <code>docs/adr/0004-private-pdk-testing.md</code>.</p>
+<p>A private test track for commercial PDKs exists, gated on per-PDK environment variables (e.g. <code>&lt;VENDOR&gt;_PDK_PATH</code>). Tests skip cleanly when PDK files are unavailable; CI runs with PDK access execute them. No PDK-derived artifacts are committed. Details: <code>docs/architecture/decisions/0004-private-pdk-testing.md</code>.</p>
 <h2 id="non-functional-requirements"><a class="header" href="#non-functional-requirements">Non-functional requirements</a></h2>
 <h3 id="n1--startup-parse-speed"><a class="header" href="#n1--startup-parse-speed">N1 — Startup parse speed</a></h3>
 <p>IR consumption at sim startup is effectively O(1) of IR size (binary, memory-mapped, zero-copy). The expensive SDF→IR conversion is a one-time preprocessing step, not an every-sim cost.</p>
@@ -233,7 +233,7 @@
 <h3 id="n3--modularity"><a class="header" href="#n3--modularity">N3 — Modularity</a></h3>
 <p>Each converter (SDF→IR, Liberty→IR, OpenSTA→IR, reference-STA→IR) is testable in isolation, without the full Jacquard build. Converters are separate crates or binaries. Consumers of IR need not know which converter produced it.</p>
 <h2 id="acceptance-criteria--phase-0"><a class="header" href="#acceptance-criteria--phase-0">Acceptance criteria — phase 0</a></h2>
-<p>Phase 0 (see <code>docs/plans/phase-0-ir-and-oracle.md</code>) is complete when:</p>
+<p>Phase 0 (see <code>docs/plans/archive/phase-0-ir-and-oracle.md</code>) is complete when:</p>
 <ol>
 <li>Timing IR schema defined, with both a binary encoding and a JSON sidecar for human/CI diffs.</li>
 <li>OpenSTA → IR converter implemented as a subprocess-driven tool.</li>
@@ -244,10 +244,10 @@
 </ol>
 <p>Phases 1 and beyond are planned at the start of each phase, not all up front.</p>
 <h2 id="open-questions"><a class="header" href="#open-questions">Open questions</a></h2>
-<p>Items not settled by this document; they resolve in ADRs, spike outcomes, or phase plans:</p>
+<p>Items not settled by this document; they resolve in decisions, spike outcomes, or phase plans:</p>
 <ul>
-<li>Exact IR schema format (FlatBuffers / Cap’n Proto / other). Tracked in ADR 0002.</li>
-<li><del>Whether OpenTimer handles SKY130 Liberty robustly.</del> Resolved: spike failed Q2 on SKY130; ADR 0003 Superseded.</li>
+<li>Exact IR schema format (FlatBuffers / Cap’n Proto / other). Tracked in Decision 0002.</li>
+<li><del>Whether OpenTimer handles SKY130 Liberty robustly.</del> Resolved: spike failed Q2 on SKY130; Decision 0003 Superseded.</li>
 <li>Whether SPEF gets its own IR or is embedded in the timing IR. Deferred; likely separate.</li>
 <li>Whether the IR is Jacquard-local or shared across a broader tooling ecosystem. External decision; answer affects investment level and schema stability requirements.</li>
 </ul>
@@ -255,12 +255,12 @@
 <p>This document supersedes the “±5% arrival tolerance” convention from <code>docs/timing-validation.md</code> once phase 0 ships. Until then, the existing convention remains in effect for designs not yet covered by oracle-backed CI.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
-<li><code>docs/simulation-architecture.md</code> — current pipeline.</li>
+<li><code>docs/architecture/simulation-engine.md</code> — current pipeline.</li>
 <li><code>docs/timing-simulation.md</code> — current timing-sim usage.</li>
 <li><code>docs/timing-validation.md</code> — current validation methodology (to be superseded).</li>
-<li><code>docs/adr/</code> — decisions executed through this document.</li>
+<li><code>docs/architecture/decisions/</code> — decisions executed through this document.</li>
 <li><code>docs/plans/</code> — phased implementation.</li>
-<li><code>docs/spikes/</code> — time-boxed experiments.</li>
+<li><code>docs/architecture/decisions/spikes/</code> — time-boxed experiments.</li>
 </ul>
 <hr>
 <p><strong>Last updated:</strong> 2026-04-23</p>
@@ -269,7 +269,7 @@
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="simulation-architecture.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="why-jacquard.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -283,7 +283,7 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="simulation-architecture.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="why-jacquard.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

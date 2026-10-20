@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -244,7 +244,7 @@ No executor or background thread is required for a single connection.</p>
 </li>
 <li>
 <p><strong>D2 — Wire <code>output_state</code> into <code>step_edge</code> (resolve the standing TODO).</strong>
-Both ADR 0017 and ADR 0013 note <code>step_edge</code> is handed an empty <code>output_state</code>
+Both Decision 0017 and Decision 0013 note <code>step_edge</code> is handed an empty <code>output_state</code>
 “until I²C/SPI observation needs it.” The interactive server is the first CPU
 model that <em>must</em> read a design output (TDO). Replace the <code>&amp;[]</code> at
 <code>cosim/mod.rs:2987</code> with the real output slice. This also unblocks the
@@ -305,13 +305,13 @@ cocotb <code>RemoteBitbangServer</code> as the behavioural precedent to match.</
 <tr><td>J1</td><td>Wire <code>output_state</code> into <code>step_edge</code> (D2); add <code>JtagConfig.tdo_gpio</code> + resolve <code>tdo_pos</code>; unit-test TDO sampling in the replay model</td><td>replay fixtures still byte-identical; TDO-sample unit test green</td><td>✅ done</td></tr>
 <tr><td>J2</td><td>Byte-source abstraction (D3): <code>JtagSource</code> enum; replay path refactored onto it</td><td><code>jtag_minimal</code> replay unchanged; model unit tests green</td><td>✅ done</td></tr>
 <tr><td>J3</td><td><code>--jtag-server</code> (D5) + live byte source + <code>R</code> write-back (D4) + <code>TcpListener</code> accept</td><td><strong>V1 loopback test</strong>: live run == replay golden (<code>data0_obs==0xCAFEBABE</code>)</td><td>✅ done (model loopback unit test + <code>jtag-minimal-cosim-server</code> CI gate; verified locally on Metal)</td></tr>
-<tr><td>J4</td><td><code>docs/jtag-debug.md</code> (V2 recipe); <code>--help</code> text; cross-link ADRs</td><td>docs build; manual OpenOCD/gdb smoke (local)</td><td>✅ done (guide + <code>--help</code>; manual OpenOCD/gdb left to operators)</td></tr>
+<tr><td>J4</td><td><code>docs/jtag-debug.md</code> (V2 recipe); <code>--help</code> text; cross-link decisions</td><td>docs build; manual OpenOCD/gdb smoke (local)</td><td>✅ done (guide + <code>--help</code>; manual OpenOCD/gdb left to operators)</td></tr>
 <tr><td>J5 (later)</td><td>Single-step / breakpoints via DM <code>step</code>/triggers; X-aware debug under <code>--xprop</code></td><td>follows from attach; see open questions</td><td>⏳ deferred</td></tr>
 </tbody>
 </table>
 </div>
 <p>CUDA/HIP note: the interactive path is the CPU-side model + <code>batch=1</code> of the
-GPU backend (per ADR 0017’s “per-edge fallback”), so it works on any cosim
+GPU backend (per Decision 0017’s “per-edge fallback”), so it works on any cosim
 backend once J1–J3 land; no per-backend kernel work.</p>
 <h2 id="risks--open-questions"><a class="header" href="#risks--open-questions">Risks / open questions</a></h2>
 <ul>
@@ -336,9 +336,9 @@ is connected.</li>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
 <li>Issue <a href="https://github.com/gpu-eda/Jacquard/issues/124">#124</a>.</li>
-<li>ADR 0017 (cosim execution model) — Amendment 2026-06-21 (interactive,
+<li>Decision 0017 (cosim execution model) — Amendment 2026-06-21 (interactive,
 externally-paced peripheral models; <code>output_state</code> wiring).</li>
-<li>ADR 0013 (peripheral model architecture) — Amendment 2026-06-21 (<code>tdo_gpio</code>
+<li>Decision 0013 (peripheral model architecture) — Amendment 2026-06-21 (<code>tdo_gpio</code>
 config surface; <code>--jtag-server</code> as the interactive sibling of <code>--jtag-replay</code>).</li>
 <li>Existing replay path: <code>src/sim/models/jtag.rs</code>, <code>tests/jtag_minimal/</code>
 (<code>bitbang.rec</code>, <code>sim_config.json</code>, the <code>jtag-minimal-cosim</code> CI gate).</li>
@@ -348,7 +348,7 @@ config surface; <code>--jtag-server</code> as the interactive sibling of <code>-
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../plans/cosim-phase2-stageC-flash.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../plans/cosim-backend-portability.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -362,7 +362,7 @@ config surface; <code>--jtag-server</code> as the interactive sibling of <code>-
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../plans/cosim-phase2-stageC-flash.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../plans/cosim-backend-portability.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

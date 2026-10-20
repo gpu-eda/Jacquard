@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,14 +179,16 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="cosim-backend-portability"><a class="header" href="#cosim-backend-portability">Cosim Backend Portability</a></h1>
-<p><strong>Status:</strong> Active — design captured, not yet scheduled.
+<p><strong>Status:</strong> Phases 0–2 shipped (PR #118, 2026-06-17; PR #120, 2026-06-21).
+Phase 3 (single-source peripherals) remains future, demand-driven work.
+The per-phase plans are in <a href="README.html#archive"><code>archive/</code></a>.
 <strong>Issue:</strong> <a href="https://github.com/gpu-eda/Jacquard/issues/105">#105</a>.
-<strong>Architecture:</strong> <a href="../adr/0017-cosim-execution-model.html">ADR 0017 — Cosim execution model</a>
+<strong>Architecture:</strong> <a href="../architecture/decisions/0017-cosim-execution-model.html">Decision 0017 — Cosim execution model</a>
 (see <em>Amendment 2026-06-07: backend-portable cosim — target architecture</em>).</p>
 <p>cosim is Metal-only today: <code>run_cosim</code> lives in <code>src/sim/cosim_metal.rs</code>
 (gated <code>#[cfg(feature = "metal")]</code>) and <code>cmd_cosim</code> hard-errors on other
 backends. This plan is the <strong>staging</strong> to reach the target architecture in
-ADR 0017: a backend-agnostic orchestration layer, a batch-granular
+Decision 0017: a backend-agnostic orchestration layer, a batch-granular
 <code>CosimBackend</code> trait, and a 3-tier <code>GpuPeripheral</code> model — then CPU and
 CUDA/HIP backends.</p>
 <h2 id="goal--non-goals"><a class="header" href="#goal--non-goals">Goal &amp; non-goals</a></h2>
@@ -195,7 +197,7 @@ CUDA/HIP backends.</p>
 peripheral models, and VCD machinery.</p>
 <p><strong>Non-goals:</strong></p>
 <ul>
-<li>Changing the batch/scheduler execution model of ADR 0017 (untouched; the
+<li>Changing the batch/scheduler execution model of Decision 0017 (untouched; the
 trait is made batch-granular to <em>preserve</em> it, not change it).</li>
 <li>Matching Metal cosim throughput on the <strong>CPU</strong> path (it’s a
 reference/oracle).</li>
@@ -223,7 +225,7 @@ GPU-agnostic in intent; it operates on <code>&amp;[u32]</code> state and <code>V
 </span>/// Design execution + state ownership. One impl per backend. The
 /// orchestration layer (scheduler, models, VCD, drains) calls this.
 ///
-/// Batch-granular by construction: measurements (ADR 0017) show Metal runs
+/// Batch-granular by construction: measurements (Decision 0017) show Metal runs
 /// 100% batched on GPU-peripheral designs, so a single-edge method would
 /// regress it ~1000×. The orchestration decides N (`force_single_edge`);
 /// the backend runs N edges however it likes.
@@ -275,7 +277,7 @@ run on the GPU inside the batch. On a discrete GPU, going per-command-buffer
 means a PCIe round-trip every edge, which is why batching (hence GPU
 peripherals) is <em>required</em> for CUDA/HIP perf, not optional — so the CUDA/HIP
 backend ships <em>with</em> its GPU peripherals (Phase 2), not as a later add-on.
-See ADR 0017, <em>Layer 3</em> and <em>Consequences</em>.</p>
+See Decision 0017, <em>Layer 3</em> and <em>Consequences</em>.</p>
 <h2 id="phases"><a class="header" href="#phases">Phases</a></h2>
 <h3 id="phase-0--extract-the-seam-metal-only-refactor-zero-behaviour-change"><a class="header" href="#phase-0--extract-the-seam-metal-only-refactor-zero-behaviour-change">Phase 0 — Extract the seam (Metal-only refactor, zero behaviour change)</a></h3>
 <p>Introduce the batch-granular <code>CosimBackend</code> trait and make the schedule
@@ -322,8 +324,8 @@ run on free <code>ubuntu-latest</code>.</li>
 existing cosim fixtures on Linux CI and passes their checkers.</p>
 <h3 id="phase-2--path-b-cudahipbackend-mirroring-metal-gpu-peripherals-batched"><a class="header" href="#phase-2--path-b-cudahipbackend-mirroring-metal-gpu-peripherals-batched">Phase 2 — Path B: <code>Cuda</code>/<code>HipBackend</code> mirroring Metal (GPU peripherals, batched)</a></h3>
 <blockquote>
-<p><strong>Refined 2026-06-19</strong> (see ADR 0017 <em>Amendment 2026-06-19</em> and the detail doc
-<a href="cosim-phase2-cuda-hip.html"><code>cosim-phase2-cuda-hip.md</code></a>): there is <strong>one</strong>
+<p><strong>Refined 2026-06-19</strong> (see Decision 0017 <em>Amendment 2026-06-19</em> and the detail doc
+<a href="archive/cosim-phase2-cuda-hip.html"><code>cosim-phase2-cuda-hip.md</code></a>): there is <strong>one</strong>
 CUDA/HIP cosim backend, mirroring <code>MetalBackend</code> (GPU design step + GPU
 peripherals + variable batching + managed memory). The earlier
 “checkpoint 2a = CPU-peripheral CUDA backend” is <strong>dropped</strong> — no production
@@ -409,11 +411,11 @@ to and larger than this seam; not a prerequisite.</li>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../plans/cosim-xprop.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../plans/distribution.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../plans/cosim-phase1-cpu-backend.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../plans/jtag-debug-server.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -423,11 +425,11 @@ to and larger than this seam; not a prerequisite.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../plans/cosim-xprop.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../plans/distribution.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../plans/cosim-phase1-cpu-backend.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../plans/jtag-debug-server.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

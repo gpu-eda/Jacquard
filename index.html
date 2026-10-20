@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,16 +192,16 @@
 <li><strong><a href="project-scope.html">Project Scope &amp; Guarantees</a></strong>: Top-level contract — what Jacquard is for, what it isn’t, licensing and architecture constraints, stability tiers.</li>
 <li><strong><a href="why-jacquard.html">Why Jacquard</a></strong>: Honest positioning vs. STA tools and event-driven simulators; what’s unique, what isn’t, and what output interface would let users extract the value.</li>
 <li><strong><a href="timing-correctness.html">Timing Correctness</a></strong>: Scoped requirements for timing accuracy, validation, and the forthcoming timing IR.</li>
-<li><strong><a href="timing-model-extensions.html">Timing Model Extensions</a></strong>: Pre-spike design notes for δ(T) dynamic delay, clock-tree skew, and wire delay at scale. Formalised in ADR 0007.</li>
-<li><strong><a href="plans/post-phase-0-roadmap.html">Post-Phase-0 Roadmap</a></strong>: Sequencing of Phase 1+ work covering structured timing output (ADR 0008) and timing model fidelity (ADR 0007). (OpenTimer integration was originally Phase 1’s centrepiece; ADR 0003 was Superseded by the spike — OpenSTA out of process is now the sole STA path per ADR 0001.)</li>
-<li><strong><a href="adr/README.html">Architecture Decision Records</a></strong>: Design decisions and their rationale (numbered, per-decision). See the index for status and how the ADRs relate.</li>
+<li><strong><a href="timing-model-extensions.html">Timing Model Extensions</a></strong>: Pre-spike design notes for δ(T) dynamic delay, clock-tree skew, and wire delay at scale. Formalised in Decision 0007.</li>
+<li><strong><a href="plans/post-phase-0-roadmap.html">Post-Phase-0 Roadmap</a></strong>: Sequencing of Phase 1+ work covering structured timing output (Decision 0008) and timing model fidelity (Decision 0007). (OpenTimer integration was originally Phase 1’s centrepiece; Decision 0003 was Superseded by the spike — OpenSTA out of process is now the sole STA path per Decision 0001.)</li>
+<li><strong><a href="architecture/decisions/README.html">Decisions</a></strong>: Design decisions and their rationale (numbered, per-decision). See the index for status and how the decisions relate.</li>
 <li><strong><a href="plans/README.html">Implementation Plans</a></strong>: Phased implementation plans with entry and exit criteria. See the index for status and reading order.</li>
 <li><strong><a href="spikes/">Spikes</a></strong>: Time-boxed experiments and their outcomes.</li>
 </ul>
 <h3 id="core-documentation"><a class="header" href="#core-documentation">Core Documentation</a></h3>
 <ul>
 <li>
-<p><strong><a href="simulation-architecture.html">Simulation Architecture</a></strong>: Detailed explanation of Jacquard’s internal architecture</p>
+<p><strong><a href="architecture/simulation-engine.html">Simulation engine</a></strong>: Detailed explanation of Jacquard’s internal architecture</p>
 <ul>
 <li>Pipeline stages (NetlistDB → AIG → StagedAIG → Partitions → FlattenedScript → GPU)</li>
 <li>Data structures and representations</li>
@@ -322,7 +322,7 @@ the workaround is to extract format strings from the pre-synthesis JSON.</li>
 <li><strong>Test instructions</strong>: Verify all commands actually work</li>
 </ol>
 <h2 id="future-documentation-needs"><a class="header" href="#future-documentation-needs">Future Documentation Needs</a></h2>
-<p>Dedicated guides not yet written (coverage today is scattered across ADRs and
+<p>Dedicated guides not yet written (coverage today is scattered across decisions and
 reference docs):</p>
 <ul>
 <li><input disabled="" type="checkbox"> Performance tuning guide (choosing <code>NUM_BLOCKS</code>, <code>--level-split</code>)</li>
@@ -331,7 +331,7 @@ reference docs):</p>
 <li><input disabled="" type="checkbox"> GPU kernel optimization internals (profiling, backend-specific tuning)</li>
 </ul>
 <p>Now covered: custom cell libraries → <a href="adding-a-pdk.html">Adding a New PDK</a> +
-ADR 0010/0011; VCD scope behaviour → <a href="troubleshooting-vcd.html">Troubleshooting VCD</a>.</p>
+Decision 0010/0011; VCD scope behaviour → <a href="troubleshooting-vcd.html">Troubleshooting VCD</a>.</p>
 <h2 id="related-resources"><a class="header" href="#related-resources">Related Resources</a></h2>
 <ul>
 <li><strong>Main README</strong>: <code>../README.md</code> - Project overview and quick start</li>

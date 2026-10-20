@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "../searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-acf3df94.js"></script>
+        <script src="../toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,7 +195,7 @@ entry into a ring buffer only when the bus is active/changed, drained by the
 CPU — but it is <strong>hardcoded</strong> to one VexRiscv-style SoC (literal names
 <code>cpu.fetch.ibus__cyc</code>, <code>spiflash.ctrl.wb_bus__ack</code>, …). We generalize that
 mechanism into a config-driven, protocol-aware monitor. It is observe-only
-(we watch design outputs, never drive), so it fits the ADR-0013 GPU
+(we watch design outputs, never drive), so it fits the decision-0013 GPU
 observe-only peripheral pattern, and gets the <code>effective_*()</code>-style plural
 config for free.</p>
 <p>Two existing pieces are reused:</p>
@@ -327,7 +327,7 @@ configured, or a dedicated <code>--bus-trace-vcd</code> flag (Phase 3)</li>
 <code>tests/apb_trace/</code> — a dedicated synthesized APB3 design (the Hazard3
 JTAG-DM post-PnR netlist drops the APB addr/data nets during flattening,
 so a names-preserved design was built instead). CI step:
-<code>Run APB3 bus-trace cosim (ADR 0013)</code>. Phases 2–3 remain.</p>
+<code>Run APB3 bus-trace cosim (Decision 0013)</code>. Phases 2–3 remain.</p>
 <h2 id="phasing"><a class="header" href="#phasing">Phasing</a></h2>
 <ol>
 <li><strong>Phase 1 — APB3 end-to-end.</strong> ✅ Done. Config schema, pin maps, shared
@@ -359,8 +359,8 @@ shared; revisit if a hot multi-bus design overflows.</li>
 <li><strong>CUDA/HIP.</strong> Cosim is Metal-only today; no kernel changes needed elsewhere
 now, but the general design should port cleanly when CUDA cosim lands.</li>
 </ul>
-<h2 id="adr-impact"><a class="header" href="#adr-impact">ADR impact</a></h2>
-<p>This generalizes the cosim peripheral architecture — update <strong>ADR-0013</strong>
+<h2 id="decision-impact"><a class="header" href="#decision-impact">decision impact</a></h2>
+<p>This generalizes the cosim peripheral architecture — update <strong>decision-0013</strong>
 (plural-peripheral configs) to record the config-driven bus-monitor pattern and
 the GPU-capture/CPU-decode split, once Phase 1 is real.</p>
 

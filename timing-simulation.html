@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -201,7 +201,7 @@
 <tr><td>OpenSTA detection + version check</td><td>✅</td></tr>
 <tr><td>Multi-corner timing IR (<code>--timing-corner &lt;name&gt;</code>)</td><td>✅</td></tr>
 <tr><td><code>--sdf-corner</code> (min/typ/max selection from one SDF)</td><td>⚠ One corner at a time</td></tr>
-<tr><td>Per-receiver wire delay (Pillar C Tier 1)</td><td>❌ Phase 2 (blocked on ADR 0007)</td></tr>
+<tr><td>Per-receiver wire delay (Pillar C Tier 1)</td><td>❌ Phase 2 (blocked on Decision 0007)</td></tr>
 </tbody>
 </table>
 </div>
@@ -216,7 +216,7 @@ had never been built, let alone run, until 2026-07-15, and <code>sim</code> did 
 there at all until the non-cooperative fallback landed: the device has no
 cooperative launch, so the grid-wide barrier <code>sim</code> relies on is unavailable
 and the host drives one launch per (cycle, stage) instead. See
-<a href="spikes/amd-laptop-backend.html"><code>spikes/amd-laptop-backend.md</code></a>.</li>
+<a href="architecture/decisions/spikes/amd-laptop-backend.html"><code>architecture/decisions/spikes/amd-laptop-backend.md</code></a>.</li>
 </ul>
 <p>Both are now covered by CI and both pass, so the ✅s above are accurate for
 each. The distinction still matters when reading a green tick: it is what hid

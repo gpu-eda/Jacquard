@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e9d705d.js";
+            window.path_to_searchindex_js = "searchindex-4bd13805.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-acf3df94.js"></script>
+        <script src="toc-d063f042.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,7 +190,7 @@ function, and which ones are sequential.</p>
 <p>There are <strong>three pathways</strong> for enabling new cells; pick based on what
 you’re adding:</p>
 <ul>
-<li><strong>Cell-model IR descriptor</strong> (<strong>recommended — the modern path</strong>, ADR
+<li><strong>Cell-model IR descriptor</strong> (<strong>recommended — the modern path</strong>, decision
 0019). A standard-cell library — pin directions, boolean functions,
 sequential roles, and timing — is captured in one <strong>generated JSON
 descriptor</strong> produced from the library’s Liberty by the
@@ -200,20 +200,20 @@ added (vendor the library + generate a descriptor) <em>and</em> how a
 proprietary library you cannot vendor is simulated (<code>--cell-descriptor</code>).
 See <strong>“Pathway A”</strong> below. This supersedes the legacy Rust workflow
 (Steps 1–8) for all combinational logic today, with sequential
-consumption completing across the built-in PDKs in the ADR 0019 C3
+consumption completing across the built-in PDKs in the Decision 0019 C3
 series.</li>
 <li><strong>Runtime cell library</strong> (<code>--cell-library</code> + <code>.cells.toml</code>
 manifest). For third-party IP, hard macros, foundry memories, and
 any other cells that <em>don’t</em> need new AIG decomposition rules — i.e.
 cells that act as opaque outputs (RAM macros), filler/cap blocks,
-or IO pads. See <strong>ADR 0010</strong> and <code>docs/plans/declarative-cell-metadata.md</code>
+or IO pads. See <strong>Decision 0010</strong> and <code>docs/plans/archive/declarative-cell-metadata.md</code>
 for the recipe. <strong>No Jacquard PR required</strong> — users ship a manifest
 alongside their netlist. See <strong>“Adding third-party IP via runtime
 manifest”</strong> at the end.</li>
 <li><strong>Legacy per-PDK Rust</strong> (Steps 1–8 below). The original pathway: pin
 tables, classifiers, decomposition functions, and AIG builder hooks
 hand-written in Rust. <strong>Being retired</strong> by the cell-model IR cutover
-(ADR 0019) — retained here as reference for the machinery the
+(Decision 0019) — retained here as reference for the machinery the
 descriptor replaces. Do not add a new PDK this way; use Pathway A.</li>
 </ul>
 <p>If you’re adding just a memory macro or other behaviourally-opaque IP,
@@ -226,7 +226,7 @@ file carrying <em>everything per-cell-type</em> about a library — L1 pin
 directions, L2 combinational logic (as a pre-decomposed AIG), L3
 sequential roles/classification, and L4 timing characterization — from
 one source: the library’s Liberty. Adding a PDK is no longer a Jacquard
-code change; it is a <em>data</em> generation step. (ADR 0019.)</p>
+code change; it is a <em>data</em> generation step. (Decision 0019.)</p>
 <h3 id="generate-a-descriptor-from-liberty"><a class="header" href="#generate-a-descriptor-from-liberty">Generate a descriptor from Liberty</a></h3>
 <p>The <code>liberty-to-cellir</code> converter reads a Liberty <code>.lib</code> (Liberty-first;
 a functional <code>.v</code> is consulted only as a fallback / cross-check) and emits
@@ -300,14 +300,14 @@ descriptor’s <code>default_corner</code>.)</p>
 (GF180, SKY130, AIGPDK, IHP) and for proprietary libraries via
 <code>--cell-descriptor</code>.</li>
 <li><strong>Sequential</strong> consumption is descriptor-driven for GF180 today and is
-being wired for the other PDKs in the ADR 0019 C3 series; the descriptor
+being wired for the other PDKs in the Decision 0019 C3 series; the descriptor
 already <em>carries</em> the L3 sequential data for all of them.</li>
 <li>A library whose functional <code>.v</code> is a single flat-module file (common for
 commercial PDKs) skips the optional <code>.v</code> logic cross-check at generation
 (the descriptor is still emitted; validate via simulation) — improving the
 flat-<code>.v</code> indexer is tracked follow-up.</li>
 <li>RAM/SRAM macros are <strong>not</strong> covered by the descriptor — they use the
-runtime manifest (ADR 0011), below.</li>
+runtime manifest (Decision 0011), below.</li>
 </ul>
 <hr>
 <h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
@@ -321,7 +321,7 @@ runtime manifest (ADR 0011), below.</li>
 <h2 id="legacy-pathway-per-pdk-rust-steps-18"><a class="header" href="#legacy-pathway-per-pdk-rust-steps-18">Legacy pathway: per-PDK Rust (Steps 1–8)</a></h2>
 <blockquote>
 <p><strong>This section documents the original hand-written-Rust workflow, which the
-cell-model IR (Pathway A, above) is retiring under ADR 0019.</strong> It is kept as
+cell-model IR (Pathway A, above) is retiring under Decision 0019.</strong> It is kept as
 a reference for the machinery the descriptor replaces and for the
 still-live paths during the cutover. <strong>To add a new PDK, use Pathway A —
 do not write per-PDK Rust.</strong> The RAM/macro manifest section that follows
@@ -603,7 +603,7 @@ approach prevents misclassification.</p>
 <h2 id="adding-third-party-ip-via-runtime-manifest"><a class="header" href="#adding-third-party-ip-via-runtime-manifest">Adding third-party IP via runtime manifest</a></h2>
 <p>If you’re adding a memory macro, IO pad, hard block, or filler library
 — anything that doesn’t need new AIG decomposition rules — the runtime
-cell-library pathway (ADR 0010) is the right route. <strong>No Jacquard PR
+cell-library pathway (Decision 0010) is the right route. <strong>No Jacquard PR
 required.</strong> Ship a Verilog blackbox file plus a TOML manifest alongside
 your design.</p>
 <h3 id="step-1-provide-the-cells-verilog-interface"><a class="header" href="#step-1-provide-the-cells-verilog-interface">Step 1: Provide the cell’s Verilog interface</a></h3>
@@ -644,7 +644,7 @@ output pins become X-source slots in the AIG. The SRAM’s internal
 memory behaviour is <strong>not</strong> modelled. Sufficient for designs whose
 CPU executes from boot ROM / register file and never reads SRAM
 contents at the timescales Jacquard simulates.</p>
-<p><strong>Explicit-port mode</strong> (with <code>ram</code> sub-table, schema v1.1+, ADR
+<p><strong>Explicit-port mode</strong> (with <code>ram</code> sub-table, schema v1.1+, decision
 0011): outputs are wired to a real AIG-backed RAMBlock, writes
 populate per-entry storage, reads return what was written. Real
 memory modelling end-to-end. Use this when the CPU reads its own
@@ -669,7 +669,7 @@ data_out     = "Q"
 </code></pre>
 <p>Field semantics, defaults, and the multi-port-SRAM/async/wider-than-32-bit
 out-of-scope items are documented in
-<a href="adr/0011-ram-port-mapping-schema.html">ADR 0011</a>. Polarity defaults
+<a href="architecture/decisions/0011-ram-port-mapping-schema.html">Decision 0011</a>. Polarity defaults
 to <code>low</code>; clock edge defaults to <code>pos</code>; mask granularity defaults
 to <code>bit</code>. All three control pins (<code>chip_enable</code> / <code>write_enable</code> /
 <code>write_mask</code>) are optional — omit them for sync SRAMs without
@@ -695,7 +695,7 @@ behaviour (parallel to the built-in <code>gf180mcu_ws_io__*</code> family).</li>
 <li><code>dff</code>, <code>latch</code>, <code>clock_gate</code>, <code>delay</code>, <code>multi_output</code> — recognised
 but the v1.0 schema doesn’t yet expose enough port semantics to
 drive AIG construction for these. Coming in the port-mapping
-schema (future ADR). For now, declaring these kinds documents
+schema (future decision). For now, declaring these kinds documents
 intent without changing behaviour.</li>
 </ul>
 
