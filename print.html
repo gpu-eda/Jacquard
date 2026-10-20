@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4bd13805.js";
+            window.path_to_searchindex_js = "searchindex-21b3895f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d063f042.js"></script>
@@ -5282,6 +5282,19 @@ from its release tarball into <code>~/.cargo/bin</code>, and <code>mdbook-d2</co
 for the backend you’re building. Nothing else.</p>
 <pre><code class="language-sh">git submodule update --init --recursive
 </code></pre>
+<blockquote>
+<p><strong>The submodule init is load-bearing, not boilerplate — and its failure is
+silent.</strong> <code>build.rs</code> bakes the standard-cell pin tables into the binary by
+reading the vendored PDK cell libraries (<code>vendor/sky130_fd_sc_hd</code>,
+<code>vendor/gf180mcu_fd_sc_mcu7t5v0</code>, <code>vendor/gf180mcu_fd_sc_mcu9t5v0</code>). If one of
+those submodules is absent, <code>build.rs</code> skips it and the build <strong>succeeds</strong> —
+but the resulting binary carries an incomplete pin table and <strong>panics at
+runtime</strong> on any netlist using an omitted cell (<code>Unknown SKY130 cell (no pin-table entry for type '…')</code>), which looks like a Jacquard bug rather than a
+missing checkout. So the <code>--recursive</code> above is required, and any script that
+inits submodules <em>selectively</em> — a CI matrix that only needs
+<code>vendor/eda-infra-rs</code>, or a historical-build / bisect harness — must also init
+the PDK cell submodules, or it will silently produce a crippled binary.</p>
+</blockquote>
 <p>The GPU backend is a feature, and you pick exactly one:</p>
 <pre><code class="language-sh">cargo build -r --features metal --bin jacquard   # macOS, Apple Silicon
 cargo build -r --features cuda  --bin jacquard   # NVIDIA, CUDA toolkit
