@@ -31,7 +31,8 @@ the images were pruned. They had never been committed.
 
 ## Service
 
-The unit is installed at `/etc/systemd/system/amd-runner.service`, with the PAT
+[`amd-runner.service`](amd-runner.service) is installed at
+`/etc/systemd/system/amd-runner.service`, with the PAT
 in `/etc/amd-runner/env` (same format as the Blackwell runner's). It passes the
 GPU through with `--device /dev/kfd`, the DRI render and card nodes, and their
 numeric groups, and runs with `seccomp=unconfined`, which ROCm needs.
