@@ -1,0 +1,49 @@
+# systemd unit for the AMD iGPU ephemeral GitHub Actions runner (Docker, ROCm + Vulkan).
+# Sibling of blackwell-runner.service; differs only in device passthrough (raw AMD
+# iGPU nodes instead of --gpus all) and labels.
+#
+# Install on nvidia1.local:
+#   sudo cp amd-runner.service /etc/systemd/system/
+#   sudo install -d -m 700 /etc/amd-runner
+#   # create /etc/amd-runner/env (root:root 600):
+#   #   RUNNER_PAT=github_pat_xxx
+#   #   GH_OWNER=gpu-eda
+#   #   GH_REPO=            # empty = org-level runner
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now amd-runner
+#
+# NOTE: this runs the *runner* image (amd-runner:latest = amd-bench + actions-runner
+# + entrypoint.sh). Build that thin layer first; amd-bench:latest alone has no runner.
+[Unit]
+Description=AMD iGPU ephemeral GitHub Actions runner (Docker, ROCm+Vulkan)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/amd-runner/env
+ExecStartPre=-/usr/bin/docker rm -f amd-runner
+# Raphael iGPU = PCI 0f:00.0 -> renderD128 / card1 (renderD129 is the NVIDIA card; do NOT pass it).
+# If DRM minor numbers ever shuffle across reboots, switch to the stable by-path symlinks:
+#   /dev/dri/by-path/pci-0000:0f:00.0-render  and  -card
+# --group-add uses NUMERIC host GIDs so the non-root runner can reach the device nodes:
+#   993 = render (owns /dev/kfd, renderD128), 44 = video (owns card1). Verify with
+#   `getent group render video` if the host is ever rebuilt.
+ExecStart=/usr/bin/docker run --rm --name amd-runner \
+    --device /dev/kfd \
+    --device /dev/dri/renderD128 \
+    --device /dev/dri/card1 \
+    --group-add 993 --group-add 44 \
+    --security-opt seccomp=unconfined \
+    --pull never \
+    -e RUNNER_PAT -e GH_OWNER -e GH_REPO \
+    -e RUNNER_LABELS=self-hosted,amd,gfx1036,rocm,hip,vulkan,cubecl \
+    amd-runner:latest
+ExecStop=/usr/bin/docker stop amd-runner
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Install]
+WantedBy=multi-user.target
