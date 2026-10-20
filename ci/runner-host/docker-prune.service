@@ -1,0 +1,8 @@
+[Unit]
+Description=Prune stale Docker images/containers/build cache (runner hygiene)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/docker-prune.sh
