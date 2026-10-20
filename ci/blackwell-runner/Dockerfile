@@ -10,7 +10,7 @@
 #   docker build -t blackwell-runner:latest ci/blackwell-runner
 FROM nvidia/cuda:12.8.1-devel-ubuntu24.04
 
-ARG RUNNER_VERSION=2.335.1
+ARG RUNNER_VERSION=2.338.0
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Build + runner runtime deps. clang/llvm cover the cc-rs C++ paths

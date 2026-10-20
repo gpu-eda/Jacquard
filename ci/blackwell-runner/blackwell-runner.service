@@ -17,6 +17,12 @@ Description=Blackwell ephemeral GitHub Actions runner (Docker, GPU)
 After=docker.service network-online.target
 Requires=docker.service
 Wants=network-online.target
+# No start limit. The container exits after every job (--ephemeral) and systemd
+# restarts it, so each job counts as a start: an enforced limit would stop the
+# runner for good after a burst of short jobs, or after a few minutes of failed
+# starts (a missing image, an expired PAT), until someone ran reset-failed.
+# StartLimit* keys belong in [Unit]; in [Service] systemd ignores the interval.
+StartLimitIntervalSec=0
 
 [Service]
 EnvironmentFile=/etc/blackwell-runner/env
@@ -32,10 +38,9 @@ ExecStart=/usr/bin/docker run --rm --name blackwell-runner \
     blackwell-runner:latest
 ExecStop=/usr/bin/docker stop blackwell-runner
 Restart=always
+# A failing start retries every RestartSec: ~360 registration-token calls an
+# hour at worst, well inside the GitHub API rate limit.
 RestartSec=10
-# Don't hammer the API if something is wedged.
-StartLimitIntervalSec=300
-StartLimitBurst=10
 
 [Install]
 WantedBy=multi-user.target
