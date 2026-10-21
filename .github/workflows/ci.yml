@@ -122,14 +122,20 @@ jobs:
           # Registry/git + the installed tool binaries (mdbook/d2 land in
           # ~/.cargo/bin). sccache owns compiled artifacts, so target/ is not
           # cached here — see setup-sccache.
+          # .crates.toml/.crates2.json are cargo's install records. Without them
+          # a restored mdbook-d2 binary is one cargo didn't install, and
+          # `cargo install` fails with "binary already exists in destination".
+          # The v2 key keeps caches saved without the records from restoring.
           path: |
             ~/.cargo/bin/
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-docs-sccache-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-docs-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-docs-sccache-
+            ${{ runner.os }}-cargo-docs-v2-
 
       # cargo doc compiles the dependency graph, including mt-kahypar's -O3 C++.
       - name: Setup sccache
