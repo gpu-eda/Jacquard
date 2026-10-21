@@ -753,11 +753,13 @@ fn cmd_sim(args: SimArgs) {
 
     // Match VCD inputs to netlist ports
     let (vcd2inp, _) = vcd_io::match_vcd_inputs(top_scope, &design.netlistdb);
+    let vcd_widths = vcd_io::declared_vcd_widths(top_scope);
 
     // Parse input VCD into state vectors
     let parsed = vcd_io::parse_input_vcd(
         &mut vcdflow,
         &vcd2inp,
+        &vcd_widths,
         &design.aig,
         &design.script,
         &design.netlistdb,

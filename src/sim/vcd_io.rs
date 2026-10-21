@@ -352,9 +352,50 @@ pub fn match_vcd_inputs(
 }
 
 /// Parse input VCD flow into state vectors for simulation.
+pub fn declared_vcd_widths(scope: &Scope) -> HashMap<u64, usize> {
+    scope.children.iter().filter_map(|item| match item {
+        ScopeItem::Var(var) => Some((var.code.0, var.size as usize)),
+        _ => None,
+    }).collect()
+}
+
+fn expanded_vcd_bits(bits: &[u8], width: usize) -> Vec<u8> {
+    assert!(!bits.is_empty() && bits.len() <= width, "VCD value exceeds declared width");
+    let pad = match bits[0] { b'x' | b'z' => bits[0], _ => b'0' };
+    let mut result = vec![pad; width];
+    result[width-bits.len()..].copy_from_slice(bits);
+    result
+}
+
+/// Emit a timestamp's inputs before accepting any values from a later time.
+/// A clock step updates FF state; its following non-edge step exposes settled
+/// outputs with the same inputs. The intermediate pre-settle output is hidden.
+fn append_vcd_group(
+    state: &mut [u32],
+    delayed_bit_changes: &mut HashSet<u32>,
+    clock_pulse_positions: &[u32],
+    parsed: &mut ParsedInputVCD,
+    timestamp: u64,
+    has_clock_edge: bool,
+) {
+    if has_clock_edge {
+        parsed.input_states.extend_from_slice(state);
+        parsed.offsets_timestamps.push((parsed.input_states.len(), u64::MAX));
+    }
+    for &pos in clock_pulse_positions {
+        state[(pos >> 5) as usize] &= !(1u32 << (pos & 31));
+    }
+    for pos in std::mem::take(delayed_bit_changes) {
+        state[(pos >> 5) as usize] ^= 1u32 << (pos & 31);
+    }
+    parsed.input_states.extend_from_slice(state);
+    parsed.offsets_timestamps.push((parsed.input_states.len(), timestamp));
+}
+
 pub fn parse_input_vcd(
     vcdflow: &mut vcd_ng::FastFlow<std::fs::File>,
     vcd2inp: &HashMap<(u64, usize), usize>,
+    vcd_widths: &HashMap<u64, usize>,
     aig: &AIG,
     script: &FlattenedScriptV1,
     netlistdb: &NetlistDB,
@@ -363,13 +404,18 @@ pub fn parse_input_vcd(
     use vcd_ng::{FFValueChange, FastFlowToken};
 
     let mut state = vec![0; script.reg_io_state_size as usize];
-    let mut vcd_time_last_active = u64::MAX;
     let mut vcd_time = 0;
-    let mut last_vcd_time_active = true;
+    let mut group_changed = true;
+    let mut has_clock_edge = false;
     let mut delayed_bit_changes = HashSet::new();
-
-    let mut input_states = Vec::new();
-    let mut offsets_timestamps = Vec::new();
+    let clock_pulse_positions: Vec<u32> = aig.clock_pin2aigpins.values()
+        .flat_map(|&(pe, ne)| [pe, ne])
+        .filter(|&pin| pin != usize::MAX)
+        .map(|pin| *script.input_map.get(&pin).unwrap())
+        .collect();
+    let mut parsed = ParsedInputVCD { input_states: Vec::new(), offsets_timestamps: Vec::new() };
+    let mut clock_edges = 0;
+    let mut stopped_at_limit = false;
 
     while let Some(tok) = vcdflow.next_token().unwrap() {
         match tok {
@@ -377,39 +423,27 @@ pub fn parse_input_vcd(
                 if t == vcd_time {
                     continue;
                 }
-                if last_vcd_time_active {
-                    input_states.extend(state.iter().copied());
-                    offsets_timestamps.push((input_states.len(), vcd_time_last_active));
-                    for (_, &(pe, ne)) in &aig.clock_pin2aigpins {
-                        if pe != usize::MAX {
-                            let p = *script.input_map.get(&pe).unwrap();
-                            state[p as usize >> 5] &= !(1 << (p & 31));
-                        }
-                        if ne != usize::MAX {
-                            let p = *script.input_map.get(&ne).unwrap();
-                            state[p as usize >> 5] &= !(1 << (p & 31));
-                        }
+                if group_changed {
+                    append_vcd_group(&mut state, &mut delayed_bit_changes,
+                                     &clock_pulse_positions, &mut parsed, vcd_time, has_clock_edge);
+                    clock_edges += usize::from(has_clock_edge);
+                    if max_clock_edges.is_some_and(|limit| clock_edges >= limit) {
+                        clilog::info!("reached --max-clock-edges, stop reading input vcd");
+                        stopped_at_limit = true;
+                        break;
                     }
-                    if let Some(max_clock_edges) = max_clock_edges {
-                        if offsets_timestamps.len() >= max_clock_edges {
-                            clilog::info!("reached --max-clock-edges, stop reading input vcd");
-                            break;
-                        }
-                    }
-                }
-                if last_vcd_time_active {
-                    vcd_time_last_active = vcd_time;
                 }
                 vcd_time = t;
-                last_vcd_time_active = false;
-
-                for pos in std::mem::take(&mut delayed_bit_changes) {
-                    state[(pos >> 5) as usize] ^= 1u32 << (pos & 31);
-                }
+                group_changed = false;
+                has_clock_edge = false;
             }
             FastFlowToken::Value(FFValueChange { id, bits }) => {
-                for (pos, b) in bits.iter().enumerate() {
+                let Some(&width) = vcd_widths.get(&id.0) else { continue };
+                let expanded = expanded_vcd_bits(bits, width);
+                for (pos, b) in expanded.iter().enumerate() {
                     if let Some(&pin) = vcd2inp.get(&(id.0, pos)) {
+                        assert!(matches!(b, b'0' | b'1'),
+                                "unknown primary-input VCD bits are not supported by static replay");
                         let aigpin = aig.pin2aigpin_iv[pin];
                         assert_eq!(aigpin & 1, 0);
                         let aigpin = aigpin >> 1;
@@ -433,14 +467,15 @@ pub fn parse_input_vcd(
                         {
                             continue;
                         }
+                        group_changed = true;
                         if let Some((pe, ne)) = aig.clock_pin2aigpins.get(&pin).copied() {
                             if pe != usize::MAX && old_value == 0 {
-                                last_vcd_time_active = true;
+                                has_clock_edge = true;
                                 let p = *script.input_map.get(&pe).unwrap();
                                 state[p as usize >> 5] |= 1 << (p & 31);
                             }
                             if ne != usize::MAX && old_value == 1 {
-                                last_vcd_time_active = true;
+                                has_clock_edge = true;
                                 let p = *script.input_map.get(&ne).unwrap();
                                 state[p as usize >> 5] |= 1 << (p & 31);
                             }
@@ -453,13 +488,13 @@ pub fn parse_input_vcd(
             }
         }
     }
-    input_states.extend(state.iter().copied());
-    clilog::info!("total number of cycles: {}", offsets_timestamps.len());
-
-    ParsedInputVCD {
-        input_states,
-        offsets_timestamps,
+    if !stopped_at_limit && group_changed {
+        append_vcd_group(&mut state, &mut delayed_bit_changes,
+                         &clock_pulse_positions, &mut parsed, vcd_time, has_clock_edge);
     }
+    parsed.input_states.extend_from_slice(&state);
+    clilog::info!("total number of replay steps: {}", parsed.offsets_timestamps.len());
+    parsed
 }
 
 // ── X-propagation state buffer helpers ───────────────────────────────────────
@@ -1095,6 +1130,31 @@ mod xprop_tests {
     use super::*;
     use indexmap::IndexMap;
 
+    #[test]
+    fn compact_vcd_bus_preserves_numeric_value() {
+        let compact = format!("{:b}", 0x0d06_31f9u32);
+        let expanded = expanded_vcd_bits(compact.as_bytes(), 32);
+        assert_eq!(expanded, format!("{:032b}", 0x0d06_31f9u32).into_bytes());
+        assert_eq!(expanded_vcd_bits(b"0", 32), vec![b'0'; 32]);
+        assert_eq!(expanded_vcd_bits(b"1", 4).as_slice(), b"0001");
+        assert_eq!(expanded_vcd_bits(b"x", 4).as_slice(), b"xxxx");
+        assert_eq!(expanded_vcd_bits(b"z1", 4).as_slice(), b"zzz1");
+    }
+
+    #[test]
+    fn replay_groups_do_not_advance_combinational_inputs() {
+        let mut parsed = ParsedInputVCD { input_states: Vec::new(), offsets_timestamps: Vec::new() };
+        // Bit 0: clock level; bit 1: edge pulse; bit 2: mode input.
+        let mut state = vec![0b110];
+        let mut delayed = HashSet::from([0]);
+        append_vcd_group(&mut state, &mut delayed, &[1], &mut parsed, 5, true);
+        state[0] &= !0b100; // A later mode change must stay at timestamp 10.
+        append_vcd_group(&mut state, &mut delayed, &[1], &mut parsed, 10, false);
+        assert_eq!(parsed.input_states, [0b110, 0b101, 0b001]);
+        assert_eq!(parsed.offsets_timestamps, [(1, u64::MAX), (2, 5), (3, 10)]);
+        assert!(delayed.is_empty());
+    }
+
     /// Build a minimal FlattenedScriptV1 for xprop buffer tests.
     ///
     /// Models the real flatten layout: primary inputs occupy `input_layout`
@@ -1607,5 +1667,76 @@ mod timing_arrival_tests {
             "zero arrival should place transition at clock edge, got:\n{}",
             vcd_output
         );
+    }
+}
+
+// SPDX-License-Identifier: Apache-2.0
+#[cfg(test)]
+mod compact_vcd_regression_tests {
+    use super::*;
+    use std::io::Write;
+
+    /// IEEE 1364 §18.2: binary vector values shorter than the declared width are left-extended.
+    const COMPACT28_VCD: &str = "$timescale 1ps $end\n$scope module compact28 $end\n$var wire 28 ! data [27:0] $end\n$var wire 1 \" clk $end\n$upscope $end\n$enddefinitions $end\n#0\nb1 !\n0\"\n#5\n1\"\n#6\n#10\n0\"\nb101 !\n#15\n1\"\n#16\n";
+
+    fn replay_compact28() -> ParsedInputVCD {
+        // Real Jacquard NetlistDB/AIG matching; no partitioner or GPU execution.
+        let mut rtl = String::from("module compact28(input [27:0] data, input clk, output [27:0] out);\n");
+        for bit in 0..28 {
+            rtl.push_str(&format!("DFF f{bit}(.CLK(clk), .D(data[{bit}]), .Q(out[{bit}]));\n"));
+        }
+        rtl.push_str("endmodule\n");
+        let netlist = NetlistDB::from_sverilog_source(
+            &rtl, Some("compact28"), &crate::aigpdk::AIGPDKLeafPins()).unwrap();
+        let aig = AIG::from_netlistdb(&netlist);
+        let mut fixture = tempfile::NamedTempFile::new().unwrap();
+        fixture.write_all(COMPACT28_VCD.as_bytes()).unwrap();
+        let mut parser = vcd_ng::Parser::new(std::io::BufReader::new(fixture.reopen().unwrap()));
+        let header = parser.parse_header().unwrap();
+        let scope = find_top_scope(&header.items, "compact28").unwrap();
+        let (mapping, _) = match_vcd_inputs(scope, &netlist);
+        let data_id = vcd_ng::IdCode::new(b"!").unwrap().0;
+        let clock_id = vcd_ng::IdCode::new(b"\"").unwrap().0;
+        let mut input_map = indexmap::IndexMap::new();
+        for pos in 0..28 {
+            let pin = mapping[&(data_id, pos)];
+            input_map.insert(aig.pin2aigpin_iv[pin] >> 1, (27-pos) as u32);
+        }
+        let clock_pin = mapping[&(clock_id, 0)];
+        input_map.insert(aig.pin2aigpin_iv[clock_pin] >> 1, 28);
+        let (posedge, negedge) = aig.clock_pin2aigpins[&clock_pin];
+        assert_ne!(posedge, usize::MAX);
+        assert_eq!(negedge, usize::MAX);
+        input_map.insert(posedge, 29);
+        let script = FlattenedScriptV1 {
+            num_blocks: 0, num_major_stages: 0,
+            blocks_start: Vec::<usize>::new().into(),
+            blocks_data: Vec::<u32>::new().into(),
+            reg_io_state_size: 1, sram_storage_size: 0,
+            sram_cell_storage_offsets: indexmap::IndexMap::new(),
+            input_layout: Vec::new(), output_map: indexmap::IndexMap::new(), input_map,
+            stages_blocks_parts: Vec::new(), assertion_positions: Vec::new(),
+            display_positions: Vec::new(), gate_delays: Vec::new(), dff_constraints: Vec::new(),
+            clock_period_ps: 10, timing_enabled: false, delay_patch_map: Vec::new(),
+            xprop_enabled: false, partition_x_capable: Vec::new(), xprop_state_offset: 0,
+            timing_arrivals_enabled: false, arrival_state_offset: 0,
+        };
+        let mut flow = vcd_ng::FastFlow::new(fixture.reopen().unwrap(), 65536);
+        parse_input_vcd(&mut flow, &mapping, &declared_vcd_widths(scope), &aig, &script, &netlist, None)
+    }
+
+    #[test]
+    fn compact_payload_keeps_numeric_value() {
+        let parsed = replay_compact28();
+        assert_eq!(parsed.input_states[0] & 0x0fff_ffff, 0x0000_0001,
+                   "28-bit data driven with compact b1 must equal 1");
+    }
+
+    #[test]
+    fn final_clock_edge_has_output_timestamp() {
+        let parsed = replay_compact28();
+        let final_time = parsed.offsets_timestamps.iter().map(|&(_, time)| time)
+            .filter(|&time| time != u64::MAX).max().unwrap();
+        assert!(final_time >= 15, "final edge at 15 is missing; latest output timestamp is {final_time}");
     }
 }
