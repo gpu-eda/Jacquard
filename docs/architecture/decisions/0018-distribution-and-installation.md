@@ -161,4 +161,4 @@ targets remain source-build.
 ## Links
 
 - Implementation phasing: [`../plans/distribution.md`](../../plans/distribution.md).
-- Release mechanics: [`../release-process.md`](../../release-process.md).
+- Release mechanics: [`../../release-process.md`](../../release-process.md).

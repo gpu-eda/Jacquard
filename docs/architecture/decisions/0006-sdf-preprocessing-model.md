@@ -81,8 +81,8 @@ Given these, maintaining the hand-rolled parser through Phase 0–2 is unnecessa
 
 ## Links
 
-- `../project-scope.md` — licensing constraint, preprocessing-tools pattern.
-- `../timing-correctness.md` — P1 (oracle), R1 (IR).
+- `../../project-scope.md` — licensing constraint, preprocessing-tools pattern.
+- `../../timing-correctness.md` — P1 (oracle), R1 (IR).
 - Decision 0001 — OpenSTA as oracle (subprocess model).
 - Decision 0002 — timing IR (format consumed).
 - Decision 0005 — OpenSTA vendoring (submodule for reproducibility + stress corpus).

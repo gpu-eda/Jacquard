@@ -65,8 +65,8 @@ ADR's decision is unchanged.
   characterization; the "separate IR" this ADR's scope boundary
   anticipated).
 
-- `../project-scope.md` — validation and permissive-license constraints.
-- `../timing-correctness.md` — requirement R1, principle P5 (multi-corner).
+- `../../project-scope.md` — validation and permissive-license constraints.
+- `../../timing-correctness.md` — requirement R1, principle P5 (multi-corner).
 - Decision 0001 — OpenSTA oracle (IR is the diff format).
 - Decision 0003 — **Superseded.** OpenTimer was the proposed in-process reference STA; spike Q2 fail moved Jacquard to OpenSTA-only via `opensta-to-ir`. See `../spikes/opentimer-sky130.md`.
 - Decision 0004 — private PDK testing (IR enables portable fixtures without leaking PDK data).

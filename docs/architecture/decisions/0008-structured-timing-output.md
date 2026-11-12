@@ -112,8 +112,8 @@ Items 1–4 are a single workstream, ~2 weeks total. They constitute the "Jacqua
 
 ## Links
 
-- `../why-jacquard.md` — positioning analysis and full output-interface design.
-- `../timing-violations.md` — current violation detection mechanics; updated to describe new outputs once they land.
-- `../timing-validation.md` — validation tolerances; will reference the JSON report format for golden comparisons.
+- `../../why-jacquard.md` — positioning analysis and full output-interface design.
+- `../../timing-violations.md` — current violation detection mechanics; updated to describe new outputs once they land.
+- `../../timing-validation.md` — validation tolerances; will reference the JSON report format for golden comparisons.
 - `../adr/0002-timing-ir.md` — IR schema versioning policy that the JSON report mirrors.
-- `../project-scope.md` — output stability constraints that apply to any user-facing format.
+- `../../project-scope.md` — output stability constraints that apply to any user-facing format.

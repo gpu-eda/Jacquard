@@ -72,8 +72,8 @@ If a stress-corpus file exposes a bug, a minimal reproducer may be distilled and
 
 ## Links
 
-- `../project-scope.md` — licensing constraints.
-- `../timing-correctness.md` — R3 (oracle-backed CI).
+- `../../project-scope.md` — licensing constraints.
+- `../../timing-correctness.md` — R3 (oracle-backed CI).
 - Decision 0001 — OpenSTA as oracle (establishes the subprocess model).
 - Decision 0002 — timing IR (the format being stress-tested).
 - `../../plans/archive/phase-0-ir-and-oracle.md` — Phase 0 WS4 implements this split.

@@ -209,5 +209,5 @@ A short report added to this document as a "Spike outcome" section, summarising:
 ## Links
 
 - Decision 0003 — OpenTimer as in-process reference STA.
-- `../timing-correctness.md` — requirement R2.
+- `../../../timing-correctness.md` — requirement R2.
 - `../../../plans/archive/phase-0-ir-and-oracle.md` — phase 0 (independent of this spike; runs in parallel).

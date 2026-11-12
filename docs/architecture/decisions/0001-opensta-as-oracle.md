@@ -20,7 +20,7 @@ Historical regressions have been caught only by comparing against genuinely exte
 
 OpenSTA is widely deployed in open-source EDA (SKY130, OpenLane2, OpenROAD) and has the largest effective test surface of any open-source STA tool for the Liberty + SDF + Verilog + SPEF stack. It is licensed under GPL-3.0 and also sold commercially.
 
-Jacquard requires permissive licensing for code linked into its binary (see [`../project-scope.md`](../../project-scope.md)).
+Jacquard requires permissive licensing for code linked into its binary (see [`../../project-scope.md`](../../project-scope.md)).
 
 ## Decision
 
@@ -33,7 +33,7 @@ OpenSTA is the ground-truth oracle for timing correctness **and the sole STA pat
 
 ## Consequences
 
-- OpenSTA is a **required runtime dependency** for timing-aware Jacquard flows (post §3 expansion), not merely a CI/validation dependency. Users running `jacquard sim --timing-ir ...` need a `.jtir` produced by `opensta-to-ir`, which subprocesses OpenSTA. Documented in `../why-jacquard.md`.
+- OpenSTA is a **required runtime dependency** for timing-aware Jacquard flows (post §3 expansion), not merely a CI/validation dependency. Users running `jacquard sim --timing-ir ...` need a `.jtir` produced by `opensta-to-ir`, which subprocesses OpenSTA. Documented in `../../why-jacquard.md`.
 - Subprocess integration preserves Jacquard's permissive licensing (satisfies `project-scope.md`).
 - "Oracle-diff clean" becomes a required CI gate for timing-related PRs, run nightly or pre-release (not per-PR — OpenSTA runs on large designs can be slow).
 - OpenSTA bugs may produce false-positive divergences. The expectation is to file upstream rather than work around silently. A pinned OpenSTA version in CI avoids drift. With OpenSTA now also the only STA path (not just the oracle), upstream regressions land in users' hands too — pinning matters more than before.
@@ -42,8 +42,8 @@ OpenSTA is the ground-truth oracle for timing correctness **and the sole STA pat
 
 ## Links
 
-- `../project-scope.md` — permissive-license constraint.
-- `../timing-correctness.md` — principle P1, requirement R3.
+- `../../project-scope.md` — permissive-license constraint.
+- `../../timing-correctness.md` — principle P1, requirement R3.
 - Decision 0002 — timing IR (the concrete diff format used for oracle comparison).
 - Decision 0003 — **Superseded.** OpenTimer in-process reference; spike Q2 fail moved Jacquard to OpenSTA-only. See `../spikes/opentimer-sky130.md` for the spike outcome.
-- `../why-jacquard.md` — user-facing consequence: OpenSTA as a runtime dependency.
+- `../../why-jacquard.md` — user-facing consequence: OpenSTA as a runtime dependency.

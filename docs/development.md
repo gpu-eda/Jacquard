@@ -178,6 +178,10 @@ to the pinned copy, so a link in an old release keeps meaning what it meant. See
 - **[Prose style](prose-style.md)** is the house style for the docs' writing.
 - **[Release Process](release-process.md)** covers cutting a release, the RC-first
   flow, and what's automated.
+- **Landing changes.** `main` is protected: PRs land through the merge queue,
+  rebase-only, so history stays linear. A CI compile job that dies with a bare
+  "compilation terminated" is a runner running out of memory on mt-kahypar's
+  `-O3` C++, not a real error. Rerun it with `gh run rerun --failed`.
 
 The through-line: a sentence that says how the tool behaves is a verifiable
 claim. That applies to docs, `--help` text, and a decision's status alike; check it

@@ -78,9 +78,9 @@ Three fidelity tiers:
 
 ## Links
 
-- `../timing-model-extensions.md` — full technical analysis underlying this ADR.
-- `../why-jacquard.md` — positioning context: where this fidelity work fits in the user value story.
+- `../../timing-model-extensions.md` — full technical analysis underlying this ADR.
+- `../../why-jacquard.md` — positioning context: where this fidelity work fits in the user value story.
 - `../adr/0001-opensta-as-oracle.md`, `../adr/0002-timing-ir.md` — preceding decisions this ADR builds on.
 - `../adr/0003-opentimer-primary-sta.md` — **Superseded** by the spike outcome (`../spikes/opentimer-sky130.md`); referenced here for historical context.
-- `../timing-validation.md` — validation tolerance contract that each pillar updates.
-- `../project-scope.md` — synchronous-only / cycle-accurate constraints that bound what this ADR can pursue.
+- `../../timing-validation.md` — validation tolerance contract that each pillar updates.
+- `../../project-scope.md` — synchronous-only / cycle-accurate constraints that bound what this ADR can pursue.
