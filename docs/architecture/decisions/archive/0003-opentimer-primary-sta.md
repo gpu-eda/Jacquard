@@ -39,8 +39,8 @@ Spike criteria in `../spikes/opentimer-sky130.md`. On spike failure, fallback is
 
 ## Links
 
-- `../project-scope.md` — licensing constraint, validation constraint.
-- `../timing-correctness.md` — requirement R2, requirement R4.
+- `../../../project-scope.md` — licensing constraint, validation constraint.
+- `../../../timing-correctness.md` — requirement R2, requirement R4.
 - `../spikes/opentimer-sky130.md` — spike and success criteria.
 - Decision 0001 — OpenSTA oracle.
 - Decision 0002 — timing IR (OpenTimer emits it).

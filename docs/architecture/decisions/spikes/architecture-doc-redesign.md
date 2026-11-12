@@ -1,7 +1,34 @@
 # Spike — Architecture documentation redesign
 
-**Status:** exploring. This is a throwaway test of a doc structure, not a
-migration. Nothing is renamed until the shape proves out on a real area.
+**Status:** adopted. The foundation landed in #227 (2026-07-21) and the
+migration in #232 (2026-10-20). The body below is the proposal as explored;
+[Outcome](#outcome) records where the shipped shape differs from it.
+
+## Outcome
+
+The split, the six areas and the doc tree shipped. These calls were made during
+the migration:
+
+- **No class prefixes in filenames.** Decisions keep `NNNN-kebab-title.md` and
+  area docs are plain `kebab-name.md` (`cosim-runtime.md`, not
+  `arch-3-cosim-runtime.md`). The directory encodes the class, and the four-digit
+  number stays the stable ID.
+- **"ADR" is retired.** The section, the directory
+  (`docs/architecture/decisions/`) and the nav all say "Decision". Spikes moved to
+  `decisions/spikes/`, and the superseded 0003 moved to `decisions/archive/`.
+- **Ambiguous placements.** Cell metadata (0010, 0011) and the cell-model IR
+  (0019) sit under PDK enablement, with 0019 also listed under Timing
+  correctness. X-propagation (0016) sits under Simulation engine.
+- **Two-way links.** Each active decision opens with a `**Current
+  architecture:**` link to its area doc.
+- **Decision bodies were not reframed.** The existing records keep their
+  current-state prose and `(amended …)` statuses. Stripping them was judged too
+  risky for cited records once the area docs carried current state, so the
+  annotations retire only as records are rewritten (see the
+  [decisions README](../README.md)).
+- **Completed plans** moved to `docs/plans/archive/`. `docs/scripts/move_doc.py`
+  moves a doc and rewrites the links to it, and `check_doc_links.py` checks that
+  the nav keeps archived and live plans apart.
 
 ## The problem
 

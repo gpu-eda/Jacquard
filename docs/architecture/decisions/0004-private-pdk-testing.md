@@ -43,6 +43,6 @@ The timing IR (Decision 0002) makes this feasible: converter output and diff res
 
 ## Links
 
-- `../project-scope.md` — validation constraint.
-- `../timing-correctness.md` — requirement R5.
+- `../../project-scope.md` — validation constraint.
+- `../../timing-correctness.md` — requirement R5.
 - Decision 0002 — timing IR (enables portable fixtures).

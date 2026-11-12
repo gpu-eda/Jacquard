@@ -51,24 +51,20 @@ module). It is located in this order:
 1. **`--yosys-wasm /path/to/yosys.wasm`** — CLI flag on `sim`/`cosim` (highest
    priority; overrides the env var and discovery).
 2. **`JACQUARD_YOSYS_WASM=/path/to/yosys.wasm`** — environment variable.
-3. **Installed `yowasp-yosys`** Python package — discovered automatically via
-   `python3 -c "import yowasp_yosys …"`. Install with:
-   ```sh
-   pip install yowasp-yosys          # or: uvx yowasp-yosys
-   ```
-4. **Fetch from a pinned release** (implemented; the default when the options above
-   aren't set): a sha256-verified `yosys.wasm` is downloaded from the
-   `gpu-eda/yowasp-yosys` fork and cached under `$XDG_CACHE_HOME/jacquard`. The
-   [RTL on-ramp](architecture/rtl-onramp.md) reference describes the full resolution
-   order and why the fork wasm is the default.
+3. **The pinned fork release** (the default): a sha256-verified wheel is
+   downloaded from the `gpu-eda/yowasp-yosys` fork on first use and unpacked
+   under `$XDG_CACHE_HOME/jacquard/wasm/<tag>`. Later runs reuse it offline. The
+   [RTL on-ramp](architecture/rtl-onramp.md) reference explains why the fork is
+   the default.
 
-> **Version caveat.** Pin to **`yowasp-yosys==0.64.0.0.post1131`** (the version in
-> the project's `uv.lock`, verified to carry `read_slang`). *Newer* wheels ship a
-> wasm built with the WebAssembly exception-handling proposal, which the current
-> embedded `wasmtime` engine cannot load yet (`pip install yowasp-yosys` gets the
-> latest and may fail with "exception refs not supported"). Loading newer modules
-> is a tracked Phase-4 follow-up; until then, `pip install
-> 'yowasp-yosys==0.64.0.0.post1131'`.
+An installed `yowasp-yosys` Python package is no longer discovered. The on-ramp
+needs the fork's patched abc, and a stock YoWASP wheel lacks it.
+
+> **Overriding the wasm.** A `--yosys-wasm` or `JACQUARD_YOSYS_WASM` override
+> should point at a build of the `gpu-eda/yowasp-yosys` fork. Newer upstream
+> wheels also ship a wasm built with the WebAssembly exception-handling
+> proposal, which the embedded `wasmtime` engine cannot load yet ("exception refs
+> not supported").
 
 > Released `jacquard` binaries are built with `--features synth` and include
 > the Yosys WASM runtime. Source builds must add `--features synth` explicitly:
@@ -86,7 +82,7 @@ script + wasm), so repeat `sim` runs skip synthesis entirely.
 
 ## SystemVerilog frontend
 
-The embedded wasm (pinned `yowasp-yosys 0.64.0.0.post1131`) bundles
+The pinned fork wasm bundles
 **yosys-slang** — a near-complete SystemVerilog-2017 elaborator. Jacquard
 probes for `read_slang` at startup and uses it when present; it falls back
 gracefully to Yosys's built-in `read_verilog -sv` for older wasm modules.
