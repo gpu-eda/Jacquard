@@ -10,6 +10,25 @@ name: CI
 # build.yml to publish the same artifacts. Keeping them as separate workflow
 # files that run as jobs within THIS run means cross-workflow artifacts flow and
 # PR gating stays intact.
+#
+# Runner image: no workflow uses `ubuntu-latest`, and the Lint job in test.yml
+# fails if one does. The GitHub-hosted Ubuntu jobs name `ubuntu-24.04`,
+# including the ones that never compile mt-kahypar, so the image is one
+# deliberate choice. The CUDA build is the exception. It runs on `ubuntu-22.04`,
+# and setup-cuda installs from NVIDIA's `ubuntu2204` apt repo.
+#
+# `ubuntu-latest` resolves to 26.04, where the mt-kahypar 0.2.0 crate does not
+# compile. Its `mt-kahypar-sc/mt-kahypar/utils/memory_tree.h` uses `uint8_t`
+# without including <cstdint>, and that image's GCC no longer supplies it
+# through the headers the file does include, so the build stops with "found ':'
+# in nested-name-specifier". Many other files in the vendored tree have the same
+# gap, so the full failure set is unknown until a 26.04 build gets past that
+# header.
+#
+# To move off the pin: reproduce with `cargo doc --no-deps --lib` in an
+# `ubuntu:26.04` container, add the missing `#include <cstdint>` lines in
+# gzz2000/mt-kahypar-rs, bump the crate, then change every `ubuntu-24.04` label
+# in one commit.
 
 on:
   push:
@@ -48,7 +67,7 @@ jobs:
   # the deadlock a workflow-level paths-ignore would cause. `docs` stays ungated.
   changes:
     name: Detect code changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       # A merge-queue entry is a candidate `main`, and the filter has no
       # meaningful base to diff against there. Run everything rather than trust
@@ -105,7 +124,7 @@ jobs:
   # so docs-only pushes still refresh the published site.
   docs:
     name: Documentation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:

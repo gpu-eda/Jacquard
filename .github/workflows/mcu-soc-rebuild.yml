@@ -18,7 +18,7 @@ permissions:
 jobs:
   rebuild:
     name: Rebuild MCU SoC Test Data
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
       - name: Free disk space
