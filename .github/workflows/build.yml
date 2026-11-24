@@ -20,7 +20,7 @@ name: Build
 # The cuda + hip artifacts are separate today; ulib already supports both
 # backends in one binary (Device is an additive runtime enum), so they can later
 # collapse into one fat cuda,hip artifact by editing this matrix — no workflow
-# reshape. See docs/plans/ci-build-test-split.md.
+# reshape. See docs/plans/archive/ci-build-test-split.md.
 
 on:
   workflow_call:
@@ -49,7 +49,7 @@ jobs:
       matrix:
         include:
           - config: cpu
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             features: synth
             submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd vendor/gf180mcu_fd_sc_mcu7t5v0 vendor/gf180mcu_fd_sc_mcu9t5v0
           - config: cuda
@@ -57,7 +57,7 @@ jobs:
             features: cuda,synth
             submodules: vendor/eda-infra-rs vendor/sky130_fd_sc_hd
           - config: hip-rocm
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             # Real ROCm toolchain, version-matched to the AMD runner (7.2.4).
             container: rocm/dev-ubuntu-24.04:7.2.4
             features: hip,synth

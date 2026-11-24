@@ -3,7 +3,7 @@ name: Test
 # Reusable test workflow: run the batch of tests against the prebuilt binaries
 # from build.yml, on the appropriate runners (GitHub-hosted GPU runners for the
 # GPU backends, a standard runner for the CPU-only config). Called by ci.yml
-# after build.yml. See docs/plans/ci-build-test-split.md.
+# after build.yml. See docs/plans/archive/ci-build-test-split.md.
 #
 # Gating contract (inputs from the orchestrator):
 #   code         — "true" when code paths changed (docs-only PRs skip the batch)
@@ -36,7 +36,7 @@ jobs:
   unit:
     if: inputs.code == 'true'
     name: Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -75,7 +75,7 @@ jobs:
   synth-onramp:
     if: inputs.code == 'true'
     name: Synth on-ramp (Linux compile + classifier tests)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -110,7 +110,7 @@ jobs:
     # CpuBackend regression (byte-identical goldens to the Metal backend).
     if: always() && inputs.code == 'true'
     name: Cosim CpuBackend (Linux, no GPU)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Gate on the build
         if: inputs.build_result != 'success'
@@ -138,7 +138,7 @@ jobs:
   opensta-to-ir-tests:
     if: inputs.code == 'true'
     name: opensta-to-ir Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -170,7 +170,10 @@ jobs:
         if: steps.cache-cudd.outputs.cache-hit != 'true'
         run: |
           cd "$HOME"
-          wget -q https://raw.githubusercontent.com/davidkebo/cudd/main/cudd_versions/cudd-3.0.0.tar.gz
+          # The release asset that upstream OpenSTA's master Dockerfiles fetch.
+          # The pinned vendor/opensta still names the old URL, which is gone.
+          wget -q https://github.com/davidkebo/cudd/releases/download/v3.0.0/cudd-3.0.0.tar.gz
+          echo "b8e966b4562c96a03e7fbea239729587d7b395d53cadcc39a7203b49cf7eeb69  cudd-3.0.0.tar.gz" | sha256sum -c -
           tar -xf cudd-3.0.0.tar.gz
           cd cudd-3.0.0
           ./configure
@@ -205,7 +208,7 @@ jobs:
   lint:
     if: inputs.code == 'true'
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -218,6 +221,15 @@ jobs:
       # carry the same version (docs/release-process.md, scripts/bump_version.py).
       - name: Check Rust crate versions agree
         run: python3 scripts/bump_version.py --check
+      # No workflow may use the moving `ubuntu-latest` label: see "Runner image"
+      # at the top of ci.yml. Comment lines are exempt, and the pattern is
+      # written so that this step doesn't match itself.
+      - name: Check runner images are pinned
+        run: |
+          if grep -nE '^[^#]*ubuntu-lates[t]' .github/workflows/*.yml; then
+            echo "::error::Name a fixed runner image. See 'Runner image' at the top of ci.yml."
+            exit 1
+          fi
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -255,7 +267,7 @@ jobs:
   benchmark:
     if: inputs.code == 'true'
     name: Benchmarks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -475,7 +487,7 @@ jobs:
   prepare-mcu-soc-jtir:
     if: inputs.code == 'true'
     name: Prepare MCU SoC timing IR
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
@@ -510,7 +522,10 @@ jobs:
         if: steps.cache-cudd.outputs.cache-hit != 'true'
         run: |
           cd "$HOME"
-          wget -q https://raw.githubusercontent.com/davidkebo/cudd/main/cudd_versions/cudd-3.0.0.tar.gz
+          # The release asset that upstream OpenSTA's master Dockerfiles fetch.
+          # The pinned vendor/opensta still names the old URL, which is gone.
+          wget -q https://github.com/davidkebo/cudd/releases/download/v3.0.0/cudd-3.0.0.tar.gz
+          echo "b8e966b4562c96a03e7fbea239729587d7b395d53cadcc39a7203b49cf7eeb69  cudd-3.0.0.tar.gz" | sha256sum -c -
           tar -xf cudd-3.0.0.tar.gz
           cd cudd-3.0.0
           ./configure
@@ -545,6 +560,10 @@ jobs:
           key: volare-sky130A-c6d73a35f524070e85faff4a6a9eef49553ebc2b
       - name: Install sky130A PDK via volare
         if: steps.cache-volare.outputs.cache-hit != 'true'
+        # volare queries the GitHub API. Unauthenticated, it shares the runner
+        # IP's rate limit and can fail with "403 rate limit exceeded".
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           uv sync --group dev
           uv run volare enable c6d73a35f524070e85faff4a6a9eef49553ebc2b
@@ -896,7 +915,7 @@ jobs:
   cvc-reference:
     if: inputs.code == 'true'
     name: CVC Reference Simulation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Cache CVC binary
@@ -974,7 +993,7 @@ jobs:
 
   timing-comparison:
     name: Timing Comparison (CVC vs Jacquard)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [metal, cvc-reference]
     if: always() && needs.metal.result == 'success' && needs.cvc-reference.result == 'success'
     steps:
@@ -1023,10 +1042,10 @@ jobs:
   # CVC SDF-annotated MCU SoC sim — advisory *guide*, not a gate
   # (continue-on-error): surfaces CVC↔Metal differences in the step summary for
   # a human to read, without committing the fragile CVC-from-source build as a
-  # required check. See docs/plans/ci-build-test-split.md.
+  # required check. See docs/plans/archive/ci-build-test-split.md.
   mcu-soc-cvc:
     name: MCU SoC CVC Reference
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [mcu-soc-metal]
     continue-on-error: true
@@ -1114,7 +1133,7 @@ jobs:
   # to the step summary; a mismatch never blocks a merge.
   mcu-soc-comparison:
     name: MCU SoC Functional Comparison
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [mcu-soc-metal, mcu-soc-cvc]
     if: always() && needs.mcu-soc-metal.result == 'success' && needs.mcu-soc-cvc.result == 'success'
     continue-on-error: true
@@ -1175,7 +1194,7 @@ jobs:
 
   backend-equivalence:
     name: Backend Equivalence (CUDA/ROCm/Metal)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [cuda, hip-on-rocm, metal]
     steps:
       - uses: actions/checkout@v6

@@ -232,7 +232,7 @@ jobs:
     needs: release-metal
     # Real tags only (skip workflow_dispatch dry-runs).
     if: needs.release-metal.outputs.is_release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out the formula template
         uses: actions/checkout@v4
@@ -299,7 +299,7 @@ jobs:
   docs-version:
     name: Publish versioned docs
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:

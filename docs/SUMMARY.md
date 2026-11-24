@@ -95,3 +95,4 @@
 - [Cosim Phase 2 — CUDA/HIP parity](plans/archive/cosim-phase2-cuda-hip.md)
 - [Cosim Phase 2 Stage B — gpu_io_step port](plans/archive/cosim-phase2-stageB-io-port.md)
 - [Cosim Phase 2 Stage C — flash kernels](plans/archive/cosim-phase2-stageC-flash.md)
+- [CI build/test split](plans/archive/ci-build-test-split.md)
