@@ -3,7 +3,7 @@ name: Test
 # Reusable test workflow: run the batch of tests against the prebuilt binaries
 # from build.yml, on the appropriate runners (GitHub-hosted GPU runners for the
 # GPU backends, a standard runner for the CPU-only config). Called by ci.yml
-# after build.yml. See docs/plans/ci-build-test-split.md.
+# after build.yml. See docs/plans/archive/ci-build-test-split.md.
 #
 # Gating contract (inputs from the orchestrator):
 #   code         — "true" when code paths changed (docs-only PRs skip the batch)
@@ -1023,7 +1023,7 @@ jobs:
   # CVC SDF-annotated MCU SoC sim — advisory *guide*, not a gate
   # (continue-on-error): surfaces CVC↔Metal differences in the step summary for
   # a human to read, without committing the fragile CVC-from-source build as a
-  # required check. See docs/plans/ci-build-test-split.md.
+  # required check. See docs/plans/archive/ci-build-test-split.md.
   mcu-soc-cvc:
     name: MCU SoC CVC Reference
     runs-on: ubuntu-latest

@@ -20,7 +20,7 @@ name: Build
 # The cuda + hip artifacts are separate today; ulib already supports both
 # backends in one binary (Device is an additive runtime enum), so they can later
 # collapse into one fat cuda,hip artifact by editing this matrix — no workflow
-# reshape. See docs/plans/ci-build-test-split.md.
+# reshape. See docs/plans/archive/ci-build-test-split.md.
 
 on:
   workflow_call:

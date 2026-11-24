@@ -1,10 +1,12 @@
 # Plan: CI build/test split via reusable workflows
 
-> **Status (2026-07-06):** Core split **implemented and green** on PR #172
-> (run 28785097079) — `build.yml` + `test.yml` + composite actions + thin
-> `ci.yml`. Faithful move (each backend keeps its current tests). Remaining:
-> branch-protection check-name swap (below), then the four follow-ups at the
-> end of this doc.
+> **Status:** Implemented. The split merged in PR #172 on 2026-07-17 as
+> `build.yml`, `test.yml`, the composite actions and a thin `ci.yml`, and branch
+> protection requires the `Test / …` check names. The workflows have changed
+> since, so read `build.yml` and `test.yml` for the current runners and matrix.
+>
+> Of the five follow-ups at the end of this doc, the AMD/ROCm runner is done: the
+> HIP job runs on the `[self-hosted, amd, rocm]` runner. The other four are open.
 
 ## Goal
 

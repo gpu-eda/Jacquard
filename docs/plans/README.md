@@ -48,6 +48,7 @@ how each decision was carried out.
 | [Cosim Phase 2: CUDA/HIP parity](archive/cosim-phase2-cuda-hip.md) | Shipped in PR #120; performance follow-up is #122 |
 | [Cosim Phase 2 Stage B: `gpu_io_step` port](archive/cosim-phase2-stageB-io-port.md) | Shipped in PR #120 |
 | [Cosim Phase 2 Stage C: flash kernels](archive/cosim-phase2-stageC-flash.md) | Shipped in PR #120 |
+| [CI build/test split via reusable workflows](archive/ci-build-test-split.md) | Shipped in PR #172; four follow-ups open |
 
 ## Reading order for new contributors
 

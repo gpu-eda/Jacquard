@@ -1,7 +1,7 @@
 name: CI
 
 # Thin orchestrator for the build → test pipeline (see
-# docs/plans/ci-build-test-split.md):
+# docs/plans/archive/ci-build-test-split.md):
 #   changes → build.yml (compile artifacts on standard runners)
 #           → test.yml  (run the batch against the artifacts on the right runners)
 #   docs                (mdBook + Pages deploy, runs regardless of code changes)
