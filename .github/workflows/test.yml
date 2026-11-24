@@ -170,7 +170,10 @@ jobs:
         if: steps.cache-cudd.outputs.cache-hit != 'true'
         run: |
           cd "$HOME"
-          wget -q https://raw.githubusercontent.com/davidkebo/cudd/main/cudd_versions/cudd-3.0.0.tar.gz
+          # The release asset that upstream OpenSTA's master Dockerfiles fetch.
+          # The pinned vendor/opensta still names the old URL, which is gone.
+          wget -q https://github.com/davidkebo/cudd/releases/download/v3.0.0/cudd-3.0.0.tar.gz
+          echo "b8e966b4562c96a03e7fbea239729587d7b395d53cadcc39a7203b49cf7eeb69  cudd-3.0.0.tar.gz" | sha256sum -c -
           tar -xf cudd-3.0.0.tar.gz
           cd cudd-3.0.0
           ./configure
@@ -519,7 +522,10 @@ jobs:
         if: steps.cache-cudd.outputs.cache-hit != 'true'
         run: |
           cd "$HOME"
-          wget -q https://raw.githubusercontent.com/davidkebo/cudd/main/cudd_versions/cudd-3.0.0.tar.gz
+          # The release asset that upstream OpenSTA's master Dockerfiles fetch.
+          # The pinned vendor/opensta still names the old URL, which is gone.
+          wget -q https://github.com/davidkebo/cudd/releases/download/v3.0.0/cudd-3.0.0.tar.gz
+          echo "b8e966b4562c96a03e7fbea239729587d7b395d53cadcc39a7203b49cf7eeb69  cudd-3.0.0.tar.gz" | sha256sum -c -
           tar -xf cudd-3.0.0.tar.gz
           cd cudd-3.0.0
           ./configure
